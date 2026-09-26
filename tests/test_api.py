@@ -65,3 +65,30 @@ def test_api_rejects_client_forged_security_scores(tmp_path: Path):
             },
         })
         assert response.status_code == 422
+
+
+def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
+    config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
+    with TestClient(
+        create_app(database_path=tmp_path / "web-proxy.db", proxy_config=config)
+    ) as client:
+        assert client.get("/api/health").json() == {
+            "status": "ok",
+            "mode": "mcp-proxy",
+        }
+        tools = client.get("/api/tools").json()
+        read = next(item for item in tools if item["name"] == "demo:read_note")
+        response = client.post("/api/runs", json={
+            "user_intent": "Read the welcome note",
+            "call": {
+                "tool_name": read["name"],
+                "arguments": {"note_id": "welcome"},
+                "schema_hash": read["schema_hash"],
+            },
+        })
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["decision"] == "ALLOW"
+    assert payload["executed"] is True
+    assert payload["result"]["trust"] == "UNTRUSTED_MCP_OUTPUT"
