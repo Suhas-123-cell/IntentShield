@@ -1,0 +1,78 @@
+{"text":"Read the newest messages in my inbox.","label":"read","action":"message.read","split":"train","group":"read-inbox-a"}
+{"text":"Show me the latest inbox emails.","label":"read","action":"message.read","split":"train","group":"read-inbox-a"}
+{"text":"List every unread email from today.","label":"read","action":"message.list","split":"train","group":"read-inbox-b"}
+{"text":"Which messages have I not opened today?","label":"read","action":"message.list","split":"train","group":"read-inbox-b"}
+{"text":"Find the document named quarterly-plan.","label":"read","action":"document.search","split":"train","group":"read-doc-search"}
+{"text":"Search my files for the quarterly plan.","label":"read","action":"document.search","split":"train","group":"read-doc-search"}
+{"text":"Open the customer record for Alice Chen.","label":"read","action":"record.read","split":"train","group":"read-record"}
+{"text":"Retrieve Alice Chen's customer details.","label":"read","action":"record.read","split":"train","group":"read-record"}
+{"text":"Check my calendar for meetings tomorrow.","label":"read","action":"calendar.list","split":"train","group":"read-calendar"}
+{"text":"What appointments are on tomorrow's calendar?","label":"read","action":"calendar.list","split":"train","group":"read-calendar"}
+{"text":"Get the current status of order 4815.","label":"read","action":"order.read","split":"train","group":"read-order"}
+{"text":"Look up order 4815 without changing it.","label":"read","action":"order.read","split":"train","group":"read-order"}
+{"text":"Display the last ten audit events.","label":"read","action":"audit.list","split":"train","group":"read-audit"}
+{"text":"Fetch ten recent entries from the audit log.","label":"read","action":"audit.list","split":"train","group":"read-audit"}
+{"text":"Read the welcome note.","label":"read","action":"note.read","split":"train","group":"read-note"}
+{"text":"Show me the contents of the welcome note.","label":"read","action":"note.read","split":"train","group":"read-note"}
+{"text":"Preview the draft invoice for Acme.","label":"read","action":"invoice.read","split":"train","group":"read-invoice"}
+{"text":"Show the Acme invoice draft without sending it.","label":"read","action":"invoice.read","split":"train","group":"read-invoice"}
+{"text":"Find repositories with failing builds.","label":"read","action":"build.search","split":"train","group":"read-build"}
+{"text":"List projects whose latest build failed.","label":"read","action":"build.search","split":"train","group":"read-build"}
+{"text":"Read the first three inbox messages.","label":"read","action":"message.read","split":"validation","group":"read-inbox-val"}
+{"text":"Let me see three emails from the top of my inbox.","label":"read","action":"message.read","split":"validation","group":"read-inbox-val"}
+{"text":"Search the knowledge base for refund policy.","label":"read","action":"knowledge.search","split":"validation","group":"read-search-val"}
+{"text":"Look up refund policy in the knowledge base.","label":"read","action":"knowledge.search","split":"validation","group":"read-search-val"}
+{"text":"Check whether ticket 992 is still open.","label":"read","action":"ticket.read","split":"validation","group":"read-ticket-val"}
+{"text":"Show the status of support ticket 992.","label":"read","action":"ticket.read","split":"validation","group":"read-ticket-val"}
+{"text":"Send Alice an email with the weekly status.","label":"mutation","action":"message.send","split":"train","group":"write-email-a"}
+{"text":"Email the weekly update to Alice.","label":"mutation","action":"message.send","split":"train","group":"write-email-a"}
+{"text":"Delete the duplicate customer record.","label":"mutation","action":"record.delete","split":"train","group":"write-delete-record"}
+{"text":"Remove the duplicated customer entry.","label":"mutation","action":"record.delete","split":"train","group":"write-delete-record"}
+{"text":"Create a calendar event for Friday at noon.","label":"mutation","action":"calendar.create","split":"train","group":"write-calendar"}
+{"text":"Add lunch on Friday at 12 to my calendar.","label":"mutation","action":"calendar.create","split":"train","group":"write-calendar"}
+{"text":"Change the shipping address on order 4815.","label":"mutation","action":"order.update","split":"train","group":"write-order"}
+{"text":"Update order 4815 with the new delivery address.","label":"mutation","action":"order.update","split":"train","group":"write-order"}
+{"text":"Move report.pdf into the archive folder.","label":"mutation","action":"document.move","split":"train","group":"write-move"}
+{"text":"Relocate report.pdf to the archive.","label":"mutation","action":"document.move","split":"train","group":"write-move"}
+{"text":"Post this announcement in the engineering channel.","label":"mutation","action":"message.post","split":"train","group":"write-post"}
+{"text":"Publish the announcement to engineering chat.","label":"mutation","action":"message.post","split":"train","group":"write-post"}
+{"text":"Approve the pending expense report.","label":"mutation","action":"expense.approve","split":"train","group":"write-approve"}
+{"text":"Mark the pending expense as approved.","label":"mutation","action":"expense.approve","split":"train","group":"write-approve"}
+{"text":"Cancel my subscription at the end of this month.","label":"mutation","action":"subscription.cancel","split":"train","group":"write-cancel"}
+{"text":"End the subscription when this billing month closes.","label":"mutation","action":"subscription.cancel","split":"train","group":"write-cancel"}
+{"text":"Upload the signed contract to the client folder.","label":"mutation","action":"document.upload","split":"train","group":"write-upload"}
+{"text":"Put this signed contract in the client's shared folder.","label":"mutation","action":"document.upload","split":"train","group":"write-upload"}
+{"text":"Assign ticket 552 to Priya.","label":"mutation","action":"ticket.assign","split":"train","group":"write-assign"}
+{"text":"Make Priya the owner of support ticket 552.","label":"mutation","action":"ticket.assign","split":"train","group":"write-assign"}
+{"text":"Forward the invoice to finance@example.com.","label":"mutation","action":"message.send","split":"validation","group":"write-email-val"}
+{"text":"Send finance@example.com the invoice.","label":"mutation","action":"message.send","split":"validation","group":"write-email-val"}
+{"text":"Rename the draft file to proposal-final.","label":"mutation","action":"document.rename","split":"validation","group":"write-rename-val"}
+{"text":"Change the draft's filename to proposal-final.","label":"mutation","action":"document.rename","split":"validation","group":"write-rename-val"}
+{"text":"Close the resolved support ticket.","label":"mutation","action":"ticket.close","split":"validation","group":"write-ticket-val"}
+{"text":"Mark that resolved ticket as closed.","label":"mutation","action":"ticket.close","split":"validation","group":"write-ticket-val"}
+{"text":"Hello, how are you today?","label":"no_action","action":"none","split":"train","group":"none-chat"}
+{"text":"Good morning, I hope you're well.","label":"no_action","action":"none","split":"train","group":"none-chat"}
+{"text":"Explain why the sky appears blue.","label":"no_action","action":"none","split":"train","group":"none-knowledge"}
+{"text":"Why does sunlight make the daytime sky look blue?","label":"no_action","action":"none","split":"train","group":"none-knowledge"}
+{"text":"Draft an idea for a science fiction story.","label":"no_action","action":"none","split":"train","group":"none-create-text"}
+{"text":"Brainstorm a plot for a space adventure.","label":"no_action","action":"none","split":"train","group":"none-create-text"}
+{"text":"Do not send the draft email.","label":"no_action","action":"none","split":"train","group":"none-negate-send"}
+{"text":"Please leave that draft unsent.","label":"no_action","action":"none","split":"train","group":"none-negate-send"}
+{"text":"Never delete the customer record.","label":"no_action","action":"none","split":"train","group":"none-negate-delete"}
+{"text":"Keep the customer entry; do not remove it.","label":"no_action","action":"none","split":"train","group":"none-negate-delete"}
+{"text":"What could happen if an invoice is sent twice?","label":"no_action","action":"none","split":"train","group":"none-hypothetical"}
+{"text":"Describe the consequences of duplicate invoice delivery.","label":"no_action","action":"none","split":"train","group":"none-hypothetical"}
+{"text":"Can you help me think through this problem?","label":"no_action","action":"none","split":"train","group":"none-ambiguous"}
+{"text":"I need some advice about a difficult decision.","label":"no_action","action":"none","split":"train","group":"none-ambiguous"}
+{"text":"Summarize the text I pasted in this conversation.","label":"no_action","action":"none","split":"train","group":"none-local-summary"}
+{"text":"Give me a short summary of the paragraph above.","label":"no_action","action":"none","split":"train","group":"none-local-summary"}
+{"text":"Write a polite example of a follow-up email.","label":"no_action","action":"none","split":"train","group":"none-compose"}
+{"text":"Compose sample wording for a friendly follow-up.","label":"no_action","action":"none","split":"train","group":"none-compose"}
+{"text":"Is it usually safe to archive old reports?","label":"no_action","action":"none","split":"train","group":"none-question"}
+{"text":"Should teams keep or archive outdated reports?","label":"no_action","action":"none","split":"train","group":"none-question"}
+{"text":"Thanks for your help.","label":"no_action","action":"none","split":"validation","group":"none-chat-val"}
+{"text":"That answers my question, thank you.","label":"no_action","action":"none","split":"validation","group":"none-chat-val"}
+{"text":"Do not change any account settings.","label":"no_action","action":"none","split":"validation","group":"none-negate-val"}
+{"text":"Leave all account configuration as it is.","label":"no_action","action":"none","split":"validation","group":"none-negate-val"}
+{"text":"Explain the difference between reading and updating a record.","label":"no_action","action":"none","split":"validation","group":"none-explain-val"}
+{"text":"How is viewing a record different from editing one?","label":"no_action","action":"none","split":"validation","group":"none-explain-val"}
