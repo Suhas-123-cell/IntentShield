@@ -8,6 +8,7 @@ from typing import AsyncIterator
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -54,6 +55,10 @@ def create_app(
                 await runtime.close()
 
     app = FastAPI(title="IntentShield", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["127.0.0.1", "localhost", "testserver"],
+    )
     app.state.service = local_service
     app.state.model_gateway = models
     app.state.proxy_runtime = runtime
