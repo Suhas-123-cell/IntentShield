@@ -1,0 +1,10 @@
+{
+  "allowed_tools": ["read_inbox", "send_email"],
+  "prohibited_tools": [],
+  "allowed_resources": ["inbox", "outbox"],
+  "allowed_destinations": ["*@example.com"],
+  "call_budget": 4,
+  "injection_block_threshold": 0.75,
+  "minimum_intent_alignment": 0.60,
+  "approval_ttl_seconds": 600
+}
