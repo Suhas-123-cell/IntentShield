@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0A0A0A">
+    <meta
+      name="description"
+      content="IntentShield local security gateway telemetry console."
+    >
+    <title>IntentShield // Tactical Console</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#request-console">Skip to request console</a>
+
+    <header class="command-bar">
+      <a class="brand" href="#top" aria-label="IntentShield console home">
+        <span class="brand-mark" aria-hidden="true">IS/</span>
+        <span>INTENTSHIELD</span>
+      </a>
+
+      <div class="command-meta" aria-label="Runtime status">
+        <span class="tag">LOCAL</span>
+        <span class="tag">GEMINI ONLY</span>
+        <span class="connection-state" id="connection-state">
+          <span class="online-lamp" id="online-lamp" aria-hidden="true"></span>
+          <span id="connection-label">PROBING</span>
+        </span>
+      </div>
+
+      <button class="command-button" id="refresh-button" type="button">
+        [ REFRESH TELEMETRY ]
+      </button>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="console-title">
+        <div class="hero-copy">
+          <p class="eyebrow">UNIT / GATE-01 &nbsp;///&nbsp; REV / MVP-0.1</p>
+          <h1 id="console-title">INTENT<br>SHIELD<span aria-hidden="true">®</span></h1>
+        </div>
+        <div class="hero-status">
+          <p class="section-code">[ ACTION-AWARE SECURITY GATEWAY ]</p>
+          <p>
+            Inspect proposed tool calls. Bind approvals to exact arguments.
+            Execute only after deterministic policy clearance.
+          </p>
+          <dl class="status-list">
+            <div><dt>CONTROL</dt><dd>DETERMINISTIC</dd></div>
+            <div><dt>GEMINI</dt><dd id="gemini-runtime">PROBING</dd></div>
+            <div><dt>DEBERTA</dt><dd id="deberta-runtime">PROBING</dd></div>
+            <div><dt>MODE</dt><dd>POLICY / GUARDED</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="telemetry-grid" aria-labelledby="telemetry-title">
+        <h2 class="visually-hidden" id="telemetry-title">System telemetry</h2>
+        <article class="metric metric-primary">
+          <span class="metric-label">TOTAL RUNS</span>
+          <data class="metric-value" id="metric-total" value="0">000</data>
+          <span class="metric-foot">SESSION + PERSISTED</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">ALLOWED</span>
+          <data class="metric-value" id="metric-allow" value="0">000</data>
+          <span class="metric-foot">POLICY CLEARED</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">REVIEW</span>
+          <data class="metric-value" id="metric-review" value="0">000</data>
+          <span class="metric-foot">HUMAN REQUIRED</span>
+        </article>
+        <article class="metric metric-alert">
+          <span class="metric-label">BLOCKED</span>
+          <data class="metric-value" id="metric-block" value="0">000</data>
+          <span class="metric-foot">EXECUTION DENIED</span>
+        </article>
+      </section>
+
+      <div class="operations-grid">
+        <section class="panel request-panel" id="request-console" aria-labelledby="request-title">
+          <header class="panel-header">
+            <div>
+              <span class="panel-index">01</span>
+              <h2 id="request-title">REQUEST INGRESS</h2>
+            </div>
+            <span class="panel-code" id="request-mode">SIM/LOCAL</span>
+          </header>
+
+          <form id="run-form" novalidate>
+            <fieldset>
+              <legend>SCENARIO PRESET</legend>
+              <div class="preset-grid">
+                <label class="preset">
+                  <input type="radio" name="scenario" value="benign" checked>
+                  <span class="preset-body">
+                    <span class="preset-id">A/01</span>
+                    <strong>BENIGN</strong>
+                    <small>READ-ONLY INBOX SUMMARY</small>
+                  </span>
+                </label>
+                <label class="preset">
+                  <input type="radio" name="scenario" value="injection">
+                  <span class="preset-body">
+                    <span class="preset-id">B/02</span>
+                    <strong>INJECTION</strong>
+                    <small>UNTRUSTED CONTENT OVERRIDE</small>
+                  </span>
+                </label>
+                <label class="preset">
+                  <input type="radio" name="scenario" value="review">
+                  <span class="preset-body">
+                    <span class="preset-id">C/03</span>
+                    <strong>REVIEW GATE</strong>
+                    <small>MUTATION REQUIRES APPROVAL</small>
+                  </span>
+                </label>
+                <label class="preset">
+                  <input type="radio" name="scenario" value="model">
+                  <span class="preset-body">
+                    <span class="preset-id">D/04</span>
+                    <strong>LIVE MODEL</strong>
+                    <small>MODEL PROPOSES / POLICY DECIDES</small>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="provider-field" id="provider-field" hidden>
+              <span class="field-label">GEMINI RUNTIME</span>
+              <output class="runtime-output" id="model-provider" aria-describedby="provider-help">
+                LOADING GEMINI STATUS…
+              </output>
+              <p class="provider-help" id="provider-help">
+                THE SERVER-SIDE GEMINI KEY IS NEVER EXPOSED TO THIS CONSOLE.
+              </p>
+            </div>
+
+            <label class="field-label" for="request-input">USER INTENT / TEST REQUEST</label>
+            <textarea
+              id="request-input"
+              name="request"
+              rows="5"
+              maxlength="1200"
+              aria-describedby="request-help request-count"
+              required
+            >Summarize my unread emails.</textarea>
+            <div class="field-meta">
+              <span id="request-help">SYNTHETIC INPUT ONLY. DO NOT ENTER REAL CREDENTIALS OR PERSONAL DATA.</span>
+              <output id="request-count" for="request-input">027/1200</output>
+            </div>
+
+            <div class="form-actions">
+              <button class="primary-action" id="run-button" type="submit">
+                <span aria-hidden="true">&gt;&gt;&gt;</span>
+                <span id="run-button-label">RUN SECURITY CHECK</span>
+              </button>
+              <button class="secondary-action" id="clear-button" type="button">CLEAR</button>
+            </div>
+            <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="panel evidence-panel" aria-labelledby="evidence-title">
+          <header class="panel-header">
+            <div>
+              <span class="panel-index">02</span>
+              <h2 id="evidence-title">DECISION EVIDENCE</h2>
+            </div>
+            <span class="decision-badge neutral" id="decision-badge">STANDBY</span>
+          </header>
+
+          <div class="evidence-empty" id="evidence-empty">
+            <span aria-hidden="true">+</span>
+            <p>NO ACTIVE TRACE</p>
+            <small>SUBMIT A SYNTHETIC SCENARIO TO INSPECT THE POLICY PATH.</small>
+          </div>
+
+          <div class="evidence-content" id="evidence-content" hidden>
+            <dl class="evidence-summary">
+              <div><dt>RUN ID</dt><dd id="evidence-run-id">—</dd></div>
+              <div><dt>TOOL</dt><dd id="evidence-tool">—</dd></div>
+              <div><dt>INJECTION SCORE</dt><dd id="evidence-score">—</dd></div>
+              <div><dt>INTENT ALIGNMENT</dt><dd id="evidence-alignment">—</dd></div>
+              <div><dt>GROUNDING</dt><dd id="evidence-grounding">—</dd></div>
+              <div><dt>INTENT MODEL</dt><dd id="evidence-classifier">—</dd></div>
+              <div><dt>EXECUTED</dt><dd id="evidence-executed">—</dd></div>
+            </dl>
+
+            <h3>[ RULE TRACE ]</h3>
+            <ol class="rule-trace" id="rule-trace"></ol>
+
+            <details class="raw-record">
+              <summary>RAW LOCAL RECORD</summary>
+              <pre><code id="raw-record">{}</code></pre>
+            </details>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel approvals-panel" aria-labelledby="approvals-title">
+        <header class="panel-header">
+          <div>
+            <span class="panel-index">03</span>
+            <h2 id="approvals-title">APPROVAL QUEUE</h2>
+          </div>
+          <output class="counter" id="approval-count">00 PENDING</output>
+        </header>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Pending approvals table">
+          <table>
+            <caption class="visually-hidden">Tool calls awaiting a human decision</caption>
+            <thead>
+              <tr>
+                <th scope="col">REQUEST</th>
+                <th scope="col">PROPOSED TOOL / ARGUMENTS</th>
+                <th scope="col">REASON / BINDING</th>
+                <th scope="col">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="approval-body">
+              <tr class="empty-row"><td colspan="4">[ QUEUE EMPTY ]</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel audit-panel" aria-labelledby="audit-title">
+        <header class="panel-header">
+          <div>
+            <span class="panel-index">04</span>
+            <h2 id="audit-title">AUDIT STREAM</h2>
+          </div>
+          <span class="panel-code">LATEST / 25</span>
+        </header>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Recent audit records table">
+          <table>
+            <caption class="visually-hidden">Recent IntentShield run records</caption>
+            <thead>
+              <tr>
+                <th scope="col">TIME</th>
+                <th scope="col">RUN ID</th>
+                <th scope="col">SCENARIO</th>
+                <th scope="col">TOOL</th>
+                <th scope="col">DECISION</th>
+                <th scope="col">EXECUTED</th>
+              </tr>
+            </thead>
+            <tbody id="audit-body">
+              <tr class="empty-row"><td colspan="6">[ NO RUNS RECORDED ]</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="tool-strip" aria-labelledby="tools-title">
+        <div>
+          <span class="panel-index">05</span>
+          <h2 id="tools-title">REGISTERED GUARDED TOOLS</h2>
+        </div>
+        <ul id="tool-list"><li>AWAITING REGISTRY</li></ul>
+      </section>
+    </main>
+
+    <footer>
+      <span>INTENTSHIELD® / SECURITY RESEARCH MVP</span>
+      <span>GEMINI PROPOSES / AGENTS DETECT + GROUND / POLICY DECIDES</span>
+      <span id="clock" aria-label="Local time">--:--:-- IST</span>
+    </footer>
+
+    <div class="toast-region" id="toast-region" aria-live="assertive" aria-atomic="true"></div>
+  </body>
+</html>
