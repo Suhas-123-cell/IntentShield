@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "intentshield"
+version = "0.1.0"
+description = "Offline, action-aware authorization gateway for tool-using agents"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "jsonschema>=4.23,<5",
+  "mcp>=2.2,<3",
+  "pydantic>=2.10,<3",
+  "python-dotenv>=1.0,<2",
+  "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8,<10",
+]
+
+[project.scripts]
+intentshield = "intentshield.__main__:main"
+intentshield-mcp = "intentshield.mcp_server:main"
+intentshield-demo-mcp = "intentshield.demo_mcp_server:main"
+intentshield-mcp-verify = "intentshield.mcp_verify:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/intentshield"]
