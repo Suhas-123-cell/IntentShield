@@ -1,0 +1,22 @@
+{
+  "upstreams": [
+    {
+      "server_id": "demo",
+      "transport": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["-m", "intentshield.demo_mcp_server"]
+    }
+  ],
+  "database_path": "intentshield-mcp.db",
+  "allowed_tools": ["demo:*"] ,
+  "prohibited_tools": [],
+  "read_only_tools": ["demo:read_note", "demo:execution_stats"],
+  "destination_fields": {},
+  "expose_upstream_descriptions": false,
+  "allowed_resources": [],
+  "allowed_destinations": [],
+  "call_budget": 8,
+  "injection_block_threshold": 0.75,
+  "minimum_intent_alignment": 0.6,
+  "approval_ttl_seconds": 600
+}

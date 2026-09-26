@@ -1,0 +1,33 @@
+{
+  "upstreams": [
+    {
+      "server_id": "notes_stdio",
+      "transport": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["-m", "intentshield.demo_mcp_server"]
+    },
+    {
+      "server_id": "notes_http",
+      "transport": "streamable_http",
+      "url": "http://127.0.0.1:8010/mcp"
+    }
+  ],
+  "database_path": "intentshield-mcp-mixed.db",
+  "allowed_tools": ["notes_stdio:*", "notes_http:*"],
+  "prohibited_tools": [],
+  "read_only_tools": [
+    "notes_stdio:read_note",
+    "notes_stdio:execution_stats",
+    "notes_http:read_note",
+    "notes_http:execution_stats"
+  ],
+  "resource_fields": {},
+  "destination_fields": {},
+  "allowed_resources_by_tool": {},
+  "allowed_destinations_by_tool": {},
+  "expose_upstream_descriptions": false,
+  "call_budget": 8,
+  "injection_block_threshold": 0.75,
+  "minimum_intent_alignment": 0.6,
+  "approval_ttl_seconds": 600
+}
