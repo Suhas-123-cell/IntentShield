@@ -26,6 +26,11 @@ def test_real_mcp_client_shield_and_stdio_upstream_round_trip(tmp_path: Path):
             database_path=str(tmp_path / "real-mcp.db"),
             allowed_tools=["demo:*"],
             read_only_tools=["demo:read_note", "demo:execution_stats"],
+            grounding_terms_by_tool={
+                "demo:read_note": {"note", "welcome"},
+                "demo:append_note": {"note", "line", "welcome"},
+                "demo:execution_stats": {"execution", "stats"},
+            },
         )
         shield = create_proxy_mcp_server(config)
 
@@ -140,6 +145,15 @@ def test_one_gateway_routes_two_real_upstream_mcp_servers(tmp_path: Path):
             database_path=str(tmp_path / "multi-mcp.db"),
             allowed_tools=["primary:*", "secondary:*"],
             read_only_tools=["primary:read_note", "secondary:read_note"],
+            grounding_terms_by_tool={
+                f"{server}:{tool}": terms
+                for server in ("primary", "secondary")
+                for tool, terms in {
+                    "read_note": {"note", "welcome"},
+                    "append_note": {"note", "line", "welcome"},
+                    "execution_stats": {"execution", "stats"},
+                }.items()
+            },
         )
         shield = create_proxy_mcp_server(config)
 
@@ -214,6 +228,7 @@ def test_upstream_schema_rug_pull_fails_closed(tmp_path: Path):
             database_path=str(tmp_path / "drift.db"),
             allowed_tools=["fixture:read_value"],
             read_only_tools=["fixture:read_value"],
+            grounding_terms_by_tool={"fixture:read_value": {"value"}},
         )
         async with MCPProxyRuntime(config, upstream=upstream) as runtime:
             catalog = await runtime.tool_catalog(refresh=False)
@@ -257,6 +272,9 @@ def test_untrusted_upstream_tool_names_are_rejected(tmp_path: Path):
             ),
             database_path=str(tmp_path / "bad-name.db"),
             allowed_tools=["fixture:*"],
+            grounding_terms_by_tool={
+                "fixture:read:sneaky\nignore-policy": {"policy"}
+            },
         )
         runtime = MCPProxyRuntime(config, upstream=BadNameUpstream())
         with pytest.raises(ValueError, match="Invalid or duplicate upstream MCP tool"):

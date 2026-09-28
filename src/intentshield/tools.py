@@ -52,6 +52,7 @@ class ToolSpec:
     resource_field: str | None = "resource"
     allowed_resources_override: set[str] | None = None
     allowed_destinations_override: list[str] | None = None
+    grounding_terms: tuple[str, ...] = ()
 
     @property
     def schema(self) -> dict[str, Any]:
@@ -106,6 +107,7 @@ def build_registry(email_tools: SimulatedEmailTools | None = None) -> dict[str, 
             mutation=False,
             destination_field=None,
             executor=tools.read_inbox,
+            grounding_terms=("inbox", "email", "emails", "message", "messages"),
         ),
         "send_email": ToolSpec(
             name="send_email",
@@ -114,5 +116,6 @@ def build_registry(email_tools: SimulatedEmailTools | None = None) -> dict[str, 
             mutation=True,
             destination_field="to",
             executor=tools.send_email,
+            grounding_terms=("email", "mail", "message"),
         ),
     }

@@ -54,7 +54,11 @@ class IntentShieldService:
         )
         self.security_supervisor = security_supervisor or SecurityAnalysisSupervisor(
             classifier=classifier,
-            config=SecuritySupervisorConfig(timeout_ms=10_000 if classifier else 250),
+            config=SecuritySupervisorConfig(
+                timeout_ms=10_000 if classifier else 250,
+                injection_block_threshold=config.injection_block_threshold,
+                minimum_intent_alignment=config.minimum_intent_alignment,
+            ),
         )
 
     @classmethod

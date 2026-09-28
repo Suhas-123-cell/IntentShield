@@ -179,6 +179,25 @@ def test_read_summary_language_is_grounded_to_a_read_tool():
     assert result.intent_alignment == 0.95
 
 
+def test_same_action_family_cannot_ground_the_wrong_read_target():
+    payroll = metadata().model_copy(update={
+        "name": "corp:read_payroll",
+        "grounding_terms": ("payroll", "compensation"),
+    })
+    proposed = call(resource="inbox").model_copy(update={
+        "tool_name": payroll.name,
+        "schema_hash": payroll.schema_hash,
+    })
+
+    result = SecurityAnalysisSupervisor().analyze(
+        "Read the welcome note", proposed, payroll
+    )
+
+    assert result.disposition is SecurityDisposition.BLOCK
+    assert result.intent_alignment == 0.3
+    assert EvidenceReason.ACTION_NOT_GROUNDED in result.reason_codes
+
+
 class InvalidClassifier:
     def predict(self, *_args: Any) -> dict[str, Any]:
         return {"alignment_score": 1.5, "label": "invalid", "authorize": True}

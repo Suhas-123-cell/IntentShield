@@ -23,6 +23,14 @@
     "notes_secondary:execution_stats"
   ],
   "destination_fields": {},
+  "grounding_terms_by_tool": {
+    "notes_primary:read_note": ["note", "welcome"],
+    "notes_primary:append_note": ["note", "line", "welcome"],
+    "notes_primary:execution_stats": ["execution", "stats", "statistics"],
+    "notes_secondary:read_note": ["note", "welcome"],
+    "notes_secondary:append_note": ["note", "line", "welcome"],
+    "notes_secondary:execution_stats": ["execution", "stats", "statistics"]
+  },
   "expose_upstream_descriptions": false,
   "allowed_resources": [],
   "allowed_destinations": [],

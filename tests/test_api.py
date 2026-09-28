@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from intentshield.api import create_app
@@ -67,10 +68,28 @@ def test_api_rejects_client_forged_security_scores(tmp_path: Path):
         assert response.status_code == 422
 
 
+def test_web_proxy_refuses_to_start_without_control_token(
+    tmp_path: Path, monkeypatch,
+):
+    monkeypatch.delenv("INTENTSHIELD_CONTROL_TOKEN", raising=False)
+    config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
+
+    with pytest.raises(ValueError, match="CONTROL_TOKEN"):
+        create_app(
+            database_path=tmp_path / "missing-token.db",
+            proxy_config=config,
+            control_token="",
+        )
+
+
 def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
     config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
     with TestClient(
-        create_app(database_path=tmp_path / "web-proxy.db", proxy_config=config)
+        create_app(
+            database_path=tmp_path / "web-proxy.db",
+            proxy_config=config,
+            control_token="test-control-token",
+        )
     ) as client:
         assert client.get("/api/health").json() == {
             "status": "ok",
@@ -78,6 +97,7 @@ def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
         }
         tools = client.get("/api/tools").json()
         read = next(item for item in tools if item["name"] == "demo:read_note")
+        append = next(item for item in tools if item["name"] == "demo:append_note")
         response = client.post("/api/runs", json={
             "user_intent": "Read the welcome note",
             "call": {
@@ -87,8 +107,33 @@ def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
             },
         })
 
+        mutation = client.post("/api/runs", json={
+            "user_intent": "Append a line to the welcome note",
+            "call": {
+                "tool_name": append["name"],
+                "arguments": {"note_id": "welcome", "text": "Checked."},
+                "schema_hash": append["schema_hash"],
+                "idempotency_key": "web-proxy-mutation-1",
+            },
+        }).json()
+        unauthorized_list = client.get("/api/approvals")
+        unauthorized = client.post(
+            f"/api/approvals/{mutation['approval_id']}/decision",
+            json={"decision": "approve"},
+        )
+        authorized = client.post(
+            f"/api/approvals/{mutation['approval_id']}/decision",
+            headers={"Authorization": "Bearer test-control-token"},
+            json={"decision": "approve"},
+        )
+
     assert response.status_code == 201
     payload = response.json()
     assert payload["decision"] == "ALLOW"
     assert payload["executed"] is True
     assert payload["result"]["trust"] == "UNTRUSTED_MCP_OUTPUT"
+    assert mutation["decision"] == "REVIEW"
+    assert unauthorized_list.status_code == 401
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 200
+    assert authorized.json()["decision"] == "ALLOW"

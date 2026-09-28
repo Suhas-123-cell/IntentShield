@@ -156,7 +156,8 @@ class DebertaIntentClassifier:
     def status(self) -> ClassifierStatus:
         try:
             metadata = self._read_metadata()
-            self._verify_files(metadata)
+            if self._loaded is None:
+                self._verify_files(metadata)
             if self._uses_default_loader:
                 absent = [
                     package

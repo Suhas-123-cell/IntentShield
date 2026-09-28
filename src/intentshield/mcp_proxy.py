@@ -36,6 +36,7 @@ class MCPProxyConfig(BaseModel):
     destination_fields: dict[str, str] = Field(default_factory=dict)
     allowed_resources_by_tool: dict[str, set[str]] = Field(default_factory=dict)
     allowed_destinations_by_tool: dict[str, list[str]] = Field(default_factory=dict)
+    grounding_terms_by_tool: dict[str, set[str]] = Field(default_factory=dict)
     expose_upstream_descriptions: bool = False
     allowed_resources: set[str] = Field(default_factory=set)
     allowed_destinations: list[str] = Field(default_factory=list)
@@ -66,6 +67,7 @@ class MCPProxyConfig(BaseModel):
             | set(self.destination_fields)
             | set(self.allowed_resources_by_tool)
             | set(self.allowed_destinations_by_tool)
+            | set(self.grounding_terms_by_tool)
         )
         if any(":" not in key for key in scoped_keys):
             raise ValueError("Resource and destination policies require qualified server:tool keys")
@@ -86,6 +88,8 @@ class MCPProxyConfig(BaseModel):
             raise ValueError("Per-tool allowed resource sets cannot be empty")
         if any(not values for values in self.allowed_destinations_by_tool.values()):
             raise ValueError("Per-tool allowed destination lists cannot be empty")
+        if any(not values for values in self.grounding_terms_by_tool.values()):
+            raise ValueError("Per-tool grounding term sets cannot be empty")
         return self
 
     @property
@@ -312,7 +316,14 @@ class MCPProxyRuntime:
                 resource_field=self.config.resource_fields.get(qualified),
                 allowed_resources_override=self.config.allowed_resources_by_tool.get(qualified),
                 allowed_destinations_override=self.config.allowed_destinations_by_tool.get(qualified),
+                grounding_terms=tuple(
+                    sorted(self.config.grounding_terms_by_tool.get(qualified, set()))
+                ),
             )
+            if self.config.is_allowed(qualified) and not registry[qualified].grounding_terms:
+                raise ValueError(
+                    f"Allowed MCP tool requires grounding_terms_by_tool: {qualified}"
+                )
         return registry
 
     def _service(self) -> IntentShieldService:

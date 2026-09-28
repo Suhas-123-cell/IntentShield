@@ -12,6 +12,11 @@
   "prohibited_tools": [],
   "read_only_tools": ["demo:read_note", "demo:execution_stats"],
   "destination_fields": {},
+  "grounding_terms_by_tool": {
+    "demo:read_note": ["note", "welcome"],
+    "demo:append_note": ["note", "line", "welcome"],
+    "demo:execution_stats": ["execution", "stats", "statistics"]
+  },
   "expose_upstream_descriptions": false,
   "allowed_resources": [],
   "allowed_destinations": [],

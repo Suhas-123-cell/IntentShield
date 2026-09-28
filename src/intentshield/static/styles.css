@@ -17,6 +17,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   background: var(--bg);
   scroll-behavior: smooth;
@@ -363,6 +367,24 @@ dd {
   display: flex;
   align-items: baseline;
   gap: 12px;
+}
+
+.panel-header .approval-auth {
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-auth label {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.approval-auth input {
+  width: 150px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
 }
 
 .panel-index {

@@ -5,6 +5,7 @@ import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from enum import StrEnum
+from threading import BoundedSemaphore
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -65,6 +66,7 @@ class TrustedToolMetadata(BaseModel):
     destination_field: str | None = Field(default=None, min_length=1, max_length=100)
     allowed_resources: tuple[str, ...] = ()
     allowed_destinations: tuple[str, ...] = ()
+    grounding_terms: tuple[str, ...] = ()
 
     @classmethod
     def from_spec(
@@ -92,6 +94,7 @@ class TrustedToolMetadata(BaseModel):
             destination_field=spec.destination_field,
             allowed_resources=tuple(sorted(resources)),
             allowed_destinations=tuple(destinations),
+            grounding_terms=tuple(sorted(set(spec.grounding_terms))),
         )
 
 
@@ -201,7 +204,25 @@ _READ_ACTIONS = frozenset({
     "summarize", "summarise", "inspect", "retrieve",
 })
 _WRITE_ACTIONS = frozenset(
-    {"send", "create", "write", "update", "append", "delete", "remove", "move", "forward"}
+    {
+        "append",
+        "approve",
+        "assign",
+        "cancel",
+        "close",
+        "create",
+        "delete",
+        "email",
+        "forward",
+        "move",
+        "post",
+        "remove",
+        "rename",
+        "send",
+        "update",
+        "upload",
+        "write",
+    }
 )
 
 
@@ -211,10 +232,6 @@ def _elapsed_ms(start: float) -> float:
 
 def _tokens(value: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", value.lower()))
-
-
-def _action_tokens(tool_name: str) -> set[str]:
-    return _tokens(tool_name.rsplit(":", 1)[-1]) & (_READ_ACTIONS | _WRITE_ACTIONS)
 
 
 def _explicitly_negates(intent: str, actions: set[str]) -> bool:
@@ -292,21 +309,21 @@ class DeterministicGroundingAgent:
             reasons.append(EvidenceReason.SCHEMA_HASH_MISMATCH)
             hard_failure = True
 
-        actions = _action_tokens(metadata.name)
-        intent_action_family: set[str] = set(actions)
-        if actions & _READ_ACTIONS:
-            intent_action_family.update(_READ_ACTIONS)
-        if actions & _WRITE_ACTIONS:
-            intent_action_family.update(_WRITE_ACTIONS)
+        # Read/mutation classification is operator-owned ToolSpec metadata.
+        # The upstream tool name can add no authority and is not trusted to
+        # define the expected action family.
+        intent_action_family = set(
+            _WRITE_ACTIONS if metadata.mutation else _READ_ACTIONS
+        )
         intent_tokens = _tokens(user_intent)
         if _explicitly_negates(user_intent, intent_action_family):
             deterministic_alignment = 0.0
             reasons.append(EvidenceReason.ACTION_EXPLICITLY_NEGATED)
-        elif actions and intent_action_family & intent_tokens:
+        elif (
+            intent_action_family & intent_tokens
+            and _tokens(" ".join(metadata.grounding_terms)) & intent_tokens
+        ):
             deterministic_alignment = 0.95
-            reasons.append(EvidenceReason.ACTION_GROUNDED)
-        elif (_tokens(metadata.name) - {"tool", "api", "mcp"}) & intent_tokens:
-            deterministic_alignment = 0.82
             reasons.append(EvidenceReason.ACTION_GROUNDED)
         else:
             deterministic_alignment = 0.30
@@ -336,6 +353,17 @@ class DeterministicGroundingAgent:
                 destination_tokens = _tokens(destination.split("@", 1)[0])
                 if destination_tokens & intent_tokens or destination.lower() in user_intent.lower():
                     reasons.append(EvidenceReason.DESTINATION_GROUNDED)
+                    if (
+                        deterministic_alignment == 0.30
+                        and intent_action_family & intent_tokens
+                    ):
+                        reasons = [
+                            reason
+                            for reason in reasons
+                            if reason is not EvidenceReason.ACTION_NOT_GROUNDED
+                        ]
+                        reasons.append(EvidenceReason.ACTION_GROUNDED)
+                        deterministic_alignment = 0.95
                 else:
                     reasons.append(EvidenceReason.DESTINATION_NOT_GROUNDED)
                     deterministic_alignment = min(deterministic_alignment, 0.55)
@@ -395,6 +423,32 @@ class SecurityAnalysisSupervisor:
         self.config = config or SecuritySupervisorConfig()
         self.detection_agent = detection_agent or DeterministicDetectionAgent()
         self.grounding_agent = grounding_agent or DeterministicGroundingAgent(classifier)
+        self._executor = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="intentshield-security"
+        )
+        self._slots = BoundedSemaphore(2)
+
+    def _submit(
+        self,
+        agent: AnalysisAgent,
+        user_intent: str,
+        call: ToolCall,
+        metadata: TrustedToolMetadata,
+    ) -> Future[DetectionEvidence | GroundingEvidence] | None:
+        if not self._slots.acquire(blocking=False):
+            return None
+
+        def run() -> DetectionEvidence | GroundingEvidence:
+            try:
+                return agent.analyze(
+                    user_intent,
+                    call.model_copy(deep=True),
+                    metadata.model_copy(deep=True),
+                )
+            finally:
+                self._slots.release()
+
+        return self._executor.submit(run)
 
     def analyze(
         self,
@@ -405,26 +459,18 @@ class SecurityAnalysisSupervisor:
         if not user_intent.strip():
             raise ValueError("user_intent must not be blank")
 
-        executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="intentshield-security")
-        futures: dict[str, Future[DetectionEvidence | GroundingEvidence]] = {
-            "detection": executor.submit(
-                self.detection_agent.analyze,
-                user_intent,
-                call.model_copy(deep=True),
-                metadata.model_copy(deep=True),
+        futures: dict[str, Future[DetectionEvidence | GroundingEvidence] | None] = {
+            "detection": self._submit(
+                self.detection_agent, user_intent, call, metadata
             ),
-            "grounding": executor.submit(
-                self.grounding_agent.analyze,
-                user_intent,
-                call.model_copy(deep=True),
-                metadata.model_copy(deep=True),
+            "grounding": self._submit(
+                self.grounding_agent, user_intent, call, metadata
             ),
         }
-        done, pending = wait(futures.values(), timeout=self.config.timeout_ms / 1000)
+        active = {future for future in futures.values() if future is not None}
+        done, pending = wait(active, timeout=self.config.timeout_ms / 1000)
         for future in pending:
             future.cancel()
-        # A timed-out plug-in must not delay a fail-closed policy response.
-        executor.shutdown(wait=False, cancel_futures=True)
 
         detection = self._detection_result(futures["detection"], done)
         grounding = self._grounding_result(futures["grounding"], done)
@@ -432,10 +478,10 @@ class SecurityAnalysisSupervisor:
 
     @staticmethod
     def _detection_result(
-        future: Future[DetectionEvidence | GroundingEvidence],
+        future: Future[DetectionEvidence | GroundingEvidence] | None,
         done: set[Future[DetectionEvidence | GroundingEvidence]],
     ) -> DetectionEvidence:
-        if future not in done:
+        if future is None or future not in done:
             return DetectionEvidence(
                 status=EvidenceStatus.TIMED_OUT,
                 injection_score=1.0,
@@ -452,10 +498,10 @@ class SecurityAnalysisSupervisor:
 
     @staticmethod
     def _grounding_result(
-        future: Future[DetectionEvidence | GroundingEvidence],
+        future: Future[DetectionEvidence | GroundingEvidence] | None,
         done: set[Future[DetectionEvidence | GroundingEvidence]],
     ) -> GroundingEvidence:
-        if future not in done:
+        if future is None or future not in done:
             return GroundingEvidence(
                 status=EvidenceStatus.TIMED_OUT,
                 intent_alignment=0.0,
