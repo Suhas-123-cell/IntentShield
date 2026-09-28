@@ -104,6 +104,8 @@ class PolicyEngine:
 
         if context.intent_alignment < self.config.minimum_intent_alignment:
             return self._block(ReasonCode.BLOCK_INTENT_MISMATCH)
+        if context.security_disposition == "BLOCK":
+            return self._block(ReasonCode.BLOCK_SECURITY_AGENTS)
 
         if spec.mutation and not call.idempotency_key:
             return self._block(ReasonCode.BLOCK_IDEMPOTENCY_REQUIRED)

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+import hmac
 import os
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Annotated, AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,9 +23,15 @@ def create_app(
     database_path: str | Path | None = None,
     model_gateway: ModelGateway | None = None,
     proxy_config: str | Path | None = None,
+    control_token: str | None = None,
 ) -> FastAPI:
     load_dotenv()
     proxy_path = proxy_config or os.getenv("INTENTSHIELD_PROXY_CONFIG")
+    approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN", "")).strip()
+    if proxy_path and not approval_token:
+        raise ValueError(
+            "INTENTSHIELD_CONTROL_TOKEN is required when the web MCP proxy is enabled"
+        )
     runtime: MCPProxyRuntime | None = None
     local_service: IntentShieldService | None = None
     if proxy_path:
@@ -68,6 +75,19 @@ def create_app(
         if current is None:
             raise RuntimeError("IntentShield service is not ready")
         return current
+
+    def require_approval_access(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> None:
+        if not approval_token:
+            return
+        expected = f"Bearer {approval_token}"
+        if authorization is None or not hmac.compare_digest(authorization, expected):
+            raise HTTPException(
+                401,
+                "A valid operator control token is required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     @app.get("/health")
     @app.get("/api/health")
@@ -190,11 +210,18 @@ def create_app(
         return service().storage.list_events(run_id)
 
     @app.get("/api/approvals")
-    def list_approvals(status: str | None = None):
+    def list_approvals(
+        status: str | None = None,
+        _authorized: None = Depends(require_approval_access),
+    ):
         return service().storage.list_approvals(status.upper() if status else None)
 
     @app.post("/api/approvals/{approval_id}/decision")
-    async def decide_approval(approval_id: str, request: ApprovalDecisionRequest):
+    async def decide_approval(
+        approval_id: str,
+        request: ApprovalDecisionRequest,
+        _authorized: None = Depends(require_approval_access),
+    ):
         try:
             if runtime is not None:
                 return await runtime.decide_approval(

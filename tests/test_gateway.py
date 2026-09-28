@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from intentshield.models import Decision, ReasonCode, ToolCall
+from intentshield.models import PolicyContext
 from intentshield.policy import PolicyConfig
 from intentshield.policy import PolicyEngine
 from intentshield.service import IntentShieldService
@@ -40,6 +41,23 @@ def test_benign_read_is_allowed_with_trusted_scores(service: IntentShieldService
     assert result.injection_score < service.config.injection_block_threshold
     assert result.intent_alignment >= service.config.minimum_intent_alignment
     assert service.email_tools.execution_count == 1
+
+
+def test_policy_consumes_security_agent_block_as_an_independent_veto(
+    service: IntentShieldService,
+):
+    call = service.scenario_call("benign")
+    outcome = service.policy.evaluate(PolicyContext(
+        run_id="run-agent-veto",
+        user_intent="Read my inbox",
+        call=call,
+        injection_score=0.1,
+        intent_alignment=1.0,
+        security_disposition="BLOCK",
+    ))
+
+    assert outcome.decision is Decision.BLOCK
+    assert outcome.reason_codes == [ReasonCode.BLOCK_SECURITY_AGENTS]
 
 
 def test_untrusted_call_cannot_forge_security_signals():

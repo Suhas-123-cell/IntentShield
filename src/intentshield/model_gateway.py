@@ -43,7 +43,7 @@ class _ProviderSettings:
 _SETTINGS = _ProviderSettings(
     key_env="GEMINI_API_KEY",
     model_env="INTENTSHIELD_GEMINI_MODEL",
-    default_model="gemini-3.5-flash",
+    default_model="gemini-3.8-flash",
 )
 
 
@@ -232,10 +232,11 @@ def _tool_declarations(
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     declarations: list[dict[str, Any]] = []
     aliases: dict[str, str] = {}
+    reserved_aliases = {_NO_ACTION_FUNCTION}
     for index, (tool_name, spec) in enumerate(sorted(registry.items())):
         base = re.sub(r"[^A-Za-z0-9_-]+", "_", tool_name).strip("_-") or f"tool_{index}"
         alias = base[:64]
-        if alias in aliases:
+        if alias in aliases or alias in reserved_aliases:
             suffix = f"_{index}"
             alias = f"{alias[:64 - len(suffix)]}{suffix}"
         aliases[alias] = tool_name

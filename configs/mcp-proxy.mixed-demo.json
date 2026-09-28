@@ -25,6 +25,14 @@
   "destination_fields": {},
   "allowed_resources_by_tool": {},
   "allowed_destinations_by_tool": {},
+  "grounding_terms_by_tool": {
+    "notes_stdio:read_note": ["note", "welcome"],
+    "notes_stdio:append_note": ["note", "line", "welcome"],
+    "notes_stdio:execution_stats": ["execution", "stats", "statistics"],
+    "notes_http:read_note": ["note", "welcome"],
+    "notes_http:append_note": ["note", "line", "welcome"],
+    "notes_http:execution_stats": ["execution", "stats", "statistics"]
+  },
   "expose_upstream_descriptions": false,
   "call_budget": 8,
   "injection_block_threshold": 0.75,

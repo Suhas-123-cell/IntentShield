@@ -60,7 +60,7 @@ cp .env.example .env
 
 ```dotenv
 GEMINI_API_KEY=
-INTENTSHIELD_GEMINI_MODEL=gemini-3.5-flash
+INTENTSHIELD_GEMINI_MODEL=gemini-3.8-flash
 INTENTSHIELD_MODEL_MAX_CONCURRENCY=2
 INTENTSHIELD_INTENT_MODEL_DIR=artifacts/intent-deberta-v3-small
 ```
@@ -186,11 +186,15 @@ catalog rather than the simulated tools, set:
 
 ```dotenv
 INTENTSHIELD_PROXY_CONFIG=configs/mcp-proxy.demo.json
+INTENTSHIELD_CONTROL_TOKEN=replace-with-a-long-random-value
 ```
 
 Then start `.venv/bin/intentshield`. The FastAPI lifespan opens the configured
 upstream connections, Gemini sees the guarded qualified catalog, and every
 proposal reaches the same policy-bound MCP executor used by the proxy server.
+Enter the same control token in the dashboard's approval queue field; it stays
+in memory and is sent only as a bearer credential to the local approval API.
+The web proxy refuses to start without this token.
 
 The real HTTP upstream, downstream, authenticated control endpoint, and clean
 shutdown path also have an opt-in process-level test:
@@ -307,7 +311,11 @@ All patterns and resource/destination rules must use qualified
 `server_id:tool_name` identities. Per-tool scope rules use
 `resource_fields` with `allowed_resources_by_tool`, or `destination_fields`
 with `allowed_destinations_by_tool`; global scope lists are rejected for MCP
-proxy configurations to prevent policy bleeding between servers.
+proxy configurations to prevent policy bleeding between servers. Every allowed
+tool must also have a nonempty `grounding_terms_by_tool` entry containing the
+operator-owned nouns that must appear in the user's request, such as `note`,
+`invoice`, or `status`. Startup fails if a discovered allowed tool has no such
+entry. When wildcard allow rules are used, map every tool they can admit.
 
 For desktop clients that launch MCP subprocesses, use the absolute executable
 and config paths:
@@ -361,6 +369,10 @@ Use `"scenario":"injection"` to demonstrate a blocked attack or
 `"scenario":"review"` to create an approval request. Scripted scenarios are
 available in local simulated mode; set `INTENTSHIELD_PROXY_CONFIG` for live MCP
 catalog and execution from the web dashboard.
+
+When the web dashboard uses a real MCP proxy, both approval endpoints require
+`Authorization: Bearer <INTENTSHIELD_CONTROL_TOKEN>`. The local simulated mode
+can run without a token for development.
 
 ## Security boundary
 

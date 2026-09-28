@@ -50,6 +50,7 @@
     rawRecord: byId("raw-record"),
     approvalBody: byId("approval-body"),
     approvalCount: byId("approval-count"),
+    controlToken: byId("control-token"),
     auditBody: byId("audit-body"),
     toolList: byId("tool-list"),
     toastRegion: byId("toast-region"),
@@ -201,9 +202,13 @@
   }
 
   async function api(path, options) {
+    const config = options || {};
     const response = await fetch(`${API}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
+      ...config,
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.headers || {}),
+      },
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -236,7 +241,7 @@
       api("/metrics"),
       api("/runs"),
       api("/tools"),
-      api("/approvals?status=pending"),
+      api("/approvals?status=pending", { headers: operatorHeaders() }),
       api("/models"),
       api("/security/status"),
     ]);
@@ -450,6 +455,7 @@
       const payload = { decision };
       await api(`/approvals/${encodeURIComponent(id)}/decision`, {
         method: "POST",
+        headers: operatorHeaders(),
         body: JSON.stringify(payload),
       });
       const outcome = decision === "approve" ? "APPROVED" : "REJECTED";
@@ -459,6 +465,11 @@
       rowButtons.forEach((button) => { button.disabled = false; });
       showToast(`APPROVAL FAILED: ${error.message}`, true);
     }
+  }
+
+  function operatorHeaders() {
+    const token = elements.controlToken.value.trim();
+    return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   function renderTools() {
@@ -676,6 +687,7 @@
   elements.requestInput.addEventListener("input", updateCount);
   elements.clearButton.addEventListener("click", clearRequest);
   elements.refreshButton.addEventListener("click", () => refreshAll({ announce: true }));
+  elements.controlToken.addEventListener("change", () => refreshAll({ announce: true }));
 
   updateCount();
   updateClock();

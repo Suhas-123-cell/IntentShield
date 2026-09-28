@@ -207,7 +207,11 @@
             <span class="panel-index">03</span>
             <h2 id="approvals-title">APPROVAL QUEUE</h2>
           </div>
-          <output class="counter" id="approval-count">00 PENDING</output>
+          <div class="approval-auth">
+            <label for="control-token">CONTROL TOKEN</label>
+            <input id="control-token" type="password" autocomplete="off" spellcheck="false">
+            <output class="counter" id="approval-count">00 PENDING</output>
+          </div>
         </header>
         <div class="table-scroll" tabindex="0" role="region" aria-label="Pending approvals table">
           <table>

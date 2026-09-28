@@ -23,6 +23,17 @@ def _write_config(tmp_path: Path, **overrides: object) -> Path:
         "destination_fields": {},
     }
     config.update(overrides)
+    upstreams = config.get("upstreams") or [config.get("upstream")]
+    server_ids = [item["server_id"] for item in upstreams if isinstance(item, dict)]
+    config["grounding_terms_by_tool"] = {
+        f"{server_id}:{tool}": terms
+        for server_id in server_ids
+        for tool, terms in {
+            "read_note": ["note", "welcome"],
+            "append_note": ["note", "line", "welcome"],
+            "execution_stats": ["execution", "stats"],
+        }.items()
+    }
     path = tmp_path / "proxy.json"
     path.write_text(json.dumps(config))
     return path

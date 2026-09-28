@@ -20,18 +20,22 @@
   ],
   "database_path": "intentshield-real.db",
   "allowed_tools": [
-    "local_api:read_*",
-    "remote_api:get_*"
+    "local_api:read_record",
+    "remote_api:get_status"
   ],
   "prohibited_tools": [],
   "read_only_tools": [
-    "local_api:read_*",
-    "remote_api:get_*"
+    "local_api:read_record",
+    "remote_api:get_status"
   ],
   "resource_fields": {},
   "destination_fields": {},
   "allowed_resources_by_tool": {},
   "allowed_destinations_by_tool": {},
+  "grounding_terms_by_tool": {
+    "local_api:read_record": ["record", "profile", "account"],
+    "remote_api:get_status": ["status", "state", "health"]
+  },
   "expose_upstream_descriptions": false,
   "call_budget": 8,
   "injection_block_threshold": 0.75,

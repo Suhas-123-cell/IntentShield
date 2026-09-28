@@ -85,6 +85,14 @@ def test_real_streamable_http_upstream_gateway_control_and_shutdown(
             "notes_http:read_note",
             "notes_http:execution_stats",
         ],
+        "grounding_terms_by_tool": {
+            "notes_stdio:read_note": ["note", "welcome"],
+            "notes_stdio:append_note": ["note", "line", "welcome"],
+            "notes_stdio:execution_stats": ["execution", "stats"],
+            "notes_http:read_note": ["note", "welcome"],
+            "notes_http:append_note": ["note", "line", "welcome"],
+            "notes_http:execution_stats": ["execution", "stats"],
+        },
     }))
     quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     upstream = subprocess.Popen(

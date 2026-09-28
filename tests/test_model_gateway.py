@@ -4,7 +4,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from intentshield.api import create_app
-from intentshield.model_gateway import ModelGateway, ModelProviderError, _redact_message
+from intentshield.model_gateway import (
+    ModelGateway,
+    ModelProviderError,
+    _redact_message,
+    _tool_declarations,
+)
 from intentshield.tools import build_registry
 
 
@@ -85,6 +90,18 @@ def test_gemini_can_choose_safe_no_action():
         gateway.propose("gemini", "Thanks, that is all", build_registry())
 
     assert caught.value.code == "MODEL_NO_ACTION"
+
+
+def test_no_action_alias_cannot_be_shadowed_by_an_upstream_tool():
+    spec = build_registry()["read_inbox"]
+
+    declarations, aliases = _tool_declarations({"intentshield_no_action": spec})
+    names = [item["name"] for item in declarations]
+
+    assert len(names) == len(set(names))
+    assert names.count("intentshield_no_action") == 1
+    assert "intentshield_no_action" not in aliases
+    assert aliases["intentshield_no_action_0"] == "intentshield_no_action"
 
 
 def test_provider_error_redaction_removes_bearer_and_raw_keys():
