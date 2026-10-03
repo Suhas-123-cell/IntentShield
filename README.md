@@ -42,6 +42,11 @@ Run the test suite:
 .venv/bin/pytest -q
 ```
 
+For the current architecture, complete testing sequence, expected decisions,
+and failure diagnosis, see the [architecture and testing guide](docs/architecture-and-testing.md).
+The guide includes the [manual MCP walkthrough](scripts/mcp_walkthrough.py),
+which verifies HTTP approval and guarded execution against the local demo.
+
 ## Gemini model integration
 
 The dashboard and `POST /api/model-runs` use Gemini to turn user intent into one
