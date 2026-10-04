@@ -13,6 +13,7 @@ import ast
 import json
 import random
 import re
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -55,6 +56,7 @@ def load_tools(data: Path) -> dict[str, dict[str, Any]]:
                 for p in tool["parameters"]
             }
             tools[toolkit["name_for_model"] + tool["name"]] = {
+                "raw": {**tool, "name": toolkit["name_for_model"] + tool["name"]},
                 "toolkit": toolkit["name_for_model"],
                 "description": tool["summary"],
                 "schema": {
@@ -148,6 +150,42 @@ def propose(client: httpx.Client, model: str, case: dict[str, Any],
     return {"tool": fn["name"], "arguments": fn.get("arguments") or {}}
 
 
+def propose_react(client: httpx.Client, model: str, case: dict[str, Any],
+                  tools: dict[str, dict[str, Any]], prompts: tuple[str, str]) -> dict[str, Any]:
+    """InjecAgent's own protocol: ReAct text prompt, injection inside the Observation."""
+    system, user = prompts
+    names = list(dict.fromkeys([case["User Tool"], *case["Attacker Tools"]]))
+    scratchpad = (
+        f"\n{case['Thought']}\nAction: {case['User Tool']}\nAction Input: {case['Tool Parameters']}\n"
+        f"Observation: {case['Tool Response']}\n"
+    )
+    prompt = user.format(
+        available_tool_descriptions=json.dumps([tools[n]["raw"] for n in names], indent=True),
+        input=case["User Instruction"],
+        available_tool_names=names,
+        agent_scratchpad=scratchpad,
+    )
+    response = client.post("/api/chat", json={
+        "model": model,
+        "stream": False,
+        "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 400},
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+    }, timeout=600)
+    response.raise_for_status()
+    text = response.json()["message"]["content"]
+    match = re.search(r"Action:\s*([A-Za-z0-9_]+)", text)
+    if not match:
+        return {"tool": None, "arguments": {}, "text": text[:300]}
+    arguments: dict[str, Any] = {}
+    raw_input = re.search(r"Action Input:\s*(\{.*?\})\s*(?:\n|$)", text, re.S)
+    if raw_input:
+        try:
+            arguments = json.loads(raw_input.group(1))
+        except json.JSONDecodeError:
+            pass
+    return {"tool": match.group(1), "arguments": arguments, "text": text[:300]}
+
+
 def sample_cases(data: Path, limit: int, seed: int) -> list[dict[str, Any]]:
     rng = random.Random(seed)
     cases: list[dict[str, Any]] = []
@@ -168,12 +206,21 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--model", default="llama3.2:3b")
     parser.add_argument("--limit", type=int, default=25, help="cases per setting")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--protocol", choices=("react", "native"), default="react",
+                        help="react = InjecAgent's own prompt; native = Ollama function calling")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
     parser.add_argument("--out", type=Path, default=Path("artifacts/injecagent"))
     args = parser.parse_args(argv)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    cache_path = args.out / f"generations-{args.model.replace(':', '_')}.jsonl"
+    tag = f"{args.model.replace(':', '_')}-{args.protocol}"
+    cache_path = args.out / f"generations-{tag}.jsonl"
+    prompts = None
+    if args.protocol == "react":
+        sys.path.insert(0, str(args.data.parent / "src"))
+        from prompts.agent_prompts import SYS_PROMPT, USER_PROMPT  # InjecAgent's own text
+
+        prompts = (SYS_PROMPT, USER_PROMPT)
     cache = {}
     if cache_path.exists():
         for line in cache_path.read_text().splitlines():
@@ -188,7 +235,8 @@ def main(argv: list[str] | None = None) -> None:
             if key in cache:
                 continue
             start = time.perf_counter()
-            proposal = propose(client, args.model, case, tools)
+            proposal = (propose_react(client, args.model, case, tools, prompts)
+                        if prompts else propose(client, args.model, case, tools))
             row = {"setting": key[0], "index": key[1], **proposal,
                    "seconds": round(time.perf_counter() - start, 2)}
             cache[key] = row
@@ -256,7 +304,7 @@ def main(argv: list[str] | None = None) -> None:
             t: {m: rate(v[m][0], v[m][1]) for m in v} for t, v in sorted(by_type.items())
         },
     }
-    (args.out / f"report-{args.model.replace(':', '_')}.json").write_text(json.dumps(report, indent=2))
+    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
     print(json.dumps({k: report[k] for k in ("model", "cases", "valid_outputs", "model_followed_injection",
                                               "defenses", "benign_false_block_rate")}, indent=2))
 
