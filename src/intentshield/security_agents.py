@@ -203,6 +203,9 @@ _READ_ACTIONS = frozenset({
     "read", "get", "list", "search", "find", "show", "view", "fetch", "check",
     "summarize", "summarise", "inspect", "retrieve",
 })
+_GENERIC_TERMS = _READ_ACTIONS | frozenset({
+    "user", "users", "details", "detail", "info", "information", "all", "data", "item", "items", "to",
+})
 _WRITE_ACTIONS = frozenset(
     {
         "append",
@@ -322,6 +325,11 @@ class DeterministicGroundingAgent:
         elif (
             intent_action_family & intent_tokens
             and _tokens(" ".join(metadata.grounding_terms)) & intent_tokens
+        ) or (
+            # Reads need only specific entity overlap ("give me the GitHub user
+            # details" has no listed verb). Mutations still need an explicit verb.
+            not metadata.mutation
+            and (_tokens(" ".join(metadata.grounding_terms)) - _GENERIC_TERMS) & intent_tokens
         ):
             deterministic_alignment = 0.95
             reasons.append(EvidenceReason.ACTION_GROUNDED)
