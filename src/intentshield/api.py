@@ -10,12 +10,14 @@ from typing import Annotated, AsyncIterator
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi import Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .model_gateway import ModelGateway, ModelProviderError
 from .mcp_proxy import MCPProxyConfig, MCPProxyRuntime
 from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, ToolCall
+from .ratelimit import RateLimiter
 from .service import IntentShieldService
 
 
@@ -66,6 +68,17 @@ def create_app(
         TrustedHostMiddleware,
         allowed_hosts=["127.0.0.1", "localhost", "testserver"],
     )
+    limiter = RateLimiter.from_env()
+    if limiter is not None:
+        @app.middleware("http")
+        async def rate_limit(request: Request, call_next):
+            client = request.client.host if request.client else "unknown"
+            if request.url.path != "/health" and not limiter.allow(client):
+                return JSONResponse(
+                    {"detail": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
+                )
+            return await call_next(request)
+
     app.state.service = local_service
     app.state.model_gateway = models
     app.state.proxy_runtime = runtime
