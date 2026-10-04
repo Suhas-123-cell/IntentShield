@@ -117,6 +117,17 @@ Inspect readiness:
 curl http://127.0.0.1:8000/api/security/status
 ```
 
+## Production settings
+
+| Variable | Purpose |
+|---|---|
+| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode). Unset leaves it open on loopback. |
+| `INTENTSHIELD_CONTROL_TOKEN` | Bearer token for the human approval endpoint. |
+| `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and `/mcp` (default 120, `0` disables). In memory, per process. |
+| `INTENTSHIELD_LOG_LEVEL` | JSON log level (default `INFO`). Decision lines carry run, tool, decision and reason codes, never arguments. |
+
+`configs/policy.json` is validated strictly: unknown keys, a tool both allowed and prohibited, and catch-all destination patterns are rejected at startup.
+
 ## Real MCP proxy
 
 IntentShield is an MCP server to the agent and an MCP client to the guarded
