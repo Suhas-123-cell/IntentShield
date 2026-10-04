@@ -128,6 +128,25 @@ curl http://127.0.0.1:8000/api/security/status
 
 `configs/policy.json` is validated strictly: unknown keys, a tool both allowed and prohibited, and catch-all destination patterns are rejected at startup.
 
+## Offline evaluation
+
+```bash
+.venv/bin/intentshield-eval --out report.json
+```
+
+The harness replays a deterministic, template-generated set of attack and benign
+tool calls against four defenses: none, a keyword filter, schema-only validation,
+and the full gateway (dry-run, nothing executes). It reports attack success
+(an unreviewed `ALLOW`), attacks that reached a human reviewer, attacks blocked,
+benign false-blocks, and latency, each with a Wilson 95% interval.
+
+The dataset is synthetic and small (95 cases). It is a regression and ablation
+harness, **not a public benchmark**, and says nothing about performance against
+adaptive attackers or on AgentDojo / InjecAgent. Known gap it exposes: when the
+user really asked to send an email, a paraphrased injection in the body avoids the
+keyword detector and is stopped only by the mutation approval step. The DeBERTa
+classifier supplies intent evidence, not injection detection.
+
 ## Real MCP proxy
 
 IntentShield is an MCP server to the agent and an MCP client to the guarded
