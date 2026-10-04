@@ -364,3 +364,16 @@ def test_existing_database_schema_is_migrated(tmp_path: Path):
     with migrated.connect() as db:
         columns = {row[1] for row in db.execute("PRAGMA table_info(runs)")}
     assert "call_count" in columns
+
+
+def test_policy_config_rejects_typos_overlaps_and_catch_all_destinations():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        PolicyConfig(call_budjet=3)
+    with pytest.raises(ValidationError, match="allowed and prohibited"):
+        PolicyConfig(allowed_tools={"send_email"}, prohibited_tools={"send_email"})
+    with pytest.raises(ValidationError, match="catch-all"):
+        PolicyConfig(allowed_destinations=["*"])
+    PolicyConfig(allowed_destinations=["*@example.com"])
