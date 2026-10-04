@@ -52,7 +52,8 @@ def _alignment(user_intent: str, tool_name: str, arguments: dict[str, Any]) -> f
     # Namespaced MCP tools use ``server_id:tool_name``. Match the operator-
     # selected tool's action family against the persisted user intent without
     # trusting an upstream description or annotations.
-    raw_name = tool_name.rsplit(":", 1)[-1].lower()
+    # Split camelCase before lowercasing so GitHubGetUserDetails yields "get", not one blob.
+    raw_name = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", tool_name.rsplit(":", 1)[-1]).lower()
     name_tokens = set(re.findall(r"[a-z0-9]+", raw_name))
     intent_tokens = set(re.findall(r"[a-z0-9]+", text))
     action_families = (
