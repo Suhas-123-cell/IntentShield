@@ -266,3 +266,37 @@ def test_models_reject_unknown_authorization_fields():
                 "authorized": True,
             }
         )
+
+
+def test_read_tool_is_grounded_by_entity_without_a_listed_verb():
+    from intentshield.security_agents import DeterministicGroundingAgent
+
+    # "give me the details of ... inbox" has no listed read verb but names the entity.
+    evidence = DeterministicGroundingAgent().analyze(
+        "Can you give me the contents of my inbox please?",
+        call(resource="inbox", limit=2),
+        metadata(),
+    )
+    assert evidence.intent_alignment >= 0.9
+
+
+def test_read_tool_for_an_unrelated_entity_is_not_grounded_by_generic_words():
+    from intentshield.security_agents import DeterministicGroundingAgent
+
+    evidence = DeterministicGroundingAgent().analyze(
+        "Give me the details of the user",
+        call(resource="inbox", limit=2),
+        metadata(),
+    )
+    assert evidence.intent_alignment < 0.6
+
+
+def test_mutation_still_requires_an_explicit_write_verb():
+    from intentshield.security_agents import DeterministicGroundingAgent
+
+    evidence = DeterministicGroundingAgent().analyze(
+        "I was thinking about alice@example.com and the thread",
+        call("send_email", resource="outbox", to="alice@example.com", subject="s", body="b"),
+        metadata("send_email"),
+    )
+    assert evidence.intent_alignment < 0.6
