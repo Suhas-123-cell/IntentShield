@@ -28,6 +28,7 @@ intentshield = "intentshield.__main__:main"
 intentshield-mcp = "intentshield.mcp_server:main"
 intentshield-demo-mcp = "intentshield.demo_mcp_server:main"
 intentshield-mcp-verify = "intentshield.mcp_verify:main"
+intentshield-eval = "intentshield.evaluation:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
