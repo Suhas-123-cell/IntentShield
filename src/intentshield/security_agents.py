@@ -165,6 +165,7 @@ class SecuritySupervisorConfig(BaseModel):
     injection_block_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
     minimum_intent_alignment: float = Field(default=0.60, ge=0.0, le=1.0)
     mutation_risk_floor: float = Field(default=0.35, ge=0.0, le=1.0)
+    lenient_reads: bool = False
 
 
 class AnalysisAgent(Protocol):
@@ -553,7 +554,12 @@ class SecurityAnalysisSupervisor:
             failed
             or injection >= self.config.injection_block_threshold
             or grounding.scope_score == 0.0
-            or alignment < self.config.minimum_intent_alignment
+            or (
+                alignment < self.config.minimum_intent_alignment
+                # Lenient reads: an ungrounded read is evidence, not a veto. Negated
+                # or failed grounding (alignment 0) and all mutations stay strict.
+                and (metadata.mutation or not self.config.lenient_reads or alignment == 0.0)
+            )
         ):
             disposition = SecurityDisposition.BLOCK
             reasons.append(EvidenceReason.CONSENSUS_BLOCK)
