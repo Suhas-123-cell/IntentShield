@@ -300,3 +300,17 @@ def test_mutation_still_requires_an_explicit_write_verb():
         metadata("send_email"),
     )
     assert evidence.intent_alignment < 0.6
+
+
+def test_generic_verb_in_tool_name_does_not_ground_an_unrelated_read():
+    from intentshield.security_agents import DeterministicGroundingAgent
+
+    trusted = TrustedToolMetadata(
+        name="DropboxGetItemMetadata", schema_hash="h" * 64, mutation=False,
+        grounding_terms=("dropbox", "get", "item", "metadata"),
+    )
+    proposed = ToolCall(tool_name=trusted.name, arguments={}, schema_hash=trusted.schema_hash)
+    evidence = DeterministicGroundingAgent().analyze(
+        "Get me the Twitter profile for the user 'AdaLovelace'.", proposed, trusted
+    )
+    assert evidence.intent_alignment < 0.6
