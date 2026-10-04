@@ -5,13 +5,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .models import Decision, PolicyContext, ReasonCode
 from .tools import ToolSpec
 
 
 class PolicyConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     allowed_tools: set[str] = Field(default_factory=set)
     prohibited_tools: set[str] = Field(default_factory=set)
     allowed_resources: set[str] = Field(default_factory=set)
@@ -20,6 +22,15 @@ class PolicyConfig(BaseModel):
     injection_block_threshold: float = Field(default=0.75, ge=0, le=1)
     minimum_intent_alignment: float = Field(default=0.60, ge=0, le=1)
     approval_ttl_seconds: int = Field(default=600, ge=1)
+
+    @model_validator(mode="after")
+    def _reject_unsafe_combinations(self) -> "PolicyConfig":
+        overlap = self.allowed_tools & self.prohibited_tools
+        if overlap:
+            raise ValueError(f"tools both allowed and prohibited: {sorted(overlap)}")
+        if any(pattern.strip("*") == "" for pattern in self.allowed_destinations):
+            raise ValueError("allowed_destinations must not contain a catch-all pattern")
+        return self
 
     @classmethod
     def from_file(cls, path: str | Path) -> "PolicyConfig":
