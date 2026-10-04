@@ -117,3 +117,31 @@ def test_fastmcp_dependency_is_actionable_when_missing(tmp_path: Path):
 def test_streamable_http_refuses_unauthenticated_remote_binding():
     with pytest.raises(ValueError, match="Remote MCP binding is disabled"):
         run_mcp_server(transport="streamable-http", host="0.0.0.0")
+
+
+def test_agent_token_guards_mcp_endpoint_but_not_control_route(monkeypatch):
+    import uvicorn
+    from starlette.testclient import TestClient
+
+    captured = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **_: captured.setdefault("app", app))
+    run_mcp_server(
+        transport="streamable-http",
+        proxy_config="configs/mcp-proxy.demo.json",
+        control_token="control-secret",
+        agent_token="agent-secret",
+    )
+    client = TestClient(captured["app"])
+    assert client.post("/mcp", json={}).status_code == 401
+    assert client.post(
+        "/mcp", json={}, headers={"authorization": "Bearer wrong"}
+    ).status_code == 401
+    # The control route keeps its own credential and is not gated by the agent token.
+    assert client.post(
+        "/control/approvals/x", json={"decision": "approve"}
+    ).status_code == 401
+    assert client.post(
+        "/control/approvals/x",
+        json={"decision": "bogus"},
+        headers={"authorization": "Bearer control-secret"},
+    ).status_code == 422

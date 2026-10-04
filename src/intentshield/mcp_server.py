@@ -359,6 +359,7 @@ def run_mcp_server(
     streamable_http_path: str = "/mcp",
     proxy_config: str | Path | None = None,
     control_token: str | None = None,
+    agent_token: str | None = None,
 ) -> None:
     """Run IntentShield for a real MCP client over stdio or Streamable HTTP."""
     if transport == "streamable-http" and host not in {"127.0.0.1", "localhost", "::1"}:
@@ -379,6 +380,7 @@ def run_mcp_server(
         )
     if transport == "streamable-http" and proxy_config is not None:
         import uvicorn
+        from starlette.middleware.base import BaseHTTPMiddleware
         from starlette.requests import Request
         from starlette.responses import JSONResponse
 
@@ -388,6 +390,17 @@ def run_mcp_server(
             json_response=True,
             host=host,
         )
+
+        if agent_token:
+            async def require_agent_token(request: Request, call_next):
+                if request.url.path.startswith("/control/"):
+                    return await call_next(request)
+                supplied = request.headers.get("authorization", "")
+                if not hmac.compare_digest(supplied, f"Bearer {agent_token}"):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                return await call_next(request)
+
+            app.add_middleware(BaseHTTPMiddleware, dispatch=require_agent_token)
 
         if control_token:
             async def decide_approval(request: Request) -> JSONResponse:
@@ -457,6 +470,7 @@ def main(argv: list[str] | None = None) -> None:
         streamable_http_path=args.path,
         proxy_config=args.config,
         control_token=os.getenv(args.control_token_env) if args.config else None,
+        agent_token=os.getenv("INTENTSHIELD_AGENT_TOKEN") if args.config else None,
     )
 
 
