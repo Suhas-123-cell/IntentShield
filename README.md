@@ -169,9 +169,13 @@ derived from tool names, standing in for operator configuration. The held-out le
 same-service read (`AmazonViewSavedPaymentMethods` for an Amazon product request): service
 names alone still ground sibling tools. Not compared against published defenses yet.
 
-On AgentDojo (`benchmarks/agentdojo_run.py`), strict grounding blocked the agent's
-context-gathering reads and cut banking utility; `lenient_reads` lets ungrounded reads
-through while mutations stay strict. On the InjecAgent tuning sample it raises first-step
+On AgentDojo (`benchmarks/agentdojo_run.py`, banking, qwen2.5:7b, 8 user tasks x 4
+injection tasks), strict grounding blocked the agent's context-gathering reads and cut
+benign utility from 37.5% to 25.0% (utility under attack 50.0% to 25.0%). With
+`lenient_reads`, which lets ungrounded reads through while mutations stay strict, both
+return to the undefended level (37.5% / 50.0%). Attack success was 0% for every
+configuration including no defense, so this slice measures utility cost only, not
+security gain; the sample is small. On the InjecAgent tuning sample it raises first-step
 read success to 15.8% while end-to-end harm (exfiltration send) stays 0%.
 
 ## Real MCP proxy
