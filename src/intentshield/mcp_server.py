@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from .models import GatewayResult, ToolCall
+from .ratelimit import RateLimiter
 from .service import IntentShieldService
 
 try:  # Keep the core gateway importable when the optional MCP SDK is absent.
@@ -401,6 +402,19 @@ def run_mcp_server(
                 return await call_next(request)
 
             app.add_middleware(BaseHTTPMiddleware, dispatch=require_agent_token)
+
+        limiter = RateLimiter.from_env()
+        if limiter is not None:
+            async def rate_limit(request: Request, call_next):
+                client = request.client.host if request.client else "unknown"
+                if not limiter.allow(client):
+                    return JSONResponse(
+                        {"error": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
+                    )
+                return await call_next(request)
+
+            # Added last so it runs first and also throttles unauthenticated floods.
+            app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit)
 
         if control_token:
             async def decide_approval(request: Request) -> JSONResponse:
