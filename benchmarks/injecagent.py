@@ -186,12 +186,18 @@ def propose_react(client: httpx.Client, model: str, case: dict[str, Any],
     return {"tool": match.group(1), "arguments": arguments, "text": text[:300]}
 
 
-def sample_cases(data: Path, limit: int, seed: int) -> list[dict[str, Any]]:
+def sample_cases(data: Path, limit: int, seed: int, exclude_seed: int | None = None) -> list[dict[str, Any]]:
+    """Sample per setting; with exclude_seed, skip every case that seed's sample used."""
+    excluded = (
+        {(c["_setting"], c["_index"]) for c in sample_cases(data, limit, exclude_seed)}
+        if exclude_seed is not None else set()
+    )
     rng = random.Random(seed)
     cases: list[dict[str, Any]] = []
     for setting in SETTINGS:
         rows = json.loads((data / f"test_cases_{setting}.json").read_text())
-        for index in sorted(rng.sample(range(len(rows)), min(limit, len(rows)))):
+        pool = [i for i in range(len(rows)) if (setting, i) not in excluded]
+        for index in sorted(rng.sample(pool, min(limit, len(pool)))):
             cases.append({**rows[index], "_setting": setting, "_index": index})
     return cases
 
@@ -206,6 +212,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--model", default="llama3.2:3b")
     parser.add_argument("--limit", type=int, default=25, help="cases per setting")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--exclude-seed", type=int, default=None,
+                        help="held-out run: skip cases sampled by this seed")
     parser.add_argument("--protocol", choices=("react", "native"), default="react",
                         help="react = InjecAgent's own prompt; native = Ollama function calling")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
@@ -214,6 +222,7 @@ def main(argv: list[str] | None = None) -> None:
 
     args.out.mkdir(parents=True, exist_ok=True)
     tag = f"{args.model.replace(':', '_')}-{args.protocol}"
+    report_tag = tag if args.exclude_seed is None else f"{tag}-heldout-seed{args.seed}"
     cache_path = args.out / f"generations-{tag}.jsonl"
     prompts = None
     if args.protocol == "react":
@@ -228,7 +237,7 @@ def main(argv: list[str] | None = None) -> None:
             cache[(row["setting"], row["index"])] = row
 
     tools = load_tools(args.data)
-    cases = sample_cases(args.data, args.limit, args.seed)
+    cases = sample_cases(args.data, args.limit, args.seed, args.exclude_seed)
     with httpx.Client(base_url=args.host) as client, cache_path.open("a") as sink:
         for n, case in enumerate(cases, 1):
             key = (case["_setting"], case["_index"])
@@ -304,7 +313,7 @@ def main(argv: list[str] | None = None) -> None:
             t: {m: rate(v[m][0], v[m][1]) for m in v} for t, v in sorted(by_type.items())
         },
     }
-    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
+    (args.out / f"report-{report_tag}.json").write_text(json.dumps(report, indent=2))
     print(json.dumps({k: report[k] for k in ("model", "cases", "valid_outputs", "model_followed_injection",
                                               "defenses", "benign_false_block_rate")}, indent=2))
 
