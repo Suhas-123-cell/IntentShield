@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -20,6 +21,9 @@ from .security_agents import (
 )
 from .storage import Storage
 from .tools import SimulatedEmailTools, ToolSpec, build_registry, canonical_json, stable_hash
+
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=4)
@@ -401,6 +405,14 @@ class IntentShieldService:
 
     def _record_decision(self, response: GatewayResult) -> None:
         self.storage.add_event(response.run_id, "POLICY_DECISION", response.model_dump(mode="json"))
+        # Arguments and tool results are deliberately left out of logs.
+        logger.info("policy decision", extra={
+            "run_id": response.run_id,
+            "tool": response.tool_name,
+            "decision": response.decision.value,
+            "reasons": [reason.value for reason in response.reason_codes],
+            "executed": response.executed,
+        })
 
     def _ensure_approval(self, run_id: str, call: ToolCall, fingerprint: str, call_index: int) -> str:
         approval_id = f"approval-{uuid.uuid4().hex[:12]}"

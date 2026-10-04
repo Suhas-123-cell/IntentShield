@@ -28,6 +28,7 @@ from typing import Any, Literal, Protocol
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
+from .logs import configure_logging
 from .models import GatewayResult, ToolCall
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
@@ -458,6 +459,7 @@ def run_mcp_server(
 
 def main(argv: list[str] | None = None) -> None:
     load_dotenv()
+    configure_logging()
     parser = argparse.ArgumentParser(description="Run the IntentShield MCP gateway")
     parser.add_argument(
         "--transport", choices=("stdio", "streamable-http"), default="stdio"
