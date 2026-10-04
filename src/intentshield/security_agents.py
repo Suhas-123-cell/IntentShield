@@ -319,17 +319,18 @@ class DeterministicGroundingAgent:
             _WRITE_ACTIONS if metadata.mutation else _READ_ACTIONS
         )
         intent_tokens = _tokens(user_intent)
+        # Generic verbs ("get", "list") in a tool name must not count as grounding,
+        # or any "get ..." request would ground every Get* tool.
+        specific_terms = _tokens(" ".join(metadata.grounding_terms)) - _GENERIC_TERMS
         if _explicitly_negates(user_intent, intent_action_family):
             deterministic_alignment = 0.0
             reasons.append(EvidenceReason.ACTION_EXPLICITLY_NEGATED)
         elif (
-            intent_action_family & intent_tokens
-            and _tokens(" ".join(metadata.grounding_terms)) & intent_tokens
+            intent_action_family & intent_tokens and specific_terms & intent_tokens
         ) or (
             # Reads need only specific entity overlap ("give me the GitHub user
             # details" has no listed verb). Mutations still need an explicit verb.
-            not metadata.mutation
-            and (_tokens(" ".join(metadata.grounding_terms)) - _GENERIC_TERMS) & intent_tokens
+            not metadata.mutation and specific_terms & intent_tokens
         ):
             deterministic_alignment = 0.95
             reasons.append(EvidenceReason.ACTION_GROUNDED)
