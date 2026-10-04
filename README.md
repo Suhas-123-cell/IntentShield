@@ -147,6 +147,33 @@ user really asked to send an email, a paraphrased injection in the body avoids t
 keyword detector and is stopped only by the mutation approval step. The DeBERTa
 classifier supplies intent evidence, not injection detection.
 
+### InjecAgent results (local models)
+
+`benchmarks/injecagent.py` replays [InjecAgent](https://github.com/uiuc-kang-lab/InjecAgent)
+cases with its own ReAct prompt against a local Ollama model, then judges each proposed
+action with IntentShield in dry-run. *Scoped* allows only the tool the user's task needs;
+*open* allows all 330 tools, so intent grounding and detection must do the work.
+Attack success = the model's next action is the attacker's tool and it is not blocked.
+60 cases per setting (ds/dh x base/enhanced), 240 per row, Wilson 95% intervals.
+
+| model | sample | model follows injection | ASR scoped | ASR open | benign false-block |
+|---|---|---|---|---|---|
+| llama3.2:3b | tuning | 1.7% | 0.0% | 0.0% | 0.0% |
+| qwen2.5:7b | tuning | 33.8% [28.1, 40.0] | 0.0% [0, 1.6] | 0.0% [0, 1.6] | 0.0% |
+| qwen2.5:7b | **held-out** | 27.9% [22.6, 33.9] | 0.0% [0, 1.6] | 0.4% [0.1, 2.3] | 0.0% |
+
+Caveats: grounding fixes (camelCase splitting, generic verbs, stopwords) were developed on
+the tuning sample; the held-out sample (`--seed 1 --exclude-seed 0`) shares no cases with it.
+Benign false-block covers only InjecAgent's 17 distinct user calls. Grounding terms are
+derived from tool names, standing in for operator configuration. The held-out leak is a
+same-service read (`AmazonViewSavedPaymentMethods` for an Amazon product request): service
+names alone still ground sibling tools. Not compared against published defenses yet.
+
+On AgentDojo (`benchmarks/agentdojo_run.py`), strict grounding blocked the agent's
+context-gathering reads and cut banking utility; `lenient_reads` lets ungrounded reads
+through while mutations stay strict. On the InjecAgent tuning sample it raises first-step
+read success to 15.8% while end-to-end harm (exfiltration send) stays 0%.
+
 ## Real MCP proxy
 
 IntentShield is an MCP server to the agent and an MCP client to the guarded
