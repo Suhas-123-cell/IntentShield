@@ -22,6 +22,8 @@ class PolicyConfig(BaseModel):
     injection_block_threshold: float = Field(default=0.75, ge=0, le=1)
     minimum_intent_alignment: float = Field(default=0.60, ge=0, le=1)
     approval_ttl_seconds: int = Field(default=600, ge=1)
+    # Allow ungrounded reads (multi-step agents gather context first); mutations stay strict.
+    lenient_reads: bool = False
 
     @model_validator(mode="after")
     def _reject_unsafe_combinations(self) -> "PolicyConfig":
@@ -113,7 +115,9 @@ class PolicyEngine:
                 ):
                 return self._block(ReasonCode.BLOCK_DESTINATION_OUT_OF_SCOPE)
 
-        if context.intent_alignment < self.config.minimum_intent_alignment:
+        if context.intent_alignment < self.config.minimum_intent_alignment and (
+            spec.mutation or not self.config.lenient_reads or context.intent_alignment == 0.0
+        ):
             return self._block(ReasonCode.BLOCK_INTENT_MISMATCH)
         if context.security_disposition == "BLOCK":
             return self._block(ReasonCode.BLOCK_SECURITY_AGENTS)

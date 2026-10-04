@@ -88,9 +88,10 @@ def build_registry(runtime: FunctionsRuntime) -> dict[str, ToolSpec]:
 
 
 class GuardedToolsExecutor(ToolsExecutor):
-    def __init__(self, review: str, workdir: Path) -> None:
+    def __init__(self, review: str, workdir: Path, lenient_reads: bool = False) -> None:
         super().__init__()
         self.review = review
+        self.lenient_reads = lenient_reads
         self.workdir = workdir
         self.service: IntentShieldService | None = None
         self.decisions: list[dict[str, Any]] = []
@@ -98,7 +99,9 @@ class GuardedToolsExecutor(ToolsExecutor):
     def _shield(self, runtime: FunctionsRuntime) -> IntentShieldService:
         if self.service is None:
             registry = build_registry(runtime)
-            config = PolicyConfig(allowed_tools=set(registry), call_budget=10_000)
+            config = PolicyConfig(
+                allowed_tools=set(registry), call_budget=10_000, lenient_reads=self.lenient_reads
+            )
             self.service = IntentShieldService(
                 Storage(self.workdir / "agentdojo.db"), config, registry=registry
             )
@@ -152,11 +155,13 @@ class GuardedToolsExecutor(ToolsExecutor):
         return query, runtime, env, out, extra_args
 
 
-def make_pipeline(model: str, defense: str, review: str, host: str, workdir: Path):
+def make_pipeline(model: str, defense: str, review: str, host: str, workdir: Path,
+                  lenient_reads: bool = False):
     client = openai.OpenAI(api_key="ollama", base_url=f"{host}/v1")
     llm = LocalLLM(client, model)
     executor = (
-        GuardedToolsExecutor(review, workdir) if defense == "intentshield" else ToolsExecutor()
+        GuardedToolsExecutor(review, workdir, lenient_reads)
+        if defense == "intentshield" else ToolsExecutor()
     )
     pipeline = AgentPipeline([
         SystemMessage(SYSTEM), InitQuery(), llm, ToolsExecutionLoop([executor, llm])
@@ -179,6 +184,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--defense", choices=("none", "intentshield"), default="none")
     parser.add_argument("--review", choices=("allow", "deny"), default="allow")
     parser.add_argument("--attack", default="important_instructions")
+    parser.add_argument("--lenient-reads", action="store_true")
     parser.add_argument("--user-tasks", type=int, default=None, help="first N user tasks")
     parser.add_argument("--injection-tasks", type=int, default=None, help="first N injection tasks")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
@@ -191,11 +197,15 @@ def main(argv: list[str] | None = None) -> None:
         list(suite.injection_tasks)[: args.injection_tasks] if args.injection_tasks else None
     )
     tag = f"{args.suite}-{args.model.replace(':', '_')}-{args.defense}-{args.review}"
+    if args.lenient_reads:
+        tag += "-lenient"
     logdir = args.out / "logs" / tag
     logdir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmp, OutputLogger(str(logdir)):
-        pipeline, executor = make_pipeline(args.model, args.defense, args.review, args.host, Path(tmp))
+        pipeline, executor = make_pipeline(
+            args.model, args.defense, args.review, args.host, Path(tmp), args.lenient_reads
+        )
         benign = benchmark_suite_without_injections(
             pipeline, suite, logdir=logdir, force_rerun=True, user_tasks=user_tasks,
         )
