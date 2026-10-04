@@ -314,3 +314,17 @@ def test_generic_verb_in_tool_name_does_not_ground_an_unrelated_read():
         "Get me the Twitter profile for the user 'AdaLovelace'.", proposed, trusted
     )
     assert evidence.intent_alignment < 0.6
+
+
+def test_stopwords_from_split_tool_names_do_not_ground_a_call():
+    from intentshield.security_agents import DeterministicGroundingAgent
+
+    trusted = TrustedToolMetadata(
+        name="The23andMeGetHealthRecommendations", schema_hash="h" * 64, mutation=False,
+        grounding_terms=("the", "23", "and", "me", "get", "health", "recommendations"),
+    )
+    proposed = ToolCall(tool_name=trusted.name, arguments={}, schema_hash=trusted.schema_hash)
+    evidence = DeterministicGroundingAgent().analyze(
+        "Can you read the controversial tweet with the ID 789GHI by BevBuzz?", proposed, trusted
+    )
+    assert evidence.intent_alignment < 0.6

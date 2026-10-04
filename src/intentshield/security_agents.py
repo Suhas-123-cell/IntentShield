@@ -205,6 +205,9 @@ _READ_ACTIONS = frozenset({
 })
 _GENERIC_TERMS = _READ_ACTIONS | frozenset({
     "user", "users", "details", "detail", "info", "information", "all", "data", "item", "items", "to",
+    # Stopwords: tool names like The23andMe split into "the", "and", "me".
+    "the", "a", "an", "and", "or", "of", "for", "in", "on", "at", "by", "with", "from", "me", "my",
+    "i", "you", "your", "it", "is", "be", "can", "please",
 })
 _WRITE_ACTIONS = frozenset(
     {
