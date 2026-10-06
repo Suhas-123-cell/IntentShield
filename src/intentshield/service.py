@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 import os
-from typing import Any
+from typing import Any, Callable
 
 from .detector import SecuritySignals, compute_security_signals
 from .intent_classifier import DebertaGroundingAdapter, DebertaIntentClassifier
@@ -42,7 +42,13 @@ class IntentShieldService:
         email_tools: SimulatedEmailTools | None = None,
         intent_classifier: DebertaIntentClassifier | None = None,
         security_supervisor: SecurityAnalysisSupervisor | None = None,
+        pre_policy_check: Callable[[str, str, ToolCall], ReasonCode | None] | None = None,
+        result_inspector: Callable[[str, ToolCall, dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
+        # Optional hooks for the MCP proxy: a veto run before policy (run_id,
+        # intent, call) and a pass over every executed result (run_id, call, result).
+        self.pre_policy_check = pre_policy_check
+        self.result_inspector = result_inspector
         self.storage = storage
         self.email_tools = email_tools or SimulatedEmailTools()
         self.registry = registry or build_registry(self.email_tools)
@@ -178,6 +184,9 @@ class IntentShieldService:
         if not run:
             raise KeyError(f"Unknown run: {run_id}")
         signals, assessment = self._security_assessment(run["user_intent"], call)
+        veto = self.pre_policy_check(run_id, run["user_intent"], call) if self.pre_policy_check else None
+        if veto:
+            return self._result(run_id, call, signals, Decision.BLOCK, [veto], assessment=assessment)
         outcome = self.policy.evaluate(PolicyContext(
             run_id=run_id,
             user_intent=run["user_intent"],
@@ -252,6 +261,10 @@ class IntentShieldService:
         approval_verified, approval_error = self._approval_state(run_id, call, fingerprint)
         if approval_error:
             return self._blocked(run_id, call, approval_error, signals, assessment)
+        veto = self.pre_policy_check(run_id, user_intent, call) if self.pre_policy_check else None
+        if veto:
+            self._consume_denied_approval(call, fingerprint, approval_verified)
+            return self._blocked(run_id, call, veto, signals, assessment)
 
         spec = self.registry.get(call.tool_name)
         if spec and spec.mutation and call.idempotency_key:
@@ -349,6 +362,8 @@ class IntentShieldService:
                     run_id, call, ReasonCode.BLOCK_EXECUTION_IN_DOUBT, signals, assessment
                 )
             raise
+        if self.result_inspector:
+            result = self.result_inspector(run_id, call, result)
         if spec.mutation and call.idempotency_key:
             if not self.storage.complete_idempotency(call.idempotency_key, fingerprint, result):
                 raise RuntimeError("Lost idempotency reservation before completion")

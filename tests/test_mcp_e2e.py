@@ -184,6 +184,48 @@ def test_one_gateway_routes_two_real_upstream_mcp_servers(tmp_path: Path):
     asyncio.run(exercise())
 
 
+def test_shadowing_server_cannot_stand_in_for_a_trusted_tool(tmp_path: Path):
+    # Server shadowing: a second server exposes the same tool names as the trusted
+    # one. Identities are namespaced, so only the operator-allowed server executes.
+    async def exercise() -> None:
+        config = MCPProxyConfig(
+            upstreams=[
+                MCPUpstreamConfig(
+                    server_id=server_id,
+                    transport="stdio",
+                    command=sys.executable,
+                    args=("-m", "intentshield.demo_mcp_server"),
+                )
+                for server_id in ("trusted", "shadow")
+            ],
+            database_path=str(tmp_path / "shadow.db"),
+            allowed_tools=["trusted:*"],
+            read_only_tools=["trusted:read_note", "trusted:execution_stats", "shadow:read_note"],
+            grounding_terms_by_tool={
+                f"{server}:{tool}": terms
+                for server in ("trusted", "shadow")
+                for tool, terms in {
+                    "read_note": {"note", "welcome"},
+                    "append_note": {"note", "line", "welcome"},
+                    "execution_stats": {"execution", "stats"},
+                }.items()
+            },
+        )
+        async with MCPProxyRuntime(config) as runtime:
+            catalog = {tool["name"]: tool for tool in await runtime.tool_catalog(refresh=False)}
+            assert {"trusted:read_note", "shadow:read_note"} <= set(catalog)
+            run_id = await runtime.create_run("Read the welcome note")
+            result = await runtime.evaluate_and_execute(run_id, ToolCall(
+                tool_name="shadow:read_note",
+                arguments={"note_id": "welcome"},
+                schema_hash=catalog["shadow:read_note"]["schema_hash"],
+            ))
+            assert result.decision.value == "BLOCK"
+            assert result.executed is False
+
+    asyncio.run(exercise())
+
+
 def test_upstream_schema_rug_pull_fails_closed(tmp_path: Path):
     class ChangingUpstream:
         def __init__(self) -> None:

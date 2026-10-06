@@ -12,12 +12,13 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .mcp_inspect import distinctive_values, scan_description, scan_output, tool_text
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
-from .models import GatewayResult, ToolCall
+from .models import GatewayResult, ReasonCode, ToolCall
 from .policy import PolicyConfig
 from .service import IntentShieldService
 from .storage import Storage
-from .tools import MCPArguments, ToolSpec
+from .tools import MCPArguments, ToolSpec, stable_hash
 
 
 class MCPProxyConfig(BaseModel):
@@ -38,6 +39,9 @@ class MCPProxyConfig(BaseModel):
     allowed_destinations_by_tool: dict[str, list[str]] = Field(default_factory=dict)
     grounding_terms_by_tool: dict[str, set[str]] = Field(default_factory=dict)
     expose_upstream_descriptions: bool = False
+    # Tools whose description or schema text matches poisoning rules are shown
+    # as unavailable and every call to them is blocked.
+    quarantine_poisoned_tools: bool = True
     allowed_resources: set[str] = Field(default_factory=set)
     allowed_destinations: list[str] = Field(default_factory=list)
     call_budget: int = Field(default=8, ge=1)
@@ -119,6 +123,12 @@ class MCPProxyConfig(BaseModel):
         return self._matches(name, self.read_only_tools)
 
 
+def _fingerprint(tool: MCPTool) -> str:
+    return stable_hash(tool.model_dump(
+        mode="json", include={"title", "description", "input_schema", "output_schema", "annotations"}
+    ))
+
+
 class MCPRemoteToolError(RuntimeError):
     """An upstream tool returned an MCP-level error result."""
 
@@ -185,8 +195,12 @@ class MCPProxyRuntime:
         self.service: IntentShieldService | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._tools: list[MCPTool] = []
-        self._bound_schemas: dict[str, dict[str, Any]] = {}
+        self._bound_fingerprints: dict[str, str] = {}
         self._drifted_tools: set[str] = set()
+        self._quarantined: dict[str, list[str]] = {}
+        self._description_values: dict[str, set[str]] = {}
+        # run_id -> distinctive values from outputs that carried injection text.
+        self._tainted: dict[str, set[str]] = {}
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -219,10 +233,15 @@ class MCPProxyRuntime:
             approval_ttl_seconds=self.config.approval_ttl_seconds,
         )
         self._tools = tools
-        self._bound_schemas = {tool.qualified_name: tool.input_schema for tool in tools}
+        self._bound_fingerprints = {tool.qualified_name: _fingerprint(tool) for tool in tools}
         self.service = IntentShieldService(
-            Storage(self.config.database_path), policy, registry=registry
+            Storage(self.config.database_path), policy, registry=registry,
+            pre_policy_check=self._pre_policy_check, result_inspector=self._inspect_result,
         )
+        if self._quarantined:
+            self.service.storage.add_event(
+                self._ensure_system_run(), "MCP_TOOLS_QUARANTINED", {"tools": self._quarantined}
+            )
 
     async def close(self) -> None:
         self.service = None
@@ -258,8 +277,19 @@ class MCPProxyRuntime:
 
     def _build_registry(self, tools: list[MCPTool]) -> dict[str, ToolSpec]:
         registry: dict[str, ToolSpec] = {}
+        self._quarantined, self._description_values = {}, {}
         for tool in tools:
             qualified = tool.qualified_name
+            # Untrusted text: scanned for poisoning; a reference to another
+            # server's tool name is shadowing.
+            text = tool_text(tool.description, tool.input_schema, tool.title)
+            own = {other.name for other in tools if other.server_id == tool.server_id}
+            findings = scan_description(
+                text, {other.name for other in tools if other.server_id != tool.server_id} - own
+            )
+            if findings and self.config.quarantine_poisoned_tools:
+                self._quarantined[qualified] = findings
+            self._description_values[qualified] = distinctive_values(text)
             if not _SAFE_TOOL_NAME.fullmatch(tool.name) or qualified in registry:
                 raise ValueError(f"Invalid or duplicate upstream MCP tool: {qualified!r}")
             Draft202012Validator.check_schema(tool.input_schema)
@@ -298,7 +328,9 @@ class MCPProxyRuntime:
             registry[qualified] = ToolSpec(
                 name=qualified,
                 description=(
-                    tool.description
+                    f"Quarantined MCP tool {qualified}; upstream description matched poisoning rules."
+                    if qualified in self._quarantined
+                    else tool.description
                     if self.config.expose_upstream_descriptions and tool.description
                     else f"Guarded MCP tool {qualified}; upstream description withheld as untrusted."
                 ),
@@ -339,16 +371,22 @@ class MCPProxyRuntime:
             await self._refresh_catalog()
         catalog = self._service().tool_catalog()
         for item in catalog:
-            item["available"] = item["name"] not in self._drifted_tools
+            item["available"] = not (
+                item["name"] in self._drifted_tools or item["name"] in self._quarantined
+            )
             item["schema_drift"] = item["name"] in self._drifted_tools
+            item["quarantined"] = item["name"] in self._quarantined
+            item["poisoning_findings"] = self._quarantined.get(item["name"], [])
         return catalog
 
     async def _refresh_catalog(self) -> None:
         discovered = await self._list_all_tools()
-        current = {tool.qualified_name: tool.input_schema for tool in discovered}
+        # Rug pull: any change to schema, description, title or annotations
+        # after connect fails closed, not only schema changes.
+        current = {tool.qualified_name: _fingerprint(tool) for tool in discovered}
         changed = {
-            name for name in set(current) | set(self._bound_schemas)
-            if current.get(name) != self._bound_schemas.get(name)
+            name for name in set(current) | set(self._bound_fingerprints)
+            if current.get(name) != self._bound_fingerprints.get(name)
         }
         newly_drifted = changed - self._drifted_tools
         self._drifted_tools.update(changed)
@@ -358,6 +396,33 @@ class MCPProxyRuntime:
                 "MCP_CATALOG_DRIFT",
                 {"tools": sorted(newly_drifted)},
             )
+
+    def _pre_policy_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
+        if call.tool_name in self._quarantined:
+            return ReasonCode.BLOCK_TOOL_QUARANTINED
+        # Argument provenance: a distinctive value (email, URL, account, path, id)
+        # the user never gave must not come from an injected output in this run
+        # or from another tool's description.
+        values = distinctive_values(call.arguments) - distinctive_values(user_intent)
+        if not values:
+            return None
+        if values & self._tainted.get(run_id, set()):
+            return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        for name, described in self._description_values.items():
+            if name != call.tool_name and values & described:
+                return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        return None
+
+    def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
+        findings = scan_output(result.get("upstream", result))
+        if not findings:
+            return result
+        values = distinctive_values(result.get("upstream", result))
+        self._tainted.setdefault(run_id, set()).update(values)
+        self._service().storage.add_event(run_id, "MCP_OUTPUT_INJECTION", {
+            "tool_name": call.tool_name, "findings": findings, "tainted_values": len(values),
+        })
+        return {**result, "injection_detected": True, "injection_findings": findings}
 
     def _ensure_system_run(self) -> str:
         return self._service().create_run("Monitor upstream MCP tool catalog", "mcp-catalog")
