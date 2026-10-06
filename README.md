@@ -242,6 +242,28 @@ labels: 94.4% agreement (precision 0.93, recall 0.74). A live qwen2.5:7b run
 .venv/bin/python benchmarks/mcptox.py --data /path/to/MCPTox-Benchmark --calibrate
 ```
 
+### Adaptive attacks on the description scanner
+
+`benchmarks/adaptive.py` rewrites the 1,311 MCPTox poisoned descriptions the
+scanner flags, as an attacker who has read the rules would, and counts how many
+stay flagged (the poisoned tool is treated as another server's, so shadowing applies).
+
+| rewrite | still flagged | before Unicode normalization |
+|---|---|---|
+| none | 100% | 100% |
+| line breaks inside trigger phrases | 99.9% | 99.9% |
+| keyword paraphrase ("must" -> "are required to", `<IMPORTANT>` -> `[NOTE]`) | 98.6% | 98.6% |
+| Cyrillic look-alike letters | 100% | 49.8% |
+| zero-width characters inside words | 100% | 10.4% |
+
+Both scanners now NFKC-normalize, drop invisible format characters and map common
+Cyrillic/Greek look-alikes before matching; false flags on the 362 clean tools stay
+at 3. Paraphrase survives mostly through the shadowing check: the rules alone keep
+only 42.7% of paraphrased descriptions, so an attacker who also avoids naming
+another server's tool would get through. Whether every rewrite still steers a model
+was not tested. MSB is the held-out check: its output-borne injections (false error,
+user impersonation, retrieval) match none of the output rules.
+
 ### Output layer on InjecAgent
 
 `benchmarks/injecagent.py --output-layer` scans each injected tool response and
