@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import tempfile
 from collections.abc import Sequence
@@ -27,6 +28,7 @@ from agentdojo.agent_pipeline import (
     ToolsExecutionLoop,
     ToolsExecutor,
 )
+from agentdojo.agent_pipeline.llms.google_llm import GoogleLLM
 from agentdojo.agent_pipeline.llms.local_llm import LocalLLM
 from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.benchmark import (
@@ -35,6 +37,7 @@ from agentdojo.benchmark import (
 )
 from agentdojo.functions_runtime import EmptyEnv, Env, FunctionsRuntime
 from agentdojo.logging import OutputLogger
+from agentdojo.models import MODEL_NAMES
 from agentdojo.task_suite.load_suites import get_suite
 from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_block_from_string
 from jsonschema import Draft202012Validator
@@ -156,9 +159,15 @@ class GuardedToolsExecutor(ToolsExecutor):
 
 
 def make_pipeline(model: str, defense: str, review: str, host: str, workdir: Path,
-                  lenient_reads: bool = False):
-    client = openai.OpenAI(api_key="ollama", base_url=f"{host}/v1")
-    llm = LocalLLM(client, model)
+                  lenient_reads: bool = False, provider: str = "ollama"):
+    if provider == "google":
+        from google import genai
+
+        llm = GoogleLLM(model, genai.Client(api_key=os.environ["GEMINI_API_KEY"]))
+        # Attack templates address the model by name; newer Geminis are not listed.
+        MODEL_NAMES.setdefault(model, "AI model developed by Google")
+    else:
+        llm = LocalLLM(openai.OpenAI(api_key="ollama", base_url=f"{host}/v1"), model)
     executor = (
         GuardedToolsExecutor(review, workdir, lenient_reads)
         if defense == "intentshield" else ToolsExecutor()
@@ -166,8 +175,8 @@ def make_pipeline(model: str, defense: str, review: str, host: str, workdir: Pat
     pipeline = AgentPipeline([
         SystemMessage(SYSTEM), InitQuery(), llm, ToolsExecutionLoop([executor, llm])
     ])
-    # The pipeline name must contain "local" for AgentDojo's attack templates.
-    pipeline.name = f"local-{model}-{defense}-{review}"
+    # The pipeline name must contain a MODEL_NAMES key ("local" for Ollama models).
+    pipeline.name = f"{'local-' * (provider == 'ollama')}{model}-{defense}-{review}"
     return pipeline, executor
 
 
@@ -188,6 +197,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--user-tasks", type=int, default=None, help="first N user tasks")
     parser.add_argument("--injection-tasks", type=int, default=None, help="first N injection tasks")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
+    parser.add_argument("--provider", choices=("ollama", "google"), default="ollama",
+                        help="google reads GEMINI_API_KEY")
+    parser.add_argument("--resume", action="store_true",
+                        help="reuse finished task logs; guard_decisions then cover new tasks only")
     parser.add_argument("--out", type=Path, default=Path("artifacts/agentdojo"))
     args = parser.parse_args(argv)
 
@@ -204,14 +217,14 @@ def main(argv: list[str] | None = None) -> None:
 
     with tempfile.TemporaryDirectory() as tmp, OutputLogger(str(logdir)):
         pipeline, executor = make_pipeline(
-            args.model, args.defense, args.review, args.host, Path(tmp), args.lenient_reads
+            args.model, args.defense, args.review, args.host, Path(tmp), args.lenient_reads, args.provider
         )
         benign = benchmark_suite_without_injections(
-            pipeline, suite, logdir=logdir, force_rerun=True, user_tasks=user_tasks,
+            pipeline, suite, logdir=logdir, force_rerun=not args.resume, user_tasks=user_tasks,
         )
         attack = load_attack(args.attack, suite, pipeline)
         attacked = benchmark_suite_with_injections(
-            pipeline, suite, attack, logdir=logdir, force_rerun=True,
+            pipeline, suite, attack, logdir=logdir, force_rerun=not args.resume,
             user_tasks=user_tasks, injection_tasks=injection_tasks,
         )
     report = {
