@@ -360,7 +360,9 @@ def main(argv: list[str] | None = None) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     tag = f"{args.model.replace(':', '_')}-{args.defense}" + ("-exposed" if args.expose_descriptions else "")
     sink = args.out / f"results-{tag}.jsonl"
-    done = {json.loads(line)["id"] for line in sink.read_text().splitlines()} if sink.exists() else set()
+    # Rows that errored (a server failed to start) are retried; the latest row per case wins.
+    done = {r["id"] for r in map(json.loads, sink.read_text().splitlines()) if "error" not in r} \
+        if sink.exists() else set()
     with tempfile.TemporaryDirectory() as tmp, sink.open("a") as out:
         for n, case in enumerate(runnable, 1):
             if case["id"] in done:
@@ -374,7 +376,7 @@ def main(argv: list[str] | None = None) -> None:
             out.flush()
             print(f"[{n}/{len(runnable)}] {case['id']} {case['attack_type']} {case['tool']} "
                   f"harm={row.get('harm_executed')} err={'error' in row}", flush=True)
-    rows = [json.loads(line) for line in sink.read_text().splitlines()]
+    rows = list({r["id"]: r for r in map(json.loads, sink.read_text().splitlines())}.values())
     scored = [r for r in rows if "error" not in r]
     report = {"model": args.model, "defense": args.defense, "expose_descriptions": args.expose_descriptions,
               "cases": len(scored), "errors": len(rows) - len(scored), "results": summarize(scored)}
