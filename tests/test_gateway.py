@@ -377,3 +377,28 @@ def test_policy_config_rejects_typos_overlaps_and_catch_all_destinations():
     with pytest.raises(ValidationError, match="catch-all"):
         PolicyConfig(allowed_destinations=["*"])
     PolicyConfig(allowed_destinations=["*@example.com"])
+
+
+def test_mutation_the_agents_cannot_match_goes_to_review_and_never_executes(
+    service: IntentShieldService,
+):
+    # "Let ... know" names no listed write verb, but the recipient is the user's own.
+    intent = "Let alice@example.com know the launch slipped a week"
+    call = ToolCall(
+        tool_name="send_email",
+        arguments={"resource": "outbox", "to": "alice@example.com", "subject": "Launch",
+                   "body": "The launch slipped a week."},
+        schema_hash=service.registry["send_email"].schema_hash,
+        idempotency_key="unmatched-mutation",
+    )
+    result = service.evaluate_and_execute(run(service, intent), intent, call)
+    assert result.decision is Decision.REVIEW
+    assert result.executed is False
+    assert service.email_tools.execution_count == 0
+
+    # A recipient the user never named, or a negated request, still blocks.
+    swapped = call.model_copy(update={"arguments": {**call.arguments, "to": "mallory@example.com"},
+                                      "idempotency_key": "swapped-recipient"})
+    assert service.evaluate_and_execute(run(service, intent), intent, swapped).decision is Decision.BLOCK
+    negated = "Do not send alice@example.com anything about the launch"
+    assert service.evaluate_and_execute(run(service, negated), negated, call).decision is Decision.BLOCK

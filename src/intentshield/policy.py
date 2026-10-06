@@ -115,9 +115,11 @@ class PolicyEngine:
                 ):
                 return self._block(ReasonCode.BLOCK_DESTINATION_OUT_OF_SCOPE)
 
+        # The agents send a mutation they could not match to the request to review
+        # rather than block; it still needs approval below.
         if context.intent_alignment < self.config.minimum_intent_alignment and (
             spec.mutation or not self.config.lenient_reads or context.intent_alignment == 0.0
-        ):
+        ) and not (spec.mutation and context.security_disposition == "REVIEW"):
             return self._block(ReasonCode.BLOCK_INTENT_MISMATCH)
         if context.security_disposition == "BLOCK":
             return self._block(ReasonCode.BLOCK_SECURITY_AGENTS)
