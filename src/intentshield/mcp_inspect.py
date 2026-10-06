@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any, Iterable
 
 _I = re.I
@@ -66,7 +67,22 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+# Cyrillic and Greek letters that render like Latin ones ("іgnоre"); NFKC keeps them.
+_CONFUSABLES = str.maketrans(
+    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ",
+    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX",
+)
+
+
+def _normalize(text: str) -> str:
+    """What an LLM reads, not what the bytes say: fold width variants, drop invisible
+    format characters (zero-width spaces, joiners, bidi marks), map look-alikes."""
+    text = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
+
+
 def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...]) -> list[str]:
+    text = _normalize(text)
     return [name for name, pattern in rules if pattern.search(text)]
 
 
@@ -95,7 +111,7 @@ def tool_text(description: str | None, schema: dict[str, Any] | None = None,
 def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
     """Poisoning rule names for one tool's text; ``shadowing`` if it names another tool."""
     findings = _scan(text, _DESCRIPTION_RULES)
-    lowered = text.lower()
+    lowered = _normalize(text).lower()
     for name in other_tools:
         # Only distinctive names: "search" in prose is not a reference to a tool.
         if len(name) >= 6 and re.search(r"[_\-.]|[a-z][A-Z]", name) and name.lower() in lowered:
