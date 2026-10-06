@@ -11,7 +11,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /usr/local/bin/uv
 
 COPY . /msb
 WORKDIR /msb/data/tools/attack_tools
-RUN uv sync
+# The attack servers import pandas, which pyproject.toml does not list.
+RUN uv sync && uv pip install pandas==2.3.1
 
 WORKDIR /msb
 # MSB's setup.py rewrites these placeholders in place; do the same for /msb.
