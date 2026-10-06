@@ -154,13 +154,15 @@ class IntentShieldService:
             allowed_resources=self.config.allowed_resources,
             allowed_destinations=self.config.allowed_destinations,
         )
+        # Before egress the intent itself is the untrusted text, so it is scanned
+        # as content rather than as the user's own (exempt) request.
         placeholder = ToolCall(
             tool_name=spec.name,
-            arguments={},
+            arguments={"user_intent": user_intent},
             schema_hash=spec.schema_hash,
         )
         result = self.security_supervisor.detection_agent.analyze(
-            user_intent, placeholder, metadata
+            "", placeholder, metadata
         )
         return DetectionEvidence.model_validate(result)
 

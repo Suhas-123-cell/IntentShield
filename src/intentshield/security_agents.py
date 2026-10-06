@@ -229,6 +229,11 @@ _WRITE_ACTIONS = frozenset(
         "update",
         "upload",
         "write",
+        # Common MCP mutation verbs. Grounding a mutation only lets it reach
+        # human review; it never authorizes execution.
+        "add", "edit", "replace", "insert", "modify", "change", "set", "save", "put", "push",
+        "commit", "merge", "install", "publish", "schedule", "book", "pay", "transfer", "mark",
+        "abort", "start", "restart", "deploy", "invite", "reply", "share", "archive",
     }
 )
 
@@ -265,10 +270,15 @@ class DeterministicDetectionAgent:
     ) -> DetectionEvidence:
         del metadata
         started = time.monotonic()
-        # Analyse both the request and model-proposed arguments. Arguments are a
-        # common indirect-prompt-injection boundary.
-        content = f"{user_intent}\n{call.tool_name}\n{canonical_json(call.arguments)}"
-        matched = tuple(name for name, pattern in _INJECTION_RULES if pattern.search(content))
+        # Arguments are the indirect-prompt-injection boundary. Text the user typed
+        # verbatim is the user's own request ("forward this: ignore previous
+        # instructions..."), so a match the intent already contains does not count.
+        content = f"{call.tool_name}\n{canonical_json(call.arguments)}"
+        intent = " ".join(user_intent.lower().split())
+        matched = tuple(
+            name for name, pattern in _INJECTION_RULES
+            if any(" ".join(m.group(0).lower().split()) not in intent for m in pattern.finditer(content))
+        )
         if not matched:
             return DetectionEvidence(
                 status=EvidenceStatus.COMPLETE,
@@ -364,7 +374,10 @@ class DeterministicGroundingAgent:
                 hard_failure = True
             else:
                 destination_tokens = _tokens(destination.split("@", 1)[0])
-                if destination_tokens & intent_tokens or destination.lower() in user_intent.lower():
+                # When the user names addresses, only those exact addresses ground;
+                # token overlap would accept alice.archive@ for alice@.
+                named = {a.lower() for a in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", user_intent)}
+                if destination.lower() in named if named else destination_tokens & intent_tokens:
                     reasons.append(EvidenceReason.DESTINATION_GROUNDED)
                     if (
                         deterministic_alignment == 0.30
