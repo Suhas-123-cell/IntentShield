@@ -60,13 +60,34 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
   - What is left (1,174 calls) is all ungrounded mutations: 88% have no listed write
     verb ("click", "fill"), 12% no tool term. Dropping the verb requirement would
     send 900 of them to review, along with 252 attacks (review, never allow).
-  - Open decision: make ungrounded mutations REVIEW instead of BLOCK (mutations
-    already never auto-run), or keep BLOCK and accept the false-block cost.
+  - Decided: ungrounded mutations go to REVIEW, not BLOCK (an ungrounded recipient,
+    negation or hard failure still blocks). Full proxy: 3.5% false block, but 46%
+    of benign calls now wait on a reviewer. Reviewer load is the next cost to cut.
 
-## Phase 5: Needs infrastructure or a decision (not started)
+## Phase 5: External benchmarks - in progress
 
-- MCP-SafetyBench and MSB on live MCP servers (API keys).
-- AgentDojo workspace/slack/travel suites and more attacks.
-- Adaptive attacks: white-box and search-based against the rules above.
-- At least three backbone models; Task Shield and other published baselines.
-- Benign MCP workload (MCP-Universe / MCP-Bench) for false positives.
+Decided 2026-10-06: Gemini + local backbones; live MCP benchmarks in Docker, keyless
+servers first.
+
+- MSB - running. `benchmarks/msb.py` drives MSB's real servers in a Docker sandbox
+  (`benchmarks/msb.Dockerfile`) through the proxy. MSB adds PI/FE/UI inside its
+  agent, after the MCP client, so the runner moves each injection to the server
+  boundary where a proxy can see it. 960 of 1,600 non-kill_process cases run without
+  accounts (all 12 attack types). Queue: 20 cases per type x {none, intentshield
+  with exposed descriptions, intentshield default} x {qwen2.5:7b, llama3.1:8b}.
+  - Held-out finding: the regex rules catch 0 of 15 MSB output injections (FE, UI,
+    RI). Description PI is caught only by the shadowing check (it names
+    `write_file`, a filesystem tool), which quarantines the task tools.
+  - The proxy's default of withholding descriptions leaves the agent unable to use
+    any tool: 0 harm, 0 utility.
+- AgentDojo all suites - partial. 8 user x 4 injection tasks per suite on
+  qwen2.5:7b: slack attack success 31.3% -> 15.6% (utility 75% -> 50%); travel and
+  workspace are 0% utility even undefended, so they need a stronger model.
+  Gemini blocked: the key is free tier (5 requests/min), and AgentDojo's Google
+  client drops Gemini 3.x thought signatures. Needs billing or a patched client.
+- MCP-SafetyBench - cloned, not run: real GitHub and other servers; needs a test
+  GitHub account and keys.
+- Adaptive attacks against the rules - not started.
+- Backbones: qwen2.5:7b, llama3.1:8b local; Gemini pending quota.
+- Published baselines (Task Shield etc.) - not started.
+- Benign MCP workload (MCP-Universe / MCP-Bench) - not started; needs keys.

@@ -204,13 +204,19 @@ where the model ignored the poison and served the user. Worst case for the
 description layer: every model saw the poisoned text. *full proxy* also credits
 quarantine, under which the model would never have seen it.
 
-| defense | attack success [95% CI] | benign false block |
-|---|---|---|
-| none | 100% | 0% |
-| quarantine + provenance (no intent grounding) | **1.3%** [0.8, 2.0] | **3.5%** [3.1, 4.1] |
-| call layer (policy + grounding, lenient reads) | 45.5% (+14.9% to human review) | 23.9% |
-| call layer + provenance | 35.0% (+9.6% to review) | 23.9% |
-| full proxy (all layers, lenient reads) | 0.4% [0.2, 0.9] | 27.3% [26.1, 28.6] |
+| defense | attack success [95% CI] | benign false block | benign sent to review |
+|---|---|---|---|
+| none | 100% | 0% | 0% |
+| quarantine + provenance (no intent grounding) | **1.3%** [0.8, 2.0] | **3.5%** [3.1, 4.1] | 0% |
+| call layer (policy + grounding, lenient reads) | 45.5% (+54.4% to human review) | 0.0% | 46.8% |
+| call layer + provenance | 35.0% (+37.6% to review) | 0.0% | 46.7% |
+| full proxy (all layers, lenient reads) | 0.4% [0.2, 0.9] | 3.5% [3.1, 4.1] | 46.3% |
+
+"Attack success" counts only calls that would run with no human. A mutation the
+call layer cannot match to the request (no listed write verb or tool term) goes to
+human review rather than being blocked; mutations never run unapproved either way.
+That keeps false blocks at the description layer's 3.5% but sends 46% of benign
+calls to a reviewer. Blocking those instead gave 27.3% false block in the full proxy.
 
 By paradigm (quarantine + provenance): Template-1 0.0%, Template-2 0.5%,
 Template-3 (argument tampering) 1.8%. Quarantine catches 96.4% of the 1,312
@@ -220,12 +226,12 @@ Caveats. The scanner rules were developed on MCPTox, so these are tuning-set
 numbers; held-out evidence needs MCP-SafetyBench or MSB descriptions. No operator config
 exists for these 45 third-party servers, so the runner stands in for it: a tool is a
 mutation if any name word is a write verb, a read if a word is a read verb, and a
-mutation otherwise (fail safe); grounding terms are the name's words. Every
-remaining call-layer false block is an ungrounded mutation; 88% of those requests
-have no listed write verb ("click the element with selector #submit"). Adding terms from each clean
-tool description cut it by only 0.9 points (23.9% to 23.0%), so it was not
-adopted. Strict reads: call layer 26.8% attack success, 39.3% false block; full
-proxy 0.2%, 42.6%. The description layer does not need grounding terms.
+mutation otherwise (fail safe); grounding terms are the name's words. Of the mutations the
+call layer cannot match, 88% are requests with no listed write verb ("click the
+element with selector #submit"). Adding terms from each clean
+tool description cut false blocks by only 0.9 points, so it was not adopted.
+Strict reads: call layer 26.8% attack success, 15.4% false block; full proxy
+0.2%, 18.9%. The description layer does not need grounding terms.
 
 `--calibrate` checks the deterministic judge used for live runs against MCPTox
 labels: 94.4% agreement (precision 0.93, recall 0.74). A live qwen2.5:7b run
