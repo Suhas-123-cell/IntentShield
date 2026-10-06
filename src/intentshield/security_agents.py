@@ -562,6 +562,15 @@ class SecurityAnalysisSupervisor:
             self.config.mutation_risk_floor if metadata.mutation else 0.0,
         )
         reasons = list(dict.fromkeys((*detection.reason_codes, *grounding.reason_codes)))
+        # A mutation whose only gap is vocabulary ("click the #submit button" names no
+        # listed verb) goes to human review: it can never run unapproved anyway. An
+        # ungrounded recipient, negation or hard failure (alignment 0) still blocks.
+        unmatched_mutation = (
+            metadata.mutation
+            and alignment > 0.0
+            and EvidenceReason.ACTION_NOT_GROUNDED in grounding.reason_codes
+            and EvidenceReason.DESTINATION_NOT_GROUNDED not in grounding.reason_codes
+        )
 
         if (
             failed
@@ -569,8 +578,9 @@ class SecurityAnalysisSupervisor:
             or grounding.scope_score == 0.0
             or (
                 alignment < self.config.minimum_intent_alignment
+                and not unmatched_mutation
                 # Lenient reads: an ungrounded read is evidence, not a veto. Negated
-                # or failed grounding (alignment 0) and all mutations stay strict.
+                # or failed grounding (alignment 0) stays strict.
                 and (metadata.mutation or not self.config.lenient_reads or alignment == 0.0)
             )
         ):
