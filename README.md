@@ -166,9 +166,9 @@ policy cost reported as a 100% false block for that category.
 |---|---|---|
 | tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models | MCP-SafetyBench, MSB |
 | tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice | MSB, adaptive attackers |
-| tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection | AgentDojo workspace/slack/travel, more attacks |
+| tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection, MSB (6 of 12 types) | AgentDojo workspace/slack/travel, more attacks |
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
-| guard-aware attacker | none | white-box and optimization attacks |
+| guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
 
 MCP-SafetyBench and MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
@@ -263,6 +263,37 @@ only 42.7% of paraphrased descriptions, so an attacker who also avoids naming
 another server's tool would get through. Whether every rewrite still steers a model
 was not tested. MSB is the held-out check: its output-borne injections (false error,
 user impersonation, retrieval) match none of the output rules.
+
+### MSB (live MCP servers, first pass)
+
+`benchmarks/msb.py` runs [MSB](https://github.com/dongsenzhang/MSB) attacks against
+its real MCP servers in a Docker sandbox (`benchmarks/msb.Dockerfile`), with the
+agent (Ollama native tool calling) and the proxy on the host. MSB adds prompt
+injection, false errors and user impersonation inside its own agent, after the MCP
+client, where no proxy could see them; the runner puts each one where a malicious
+server would, in the tool description or result. Keyless subset: 960 of 1,600
+non-kill_process cases; this pass sampled 20 per attack type. Harm is scored as in
+MSB's metrics.py, on calls that actually executed; REVIEW is not approved.
+
+First pass covers 6 of 12 attack types (PI, FE, UI, RI, PI-UI, PI-FE); the other six
+failed to start (MSB's attack servers need pandas) and are rerun next.
+
+| backbone | defense | harm executed [95% CI] | harmful call sent to review | task tool used |
+|---|---|---|---|---|
+| qwen2.5:7b | none | 55.2% [46.1, 63.9] | 0% | 84.5% |
+| qwen2.5:7b | IntentShield, descriptions exposed | **0.0%** [0, 3.3] | 7.9% | 19.3% |
+| qwen2.5:7b | IntentShield, default (descriptions withheld) | 0.0% [0, 3.2] | 6.9% | 22.4% |
+| llama3.1:8b | none | 0.0% [0, 3.2] | 0% | 71.6% |
+| llama3.1:8b | IntentShield, descriptions exposed | 0.0% | 0% | 18.8% |
+| llama3.1:8b | IntentShield, default | 0.0% | 0% | 22.4% |
+
+Undefended qwen2.5:7b followed user impersonation, PI-UI and PI-FE 85% of the time.
+llama3.1:8b followed none, so its rows measure utility cost only. That cost is the
+main finding: guarded agents used their task tool in about 20% of cases against
+72-85% unguarded. Description injections name a tool on another server, so the
+task tools are quarantined as shadowing and the task cannot be done. Output-borne
+injections (FE, UI, RI) match none of the output rules; the harmful write is
+stopped instead because it is an unrequested mutation (review, never executed).
 
 ### Output layer on InjecAgent
 

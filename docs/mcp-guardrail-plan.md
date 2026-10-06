@@ -69,17 +69,25 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
 Decided 2026-10-06: Gemini + local backbones; live MCP benchmarks in Docker, keyless
 servers first.
 
-- MSB - running. `benchmarks/msb.py` drives MSB's real servers in a Docker sandbox
-  (`benchmarks/msb.Dockerfile`) through the proxy. MSB adds PI/FE/UI inside its
-  agent, after the MCP client, so the runner moves each injection to the server
-  boundary where a proxy can see it. 960 of 1,600 non-kill_process cases run without
-  accounts (all 12 attack types). Queue: 20 cases per type x {none, intentshield
-  with exposed descriptions, intentshield default} x {qwen2.5:7b, llama3.1:8b}.
-  - Held-out finding: the regex rules catch 0 of 15 MSB output injections (FE, UI,
-    RI). Description PI is caught only by the shadowing check (it names
-    `write_file`, a filesystem tool), which quarantines the task tools.
-  - The proxy's default of withholding descriptions leaves the agent unable to use
-    any tool: 0 harm, 0 utility.
+- MSB - first pass done (2026-10-07), rerun pending. `benchmarks/msb.py` drives
+  MSB's real servers in a Docker sandbox (`benchmarks/msb.Dockerfile`) through the
+  proxy, with each agent-side injection moved to the server boundary. 960 of 1,600
+  non-kill_process cases run without accounts. Sampled 20 per type x {none,
+  exposed descriptions, default} x {qwen2.5:7b, llama3.1:8b}.
+  - 6 of 12 types scored (PI, FE, UI, RI, PI-UI, PI-FE). qwen2.5:7b harm 55.2% ->
+    0.0% guarded; llama3.1:8b never followed an injection (0% undefended).
+  - Utility is the problem: task tool used in ~20% of guarded cases vs 72-85%
+    unguarded. PI quarantines the task tools (shadowing); default withheld
+    descriptions leave the agent unable to choose tools.
+  - Output rules catch 0 of MSB's FE/UI/RI injections; the harmful write is
+    stopped only because it is an unrequested mutation.
+  - Next session: the other 6 types (NC, PM, OP, TT, PM-OP, PM-UI) failed because
+    the attack servers lacked pandas (fixed in the image). Resume with
+    `artifacts/msb-queue.sh`; `--resume` retries errored rows (~120 per config).
+- Adaptive attacks - first pass done. `benchmarks/adaptive.py`: zero-width and
+  look-alike rewrites evaded the description rules (10.4% / 49.8% still flagged)
+  until Unicode normalization (100%). Paraphrase keeps 98.6% only via shadowing;
+  the rules alone keep 42.7%.
 - AgentDojo all suites - partial. 8 user x 4 injection tasks per suite on
   qwen2.5:7b: slack attack success 31.3% -> 15.6% (utility 75% -> 50%); travel and
   workspace are 0% utility even undefended, so they need a stronger model.
@@ -87,7 +95,6 @@ servers first.
   client drops Gemini 3.x thought signatures. Needs billing or a patched client.
 - MCP-SafetyBench - cloned, not run: real GitHub and other servers; needs a test
   GitHub account and keys.
-- Adaptive attacks against the rules - not started.
 - Backbones: qwen2.5:7b, llama3.1:8b local; Gemini pending quota.
 - Published baselines (Task Shield etc.) - not started.
 - Benign MCP workload (MCP-Universe / MCP-Bench) - not started; needs keys.
