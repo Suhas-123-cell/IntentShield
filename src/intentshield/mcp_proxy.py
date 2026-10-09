@@ -12,7 +12,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .mcp_inspect import distinctive_values, scan_description, scan_output, tool_text
+from .mcp_inspect import distinctive_values, scan_description, scan_output, self_disclosure_fields, tool_text
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
 from .policy import PolicyConfig
@@ -47,6 +47,8 @@ class MCPProxyConfig(BaseModel):
     call_budget: int = Field(default=8, ge=1)
     injection_block_threshold: float = Field(default=0.75, ge=0, le=1)
     minimum_intent_alignment: float = Field(default=0.60, ge=0, le=1)
+    # Ungrounded reads pass (evidence, not a veto); mutations and negated reads stay strict.
+    lenient_reads: bool = False
     approval_ttl_seconds: int = Field(default=600, ge=1)
     max_upstreams: int = Field(default=8, ge=1, le=64)
     max_total_tools: int = Field(default=2_000, ge=1, le=100_000)
@@ -199,6 +201,9 @@ class MCPProxyRuntime:
         self._drifted_tools: set[str] = set()
         self._quarantined: dict[str, list[str]] = {}
         self._description_values: dict[str, set[str]] = {}
+        # Parameters asking the agent for its model, prompt or conversation: hidden from
+        # the agent and always sent upstream empty.
+        self._redacted: dict[str, set[str]] = {}
         # run_id -> distinctive values from outputs that carried injection text.
         self._tainted: dict[str, set[str]] = {}
 
@@ -230,6 +235,7 @@ class MCPProxyRuntime:
             call_budget=self.config.call_budget,
             injection_block_threshold=self.config.injection_block_threshold,
             minimum_intent_alignment=self.config.minimum_intent_alignment,
+            lenient_reads=self.config.lenient_reads,
             approval_ttl_seconds=self.config.approval_ttl_seconds,
         )
         self._tools = tools
@@ -241,6 +247,11 @@ class MCPProxyRuntime:
         if self._quarantined:
             self.service.storage.add_event(
                 self._ensure_system_run(), "MCP_TOOLS_QUARANTINED", {"tools": self._quarantined}
+            )
+        if self._redacted:
+            self.service.storage.add_event(
+                self._ensure_system_run(), "MCP_SELF_DISCLOSURE_FIELDS",
+                {"tools": {name: sorted(fields) for name, fields in self._redacted.items()}},
             )
 
     async def close(self) -> None:
@@ -277,7 +288,7 @@ class MCPProxyRuntime:
 
     def _build_registry(self, tools: list[MCPTool]) -> dict[str, ToolSpec]:
         registry: dict[str, ToolSpec] = {}
-        self._quarantined, self._description_values = {}, {}
+        self._quarantined, self._description_values, self._redacted = {}, {}, {}
         for tool in tools:
             qualified = tool.qualified_name
             # Untrusted text: scanned for poisoning; a reference to another
@@ -290,6 +301,15 @@ class MCPProxyRuntime:
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = findings
             self._description_values[qualified] = distinctive_values(text)
+            hidden = self_disclosure_fields(tool.input_schema)
+            if hidden:
+                self._redacted[qualified] = hidden
+            visible = tool.input_schema if not hidden else {
+                **tool.input_schema,
+                "properties": {k: v for k, v in tool.input_schema["properties"].items() if k not in hidden},
+                **({"required": [k for k in tool.input_schema["required"] if k not in hidden]}
+                   if isinstance(tool.input_schema.get("required"), list) else {}),
+            }
             if not _SAFE_TOOL_NAME.fullmatch(tool.name) or qualified in registry:
                 raise ValueError(f"Invalid or duplicate upstream MCP tool: {qualified!r}")
             Draft202012Validator.check_schema(tool.input_schema)
@@ -341,7 +361,7 @@ class MCPProxyRuntime:
                 ),
                 executor=execute,
                 schema_override=tool.input_schema,
-                public_schema_override=_public_schema(tool.input_schema),
+                public_schema_override=_public_schema(visible),
                 argument_validator=validate,
                 upstream_id=tool.server_id,
                 upstream_tool_name=tool.name,
@@ -377,6 +397,7 @@ class MCPProxyRuntime:
             item["schema_drift"] = item["name"] in self._drifted_tools
             item["quarantined"] = item["name"] in self._quarantined
             item["poisoning_findings"] = self._quarantined.get(item["name"], [])
+            item["redacted_fields"] = sorted(self._redacted.get(item["name"], ()))
         return catalog
 
     async def _refresh_catalog(self) -> None:
@@ -424,12 +445,25 @@ class MCPProxyRuntime:
         })
         return {**result, "injection_detected": True, "injection_findings": findings}
 
+    def _redact(self, call: ToolCall) -> ToolCall:
+        hidden = self._redacted.get(call.tool_name)
+        if not hidden:
+            return call
+        schema = next(t.input_schema for t in self._tools if t.qualified_name == call.tool_name)
+        required = set(schema.get("required") or ())
+        arguments = {k: v for k, v in call.arguments.items() if k not in hidden}
+        for name in hidden & required:
+            # Only an empty string can stand in for a required value; other types fail validation.
+            arguments[name] = ""
+        return call.model_copy(update={"arguments": arguments})
+
     def _ensure_system_run(self) -> str:
         return self._service().create_run("Monitor upstream MCP tool catalog", "mcp-catalog")
 
     async def evaluate_and_execute(self, run_id: str, call: ToolCall) -> GatewayResult:
         service = self._service()
         await self._refresh_catalog()
+        call = self._redact(call)
         if call.tool_name in self._drifted_tools:
             # Force the existing pure policy engine down its schema-drift path.
             # The upstream executor remains unreachable.
@@ -441,6 +475,7 @@ class MCPProxyRuntime:
     async def evaluate_only(self, run_id: str, call: ToolCall) -> GatewayResult:
         """Evaluate a proposed call without execution or approval persistence."""
         await self._refresh_catalog()
+        call = self._redact(call)
         if call.tool_name in self._drifted_tools:
             call = call.model_copy(update={"schema_hash": "mcp-catalog-drift"})
         return await asyncio.to_thread(self._service().evaluate_only, run_id, call)
