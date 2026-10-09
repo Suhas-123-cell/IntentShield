@@ -204,6 +204,7 @@ class MCPProxyRuntime:
         # Parameters asking the agent for its model, prompt or conversation: hidden from
         # the agent and always sent upstream empty.
         self._redacted: dict[str, set[str]] = {}
+        self._visible_schemas: dict[str, dict[str, Any]] = {}
         # run_id -> distinctive values from outputs that carried injection text.
         self._tainted: dict[str, set[str]] = {}
 
@@ -310,6 +311,7 @@ class MCPProxyRuntime:
                 **({"required": [k for k in tool.input_schema["required"] if k not in hidden]}
                    if isinstance(tool.input_schema.get("required"), list) else {}),
             }
+            self._visible_schemas[qualified] = visible
             if not _SAFE_TOOL_NAME.fullmatch(tool.name) or qualified in registry:
                 raise ValueError(f"Invalid or duplicate upstream MCP tool: {qualified!r}")
             Draft202012Validator.check_schema(tool.input_schema)
@@ -471,6 +473,28 @@ class MCPProxyRuntime:
         # Execution must run off the event loop because the synchronous policy
         # engine may wait for an upstream coroutine scheduled onto this loop.
         return await asyncio.to_thread(service.evaluate_and_execute, run_id, "", call)
+
+    async def transparent_tools(self) -> list[tuple[MCPTool, dict[str, Any]]]:
+        """Upstream tools an MCP client may see directly: not quarantined, not drifted, with
+        self-disclosure parameters removed from the schema."""
+        await self._refresh_catalog()
+        return [(tool, self._visible_schemas[tool.qualified_name]) for tool in self._tools
+                if tool.qualified_name not in self._quarantined and tool.qualified_name not in self._drifted_tools]
+
+    async def forward(self, name: str, arguments: dict[str, Any]) -> tuple[MCPCallResult, list[str]]:
+        """Transparent mode: call an upstream tool on the catalog layer's terms only. The
+        intent-bound call policy runs in the harness hooks, which see the user's prompt."""
+        await self._refresh_catalog()
+        if name in self._quarantined:
+            raise MCPRemoteToolError(f"{name} is quarantined: its description matched poisoning rules")
+        if name in self._drifted_tools:
+            raise MCPRemoteToolError(f"{name} changed after connect and is blocked")
+        tool = next((t for t in self._tools if t.qualified_name == name), None)
+        if tool is None:
+            raise MCPRemoteToolError(f"Unknown tool {name}")
+        call = self._redact(ToolCall(tool_name=name, arguments=arguments, schema_hash="transparent"))
+        result = await self.upstreams[tool.server_id].call_tool(tool.name, call.arguments)
+        return result, scan_output(result.model_dump(mode="json", include={"content", "structured_content"}))
 
     async def evaluate_only(self, run_id: str, call: ToolCall) -> GatewayResult:
         """Evaluate a proposed call without execution or approval persistence."""
