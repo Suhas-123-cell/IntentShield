@@ -94,9 +94,12 @@ def _normalize(text: str) -> str:
     return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
 
 
-def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...]) -> list[str]:
+def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "") -> list[str]:
     text = _normalize(text)
-    return [name for name, pattern in rules if pattern.search(text)]
+    # Text the user typed is their own request, not an injection ("forward this: ignore ...").
+    trusted = " ".join(_normalize(trusted).lower().split())
+    return [name for name, pattern in rules
+            if any(" ".join(m.group(0).lower().split()) not in trusted for m in pattern.finditer(text))]
 
 
 def tool_text(description: str | None, schema: dict[str, Any] | None = None,
@@ -160,9 +163,9 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
     return found
 
 
-def scan_output(value: Any) -> list[str]:
+def scan_output(value: Any, trusted: str = "") -> list[str]:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    return _scan(text, _OUTPUT_RULES)
+    return _scan(text, _OUTPUT_RULES, trusted)
 
 
 _VALUE_PATTERNS = (
