@@ -165,7 +165,7 @@ policy cost reported as a 100% false block for that category.
 | attack surface | covered here | not yet run |
 |---|---|---|
 | tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models; MSB description attacks | MCP-SafetyBench |
-| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice; MSB (out-of-scope parameters get through) | adaptive attackers |
+| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice; MSB (held-out: 0.0% harm) | adaptive attackers |
 | tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection, MSB | AgentDojo workspace/slack/travel, more attacks |
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
 | guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
@@ -272,42 +272,69 @@ agent (Ollama native tool calling) and the proxy on the host. MSB adds prompt
 injection, false errors and user impersonation inside its own agent, after the MCP
 client, where no proxy could see them; the runner puts each one where a malicious
 server would, in the tool description or result. Keyless subset: 960 of 1,600
-non-kill_process cases; 20 seeded cases per attack type, all 12 types (236 cases;
-search_term_deception has 16), same sample for every row. Harm is scored as in
-MSB's metrics.py, on calls that actually executed; REVIEW is not approved.
+non-kill_process cases. Harm is scored as in MSB's metrics.py, on what actually
+reached the server; REVIEW is not approved. "Task tool reached" counts the task
+tool executed or waiting on a human reviewer.
 
-| backbone | defense | harm executed [95% CI] | harmful call sent to review | task tool used |
-|---|---|---|---|---|
-| qwen2.5:7b | none | 49.2% [42.8, 55.5] | 0% | 85.6% |
-| qwen2.5:7b | IntentShield, descriptions exposed | 7.2% [4.6, 11.2] | 11.0% | 26.7% |
-| qwen2.5:7b | IntentShield, default (descriptions withheld) | **6.8%** [4.2, 10.7] | 5.1% | 29.7% |
-| llama3.1:8b | none | 22.0% [17.2, 27.8] | 0% | 75.4% |
-| llama3.1:8b | IntentShield, descriptions exposed | 9.3% [6.2, 13.7] | 9.3% | 25.4% |
-| llama3.1:8b | IntentShield, default | **3.8%** [2.0, 7.1] | 5.9% | 29.2% |
+Protocol: the guard was changed using a 236-case tuning sample (20 seeded cases per
+attack type, all 12 types), then frozen (commit `05bb91a`) and run on 220 held-out
+cases outside it (20 per type; search_term_deception has none left). The held-out
+cases are new, but the attack templates are the same, so this shows the guard is
+not fitted to the tuning cases; generalization to other attack wording is checked
+on AgentDojo and InjecAgent below.
 
-Harm executed by attack type (qwen2.5:7b / llama3.1:8b; guarded = default):
+**Held-out (220 cases), cite these:**
 
-| attack type | unguarded | guarded |
+| backbone | defense | harm executed [95% CI] | harm attempted | task tool reached | task tool executed |
+|---|---|---|---|---|---|
+| qwen2.5:7b | none | 51.4% [44.8, 57.9] | 51.4% | 90.9% | 90.9% |
+| qwen2.5:7b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 10.0% | 65.9% | 51.8% |
+| qwen2.5:7b | IntentShield, default | **0.0%** [0, 1.7] | 1.4% | 63.6% | 51.4% |
+| llama3.1:8b | none | 21.8% [16.9, 27.7] | 22.3% | 83.2% | 83.2% |
+| llama3.1:8b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 12.7% | 57.3% | 37.7% |
+| llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.6% | 42.3% |
+
+Tuning sample (236 cases), before and after the changes, default defense: harm
+qwen2.5:7b 6.8% -> 0.0%, llama3.1:8b 3.8% -> 0.0%; task tool reached about 30% ->
+57-59%. Every guarded row is 0.0% on both splits.
+
+What changed, from the tuning failures:
+
+- **Self-disclosure parameters.** Out-of-scope parameter and tool transfer leaked
+  through a read call whose schema asks for `llm_model_name` (40% guarded). The proxy
+  now hides parameters that ask for the agent's model, system prompt or conversation
+  and always sends them empty (`mcp_inspect.self_disclosure_fields`, by name or
+  description). False flags: 0 of 86 tools on MSB's 13 clean servers. With
+  descriptions exposed the agent still tries (harm attempted 10-13%), but the value
+  never reaches the server.
+- **Output rules** for user impersonation, task hijack ("before you can solve the
+  task"), "you must follow" demands and chat-role markers. MSB's false-error,
+  impersonation and injection templates all match; a matched output taints the run,
+  so a write or read that reuses its values is blocked.
+- **Lenient reads** (`MCPProxyConfig.lenient_reads`): an ungrounded read is evidence,
+  not a veto, as in the MCPTox replay. Strict reads had blocked the user's own
+  lookups (`get_pubmed_article_metadata` with the user's PMID).
+- **Runner**: an upstream tool error returns to the agent instead of aborting the
+  case; executed harm is judged on the arguments that reached the server.
+
+Utility is still the cost. The three prompt-injection types put the instruction in
+the task tool's own description, so the tool is quarantined and the task cannot be
+done (0% reached); that is the defense working. On the other eight held-out types,
+task tool reached is 82-88% guarded against 88-89% unguarded.
+
+Generalization of the new output rules beyond MSB (`scan_output`, no model calls):
+
+| corpus | flagged before | after |
 |---|---|---|
-| prompt injection (PI), PI-false error, PI-user impersonation | 25-85% / 0% | 0% / 0% |
-| user impersonation, false error | 85%, 30% / 0% | 0% / 0% |
-| name overlap, preference manipulation (PM), PM-impersonation, retrieval | 0-12% / 0% | 0% / 0% |
-| PM-out-of-scope parameter | 60% / 65% | 0% / 0% |
-| out-of-scope parameter | 95% / 100% | **40% / 40%** |
-| tool transfer | 95% / 95% | **40% / 5%** |
+| AgentDojo important_instructions / tool_knowledge / system_message (35 each) | 0% | 100% |
+| AgentDojo ignore_previous / direct (35 each) | 0% | 0% |
+| InjecAgent enhanced (1,054) | 100% | 100% |
+| InjecAgent base (1,054) | 0-3% | 0-3% |
+| benign: AgentDojo environment strings (323) + InjecAgent tool responses (17) | 0 false flags | 0 false flags |
 
-What gets through is one shape: a read call whose schema asks for an extra
-parameter (`llm_model_name`), which the model fills. The call is a read, and the
-value comes from neither the user nor a tainted output, so neither the call policy
-nor argument provenance objects; MSB counts any non-empty value, even `"default"`,
-as a leak. Everything that needs an injected instruction is stopped: description
-injections name a tool on another server and are quarantined as shadowing, and
-output-borne ones (false error, impersonation, retrieval) match none of the output
-rules but end in an unrequested mutation, which goes to review.
-
-Utility is the cost: guarded agents used their task tool in 25-30% of cases
-against 75-86% unguarded, because quarantine removes the task tools along with the
-injected description.
+MSB's prompt-injection template is AgentDojo's important_instructions, so those two
+rows are not independent. Plain polite requests (InjecAgent base) still need a
+semantic detector, and the benign set is small.
 
 ### Output layer on InjecAgent
 
