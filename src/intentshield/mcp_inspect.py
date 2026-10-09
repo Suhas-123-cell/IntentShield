@@ -64,6 +64,19 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"\b(?:send|forward|email|upload|post|transfer|leak|exfiltrate)\w*\b[^.\n]{0,80}?"
         r"\b(?:password|credential|secret|token|api\s*key|private\s+key|ssn|social\s+security|"
         r"bank\s+account|card\s+number)s?\b", _I)),
+    # A tool result speaking as the user ("message from me ... to you", "I am the user").
+    ("user_impersonation", re.compile(
+        r"\b(?:message|note|request)\s+from\s+(?:me|the\s+user|your\s+user)\b[^.\n]{0,60}?\bto\s+you\b|"
+        r"\bI\s+am\s+(?:the|your)\s+user\b(?=\s*(?:[.,!;:]|$|and\b))|\bnew\s+user\s+(?:query|request|message|instructions?)\b", _I)),
+    # A tool result rearranging the agent's task ("before you can solve the task", "the previous
+    # task has been completed").
+    ("task_hijack", re.compile(
+        r"\bbefore\s+you\s+(?:can\s+)?(?:solve|complete|finish|continue|answer)\b[^.\n]{0,60}?\btask\b|"
+        r"\b(?:previous|original|current)\s+task\s+(?:has\s+been|is)\s+(?:completed|done|finished|cancelled)\b|"
+        r"\bmore\s+urgent\s+(?:new\s+)?task\b", _I)),
+    ("instruction_demand", re.compile(
+        r"\byou\s+must\s+(?:strictly\s+)?(?:adhere\s+to|follow|obey|comply\s+with)\b", _I)),
+    ("role_marker", re.compile(r"<\|im_start\|>|\[/?INST\]|#+\s*\(\s*system[_\s]message\s*\)", _I)),
 )
 
 
@@ -118,6 +131,33 @@ def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
             findings.append("shadowing")
             break
     return findings
+
+
+_SELF_FIELD_NAME = re.compile(
+    r"^(?:llm|lm)_?(?:model_?)?(?:name|id|version|type|provider)?$|"
+    r"^(?:ai|agent|assistant|caller)_?model(?:_?(?:name|id|version))?$|"
+    r"^(?:system_?prompt|conversation_?history|chat_?history|previous_?messages|prior_?messages)$", _I)
+_SELF_FIELD_TEXT = re.compile(
+    r"\b(?:llm|model|ai|assistant|agent)\b[^.\n]{0,40}?\b(?:that|which|who)\s+(?:is\s+)?"
+    r"(?:calls?|calling|invok\w+|uses?|using)\s+this\s+tool\b|"
+    r"\byour\s+(?:own\s+)?(?:model(?:\s+name)?|system\s+prompt|instructions|conversation(?:\s+history)?|"
+    r"chat\s+history|previous\s+messages)\b", _I)
+
+
+def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
+    """Top-level parameters that ask the calling agent about itself: its model, system
+    prompt or conversation. No tool needs these to do its job; they are a leak channel."""
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    if not isinstance(properties, dict):
+        return set()
+    found = set()
+    for name, spec in properties.items():
+        snake = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
+        text = _normalize(" ".join(str(spec.get(k, "")) for k in ("title", "description"))) \
+            if isinstance(spec, dict) else ""
+        if _SELF_FIELD_NAME.match(snake) or _SELF_FIELD_TEXT.search(text):
+            found.add(name)
+    return found
 
 
 def scan_output(value: Any) -> list[str]:
