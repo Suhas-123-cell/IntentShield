@@ -69,21 +69,24 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
 Decided 2026-10-06: Gemini + local backbones; live MCP benchmarks in Docker, keyless
 servers first.
 
-- MSB - first pass done (2026-10-07), rerun pending. `benchmarks/msb.py` drives
-  MSB's real servers in a Docker sandbox (`benchmarks/msb.Dockerfile`) through the
-  proxy, with each agent-side injection moved to the server boundary. 960 of 1,600
-  non-kill_process cases run without accounts. Sampled 20 per type x {none,
-  exposed descriptions, default} x {qwen2.5:7b, llama3.1:8b}.
-  - 6 of 12 types scored (PI, FE, UI, RI, PI-UI, PI-FE). qwen2.5:7b harm 55.2% ->
-    0.0% guarded; llama3.1:8b never followed an injection (0% undefended).
-  - Utility is the problem: task tool used in ~20% of guarded cases vs 72-85%
-    unguarded. PI quarantines the task tools (shadowing); default withheld
-    descriptions leave the agent unable to choose tools.
-  - Output rules catch 0 of MSB's FE/UI/RI injections; the harmful write is
+- MSB - done for the keyless subset (2026-10-09). `benchmarks/msb.py` drives MSB's
+  real servers in a Docker sandbox (`benchmarks/msb.Dockerfile`) through the proxy,
+  with each agent-side injection moved to the server boundary. 960 of 1,600
+  non-kill_process cases run without accounts. 20 per type, all 12 types (236) x
+  {none, exposed descriptions, default} x {qwen2.5:7b, llama3.1:8b}.
+  - Harm executed: qwen2.5:7b 49.2% -> 6.8%, llama3.1:8b 22.0% -> 3.8% (default).
+    Every attack that needs an injected instruction is at 0%.
+  - Gap: out-of-scope parameter (40% guarded) and tool transfer. A read call whose
+    schema asks for `llm_model_name` is allowed: it is a read and the value is not
+    from a tainted output. Next: flag schema parameters that ask for agent or model
+    metadata, or require every argument to be grounded in the task.
+  - Utility: task tool used in 25-30% of guarded cases vs 75-86% unguarded. PI
+    quarantines the task tools (shadowing); default withheld descriptions leave the
+    agent unable to choose tools.
+  - Output rules catch none of MSB's FE/UI/RI injections; the harmful write is
     stopped only because it is an unrequested mutation.
-  - Next session: the other 6 types (NC, PM, OP, TT, PM-OP, PM-UI) failed because
-    the attack servers lacked pandas (fixed in the image). Resume with
-    `artifacts/msb-queue.sh`; `--resume` retries errored rows (~120 per config).
+  - Runner: an upstream tool error (e.g. a path outside allowed directories) now
+    returns to the agent as on the unguarded path instead of aborting the case.
 - Adaptive attacks - first pass done. `benchmarks/adaptive.py`: zero-width and
   look-alike rewrites evaded the description rules (10.4% / 49.8% still flagged)
   until Unicode normalization (100%). Paraphrase keeps 98.6% only via shadowing;
