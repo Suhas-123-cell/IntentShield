@@ -33,7 +33,7 @@ from typing import Any
 import httpx
 
 from intentshield.evaluation import wilson
-from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime
+from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from intentshield.models import ToolCall
 from intentshield.security_agents import _WRITE_ACTIONS
@@ -231,9 +231,13 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 return f"Unknown tool {name}"
             if proxy is not None:
                 _, _, schema_hash, mutation = tools[qualified]
-                result = await proxy.evaluate_and_execute(run_id, ToolCall(
-                    tool_name=qualified, arguments=arguments, schema_hash=schema_hash,
-                    idempotency_key=f"{case['id']}-{len(trace)}" if mutation else None))
+                try:
+                    result = await proxy.evaluate_and_execute(run_id, ToolCall(
+                        tool_name=qualified, arguments=arguments, schema_hash=schema_hash,
+                        idempotency_key=f"{case['id']}-{len(trace)}" if mutation else None))
+                except MCPRemoteToolError as exc:  # the server ran and refused; the agent sees it, as unguarded
+                    step.update(decision="ALLOW", executed=True, reasons=[])
+                    return f"Tool error: {exc}"
                 step.update(decision=result.decision.value, executed=result.executed,
                             reasons=[r.value for r in result.reason_codes])
                 if not result.executed:
