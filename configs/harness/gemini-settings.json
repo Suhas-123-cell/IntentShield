@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "BeforeAgent": [{"hooks": [{"type": "command", "command": "intentshield-hook gemini"}]}],
+    "BeforeTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": "intentshield-hook gemini"}]}],
+    "AfterTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": "intentshield-hook gemini"}]}]
+  }
+}
