@@ -69,24 +69,21 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
 Decided 2026-10-06: Gemini + local backbones; live MCP benchmarks in Docker, keyless
 servers first.
 
-- MSB - done for the keyless subset (2026-10-09). `benchmarks/msb.py` drives MSB's
-  real servers in a Docker sandbox (`benchmarks/msb.Dockerfile`) through the proxy,
-  with each agent-side injection moved to the server boundary. 960 of 1,600
-  non-kill_process cases run without accounts. 20 per type, all 12 types (236) x
-  {none, exposed descriptions, default} x {qwen2.5:7b, llama3.1:8b}.
-  - Harm executed: qwen2.5:7b 49.2% -> 6.8%, llama3.1:8b 22.0% -> 3.8% (default).
-    Every attack that needs an injected instruction is at 0%.
-  - Gap: out-of-scope parameter (40% guarded) and tool transfer. A read call whose
-    schema asks for `llm_model_name` is allowed: it is a read and the value is not
-    from a tainted output. Next: flag schema parameters that ask for agent or model
-    metadata, or require every argument to be grounded in the task.
-  - Utility: task tool used in 25-30% of guarded cases vs 75-86% unguarded. PI
-    quarantines the task tools (shadowing); default withheld descriptions leave the
-    agent unable to choose tools.
-  - Output rules catch none of MSB's FE/UI/RI injections; the harmful write is
-    stopped only because it is an unrequested mutation.
-  - Runner: an upstream tool error (e.g. a path outside allowed directories) now
-    returns to the agent as on the unguarded path instead of aborting the case.
+- MSB - done (2026-10-09/10), tuned then held out. `benchmarks/msb.py` drives MSB's
+  real servers in a Docker sandbox through the proxy, each agent-side injection moved
+  to the server boundary; keyless subset 960 of 1,600 cases.
+  - Tuning sample (236, seed 0): first pass left 6.8% / 3.8% harm (qwen2.5:7b /
+    llama3.1:8b) through out-of-scope parameters. Fixed with self-disclosure parameter
+    redaction, output rules for impersonation / task hijack / "you must follow", and
+    lenient reads in the proxy. Tuning harm 0.0% on both models.
+  - Held-out (220 cases outside the tuning sample, code frozen at `05bb91a`): harm
+    executed 0.0% [0, 1.7] in all four guarded configs, against 51.4% and 21.8%
+    unguarded. Task tool reached 58-66% vs 83-91%; the gap is mostly the three PI
+    types, whose task tool is itself poisoned and quarantined.
+  - Same templates on both splits: generalization to other wording is AgentDojo
+    (important_instructions 0% -> 100% flagged) and InjecAgent (base still 0-3%).
+  - Next: Ornith-1.5-9B as a third backbone (queued; needs a newer Ollama), and the
+    harness-hook path (branch `harness-guard`) measured on the same held-out cases.
 - Adaptive attacks - first pass done. `benchmarks/adaptive.py`: zero-width and
   look-alike rewrites evaded the description rules (10.4% / 49.8% still flagged)
   until Unicode normalization (100%). Paraphrase keeps 98.6% only via shadowing;
