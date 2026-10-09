@@ -164,13 +164,13 @@ policy cost reported as a 100% false block for that category.
 
 | attack surface | covered here | not yet run |
 |---|---|---|
-| tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models | MCP-SafetyBench, MSB |
-| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice | MSB, adaptive attackers |
-| tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection, MSB (6 of 12 types) | AgentDojo workspace/slack/travel, more attacks |
+| tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models; MSB description attacks | MCP-SafetyBench |
+| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice; MSB (out-of-scope parameters get through) | adaptive attackers |
+| tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection, MSB | AgentDojo workspace/slack/travel, more attacks |
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
 | guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
 
-MCP-SafetyBench and MSB need live third-party MCP servers and their API keys;
+MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
 Results so far use local Ollama models only, with no published-defense baselines.
 
@@ -264,7 +264,7 @@ another server's tool would get through. Whether every rewrite still steers a mo
 was not tested. MSB is the held-out check: its output-borne injections (false error,
 user impersonation, retrieval) match none of the output rules.
 
-### MSB (live MCP servers, first pass)
+### MSB (live MCP servers)
 
 `benchmarks/msb.py` runs [MSB](https://github.com/dongsenzhang/MSB) attacks against
 its real MCP servers in a Docker sandbox (`benchmarks/msb.Dockerfile`), with the
@@ -272,28 +272,42 @@ agent (Ollama native tool calling) and the proxy on the host. MSB adds prompt
 injection, false errors and user impersonation inside its own agent, after the MCP
 client, where no proxy could see them; the runner puts each one where a malicious
 server would, in the tool description or result. Keyless subset: 960 of 1,600
-non-kill_process cases; this pass sampled 20 per attack type. Harm is scored as in
+non-kill_process cases; 20 seeded cases per attack type, all 12 types (236 cases;
+search_term_deception has 16), same sample for every row. Harm is scored as in
 MSB's metrics.py, on calls that actually executed; REVIEW is not approved.
-
-First pass covers 6 of 12 attack types (PI, FE, UI, RI, PI-UI, PI-FE); the other six
-failed to start (MSB's attack servers need pandas) and are rerun next.
 
 | backbone | defense | harm executed [95% CI] | harmful call sent to review | task tool used |
 |---|---|---|---|---|
-| qwen2.5:7b | none | 55.2% [46.1, 63.9] | 0% | 84.5% |
-| qwen2.5:7b | IntentShield, descriptions exposed | **0.0%** [0, 3.3] | 7.9% | 19.3% |
-| qwen2.5:7b | IntentShield, default (descriptions withheld) | 0.0% [0, 3.2] | 6.9% | 22.4% |
-| llama3.1:8b | none | 0.0% [0, 3.2] | 0% | 71.6% |
-| llama3.1:8b | IntentShield, descriptions exposed | 0.0% | 0% | 18.8% |
-| llama3.1:8b | IntentShield, default | 0.0% | 0% | 22.4% |
+| qwen2.5:7b | none | 49.2% [42.8, 55.5] | 0% | 85.6% |
+| qwen2.5:7b | IntentShield, descriptions exposed | 7.2% [4.6, 11.2] | 11.0% | 26.7% |
+| qwen2.5:7b | IntentShield, default (descriptions withheld) | **6.8%** [4.2, 10.7] | 5.1% | 29.7% |
+| llama3.1:8b | none | 22.0% [17.2, 27.8] | 0% | 75.4% |
+| llama3.1:8b | IntentShield, descriptions exposed | 9.3% [6.2, 13.7] | 9.3% | 25.4% |
+| llama3.1:8b | IntentShield, default | **3.8%** [2.0, 7.1] | 5.9% | 29.2% |
 
-Undefended qwen2.5:7b followed user impersonation, PI-UI and PI-FE 85% of the time.
-llama3.1:8b followed none, so its rows measure utility cost only. That cost is the
-main finding: guarded agents used their task tool in about 20% of cases against
-72-85% unguarded. Description injections name a tool on another server, so the
-task tools are quarantined as shadowing and the task cannot be done. Output-borne
-injections (FE, UI, RI) match none of the output rules; the harmful write is
-stopped instead because it is an unrequested mutation (review, never executed).
+Harm executed by attack type (qwen2.5:7b / llama3.1:8b; guarded = default):
+
+| attack type | unguarded | guarded |
+|---|---|---|
+| prompt injection (PI), PI-false error, PI-user impersonation | 25-85% / 0% | 0% / 0% |
+| user impersonation, false error | 85%, 30% / 0% | 0% / 0% |
+| name overlap, preference manipulation (PM), PM-impersonation, retrieval | 0-12% / 0% | 0% / 0% |
+| PM-out-of-scope parameter | 60% / 65% | 0% / 0% |
+| out-of-scope parameter | 95% / 100% | **40% / 40%** |
+| tool transfer | 95% / 95% | **40% / 5%** |
+
+What gets through is one shape: a read call whose schema asks for an extra
+parameter (`llm_model_name`), which the model fills. The call is a read, and the
+value comes from neither the user nor a tainted output, so neither the call policy
+nor argument provenance objects; MSB counts any non-empty value, even `"default"`,
+as a leak. Everything that needs an injected instruction is stopped: description
+injections name a tool on another server and are quarantined as shadowing, and
+output-borne ones (false error, impersonation, retrieval) match none of the output
+rules but end in an unrequested mutation, which goes to review.
+
+Utility is the cost: guarded agents used their task tool in 25-30% of cases
+against 75-86% unguarded, because quarantine removes the task tools along with the
+injected description.
 
 ### Output layer on InjecAgent
 
