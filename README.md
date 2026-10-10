@@ -32,7 +32,7 @@ Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#gua
 - Upstream JSON Schema validation, namespaced tool identities, and fail-closed catalog drift checks
 - MCP poisoning defense: description scanning with quarantine, cross-server shadowing detection, and rug-pull fingerprints over descriptions and annotations
 - Tool-output injection scanning (including user impersonation and task hijack) with run taint, and argument-provenance blocking of attacker-supplied values
-- Self-disclosure parameter redaction: parameters that ask for the agent's model, system prompt or conversation are hidden and always sent empty
+- Self-disclosure parameter redaction: parameters that ask for the agent's model, system prompt or conversation are hidden from the agent and never reach the server with a value
 - Harness hooks for Claude Code, Codex CLI, Cursor and Gemini CLI (`intentshield-hook`), bound to the user's real prompt
 - Transparent proxy mode (`intentshield-mcp --transparent`) for the MCP servers a harness launches
 - Gemini-native function calling as the only remote model provider
@@ -142,9 +142,9 @@ curl http://127.0.0.1:8000/api/security/status
 
 | Variable | Purpose |
 |---|---|
-| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode). Unset leaves it open on loopback. |
+| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP). Unset leaves it open on loopback. |
 | `INTENTSHIELD_CONTROL_TOKEN` | Bearer token for the human approval endpoint. |
-| `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and `/mcp` (default 120, `0` disables). In memory, per process. |
+| `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and, in proxy mode over Streamable HTTP, `/mcp` (default 120, `0` disables). In memory, per process. |
 | `INTENTSHIELD_LOG_LEVEL` | JSON log level (default `INFO`). Decision lines carry run, tool, decision and reason codes, never arguments. |
 
 `configs/policy.json` is validated strictly: unknown keys, a tool both allowed and prohibited, and catch-all destination patterns are rejected at startup.
@@ -192,8 +192,8 @@ policy cost reported as a 100% false block for that category.
 
 MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
-Benchmark agents are local Ollama models (qwen2.5:7b, llama3.1:8b, Ornith-1.5-9B); the
-harness check uses Claude Code with Haiku. No published-defense baselines yet.
+Benchmark agents are local Ollama models (qwen2.5:7b, llama3.1:8b, Ornith-1.5-9B; llama3.2:3b
+on InjecAgent); the harness check uses Claude Code with Haiku. No published-defense baselines yet.
 
 ### MCP guardrail layers
 
@@ -219,7 +219,8 @@ The proxy guards all three places an MCP attack enters (plan and status:
   attacker-chosen recipient, account or path.
 - **Self-disclosure parameters.** A schema parameter that asks for the agent's
   model, system prompt or conversation (`llm_model_name`, `system_prompt`, ...) is
-  removed from the schema the agent sees and always sent upstream empty.
+  removed from the schema the agent sees. Any value the agent sends for it is dropped;
+  an empty string stands in when the upstream schema requires the field.
 - **Reads.** With `lenient_reads`, an ungrounded read is evidence rather than a
   block; mutations stay strict.
 
@@ -286,8 +287,8 @@ stay flagged (the poisoned tool is treated as another server's, so shadowing app
 
 Both scanners now NFKC-normalize, drop invisible format characters and map common
 Cyrillic/Greek look-alikes before matching; false flags on the 362 clean tools stay
-at 3. Paraphrase survives mostly through the shadowing check: the rules alone keep
-only 42.7% of paraphrased descriptions, so an attacker who also avoids naming
+at 3. Paraphrase survives mostly through the shadowing check: of the 1,265 descriptions
+the rules flag without it, the rules alone still flag 42.7% after paraphrase, so an attacker who also avoids naming
 another server's tool would get through. Whether every rewrite still steers a model
 was not tested. MSB is the held-out check: its output-borne injections (false error,
 user impersonation, retrieval) match none of the output rules.
@@ -320,7 +321,7 @@ on AgentDojo and InjecAgent below.
 | qwen2.5:7b | IntentShield, default | **0.0%** [0, 1.7] | 1.4% | 63.6% | 51.4% |
 | llama3.1:8b | none | 21.8% [16.9, 27.7] | 22.3% | 83.2% | 83.2% |
 | llama3.1:8b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 12.7% | 57.3% | 37.7% |
-| llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.6% | 42.3% |
+| llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.5% | 42.3% |
 | Ornith-1.5-9B | none | 52.7% [46.1, 59.2] | 54.5% | 98.6% | 98.6% |
 | Ornith-1.5-9B | IntentShield, default (219; 1 case hit an Ollama 500 twice) | **0.0%** [0, 1.7] | 2.7% | 67.1% | 51.6% |
 
@@ -346,15 +347,16 @@ most attack-prone (52.7% harm; it follows false errors in 55% of cases, against 
 for qwen2.5:7b and 0% for llama3.1:8b). Guarded it also stays at 0.0%.
 
 Tuning sample (236 cases), before and after the changes, default defense: harm
-qwen2.5:7b 6.8% -> 0.0%, llama3.1:8b 3.8% -> 0.0%; task tool reached about 30% ->
-57-59%. Every guarded row is 0.0% on both splits.
+qwen2.5:7b 6.8% -> 0.0%, llama3.1:8b 3.8% -> 0.0%; task tool executed about 30% ->
+38-49% (reached, including calls waiting on review, 56-59% after). Every guarded row
+is 0.0% on both splits.
 
 What changed, from the tuning failures:
 
 - **Self-disclosure parameters.** Out-of-scope parameter and tool transfer leaked
   through a read call whose schema asks for `llm_model_name` (40% guarded). The proxy
   now hides parameters that ask for the agent's model, system prompt or conversation
-  and always sends them empty (`mcp_inspect.self_disclosure_fields`, by name or
+  and never forwards a value for them (`mcp_inspect.self_disclosure_fields`, by name or
   description). False flags: 0 of 86 tools on MSB's 13 clean servers. With
   descriptions exposed the agent still tries (harm attempted 10-13%), but the value
   never reaches the server.
@@ -371,7 +373,8 @@ What changed, from the tuning failures:
 Utility is still the cost. The three prompt-injection types put the instruction in
 the task tool's own description, so the tool is quarantined and the task cannot be
 done (0% reached); that is the defense working. On the other eight held-out types,
-task tool reached is 82-88% guarded against 88-89% unguarded.
+task tool reached is 82-92% guarded against 88-98% unguarded (default defense, all three
+backbones).
 
 Generalization of the new output rules beyond MSB (`scan_output`, no model calls):
 
@@ -490,7 +493,9 @@ is only for a separate online MCP server that IntentShield connects to as an
 upstream; obtain that credential from the upstream provider if it requires
 one. `INTENTSHIELD_CONTROL_TOKEN` is generated by you and protects the
 separate human approval endpoint for mutations. It does not authenticate the
-agent-facing `/mcp` endpoint, which is bound to localhost in this MVP.
+agent-facing `/mcp` endpoint, which is bound to localhost in this MVP; set
+`INTENTSHIELD_AGENT_TOKEN` to require a bearer token there (see
+[production settings](#production-settings)).
 
 The proxy exposes five stable MCP tools:
 
@@ -715,14 +720,19 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   - scan every MCP result; an injected one taints the session and the model is told
     it is data, not a request (`--outputs block` replaces the result instead);
   - ask before state-changing MCP calls once the session is tainted
-    (`--review always|tainted|never`).
+    (`--review always|tainted|never`, or `INTENTSHIELD_HOOK_REVIEW`; `--outputs` reads
+    `INTENTSHIELD_HOOK_OUTPUTS`).
   A hook that crashes denies the call. Built-in tools (shell, file edits) are left
   to the harness.
-- **Transparent proxy** (`intentshield-mcp --transparent --config <file>`) wraps each
-  MCP server the harness launches. It shows the upstream's own tools, hides any whose
-  description matches poisoning rules or that changed after connect (rug pull),
+- **Transparent proxy** (`intentshield-mcp --transparent --config <file>`, stdio only)
+  wraps each MCP server the harness launches. It shows the upstream's own tools, hides
+  any whose description matches poisoning rules or that changed after connect (rug pull),
   removes self-disclosure parameters from schemas and flags injected results. Hooks
   never see tool descriptions, so this layer covers what they cannot.
+
+The example configs call `intentshield-hook` and `intentshield-mcp` by name, so put
+`.venv/bin` on the harness's `PATH` or replace them with absolute paths, and give
+`--config` an absolute path.
 
 | harness | hook config (examples in `configs/harness/`) | rewrite arguments | ask the user |
 |---|---|---|---|

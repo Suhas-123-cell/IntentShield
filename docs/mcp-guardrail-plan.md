@@ -4,23 +4,57 @@ Goal: IntentShield guards every place an attack can enter an MCP agent: tool
 descriptions (before any call), tool calls and their arguments, and tool outputs.
 Each phase ships code, tests, and a measurable benchmark hook. Status is kept here.
 
+## Resume here (state on 2026-10-10)
+
+- Phases 1-4 and 6 are done; phase 5 (external benchmarks) is in progress.
+- Tests: 130 pass and 1 is skipped (the opt-in HTTP e2e); 131 pass with
+  `INTENTSHIELD_RUN_HTTP_E2E=1`.
+  `INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= INTENTSHIELD_INTENT_MODEL_DIR=/tmp/none .venv/bin/pytest -q`
+- Environment: `uv sync --locked --extra dev` installs the six commands, including
+  `intentshield-hook` and `intentshield-eval`. It needs network access, recreates
+  `.venv` when the interpreter changes, and removes the optional DeBERTa packages;
+  reinstall those with `uv pip install --python .venv/bin/python -r requirements-ml.txt`.
+- Held-out MSB results are in `artifacts/msb-v2/` (`results-<model>-<defense>-holdout.jsonl`,
+  ignored by Git). The guard was frozen at `05bb91a` for that run. To rerun:
+  `docker build -f benchmarks/msb.Dockerfile -t intentshield-msb artifacts/data/MSB`,
+  `docker run -d --name intentshield-msb intentshield-msb`, then
+  `.venv/bin/python benchmarks/msb.py --model qwen2.5:7b --defense hooks --per-type 20 --holdout --out artifacts/msb-v2`.
+  Models in Ollama: `qwen2.5:7b`, `llama3.1:8b`, `ornith:9b`.
+- No-model checks that reproduce README numbers from the current code:
+  `benchmarks/mcptox.py --data artifacts/data/MCPTox-Benchmark --replay --lenient-reads`
+  and `benchmarks/adaptive.py`.
+- Next, in order:
+  1. Live Codex CLI, Cursor and Gemini CLI runs with `configs/harness/`; only Claude
+     Code has run live.
+  2. A live Claude Code run with a less resistant model, so the hook's deny path runs
+     live (Haiku refused the injected instruction on its own).
+  3. A semantic detector for plain-language injections (InjecAgent base: 0-4%
+     flagged); more regex will not close this.
+  4. Reviewer load: 46% of benign MCPTox calls wait on a reviewer.
+  5. AgentDojo travel/workspace with a stronger model, or Gemini once billing is on.
+  6. MCP-SafetyBench (needs a test GitHub account), MCP-Universe / MCP-Bench, and
+     published baselines.
+
 ## Phase 1: Tool-description layer (poisoning, rug pull, shadowing) - done
 
 - `mcp_inspect.scan_description`: deterministic poisoning rules over each upstream
   tool's description and schema annotation text: instruction override, hidden
   `<IMPORTANT>`-style directives, cross-tool directives ("before calling X, call Y"),
   concealment from the user, sensitive paths, argument overrides, priority claims.
+  Text is NFKC-normalized, invisible format characters are dropped and Cyrillic/Greek
+  look-alikes are mapped before matching.
 - Quarantine: a flagged tool stays registered for audit, is shown as unavailable
   in the catalog, and any call is blocked (`BLOCK_TOOL_QUARANTINED`).
 - Shadowing: a description that names another server's tool is flagged.
-- Rug pull: the drift fingerprint covers description, title and annotations,
-  not only the input schema; any change fails closed.
-- Measure: false-flag rate on MCPTox's 45 real servers' clean descriptions;
-  detection rate on its poisoned descriptions.
+- Rug pull: the drift fingerprint covers description, title, annotations and the
+  input and output schemas; any change fails closed.
+- Measured on MCPTox: 96.4% of 1,312 poisoned descriptions flagged, 3 of 362 clean
+  tools falsely flagged.
 
 ## Phase 2: Tool-output layer (indirect injection) - done
 
-- `mcp_inspect.scan_output`: injection rules over every upstream result.
+- `mcp_inspect.scan_output`: injection rules over every upstream result, including
+  user impersonation, task hijack, "you must follow" demands and chat-role markers.
 - A hit records `MCP_OUTPUT_INJECTION` and taints the run with the output's
   distinctive values (emails, URLs, account numbers, paths, long identifiers).
 - The result is still returned, marked `injection_detected` with findings, so
@@ -34,6 +68,9 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
   intent-consistent attacks: the right action with an attacker-chosen argument.
 - Wired through two service hooks (`pre_policy_check`, `result_inspector`) so the
   policy engine stays pure and the plain gateway is unchanged.
+- Self-disclosure parameters (`mcp_inspect.self_disclosure_fields`): a schema
+  parameter asking for the agent's model, system prompt or conversation is removed
+  from the schema the agent sees and never reaches the server with a value.
 
 ## Phase 4: Benchmarks on the real layers - done (see README)
 
@@ -41,12 +78,12 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
   calls (cached generations), poisoned vs withheld.
 - InjecAgent: scan the injected tool response, taint, then judge the attacker call.
 - README: per-attack-type tables. Provenance is covered by proxy tests
-  (`tests/test_mcp_guardrail.py`), not yet by the offline harness.
+  (`tests/test_mcp_guardrail.py`) and by MSB, not by the offline harness.
 
 ## Findings that set the next phase
 
 - Description layer: 1.3% attack success, 3.5% benign false block on MCPTox's
-  11-model replay (tuning set). Needs a held-out benchmark next.
+  11-model replay (tuning set). Held-out check is MSB (phase 5).
 - Output layer misses plain-request injections (InjecAgent base: 0-4% flagged).
   Next step is a semantic detector, not more regex.
 - Intent grounding without operator terms falsely blocked ~40% of benign calls on
@@ -64,30 +101,6 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
     negation or hard failure still blocks). Full proxy: 3.5% false block, but 46%
     of benign calls now wait on a reviewer. Reviewer load is the next cost to cut.
 
-## Phase 6: Harness guard - done (live runs pending outside Claude Code)
-
-- `intentshield-hook <claude|codex|cursor|gemini>`: one guard behind each harness's
-  prompt / pre-call / post-call hooks. Session intent and taint are kept in SQLite.
-  Self-disclosure args are blanked, injected or tainted args are denied, and
-  mutations after a tainted output are asked (Codex has no ask, so they are denied).
-- `intentshield-mcp --transparent --config ...`: proxy that exposes upstream tools
-  under their own names, hides quarantined or drifted tools, redacts schemas, and
-  marks injected outputs.
-- Live Claude Code (Haiku, `benchmarks/harness_live/`): the model name leaked in 3 of 3
-  unguarded runs and in 0 of 3 guarded runs.
-
-## Phase 6: Harness guard - done (live runs pending outside Claude Code)
-
-- `intentshield-hook <claude|codex|cursor|gemini>`: one guard behind each harness's
-  prompt / pre-call / post-call hooks. Session intent and taint are kept in SQLite.
-  Self-disclosure args are blanked, injected or tainted args are denied, and
-  mutations after a tainted output are asked (Codex has no ask, so they are denied).
-- `intentshield-mcp --transparent --config ...`: proxy that exposes upstream tools
-  under their own names, hides quarantined or drifted tools, redacts schemas, and
-  marks injected outputs.
-- Live Claude Code (Haiku, `benchmarks/harness_live/`): the model name leaked in 3 of 3
-  unguarded runs and in 0 of 3 guarded runs.
-
 ## Phase 5: External benchmarks - in progress
 
 Decided 2026-10-06: Gemini + local backbones; live MCP benchmarks in Docker, keyless
@@ -102,8 +115,8 @@ servers first.
     lenient reads in the proxy. Tuning harm 0.0% on both models.
   - Held-out (220 cases outside the tuning sample, code frozen at `05bb91a`): harm
     executed 0.0% [0, 1.7] in all four guarded configs, against 51.4% and 21.8%
-    unguarded. Task tool reached 58-66% vs 83-91%; the gap is mostly the three PI
-    types, whose task tool is itself poisoned and quarantined.
+    unguarded. Task tool reached 57-66% vs 83-91%; the gap is mostly the three PI
+    types, whose task tool is itself poisoned and quarantined (0 of 60 reached).
   - Same templates on both splits: generalization to other wording is AgentDojo
     (important_instructions 0% -> 100% flagged) and InjecAgent (base still 0-3%).
   - Ornith-1.5-9B (third backbone, held-out): 52.7% harm unguarded with 98.6% task
@@ -111,12 +124,10 @@ servers first.
     in Ollama with a 500 every time).
   - Harness hook path (`--defense hooks`, Claude Code adapter + transparent proxy), same
     held-out cases: 0.0% harm on all three backbones; task tool executed 64-69%.
-  - Next: live Codex, Cursor and Gemini CLI runs; plain-language injections (InjecAgent
-    base) need a semantic detector.
 - Adaptive attacks - first pass done. `benchmarks/adaptive.py`: zero-width and
   look-alike rewrites evaded the description rules (10.4% / 49.8% still flagged)
   until Unicode normalization (100%). Paraphrase keeps 98.6% only via shadowing;
-  the rules alone keep 42.7%.
+  the rules alone keep 42.7% of the descriptions they flag.
 - AgentDojo all suites - partial. 8 user x 4 injection tasks per suite on
   qwen2.5:7b: slack attack success 31.3% -> 15.6% (utility 75% -> 50%); travel and
   workspace are 0% utility even undefended, so they need a stronger model.
@@ -124,6 +135,20 @@ servers first.
   client drops Gemini 3.x thought signatures. Needs billing or a patched client.
 - MCP-SafetyBench - cloned, not run: real GitHub and other servers; needs a test
   GitHub account and keys.
-- Backbones: qwen2.5:7b, llama3.1:8b local; Gemini pending quota.
+- Backbones: qwen2.5:7b, llama3.1:8b, Ornith-1.5-9B local; Gemini pending quota.
 - Published baselines (Task Shield etc.) - not started.
 - Benign MCP workload (MCP-Universe / MCP-Bench) - not started; needs keys.
+
+## Phase 6: Harness guard - done (live runs pending outside Claude Code)
+
+- `intentshield-hook <claude|codex|cursor|gemini>`: one guard behind each harness's
+  prompt / pre-call / post-call hooks. Session intent and taint are kept in SQLite.
+  Self-disclosure args are blanked, injected or tainted args are denied, and
+  mutations after a tainted output are asked (Codex and Gemini CLI have no ask, so
+  they are denied with a reason).
+- `intentshield-mcp --transparent --config ...`: proxy that exposes upstream tools
+  under their own names, hides quarantined or drifted tools, redacts schemas, and
+  marks injected outputs.
+- Live Claude Code (Haiku, `benchmarks/harness_live/`): the model name leaked in 3 of 3
+  unguarded runs and in 0 of 3 guarded runs.
+- MSB through the hook path: see phase 5.
