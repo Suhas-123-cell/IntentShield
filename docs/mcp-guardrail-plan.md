@@ -64,6 +64,30 @@ Each phase ships code, tests, and a measurable benchmark hook. Status is kept he
     negation or hard failure still blocks). Full proxy: 3.5% false block, but 46%
     of benign calls now wait on a reviewer. Reviewer load is the next cost to cut.
 
+## Phase 6: Harness guard - done (live runs pending outside Claude Code)
+
+- `intentshield-hook <claude|codex|cursor|gemini>`: one guard behind each harness's
+  prompt / pre-call / post-call hooks. Session intent and taint are kept in SQLite.
+  Self-disclosure args are blanked, injected or tainted args are denied, and
+  mutations after a tainted output are asked (Codex has no ask, so they are denied).
+- `intentshield-mcp --transparent --config ...`: proxy that exposes upstream tools
+  under their own names, hides quarantined or drifted tools, redacts schemas, and
+  marks injected outputs.
+- Live Claude Code (Haiku, `benchmarks/harness_live/`): the model name leaked in 3 of 3
+  unguarded runs and in 0 of 3 guarded runs.
+
+## Phase 6: Harness guard - done (live runs pending outside Claude Code)
+
+- `intentshield-hook <claude|codex|cursor|gemini>`: one guard behind each harness's
+  prompt / pre-call / post-call hooks. Session intent and taint are kept in SQLite.
+  Self-disclosure args are blanked, injected or tainted args are denied, and
+  mutations after a tainted output are asked (Codex has no ask, so they are denied).
+- `intentshield-mcp --transparent --config ...`: proxy that exposes upstream tools
+  under their own names, hides quarantined or drifted tools, redacts schemas, and
+  marks injected outputs.
+- Live Claude Code (Haiku, `benchmarks/harness_live/`): the model name leaked in 3 of 3
+  unguarded runs and in 0 of 3 guarded runs.
+
 ## Phase 5: External benchmarks - in progress
 
 Decided 2026-10-06: Gemini + local backbones; live MCP benchmarks in Docker, keyless
