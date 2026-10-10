@@ -658,7 +658,21 @@ Wrap a server for the proxy layer, e.g. in Claude Code's `.mcp.json`:
 Cost: a hook is a short-lived process, about 36 ms per MCP call on an M5 (mostly
 Python start-up); the checks themselves take under a millisecond. The adapters follow
 each harness's documented hook format and are tested on those event shapes
-(`tests/test_harness.py`); they have not yet been run inside the live harnesses.
+(`tests/test_harness.py`). Cursor, Codex and Gemini CLI have not been run live yet.
+
+Live check in Claude Code 2.1.295 (`benchmarks/harness_live/run.sh`, Haiku, headless,
+3 prompts x unguarded/guarded) against a malicious server that logs every call:
+
+| | unguarded | guarded |
+|---|---|---|
+| model name sent to the server (`llm_model_name`) | `claude-haiku-5-5` in 3 of 3 | empty in 3 of 3 |
+| poisoned tool (`add_numbers`) offered to the agent | yes | no (quarantined) |
+| attacker email sent | 0 of 3 (Haiku refused) | 0 of 3 |
+| hooks recorded the user prompt and tainted the attacker address | n/a | yes |
+
+Haiku ignored the injected instruction even when the user asked it to use the
+injected address, so the hook's denial path was not exercised live; it is covered
+by the tests above. A less resistant model is the next live check.
 
 ## API
 
