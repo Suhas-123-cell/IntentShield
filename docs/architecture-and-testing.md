@@ -1,20 +1,21 @@
 **IntentShield: current architecture and detailed testing guide**
 
-This guide describes the application at commit `ec26a1e`, inspected on 3 October 2026. Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
+This guide describes the application on 10 October 2026 (`main` after commit `091cfd2`). Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
 
 **1. What the application currently does**
 
 IntentShield is a local authorization gateway between an agent's proposed tool call and the tool executor. A proposed call receives `ALLOW`, `REVIEW`, or `BLOCK`. An allowed read can execute immediately. An otherwise valid mutation waits for an operator to approve the exact stored call. A blocked proposal does not reach the executor.
 
-There are three ways into the gateway:
+There are three ways into the gateway, plus a harness mode that applies the same MCP rules inside an agent harness:
 
 | Entry path | What proposes the call | What executes it |
 |---|---|---|
 | Offline dashboard / REST scenarios | A predefined benign, injection, or review fixture | In-memory simulated inbox/outbox tools |
 | Web Gemini integration | Gemini returns one native function-call proposal | Simulated tools, or real MCP tools when proxy mode is enabled |
 | Agent-facing MCP server | Codex, Claude, or another MCP client submits an explicit call | Simulated tools without a proxy config, or configured real upstream MCP servers |
+| Harness hooks + transparent proxy | The harness's own model calls MCP tools directly | The harness, after `intentshield-hook` returns allow, deny or ask; the transparent proxy forwards to the upstream server |
 
-The proposal source does not supply authorization scores or approval decisions. All paths use the same `IntentShieldService` and deterministic `PolicyEngine`.
+The proposal source does not supply authorization scores or approval decisions. The three gateway paths use the same `IntentShieldService` and deterministic `PolicyEngine`. The harness mode does not: `harness.py` keeps per-session intent and taint in SQLite and applies the `mcp_inspect` rules (self-disclosure redaction, argument injection, argument provenance, output scanning), and the transparent proxy applies only the catalog layer (quarantine, rug pull, schema redaction, output flagging). Confirmation of state-changing calls is left to the harness's own permission flow.
 
 ```mermaid
 flowchart TD
@@ -26,7 +27,8 @@ flowchart TD
     A[MCP client] --> M[Five IntentShield gateway tools]
     M --> C
     C --> S[Detection and grounding evidence]
-    S --> D[Deterministic policy]
+    S --> V[Proxy veto: quarantine, argument provenance]
+    V --> D[Deterministic policy]
     D -->|BLOCK| B[Audited denial; no execution]
     D -->|REVIEW| Q[Pending exact-call approval]
     H[Trusted operator] --> Q
@@ -34,8 +36,13 @@ flowchart TD
     D -->|ALLOW| E[Service executor boundary]
     E --> L[Simulated email tools]
     E --> U[Real MCP upstreams: stdio / HTTP]
+    U --> O[Output scan and run taint]
     C -.-> DB[(SQLite audit, approvals, idempotency)]
     E -.-> DB
+    HN[Harness: Claude Code, Codex CLI, Cursor, Gemini CLI] --> HK[intentshield-hook: prompt, pre-call, post-call]
+    HK -.-> HDB[(SQLite session intent and taint)]
+    HN --> T[Transparent proxy: catalog layer]
+    T --> U2[Upstream MCP server]
 ```
 
 **2. Components and responsibilities**
@@ -47,23 +54,30 @@ flowchart TD
 | Request/result models | `models.py` | Typed tool calls, decisions and stable reason codes. ToolCall forbids extra fields, so a client cannot inject trusted scores. |
 | Main service | `service.py` | Persists runs, obtains evidence, evaluates policy, manages approval/idempotency, and invokes executors. Persisted run intent is authoritative when resuming a call. |
 | Security workers | `security_agents.py` | Concurrent deterministic detection and grounding. Their validated evidence cannot authorize execution. |
+| Fallback signals | `detector.py` | Deterministic scores used when a call names an unregistered tool (no trusted metadata to analyse). |
+| MCP text rules | `mcp_inspect.py` | Description poisoning and output injection rules, Unicode normalization, self-disclosure parameter detection, distinctive-value extraction for provenance. Evidence only. |
+| Harness guard | `harness.py` | `intentshield-hook` for Claude Code, Codex CLI, Cursor and Gemini CLI; per-session intent and taint in SQLite; standard library plus `mcp_inspect` only, for fast start-up. |
+| Offline evaluation | `evaluation.py` | `intentshield-eval`: 111 synthetic cases against four defenses with Wilson intervals. |
+| Logging / rate limit | `logs.py`, `ratelimit.py` | JSON decision logs without arguments; in-memory per-client token bucket. |
 | Local classifier | `intent_classifier.py` | Optional DeBERTa action-family prediction and abstention, local artifact verification and lazy loading. |
 | Training pipeline | `intent_training.py` | Fine-tunes DeBERTa, evaluates the development split, records metadata/file hashes and qualification. |
 | Gemini adapter | `model_gateway.py` | Sends a proposal request to Gemini, normalizes exactly one known native function call, supports safe no-action, and rejects malformed responses. |
 | Policy | `policy.py` | Pure authorization logic; performs no tool execution. |
 | Storage | `storage.py` | SQLite runs, ordered events, approvals and atomic mutation reservations. |
 | Local tools | `tools.py` | Synthetic inbox read and synthetic email send. No actual email provider is connected. |
-| MCP server | `mcp_server.py` | Exposes five gateway tools, plus a separate optional HTTP approval control endpoint. |
-| MCP runtime/client | `mcp_proxy.py`, `mcp_upstream.py` | Discovers and binds upstream schemas, namespaces tools, validates JSON Schema, detects catalog drift, invokes allowed upstream calls, bounds/redacts results. |
+| MCP server | `mcp_server.py` | Exposes five gateway tools, plus a separate optional HTTP approval control endpoint, optional agent bearer token and rate limit; `--transparent` serves the upstream's own tools over stdio instead. |
+| MCP runtime/client | `mcp_proxy.py`, `mcp_upstream.py` | Discovers and binds upstream schemas, namespaces tools, validates JSON Schema, quarantines poisoned tools, detects catalog drift (rug pull), redacts self-disclosure parameters, checks argument provenance, scans and taints on outputs, invokes allowed upstream calls, bounds/redacts results. |
 | MCP fixture/verifier | `demo_mcp_server.py`, `mcp_verify.py` | Real local protocol fixture and deployment/wiring preflight. |
 
-Source root: [src/intentshield](../src/intentshield). Policy examples: [configs](../configs). Tests: [tests](../tests).
+Source root: [src/intentshield](../src/intentshield). Policy and harness examples: [configs](../configs). Tests: [tests](../tests). Benchmark runners: [benchmarks](../benchmarks).
 
 **3. What happens to a call**
 
 A run is created with the request text. A tool call includes the tool name, arguments and exact catalog schema hash. Mutations also need an idempotency key. The gateway scans the stored intent and proposed call, validates the evidence, applies policy and records the decision. Only an allowed call reaches the registered executor.
 
-The service's approval and idempotency checks surround the policy evaluation. The policy itself checks, in order: registered tool; prohibit/allow rules; schema binding; per-run call budget; injection threshold; explicit resource/destination fields; argument schema; resource/destination scope; intent alignment; the security supervisor's blocking disposition; mutation idempotency; and verified human approval.
+The service's checks surround the policy evaluation. In order, the service computes detection and grounding evidence, checks any supplied approval, runs the proxy veto when one is configured (`BLOCK_TOOL_QUARANTINED` for a quarantined tool, `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` for an argument value taken from a tainted output or another tool's description), and checks for idempotency conflicts. The policy itself then checks, in order: registered tool; prohibit/allow rules; schema binding; per-run call budget; injection threshold; explicit resource/destination fields; argument schema; resource/destination scope; intent alignment; the security supervisor's blocking disposition; mutation idempotency; and verified human approval. After an allowed call executes, the proxy's result inspector scans the output and taints the run when it finds injected instructions.
+
+Intent alignment below the minimum blocks, with two exceptions: with `lenient_reads`, an ungrounded read whose alignment is above zero passes as evidence; and a mutation the supervisor sent to `REVIEW` (grounded except for vocabulary) reaches human review instead of being blocked.
 
 An earlier failing check determines the main reason code. For example, an unregistered tool is blocked as `BLOCK_TOOL_NOT_REGISTERED`, even if the same request would also fail grounding.
 
@@ -84,7 +98,9 @@ The detection and grounding “agents” are ordinary local Python workers. They
 
 Detection scans the intent, tool name and canonical JSON arguments for four rule families: instruction override, system/developer authority impersonation, obvious exfiltration phrases, and unauthorized-recipient language. No matched rule gives 0.02; one gives 0.75; two give 0.98; larger combinations are capped at 0.99. The default blocking threshold is 0.75. These values are rule scores, not measured probabilities of attack.
 
-Grounding checks the trusted registry name/hash, read-versus-mutation classification, action words, operator-owned target terms, resource scope, destination scope and explicit negation. Action plus a matching target term normally gives 0.95 alignment; missing grounding gives 0.30; explicit negation gives 0.0. An email destination also needs grounding in the user's request. The default minimum alignment is 0.60.
+Grounding checks the trusted registry name/hash, read-versus-mutation classification, action words, operator-owned target terms, resource scope, destination scope and explicit negation. Action plus a matching target term normally gives 0.95 alignment; a read needs only a specific target term (generic words such as "get", "details" and stopwords do not count); missing grounding gives 0.30; explicit negation gives 0.0. An email destination also needs grounding in the user's request: when the user names addresses, only those exact addresses ground, and an ungrounded destination caps alignment at 0.55. The default minimum alignment is 0.60.
+
+The supervisor combines the evidence into `CLEAR_FOR_POLICY`, `REVIEW` or `BLOCK`. A mutation whose only gap is vocabulary (`ACTION_NOT_GROUNDED`, alignment above zero, destination not ungrounded) is `REVIEW`, not `BLOCK`; it still cannot run without approval. A failed or timed-out worker, an injection score at the threshold, a scope failure, or low alignment otherwise gives `BLOCK`.
 
 The optional classifier predicts `read`, `mutation`, or `no_action` from the user's intent. `unknown` is abstention. Its score is combined with deterministic grounding using the lower score. It can make a decision more conservative. It cannot grant authorization, detect every injection, or establish that every argument matches the user's intent.
 
@@ -132,9 +148,16 @@ With the single demo proxy config, the protected catalog contains `demo:read_not
 
 The operator config owns which tools are allowed and read-only, their grounding terms and any resource/destination scope. Upstream annotations cannot make a tool read-only. Unlisted read-only status means mutation. Qualified identities keep equal raw tool names on different servers separate. The demo config does not restrict `note_id` to only `welcome`; add explicit per-tool resource rules if that restriction is desired.
 
-The runtime binds original upstream schemas at startup, validates arguments against them, strips untrusted schema annotations from the public catalog, withholds raw descriptions by default, refreshes the catalog before calls, and blocks detected drift until restart. Every real MCP result is wrapped with `trust=UNTRUSTED_MCP_OUTPUT`. That label preserves a trust boundary; it does not remove hostile text.
+The runtime binds original upstream schemas at startup, validates arguments against them, strips untrusted schema annotations from the public catalog, withholds raw descriptions by default, refreshes the catalog before calls, and blocks detected drift until restart. The drift fingerprint covers title, description, input and output schemas and annotations, so a changed description (rug pull) fails closed like a changed schema. Every real MCP result is wrapped with `trust=UNTRUSTED_MCP_OUTPUT`. That label preserves a trust boundary; it does not remove hostile text.
 
-The HTTP `/mcp` endpoint is local and has no agent authentication in this MVP. Approval is a separate human operation; no agent-callable approval tool exists. With a token, a proxy HTTP server exposes `POST /control/approvals/{id}`. Without a token that endpoint is absent. A web app using real MCP requires a token and protects both approval listing and decisions. Simulated development mode can run without a token.
+The proxy also guards the MCP-specific attack surfaces:
+
+- A tool whose title, description or schema text matches the poisoning rules, or names another server's tool (shadowing), is quarantined: listed with `available=false`, `quarantined=true` and its `poisoning_findings`, described only by a placeholder, and every call is `BLOCK_TOOL_QUARANTINED`. `quarantine_poisoned_tools` (default true) controls this.
+- A parameter asking for the agent's model, system prompt or conversation is removed from the public schema (`redacted_fields` in the catalog); any value sent for it is dropped, with an empty string when the upstream schema requires the field.
+- Every result is scanned. A match adds `injection_detected` and `injection_findings` to the result, logs `MCP_OUTPUT_INJECTION`, and taints the run with the output's distinctive values. A later call in the run that carries one of those values, or a value only another tool's description supplied, is `BLOCK_UNTRUSTED_ARGUMENT_SOURCE`.
+- `lenient_reads` (default false) lets an ungrounded read through as evidence; mutations and negated reads stay strict.
+
+The HTTP `/mcp` endpoint is bound to loopback. In proxy mode it requires `Authorization: Bearer <INTENTSHIELD_AGENT_TOKEN>` when that variable is set and is rate limited per client by `INTENTSHIELD_RATE_LIMIT_PER_MIN` (default 120); without a proxy config neither applies. Approval is a separate human operation; no agent-callable approval tool exists. With a token, a proxy HTTP server exposes `POST /control/approvals/{id}`. Without a token that endpoint is absent. A web app using real MCP requires a token and protects both approval listing and decisions. Simulated development mode can run without a token.
 
 Approval fingerprints bind the run, tool, arguments, schema hash and idempotency key. Approvals expire after 600 seconds by default and are consumed once. Approving re-evaluates the call; it cannot override a new policy denial or schema drift.
 
@@ -166,7 +189,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `87 passed, 1 skipped`. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+For this revision, expect `130 passed, 1 skipped`. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -177,7 +200,9 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 88 collected tests at this revision. They should all pass when real localhost socket binding is allowed. I verified the 87 standard tests and separately verified the opt-in HTTP test. I also verified the supplied manual MCP walkthrough against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+There are 131 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 10 October 2026 all 131 passed with HTTP enabled, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+
+The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
 The per-command environment settings isolate this baseline from your existing `.env` and optional checkpoint. They do not edit `.env` or persist into later terminal commands.
 
@@ -193,6 +218,10 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_mcp_server.py`, `test_mcp_upstream.py` | Gateway surface, upstream configuration/client normalization, policy bridge and transport behavior. |
 | `test_mcp_e2e.py`, `test_mcp_verify.py` | Real stdio upstreams/downstream subprocess, multiple upstreams, schema drift and verifier behavior. |
 | `test_mcp_http_e2e.py` | Real process-level HTTP downstream plus stdio/HTTP upstreams, verifier, 401 rejection, authenticated rejection and shutdown. |
+| `test_mcp_guardrail.py`, `test_lenient_reads.py` | Description and output scanners, quarantine, rug pull, output taint, argument provenance, Unicode evasion, self-disclosure redaction, lenient reads. |
+| `test_harness.py` | Hook adapters for Claude Code, Codex CLI, Cursor and Gemini CLI on their documented event shapes, fail-closed hook crashes, mutation naming, transparent forwarding. |
+| `test_detector.py`, `test_evaluation.py` | Fallback signals on camelCase tool names; offline evaluation dataset, Wilson intervals and safety invariants. |
+| `test_logs.py`, `test_ratelimit.py` | JSON decision logs without arguments; per-client rate limit and 429 responses. |
 
 Example:
 
@@ -342,9 +371,11 @@ Now run the supplied, verified [manual MCP walkthrough](../scripts/mcp_walkthrou
 
 It requires the single `demo` config and intentionally appends one synthetic line after authenticated approval. It uses a fresh UUID key and compares mutation-count deltas, so it can be rerun without an empty demo note. Keep the deterministic classifier baseline for this phase if a live classifier changes a proposed test's grounding outcome.
 
-The walkthrough checks the five-tool surface, successful read, unknown tool, stale schema, invalid arguments, explicit negation, wrong action, missing idempotency, injected arguments, dry-run review, zero mutation before approval, unauthorized approval 401, authorized approval execution, completion polling, repeated decision 409, consumed approval denial, poisoned output wrapping, and the ninth call exceeding one run's eight-call budget. It finishes with `PASS: all manual MCP walkthrough checks completed.`
+The walkthrough checks the five-tool surface, successful read, unknown tool, stale schema, invalid arguments, explicit negation, missing idempotency, injected arguments, wrong action sent to review without a mutation, dry-run review, zero mutation before approval, unauthorized approval 401, authorized approval execution, completion polling, repeated decision 409, consumed approval denial, poisoned output wrapping, and the ninth call exceeding one run's eight-call budget. It finishes with `PASS: all manual MCP walkthrough checks completed.`
 
-The poisoned note returns hostile text inside `UNTRUSTED_MCP_OUTPUT`. The read is permitted and no automatic second call occurs. This demonstrates current behavior; it does not establish that an arbitrary downstream agent will always treat that text as untrusted.
+The poisoned note returns hostile text inside `UNTRUSTED_MCP_OUTPUT`, marked `injection_detected` with its findings, and the run is tainted with the note's distinctive values. The read is permitted and no automatic second call occurs. This demonstrates current behavior; it does not establish that an arbitrary downstream agent will always treat that text as untrusted.
+
+To wait for the gateway in a script, check the port (`nc -z 127.0.0.1 8001`). A plain `GET /mcp` opens a stream and does not return.
 
 If using another port, set `INTENTSHIELD_TEST_BASE_URL=http://127.0.0.1:YOUR_PORT` when running the walkthrough. For isolated audits, copy the proxy config and give it a new `database_path`. The config's `.venv/bin/python` command needs the repository working directory, or replace it with an absolute executable path.
 
@@ -488,15 +519,52 @@ If you want to reproduce training while preserving the existing checkpoint:
 
 Training downloads the base model when it is not cached and uses CPU unless CUDA is available; this trainer has no Apple MPS branch. A failed release gate still saves an artifact, but runtime refuses its qualification. Only switch `INTENTSHIELD_INTENT_MODEL_DIR` to the new artifact after reviewing the report, then restart and repeat real predictions and gateway tests.
 
-**14. Completion checklist and practical limits**
+**14. Harness hooks and transparent proxy**
 
-For a thorough test of the current implementation, collect these results: all 88 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; audit persistence and clean Ctrl-C shutdown.
+`intentshield-hook <claude|codex|cursor|gemini>` reads one hook event on stdin and prints the harness's JSON reply. Session state lives in `~/.intentshield/hooks.db` unless `INTENTSHIELD_HOOK_DB` or `--db` says otherwise. `--review tainted|always|never` (`INTENTSHIELD_HOOK_REVIEW`, default `tainted`) decides when state-changing MCP calls are asked; `--outputs warn|block` (`INTENTSHIELD_HOOK_OUTPUTS`, default `warn`) decides whether an injected result is kept with a warning or replaced. A crash on a pre-call event exits 2 with the error on stderr, which the harnesses treat as a denial (Cursor through `failClosed` in its config). Built-in harness tools are ignored.
+
+Exercise it by hand in an isolated database:
+
+```bash
+export INTENTSHIELD_HOOK_DB=/tmp/intentshield-hooks.db
+echo '{"hook_event_name":"UserPromptSubmit","session_id":"s","prompt":"Search my notes"}' \
+  | .venv/bin/intentshield-hook claude
+echo '{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"mcp__notes__search","tool_input":{"query":"plan","llm_model_name":"x"}}' \
+  | .venv/bin/intentshield-hook claude
+```
+
+The prompt event prints nothing. The call event returns `permissionDecision: allow` with `updatedInput` carrying `llm_model_name: ""`. A plain read with no self-disclosure field prints nothing, so the harness's own permissions decide. A `PostToolUse` event whose `tool_response` contains injected instructions returns `additionalContext` telling the model it is data, and taints the session; a later call carrying a value from that output is denied.
+
+Example configs are in `configs/harness/`; they call `intentshield-hook` by name, so `.venv/bin` must be on the harness's `PATH` (or use absolute paths). Codex CLI and Gemini CLI have no ask, so a confirmation becomes a denial with a reason; Cursor cannot rewrite arguments, so a call with a self-disclosure value is denied with instructions to resend it empty.
+
+`intentshield-mcp --transparent --config <file>` serves one or more upstreams over stdio under their own tool names (`server__tool` when there are several). `configs/harness/transparent-filesystem.json` wraps the reference filesystem server. It needs no `allowed_tools`: the intent-bound call policy runs in the hooks. Quarantined and drifted tools are hidden, self-disclosure parameters are removed, and an injected result gets an `[IntentShield]` warning block in front of it.
+
+`benchmarks/harness_live/run.sh [model]` runs headless Claude Code against a malicious MCP server that logs every call (`benchmarks/harness_live/calls.jsonl`), unguarded and guarded. It uses your Claude login and model quota. Cost per hook call is about 36 ms on an M5, almost all Python start-up.
+
+**15. Offline evaluation and benchmarks**
+
+`.venv/bin/intentshield-eval --out report.json` replays 111 synthetic cases (89 attack, 22 benign) against no defense, a keyword filter, schema-only validation and the full gateway in dry-run, with Wilson 95% intervals. Expect 0.0% attack success and 9.1% benign false block for the full gateway with no classifier attached.
+
+The runners in `benchmarks/` need external datasets under `artifacts/data/` (ignored by Git):
+
+| Runner | Needs | Model calls |
+|---|---|---|
+| `mcptox.py --replay [--lenient-reads]` | MCPTox-Benchmark checkout | None; scores MCPTox's published responses |
+| `adaptive.py` | MCPTox-Benchmark checkout | None; rewrites flagged descriptions |
+| `injecagent.py`, `asb.py`, `agentdojo_run.py` | The benchmark data, Ollama (AgentDojo also supports Google) | Yes |
+| `msb.py --defense none\|intentshield\|hooks` | MSB checkout, the `intentshield-msb` Docker container, Ollama | Yes |
+
+Results and their caveats are in the README; the plan and next steps are in [mcp-guardrail-plan.md](mcp-guardrail-plan.md).
+
+**16. Completion checklist and practical limits**
+
+For a thorough test of the current implementation, collect these results: all 131 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 
-Rules can miss paraphrased/encoded injections and can flag legitimate quotations of attack phrases. Grounding uses English action/target tokens; it does not semantically compare every argument or prove the origin of the client-supplied user intent. Tool output is labeled, not sanitized. The gateway requires calls to pass through it; a separate direct upstream connection bypasses that boundary. The local MVP has no general user accounts, remote agent authentication, TLS deployment, signed audit ledger, or automatic reconciliation for uncertain mutations. Those are separate capabilities from the local behavior this guide tests.
+Rules can miss paraphrased/encoded injections and plain-language requests, and can flag legitimate quotations of attack phrases. Grounding uses English action/target tokens; it does not semantically compare every argument or prove the origin of the client-supplied user intent. Tool output is labeled and flagged, not sanitized. The gateway requires calls to pass through it; a separate direct upstream connection bypasses that boundary. The local MVP has no general user accounts, remote agent authentication beyond the loopback bearer token, TLS deployment, signed audit ledger, or automatic reconciliation for uncertain mutations. Those are separate capabilities from the local behavior this guide tests.
 
-**15. Failure diagnosis**
+**17. Failure diagnosis**
 
 | Symptom | Next check |
 |---|---|
@@ -510,6 +578,10 @@ Rules can miss paraphrased/encoded injections and can flag legitimate quotations
 | `BLOCK_SCHEMA_DRIFT` | Verify the current hash; actual catalog drift remains blocked until restart. |
 | `BLOCK_INTENT_MISMATCH` | Check exact stored intent, action/target terms, negation, destination grounding and optional classifier evidence. |
 | `BLOCK_EXECUTION_IN_DOUBT` | Reconcile the original mutation outcome with the upstream; do not blindly retry. |
+| `BLOCK_TOOL_QUARANTINED` | Inspect `poisoning_findings` in the catalog and the `MCP_TOOLS_QUARANTINED` event; trust the server only after reviewing its descriptions. |
+| `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` | An argument value came from an injected output in the run or another tool's description; check the run's `MCP_OUTPUT_INJECTION` events. |
+| `intentshield-hook: command not found` | Run `uv sync --locked --extra dev`, then put `.venv/bin` on the harness's `PATH` or use the absolute path. |
+| Every MCP call denied by a hook | A crashing hook fails closed; read its stderr message in the harness log. |
 | Classifier unavailable | Check dependencies, directory, qualification flag, hashes and actual first prediction. |
 | Gemini configured but 502 | Inspect redacted model error and verify key/model access, quota, network and proposal shape. |
 | `metrics.executions` stays zero after a read | That metric counts persisted mutation completions; inspect execution fields/events for reads. |
