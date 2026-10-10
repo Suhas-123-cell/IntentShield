@@ -1,6 +1,21 @@
-# IntentShield MCP MVP
+# IntentShield
 
-IntentShield is an offline-first authorization gateway for tool-using AI agents. The MVP demonstrates that every proposed tool call is normalized, evaluated, audited, and either **ALLOW**, **REVIEW**, or **BLOCK** before any side effect can occur.
+IntentShield is an offline-first guardrail for AI agents and agent harnesses that use
+MCP tools. Every proposed tool call is normalized, evaluated, audited, and either
+**ALLOW**, **REVIEW**, or **BLOCK** before any side effect can occur. It plugs into
+Claude Code, Codex CLI, Cursor and Gemini CLI through their hooks, and wraps the MCP
+servers they launch with a transparent proxy.
+
+## Results at a glance
+
+| check | unguarded | with IntentShield |
+|---|---|---|
+| MSB held-out, harmful action executed (220 live-server cases per model) | qwen2.5:7b 51.4%, llama3.1:8b 21.8%, Ornith-1.5-9B 52.7% | **0.0%** [0, 1.7] on all three |
+| MSB held-out, task tool reached (incl. calls waiting on review) | 83-99% | 60-67% (the gap is mostly tools quarantined as poisoned) |
+| Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3; poisoned tool never offered |
+| AgentDojo important_instructions injections flagged in tool output | - | 100% (InjecAgent plain-language base: 0-3%) |
+
+Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli).
 
 ## What is implemented
 
@@ -15,7 +30,10 @@ IntentShield is an offline-first authorization gateway for tool-using AI agents.
 - Guarded connections to multiple real upstream MCP servers over stdio or Streamable HTTP
 - Upstream JSON Schema validation, namespaced tool identities, and fail-closed catalog drift checks
 - MCP poisoning defense: description scanning with quarantine, cross-server shadowing detection, and rug-pull fingerprints over descriptions and annotations
-- Tool-output injection scanning with run taint, and argument-provenance blocking of attacker-supplied values
+- Tool-output injection scanning (including user impersonation and task hijack) with run taint, and argument-provenance blocking of attacker-supplied values
+- Self-disclosure parameter redaction: parameters that ask for the agent's model, system prompt or conversation are hidden and always sent empty
+- Harness hooks for Claude Code, Codex CLI, Cursor and Gemini CLI (`intentshield-hook`), bound to the user's real prompt
+- Transparent proxy mode (`intentshield-mcp --transparent`) for the MCP servers a harness launches
 - Gemini-native function calling as the only remote model provider
 - Evidence-only detection and grounding agents feeding the deterministic policy engine
 - A locally trained DeBERTa-v3-small intent classifier with abstention and artifact integrity checks
@@ -164,15 +182,17 @@ policy cost reported as a 100% false block for that category.
 
 | attack surface | covered here | not yet run |
 |---|---|---|
-| tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models; MSB description attacks | MCP-SafetyBench |
-| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice; MSB (held-out: 0.0% harm) | adaptive attackers |
+| tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models; MSB description attacks; transparent proxy in a live Claude Code session | MCP-SafetyBench |
+| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice; MSB (held-out: 0.0% harm on 3 backbones); self-disclosure redaction | adaptive attackers |
 | tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection, MSB | AgentDojo workspace/slack/travel, more attacks |
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
 | guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
+| agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs; MSB through the hook path |
 
 MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
-Results so far use local Ollama models only, with no published-defense baselines.
+Benchmark agents are local Ollama models (qwen2.5:7b, llama3.1:8b, Ornith-1.5-9B); the
+harness check uses Claude Code with Haiku. No published-defense baselines yet.
 
 ### MCP guardrail layers
 
@@ -187,13 +207,20 @@ The proxy guards all three places an MCP attack enters (plan and status:
   `BLOCK_TOOL_QUARANTINED`. A description naming another server's tool is
   flagged as shadowing. The drift fingerprint covers description, title,
   annotations and schemas, so any rug pull fails closed.
-- **Outputs.** Every upstream result is scanned. A hit marks the result
+- **Outputs.** Every upstream result is scanned, including for user impersonation
+  ("I am the user"), task hijack ("before you can solve the task") and
+  "you must follow" demands. A hit marks the result
   `injection_detected`, logs `MCP_OUTPUT_INJECTION`, and taints the run with the
   output's distinctive values (emails, URLs, account numbers, paths, ids).
 - **Arguments.** A call carrying a distinctive value the user never gave is
   `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` when that value came from a tainted output in
   the run or from another tool's description: the right action with an
   attacker-chosen recipient, account or path.
+- **Self-disclosure parameters.** A schema parameter that asks for the agent's
+  model, system prompt or conversation (`llm_model_name`, `system_prompt`, ...) is
+  removed from the schema the agent sees and always sent upstream empty.
+- **Reads.** With `lenient_reads`, an ungrounded read is evidence rather than a
+  block; mutations stay strict.
 
 ### MCPTox results (tool poisoning, 11 models)
 
@@ -415,6 +442,11 @@ http://127.0.0.1:8001/mcp
 ```
 
 ### Connect Codex or Claude Code
+
+This gateway mode exposes IntentShield's own tools, so the model must route calls
+through `intentshield_call` and state the user's intent itself. For a harness, prefer
+[hooks plus the transparent proxy](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli):
+the hooks read the user's real prompt and see every MCP call.
 
 Start the server above in one terminal and leave it running. In another
 terminal, register the local endpoint with either client:
