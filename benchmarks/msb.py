@@ -33,6 +33,7 @@ from typing import Any
 import httpx
 
 from intentshield.evaluation import wilson
+from intentshield.harness import HarnessGuard, handle
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from intentshield.models import ToolCall
@@ -220,6 +221,18 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
             run_id = await proxy.create_run(case["task"])
             tools = {c["name"]: (c["description"], c["schema"], c["schema_hash"], c["mutation"])
                      for c in await proxy.tool_catalog() if c["available"]}
+        elif args.defense == "hooks":
+            # What a harness sees with IntentShield installed: servers behind the transparent
+            # proxy, and the Claude Code hook adapter on the user prompt and every MCP call.
+            proxy = MCPProxyRuntime(MCPProxyConfig(upstreams=[u.config for u in upstreams.values()],
+                                                   database_path=str(workdir / f"{case['id']}.db")),
+                                    upstreams=upstreams)
+            await proxy.connect()
+            guard = HarnessGuard(workdir / f"{case['id']}-hooks.db")
+            handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": case["id"],
+                              "prompt": case["task"]}, guard)
+            tools = {t.qualified_name: (t.description or "", schema, "", False)
+                     for t, schema in await proxy.transparent_tools()}
         else:
             tools = {f"{sid}:{tool.name}": (tool.description or "", tool.input_schema, "", False)
                      for sid, items in listed.items() for tool in items}
@@ -234,6 +247,29 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 return f"Unknown tool {name}"
             sid = qualified.split(":", 1)[0]
             before = len(upstreams[sid].sent)
+            if args.defense == "hooks":
+                event = {"session_id": case["id"], "tool_name": f"mcp__{sid}__{qualified.split(':', 1)[1]}"}
+                pre = (handle("claude", {**event, "hook_event_name": "PreToolUse", "tool_input": arguments},
+                              guard) or {}).get("hookSpecificOutput", {})
+                verdict = pre.get("permissionDecision", "allow")
+                if verdict != "allow":  # ask is a human decision, never approved here (as REVIEW)
+                    step.update(decision="BLOCK" if verdict == "deny" else "REVIEW", executed=False,
+                                reasons=[pre.get("permissionDecisionReason", "")])
+                    return f"Blocked by IntentShield hook ({verdict}): {pre.get('permissionDecisionReason', '')}"
+                sent_arguments = pre.get("updatedInput", arguments)
+                try:
+                    result, _ = await proxy.forward(qualified, sent_arguments)
+                except MCPRemoteToolError as exc:
+                    step.update(decision="ALLOW", executed=len(upstreams[sid].sent) > before, reasons=[])
+                    if step["executed"]:
+                        step["sent"] = upstreams[sid].sent[-1]
+                    return f"Tool error: {exc}"
+                step.update(decision="ALLOW", executed=True, reasons=[], sent=upstreams[sid].sent[-1])
+                response = result.model_dump(mode="json", include={"content", "structured_content"})
+                post = handle("claude", {**event, "hook_event_name": "PostToolUse", "tool_input": sent_arguments,
+                                         "tool_response": response}, guard)
+                note = f"\n{post['hookSpecificOutput']['additionalContext']}" if post else ""
+                return json.dumps(response["content"])[:4000] + note
             if proxy is not None:
                 _, _, schema_hash, mutation = tools[qualified]
                 try:
@@ -351,7 +387,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--container", default="intentshield-msb")
     parser.add_argument("--model", default="qwen2.5:7b")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
-    parser.add_argument("--defense", choices=("none", "intentshield"), default="intentshield")
+    parser.add_argument("--defense", choices=("none", "intentshield", "hooks"), default="intentshield")
     parser.add_argument("--expose-descriptions", action="store_true",
                         help="forward upstream descriptions (the proxy withholds them by default)")
     parser.add_argument("--attack-types", default="all")
