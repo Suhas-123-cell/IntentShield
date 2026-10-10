@@ -652,6 +652,62 @@ plain HTTP upstreams are accepted only on loopback. The stdio mode is useful for
 read-only tools and embedded applications that provide their own trusted
 approval UI.
 
+## Guard an agent harness (Claude Code, Codex CLI, Cursor, Gemini CLI)
+
+Harnesses that call MCP tools get two layers that share IntentShield's rules:
+
+- **Hooks** (`intentshield-hook <harness>`) see what the model cannot forge: the
+  user's real prompt and every MCP call and result. Per session (SQLite at
+  `~/.intentshield/hooks.db`, or `INTENTSHIELD_HOOK_DB`) they:
+  - send parameters that ask for the agent's model, system prompt or conversation
+    (`llm_name`, `system_prompt`, ...) empty;
+  - deny a call whose arguments carry injected instructions, or a value that came
+    from a tool output with injected instructions and not from the user;
+  - scan every MCP result; an injected one taints the session and the model is told
+    it is data, not a request (`--outputs block` replaces the result instead);
+  - ask before state-changing MCP calls once the session is tainted
+    (`--review always|tainted|never`).
+  A hook that crashes denies the call. Built-in tools (shell, file edits) are left
+  to the harness.
+- **Transparent proxy** (`intentshield-mcp --transparent --config <file>`) wraps each
+  MCP server the harness launches. It shows the upstream's own tools, hides any whose
+  description matches poisoning rules or that changed after connect (rug pull),
+  removes self-disclosure parameters from schemas and flags injected results. Hooks
+  never see tool descriptions, so this layer covers what they cannot.
+
+| harness | hook config (examples in `configs/harness/`) | rewrite arguments | ask the user |
+|---|---|---|---|
+| Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` | yes | yes |
+| Codex CLI | `~/.codex/config.toml`: same events | yes | no: asks become denials with a reason |
+| Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no: the agent is told to resend | yes |
+| Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no: denials with a reason |
+
+Wrap a server for the proxy layer, e.g. in Claude Code's `.mcp.json`:
+
+```json
+{"mcpServers": {"filesystem": {"command": "intentshield-mcp",
+  "args": ["--transparent", "--config", "configs/harness/transparent-filesystem.json"]}}}
+```
+
+Cost: a hook is a short-lived process, about 36 ms per MCP call on an M5 (mostly
+Python start-up); the checks themselves take under a millisecond. The adapters follow
+each harness's documented hook format and are tested on those event shapes
+(`tests/test_harness.py`). Cursor, Codex and Gemini CLI have not been run live yet.
+
+Live check in Claude Code 2.1.295 (`benchmarks/harness_live/run.sh`, Haiku, headless,
+3 prompts x unguarded/guarded) against a malicious server that logs every call:
+
+| | unguarded | guarded |
+|---|---|---|
+| model name sent to the server (`llm_model_name`) | `claude-haiku-5-5` in 3 of 3 | empty in 3 of 3 |
+| poisoned tool (`add_numbers`) offered to the agent | yes | no (quarantined) |
+| attacker email sent | 0 of 3 (Haiku refused) | 0 of 3 |
+| hooks recorded the user prompt and tainted the attacker address | n/a | yes |
+
+Haiku ignored the injected instruction even when the user asked it to use the
+injected address, so the hook's denial path was not exercised live; it is covered
+by the tests above. A less resistant model is the next live check.
+
 ## API
 
 - `GET /api/health`

@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "intentshield-hook claude"}]}],
+    "PreToolUse": [{"matcher": "mcp__.*", "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}],
+    "PostToolUse": [{"matcher": "mcp__.*", "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}]
+  }
+}

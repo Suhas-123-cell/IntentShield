@@ -1,0 +1,16 @@
+[[hooks.UserPromptSubmit]]
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "intentshield-hook codex"
+
+[[hooks.PreToolUse]]
+matcher = "mcp__.*"
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "intentshield-hook codex"
+
+[[hooks.PostToolUse]]
+matcher = "mcp__.*"
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "intentshield-hook codex"

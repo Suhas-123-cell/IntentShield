@@ -1,0 +1,11 @@
+{
+  "upstreams": [
+    {
+      "server_id": "filesystem",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"]
+    }
+  ],
+  "database_path": "intentshield-filesystem.db"
+}
