@@ -82,8 +82,10 @@ servers first.
     types, whose task tool is itself poisoned and quarantined.
   - Same templates on both splits: generalization to other wording is AgentDojo
     (important_instructions 0% -> 100% flagged) and InjecAgent (base still 0-3%).
-  - Next: Ornith-1.5-9B as a third backbone (queued; needs a newer Ollama), and the
-    harness-hook path (branch `harness-guard`) measured on the same held-out cases.
+  - Ornith-1.5-9B (third backbone, held-out): 52.7% harm unguarded with 98.6% task
+    tool use, 0.0% [0, 1.7] guarded with 67.1% reached (219 scored; one case fails
+    in Ollama with a 500 every time).
+  - Next: the harness-hook path (branch `harness-guard`) on the same held-out cases.
 - Adaptive attacks - first pass done. `benchmarks/adaptive.py`: zero-width and
   look-alike rewrites evaded the description rules (10.4% / 49.8% still flagged)
   until Unicode normalization (100%). Paraphrase keeps 98.6% only via shadowing;
