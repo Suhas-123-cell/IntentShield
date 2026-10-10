@@ -85,7 +85,10 @@ servers first.
   - Ornith-1.5-9B (third backbone, held-out): 52.7% harm unguarded with 98.6% task
     tool use, 0.0% [0, 1.7] guarded with 67.1% reached (219 scored; one case fails
     in Ollama with a 500 every time).
-  - Next: the harness-hook path (branch `harness-guard`) on the same held-out cases.
+  - Harness hook path (`--defense hooks`, Claude Code adapter + transparent proxy), same
+    held-out cases: 0.0% harm on all three backbones; task tool executed 64-69%.
+  - Next: live Codex, Cursor and Gemini CLI runs; plain-language injections (InjecAgent
+    base) need a semantic detector.
 - Adaptive attacks - first pass done. `benchmarks/adaptive.py`: zero-width and
   look-alike rewrites evaded the description rules (10.4% / 49.8% still flagged)
   until Unicode normalization (100%). Paraphrase keeps 98.6% only via shadowing;

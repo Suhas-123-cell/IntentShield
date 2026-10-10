@@ -12,6 +12,7 @@ servers they launch with a transparent proxy.
 |---|---|---|
 | MSB held-out, harmful action executed (220 live-server cases per model) | qwen2.5:7b 51.4%, llama3.1:8b 21.8%, Ornith-1.5-9B 52.7% | **0.0%** [0, 1.7] on all three |
 | MSB held-out, task tool reached (incl. calls waiting on review) | 83-99% | 60-67% (the gap is mostly tools quarantined as poisoned) |
+| MSB held-out through the harness hook path (Claude Code adapter + transparent proxy) | same as above | **0.0%** harm on all three; task tool executed 64-69% |
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3; poisoned tool never offered |
 | AgentDojo important_instructions injections flagged in tool output | - | 100% (InjecAgent plain-language base: 0-3%) |
 
@@ -187,7 +188,7 @@ policy cost reported as a 100% false block for that category.
 | tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking, ASB observation injection, MSB | AgentDojo workspace/slack/travel, more attacks |
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
 | guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
-| agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs; MSB through the hook path |
+| agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs |
 
 MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
@@ -322,6 +323,22 @@ on AgentDojo and InjecAgent below.
 | llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.6% | 42.3% |
 | Ornith-1.5-9B | none | 52.7% [46.1, 59.2] | 54.5% | 98.6% | 98.6% |
 | Ornith-1.5-9B | IntentShield, default (219; 1 case hit an Ollama 500 twice) | **0.0%** [0, 1.7] | 2.7% | 67.1% | 51.6% |
+
+Through the harness hook path (`--defense hooks`: the Claude Code hook adapter on the
+user prompt and every MCP call, servers behind the transparent proxy, a hook's "ask"
+counted as not executed), on the same held-out cases:
+
+| backbone | harm executed [95% CI] | harm attempted | task tool executed |
+|---|---|---|---|
+| qwen2.5:7b (218; 2 cases time out in Ollama) | **0.0%** [0, 1.7] | 14.2% | 64.2% |
+| llama3.1:8b | **0.0%** [0, 1.7] | 6.8% | 66.4% |
+| Ornith-1.5-9B | **0.0%** [0, 1.7] | 3.6% | 69.1% |
+
+More tasks run than through the gateway (42-52% executed there), because hooks leave
+untainted writes to the harness's own permissions instead of sending every write to
+review. More harmful calls are attempted, because the transparent proxy shows the
+agent the upstream descriptions; the hook denies them or the proxy blanks the leaked
+field before anything reaches the server.
 
 Ornith-1.5-9B (Qwen3.5-based, trained for MCP tool use; Ollama 0.40.2) is the
 strongest tool user here (task tool used in 98.6% of unguarded cases) and also the
