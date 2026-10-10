@@ -293,6 +293,13 @@ on AgentDojo and InjecAgent below.
 | llama3.1:8b | none | 21.8% [16.9, 27.7] | 22.3% | 83.2% | 83.2% |
 | llama3.1:8b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 12.7% | 57.3% | 37.7% |
 | llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.6% | 42.3% |
+| Ornith-1.5-9B | none | 52.7% [46.1, 59.2] | 54.5% | 98.6% | 98.6% |
+| Ornith-1.5-9B | IntentShield, default (219; 1 case hit an Ollama 500 twice) | **0.0%** [0, 1.7] | 2.7% | 67.1% | 51.6% |
+
+Ornith-1.5-9B (Qwen3.5-based, trained for MCP tool use; Ollama 0.40.2) is the
+strongest tool user here (task tool used in 98.6% of unguarded cases) and also the
+most attack-prone (52.7% harm; it follows false errors in 55% of cases, against 10%
+for qwen2.5:7b and 0% for llama3.1:8b). Guarded it also stays at 0.0%.
 
 Tuning sample (236 cases), before and after the changes, default defense: harm
 qwen2.5:7b 6.8% -> 0.0%, llama3.1:8b 3.8% -> 0.0%; task tool reached about 30% ->
