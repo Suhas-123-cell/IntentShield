@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [{"command": "intentshield-hook cursor"}],
+    "beforeMCPExecution": [{"command": "intentshield-hook cursor", "failClosed": true}],
+    "afterMCPExecution": [{"command": "intentshield-hook cursor"}]
+  }
+}
