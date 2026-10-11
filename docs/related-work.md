@@ -80,6 +80,11 @@ recipient, account or path they plant now sends any call that carries it to revi
 (`REVIEW_UNTRUSTED_ARGUMENT_SOURCE`). The split, polite-description and Spanish rows remain
 open (items 3 and 4).
 
+Status after items 3 and 4 (2026-10-11): the split row is flagged by the server-level scan
+(`split_*`, every tool on that server quarantined). The polite-description and Spanish rows,
+and the polite-output and false-error outputs, are caught by the trained classifier, but at a
+20% benign false-flag rate, so it is not usable yet (see the item 4 note below).
+
 The structural reason it matters: run taint, and therefore `BLOCK_UNTRUSTED_ARGUMENT_SOURCE`,
 only starts when `scan_output` flags an output. An attack the rules miss never taints the run,
 so the attacker's IBAN or address passes provenance. PACT and ToolFence avoid this by treating
@@ -102,14 +107,24 @@ In order of value per effort:
    utility, which this lowers.
 2. **Decode before scanning (done 2026-10-11).** Base64, hex, URL and HTML-entity decoding of long tokens, then
    rescan. Cheap, deterministic, closes the encoded row.
-3. **Server-level description scan.** Also scan the concatenation of all of a server's
+3. **Server-level description scan (done 2026-10-11).** Also scan the concatenation of all of a server's
    descriptions, and flag description text that refers to other tools' data or to sending
    anything (ShareLock, cross-tool poisoning). Add `sensitive_target` to the output rules.
-4. **A semantic second stage, local and evidence-only.** A small classifier for "this text
+   Implemented as `scan_server` (findings only in the joined text become `split_<rule>` and
+   quarantine the server), the `cross_tool_data` and `external_send` description rules, and
+   the `sensitive_request` output rule. On MCPTox: clean tools flagged 3/362 (unchanged),
+   clean server catalogs 0/45, poisoned descriptions 1256/1302 (was 1255).
+4. **A semantic second stage, local and evidence-only (built 2026-10-11; first artifact not usable).** A small classifier for "this text
    instructs the agent" on descriptions and outputs, run only on what the rules pass, trained
    on MCPTox/MSB/InjecAgent with paraphrases and translations (keep MSB held-out cases out).
    The repo already has a DeBERTa pipeline. This addresses plain-language and non-English
    injections. It must stay evidence: it can escalate to REVIEW, never authorize.
+   Implemented as `InjectionClassifier` (`REVIEW_CLASSIFIER_FLAGGED`, off by default), trained
+   on MCPTox plus qwen2.5:7b-written outputs and translations (InjecAgent was not available
+   locally; MSB unused). On held-out MCPTox servers it caught 716/716 injections and 4/4 new
+   attack probes but flagged 20.3% of benign rows, including human-directed instructions
+   ("submit your timesheets by Friday"). Consistent with the detector literature; it needs
+   many more hard benign rows before it can be enabled.
 5. **Behavioral baselines for outputs.** Per tool, learn the output shape (keys, value types,
    which distinctive values recur) over the first N calls; flag a later output that adds
    instruction-like fields or new destination-shaped values (TrustShift).
