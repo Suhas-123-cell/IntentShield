@@ -9,5 +9,7 @@ def _isolate_environment(monkeypatch):
     for name in list(os.environ):
         if name.startswith("INTENTSHIELD_") or name == "GEMINI_API_KEY":
             monkeypatch.delenv(name)
+    # A locally trained classifier would change decisions; tests run the deterministic agents.
+    monkeypatch.setenv("INTENTSHIELD_INTENT_MODEL_DIR", "tests/no-intent-model")
     for module in ("api", "mcp_server", "mcp_verify"):
         monkeypatch.setattr(f"intentshield.{module}.load_dotenv", lambda *a, **k: False)

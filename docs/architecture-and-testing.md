@@ -75,7 +75,7 @@ Source root: [src/intentshield](../src/intentshield). Policy and harness example
 
 A run is created with the request text. A tool call includes the tool name, arguments and exact catalog schema hash. Mutations also need an idempotency key. The gateway scans the stored intent and proposed call, validates the evidence, applies policy and records the decision. Only an allowed call reaches the registered executor.
 
-The service's checks surround the policy evaluation. In order, the service computes detection and grounding evidence, checks any supplied approval, runs the proxy veto when one is configured (`BLOCK_TOOL_QUARANTINED` for a quarantined tool, `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` for an argument value taken from a tainted output or another tool's description), and checks for idempotency conflicts. The policy itself then checks, in order: registered tool; prohibit/allow rules; schema binding; per-run call budget; injection threshold; explicit resource/destination fields; argument schema; resource/destination scope; intent alignment; the security supervisor's blocking disposition; mutation idempotency; and verified human approval. After an allowed call executes, the proxy's result inspector scans the output and taints the run when it finds injected instructions.
+The service's checks surround the policy evaluation. In order, the service computes detection and grounding evidence, checks any supplied approval, runs the proxy veto when one is configured (`BLOCK_TOOL_QUARANTINED` for a quarantined tool, `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` for an argument value taken from a tainted output or another tool's description; or, without blocking, `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` for a recipient, URL, account or path whose only source is any tool output in the run), and checks for idempotency conflicts. The review flag reaches the policy as `untrusted_source`, which sends the call, read or write, to approval once every blocking check has passed; an approved read is consumed like an approved mutation. The policy itself then checks, in order: registered tool; prohibit/allow rules; schema binding; per-run call budget; injection threshold; explicit resource/destination fields; argument schema; resource/destination scope; intent alignment; the security supervisor's blocking disposition; mutation idempotency; and verified human approval. After an allowed call executes, the proxy's result inspector scans the output and taints the run when it finds injected instructions.
 
 Intent alignment below the minimum blocks, with two exceptions: with `lenient_reads`, an ungrounded read whose alignment is above zero passes as evidence; and a mutation the supervisor sent to `REVIEW` (grounded except for vocabulary) reaches human review instead of being blocked.
 
@@ -154,6 +154,8 @@ The proxy also guards the MCP-specific attack surfaces:
 
 - A tool whose title, description or schema text matches the poisoning rules, or names another server's tool (shadowing), is quarantined: listed with `available=false`, `quarantined=true` and its `poisoning_findings`, described only by a placeholder, and every call is `BLOCK_TOOL_QUARANTINED`. `quarantine_poisoned_tools` (default true) controls this.
 - A parameter asking for the agent's model, system prompt or conversation is removed from the public schema (`redacted_fields` in the catalog); any value sent for it is dropped, with an empty string when the upstream schema requires the field.
+- Every result's recipients, URLs, account numbers and paths are recorded for the run, flagged or not; a later argument whose only source they are (not the user's text, not inside a directory or site the user named) is `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`. `review_output_sourced_arguments: false` turns this off.
+- Both scanners also scan base64, hex, URL- and HTML-escaped text, decoded up to three layers deep; decoded bytes count only if they read as text, so hashes and keys stay clean.
 - Every result is scanned. A match adds `injection_detected` and `injection_findings` to the result, logs `MCP_OUTPUT_INJECTION`, and taints the run with the output's distinctive values. A later call in the run that carries one of those values, or a value only another tool's description supplied, is `BLOCK_UNTRUSTED_ARGUMENT_SOURCE`.
 - `lenient_reads` (default false) lets an ungrounded read through as evidence; mutations and negated reads stay strict.
 
@@ -189,7 +191,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `130 passed, 1 skipped`. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+For this revision, expect `134 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -200,7 +202,7 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 131 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 10 October 2026 all 131 passed with HTTP enabled, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+There are 135 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 11 October 2026 all 135 passed with HTTP enabled; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
 
 The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
@@ -533,7 +535,7 @@ echo '{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"mcp__notes__
   | .venv/bin/intentshield-hook claude
 ```
 
-The prompt event prints nothing. The call event returns `permissionDecision: allow` with `updatedInput` carrying `llm_model_name: ""`. A plain read with no self-disclosure field prints nothing, so the harness's own permissions decide. A `PostToolUse` event whose `tool_response` contains injected instructions returns `additionalContext` telling the model it is data, and taints the session; a later call carrying a value from that output is denied.
+The prompt event prints nothing. The call event returns `permissionDecision: allow` with `updatedInput` carrying `llm_model_name: ""`. A plain read with no self-disclosure field prints nothing, so the harness's own permissions decide. A `PostToolUse` event whose `tool_response` contains injected instructions returns `additionalContext` telling the model it is data, and taints the session; a later call carrying a value from that output is denied. A recipient, URL, account or path from any output, flagged or not, makes a later call that carries it `ask` (unless `--review never`); these live in the `observed` table.
 
 Example configs are in `configs/harness/`; they call `intentshield-hook` by name, so `.venv/bin` must be on the harness's `PATH` (or use absolute paths). Codex CLI and Gemini CLI have no ask, so a confirmation becomes a denial with a reason; Cursor cannot rewrite arguments, so a call with a self-disclosure value is denied with instructions to resend it empty.
 
@@ -558,7 +560,7 @@ Results and their caveats are in the README; the plan and next steps are in [mcp
 
 **16. Completion checklist and practical limits**
 
-For a thorough test of the current implementation, collect these results: all 131 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
+For a thorough test of the current implementation, collect these results: all 135 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 
@@ -580,6 +582,7 @@ Rules can miss paraphrased/encoded injections and plain-language requests, and c
 | `BLOCK_EXECUTION_IN_DOUBT` | Reconcile the original mutation outcome with the upstream; do not blindly retry. |
 | `BLOCK_TOOL_QUARANTINED` | Inspect `poisoning_findings` in the catalog and the `MCP_TOOLS_QUARANTINED` event; trust the server only after reviewing its descriptions. |
 | `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` | An argument value came from an injected output in the run or another tool's description; check the run's `MCP_OUTPUT_INJECTION` events. |
+| `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` | A recipient, URL, account or path came only from a tool output, not the user. Approve it if the user meant that value, name it in the request, or set `review_output_sourced_arguments: false`. |
 | `intentshield-hook: command not found` | Run `uv sync --locked --extra dev`, then put `.venv/bin` on the harness's `PATH` or use the absolute path. |
 | Every MCP call denied by a hook | A crashing hook fails closed; read its stderr message in the harness log. |
 | Classifier unavailable | Check dependencies, directory, qualification flag, hashes and actual first prediction. |

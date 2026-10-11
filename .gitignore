@@ -12,3 +12,5 @@ artifacts/
 !.env.example
 .DS_Store
 benchmarks/harness_live/calls.jsonl
+CLAUDE.md
+AGENTS.md

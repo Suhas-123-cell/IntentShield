@@ -12,7 +12,10 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .mcp_inspect import distinctive_values, scan_description, scan_output, self_disclosure_fields, tool_text
+from .mcp_inspect import (
+    authority_values, distinctive_values, scan_description, scan_output, self_disclosure_fields,
+    sourced_from, tool_text,
+)
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
 from .policy import PolicyConfig
@@ -42,6 +45,9 @@ class MCPProxyConfig(BaseModel):
     # Tools whose description or schema text matches poisoning rules are shown
     # as unavailable and every call to them is blocked.
     quarantine_poisoned_tools: bool = True
+    # A recipient, URL, account or path whose only source is a tool output sends the
+    # call to review, whether or not the scanners flagged that output.
+    review_output_sourced_arguments: bool = True
     allowed_resources: set[str] = Field(default_factory=set)
     allowed_destinations: list[str] = Field(default_factory=list)
     call_budget: int = Field(default=8, ge=1)
@@ -207,6 +213,8 @@ class MCPProxyRuntime:
         self._visible_schemas: dict[str, dict[str, Any]] = {}
         # run_id -> distinctive values from outputs that carried injection text.
         self._tainted: dict[str, set[str]] = {}
+        # run_id -> recipients, URLs, accounts and paths seen in any tool output.
+        self._observed: dict[str, set[str]] = {}
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -434,9 +442,16 @@ class MCPProxyRuntime:
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        # Detection is not the gate: a value the scanners missed still came from a tool.
+        if self.config.review_output_sourced_arguments and sourced_from(
+            authority_values(call.arguments), self._observed.get(run_id, set()),
+            distinctive_values(user_intent),
+        ):
+            return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         return None
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
+        self._observed.setdefault(run_id, set()).update(authority_values(result.get("upstream", result)))
         findings = scan_output(result.get("upstream", result))
         if not findings:
             return result
