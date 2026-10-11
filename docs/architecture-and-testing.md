@@ -75,7 +75,7 @@ Source root: [src/intentshield](../src/intentshield). Policy and harness example
 
 A run is created with the request text. A tool call includes the tool name, arguments and exact catalog schema hash. Mutations also need an idempotency key. The gateway scans the stored intent and proposed call, validates the evidence, applies policy and records the decision. Only an allowed call reaches the registered executor.
 
-The service's checks surround the policy evaluation. In order, the service computes detection and grounding evidence, checks any supplied approval, runs the proxy veto when one is configured (`BLOCK_TOOL_QUARANTINED` for a quarantined tool, `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` for an argument value taken from a tainted output or another tool's description; or, without blocking, `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` for a recipient, URL, account or path whose only source is any tool output in the run), and checks for idempotency conflicts. The review flag reaches the policy as `untrusted_source`, which sends the call, read or write, to approval once every blocking check has passed; an approved read is consumed like an approved mutation. The policy itself then checks, in order: registered tool; prohibit/allow rules; schema binding; per-run call budget; injection threshold; explicit resource/destination fields; argument schema; resource/destination scope; intent alignment; the security supervisor's blocking disposition; mutation idempotency; and verified human approval. After an allowed call executes, the proxy's result inspector scans the output and taints the run when it finds injected instructions.
+The service's checks surround the policy evaluation. In order, the service computes detection and grounding evidence, checks any supplied approval, runs the proxy veto when one is configured (`BLOCK_TOOL_QUARANTINED` for a quarantined tool, `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` for an argument value taken from a tainted output or another tool's description; or, without blocking, `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` for a recipient, URL, account or path whose only source is any tool output in the run), and checks for idempotency conflicts. Any `REVIEW_*` code (this one, or `REVIEW_CLASSIFIER_FLAGGED` from the optional injection classifier) reaches the policy as `review_reason`, which sends the call, read or write, to approval once every blocking check has passed; an approved read is consumed like an approved mutation. The policy itself then checks, in order: registered tool; prohibit/allow rules; schema binding; per-run call budget; injection threshold; explicit resource/destination fields; argument schema; resource/destination scope; intent alignment; the security supervisor's blocking disposition; mutation idempotency; and verified human approval. After an allowed call executes, the proxy's result inspector scans the output and taints the run when it finds injected instructions.
 
 Intent alignment below the minimum blocks, with two exceptions: with `lenient_reads`, an ungrounded read whose alignment is above zero passes as evidence; and a mutation the supervisor sent to `REVIEW` (grounded except for vocabulary) reaches human review instead of being blocked.
 
@@ -152,7 +152,8 @@ The runtime binds original upstream schemas at startup, validates arguments agai
 
 The proxy also guards the MCP-specific attack surfaces:
 
-- A tool whose title, description or schema text matches the poisoning rules, or names another server's tool (shadowing), is quarantined: listed with `available=false`, `quarantined=true` and its `poisoning_findings`, described only by a placeholder, and every call is `BLOCK_TOOL_QUARANTINED`. `quarantine_poisoned_tools` (default true) controls this.
+- A tool whose title, description or schema text matches the poisoning rules, or names another server's tool (shadowing), is quarantined: listed with `available=false`, `quarantined=true` and its `poisoning_findings`, described only by a placeholder, and every call is `BLOCK_TOOL_QUARANTINED`. `quarantine_poisoned_tools` (default true) controls this. Each server's tool texts are also scanned joined in catalog order with line breaks folded; a finding that only appears joined (`split_<rule>`) quarantines every tool of that server.
+- With `injection_classifier_dir`, a local classifier (`injection_classifier.py`, trained by `injection_training.py` on `benchmarks/injection_data.py` output) scores descriptions and outputs the rules pass. A flagged description is withheld (even with `expose_upstream_descriptions`) and calls to the tool are `REVIEW_CLASSIFIER_FLAGGED`; a flagged output gets `injection_suspected`, logs `MCP_OUTPUT_SUSPECTED`, and any later call carrying one of its distinctive values is `REVIEW_CLASSIFIER_FLAGGED`. A configured artifact that fails its hash or label checks stops the proxy from starting.
 - A parameter asking for the agent's model, system prompt or conversation is removed from the public schema (`redacted_fields` in the catalog); any value sent for it is dropped, with an empty string when the upstream schema requires the field.
 - Every result's recipients, URLs, account numbers and paths are recorded for the run, flagged or not; a later argument whose only source they are (not the user's text, not inside a directory or site the user named) is `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`. `review_output_sourced_arguments: false` turns this off.
 - Both scanners also scan base64, hex, URL- and HTML-escaped text, decoded up to three layers deep; decoded bytes count only if they read as text, so hashes and keys stay clean.
@@ -191,7 +192,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `134 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+For this revision, expect `139 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -202,7 +203,7 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 135 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 11 October 2026 all 135 passed with HTTP enabled; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+There are 140 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 11 October 2026 all 140 passed with HTTP enabled; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
 
 The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
@@ -220,7 +221,8 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_mcp_server.py`, `test_mcp_upstream.py` | Gateway surface, upstream configuration/client normalization, policy bridge and transport behavior. |
 | `test_mcp_e2e.py`, `test_mcp_verify.py` | Real stdio upstreams/downstream subprocess, multiple upstreams, schema drift and verifier behavior. |
 | `test_mcp_http_e2e.py` | Real process-level HTTP downstream plus stdio/HTTP upstreams, verifier, 401 rejection, authenticated rejection and shutdown. |
-| `test_mcp_guardrail.py`, `test_lenient_reads.py` | Description and output scanners, quarantine, rug pull, output taint, argument provenance, Unicode evasion, self-disclosure redaction, lenient reads. |
+| `test_mcp_guardrail.py`, `test_lenient_reads.py` | Description and output scanners, server-level split scan, encoded payloads, quarantine, rug pull, output taint, argument provenance and output-sourced review, Unicode evasion, self-disclosure redaction, lenient reads. |
+| `test_injection_classifier.py` | Injection classifier artifact checks (missing, tampered), proxy and hook wiring with a stub model. |
 | `test_harness.py` | Hook adapters for Claude Code, Codex CLI, Cursor and Gemini CLI on their documented event shapes, fail-closed hook crashes, mutation naming, transparent forwarding. |
 | `test_detector.py`, `test_evaluation.py` | Fallback signals on camelCase tool names; offline evaluation dataset, Wilson intervals and safety invariants. |
 | `test_logs.py`, `test_ratelimit.py` | JSON decision logs without arguments; per-client rate limit and 429 responses. |
@@ -523,7 +525,7 @@ Training downloads the base model when it is not cached and uses CPU unless CUDA
 
 **14. Harness hooks and transparent proxy**
 
-`intentshield-hook <claude|codex|cursor|gemini>` reads one hook event on stdin and prints the harness's JSON reply. Session state lives in `~/.intentshield/hooks.db` unless `INTENTSHIELD_HOOK_DB` or `--db` says otherwise. `--review tainted|always|never` (`INTENTSHIELD_HOOK_REVIEW`, default `tainted`) decides when state-changing MCP calls are asked; `--outputs warn|block` (`INTENTSHIELD_HOOK_OUTPUTS`, default `warn`) decides whether an injected result is kept with a warning or replaced. A crash on a pre-call event exits 2 with the error on stderr, which the harnesses treat as a denial (Cursor through `failClosed` in its config). Built-in harness tools are ignored.
+`intentshield-hook <claude|codex|cursor|gemini>` reads one hook event on stdin and prints the harness's JSON reply. Session state lives in `~/.intentshield/hooks.db` unless `INTENTSHIELD_HOOK_DB` or `--db` says otherwise. `--review tainted|always|never` (`INTENTSHIELD_HOOK_REVIEW`, default `tainted`) decides when state-changing MCP calls are asked; `--outputs warn|block` (`INTENTSHIELD_HOOK_OUTPUTS`, default `warn`) decides whether an injected result is kept with a warning or replaced. `--classifier DIR` (`INTENTSHIELD_HOOK_CLASSIFIER`) runs the injection classifier on results the rules pass: a hit warns the model and makes later calls carrying any of that result's values `ask`. A crash on a pre-call event exits 2 with the error on stderr, which the harnesses treat as a denial (Cursor through `failClosed` in its config). Built-in harness tools are ignored.
 
 Exercise it by hand in an isolated database:
 
