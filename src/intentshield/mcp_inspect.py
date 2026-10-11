@@ -9,8 +9,10 @@ import base64
 import binascii
 import html
 import json
+import math
 import re
 import unicodedata
+from collections import Counter
 from typing import Any, Iterable
 from urllib.parse import unquote
 
@@ -278,3 +280,35 @@ def sourced_from(values: set[str], source: set[str], user_values: set[str]) -> s
     directory or site the user named counts as the user's own."""
     prefixes = tuple(item.rstrip("/") + "/" for item in user_values if "/" in item)
     return {item for item in values & source - user_values if not item.startswith(prefixes)}
+
+
+_STOPWORDS = frozenset("a an and are as at be by can for from i in into is it me my of on or our please "
+                       "that the this to us we with you your".split())
+
+
+def _terms(text: str) -> list[str]:
+    words = re.findall(r"[a-z0-9]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", text).lower())
+    words = [w[:-3] if len(w) > 5 and w.endswith("ing") else w for w in words if w not in _STOPWORDS]
+    return [w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in words]
+
+
+def rank_tools(task: str, tools: Iterable[tuple[str, str]], limit: int = 5) -> list[tuple[str, float]]:
+    """The tools whose name and description best match ``task`` (BM25), best first; empty
+    when nothing matches. Names count twice, and only the first 300 characters of a
+    description are read, so a server cannot stuff one with every keyword. Ranking is a
+    convenience, never a trust decision."""
+    docs = [(name, _terms(name) * 2 + _terms(description[:300])) for name, description in tools]
+    if not docs:
+        return []
+    average = sum(len(terms) for _, terms in docs) / len(docs) or 1
+    containing = Counter(term for _, terms in docs for term in set(terms))
+    wanted = set(_terms(task))
+    scored = []
+    for name, terms in docs:
+        counts = Counter(terms)
+        score = sum(math.log(1 + (len(docs) - containing[t] + 0.5) / (containing[t] + 0.5))
+                    * counts[t] * 2.2 / (counts[t] + 1.2 * (0.25 + 0.75 * len(terms) / average))
+                    for t in wanted & set(counts))
+        if score > 0:
+            scored.append((name, round(score, 3)))
+    return sorted(scored, key=lambda item: -item[1])[:limit]

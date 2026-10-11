@@ -192,7 +192,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `139 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+For this revision, expect `142 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -203,7 +203,7 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 140 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 11 October 2026 all 140 passed with HTTP enabled; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+There are 143 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 11 October 2026 all 143 passed with HTTP enabled; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
 
 The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
@@ -223,7 +223,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_mcp_http_e2e.py` | Real process-level HTTP downstream plus stdio/HTTP upstreams, verifier, 401 rejection, authenticated rejection and shutdown. |
 | `test_mcp_guardrail.py`, `test_lenient_reads.py` | Description and output scanners, server-level split scan, encoded payloads, quarantine, rug pull, output taint, argument provenance and output-sourced review, Unicode evasion, self-disclosure redaction, lenient reads. |
 | `test_injection_classifier.py` | Injection classifier artifact checks (missing, tampered), proxy and hook wiring with a stub model. |
-| `test_harness.py` | Hook adapters for Claude Code, Codex CLI, Cursor and Gemini CLI on their documented event shapes, fail-closed hook crashes, mutation naming, transparent forwarding. |
+| `test_harness.py` | Hook adapters for Claude Code, Codex CLI, Cursor and Gemini CLI on their documented event shapes, fail-closed hook crashes, mutation naming, transparent forwarding, tool ranking, search-first tool listing with `list_changed` over an in-process MCP client, and the per-prompt tool hint. |
 | `test_detector.py`, `test_evaluation.py` | Fallback signals on camelCase tool names; offline evaluation dataset, Wilson intervals and safety invariants. |
 | `test_logs.py`, `test_ratelimit.py` | JSON decision logs without arguments; per-client rate limit and 429 responses. |
 
@@ -541,7 +541,7 @@ The prompt event prints nothing. The call event returns `permissionDecision: all
 
 Example configs are in `configs/harness/`; they call `intentshield-hook` by name, so `.venv/bin` must be on the harness's `PATH` (or use absolute paths). Codex CLI and Gemini CLI have no ask, so a confirmation becomes a denial with a reason; Cursor cannot rewrite arguments, so a call with a self-disclosure value is denied with instructions to resend it empty.
 
-`intentshield-mcp --transparent --config <file>` serves one or more upstreams over stdio under their own tool names (`server__tool` when there are several). `configs/harness/transparent-filesystem.json` wraps the reference filesystem server. It needs no `allowed_tools`: the intent-bound call policy runs in the hooks. Quarantined and drifted tools are hidden, self-disclosure parameters are removed, and an injected result gets an `[IntentShield]` warning block in front of it.
+`intentshield-mcp --transparent --config <file>` serves one or more upstreams over stdio under their own tool names (`server__tool` when there are several). `configs/harness/transparent-filesystem.json` wraps the reference filesystem server. It needs no `allowed_tools`: the intent-bound call policy runs in the hooks. Quarantined and drifted tools are hidden, self-disclosure parameters are removed, and an injected result gets an `[IntentShield]` warning block in front of it. With `tool_routing` it lists only `intentshield_find_tools` (plus `pinned_tools`) and unlocks the tools each search ranks highest, sending `tools/list_changed`; with `tool_catalog_dir` it writes its visible tool names and descriptions there for the prompt hook, which adds a line naming the best matches for each prompt (`rank_tools` in `mcp_inspect.py`, keyword BM25).
 
 `benchmarks/harness_live/run.sh [model]` runs headless Claude Code against a malicious MCP server that logs every call (`benchmarks/harness_live/calls.jsonl`), unguarded and guarded. It uses your Claude login and model quota. Cost per hook call is about 36 ms on an M5, almost all Python start-up.
 
@@ -562,7 +562,7 @@ Results and their caveats are in the README; related work and next steps are in 
 
 **16. Completion checklist and practical limits**
 
-For a thorough test of the current implementation, collect these results: all 135 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
+For a thorough test of the current implementation, collect these results: all 143 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 

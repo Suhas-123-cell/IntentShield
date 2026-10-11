@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 from contextlib import asynccontextmanager
 import hmac
+import json
 import os
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -352,34 +353,74 @@ def create_proxy_mcp_server(config: Any) -> Any:
     return server
 
 
-def create_transparent_mcp_server(config: Any) -> Any:
+def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
     """An MCP server that shows the upstream's own tools, for harnesses that guard calls
     with hooks: quarantined or drifted tools are hidden, self-disclosure parameters are
-    removed, and an output carrying injected instructions is flagged in front of it."""
+    removed, and an output carrying injected instructions is flagged in front of it. With
+    ``tool_routing`` it lists only a search tool until the agent asks for what it needs."""
     from mcp import types
     from mcp.server.lowlevel import Server
 
+    from .mcp_inspect import rank_tools
     from .mcp_proxy import MCPProxyRuntime, MCPRemoteToolError
 
-    runtime = MCPProxyRuntime(config)
+    runtime = runtime or MCPProxyRuntime(config)
     single = len(config.upstream_configs) == 1
+    unlocked: set[str] = set()  # one stdio server per harness session
+    find = types.Tool(
+        name="intentshield_find_tools",
+        description="Find the tools for a task. Describe what you need to do in a few words; the "
+                    "best matching tools become available and their names are returned.",
+        input_schema={"type": "object", "required": ["task"], "properties": {
+            "task": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}}},
+    )
 
     def exposed(tool: Any) -> str:
         # One upstream keeps its tool names, so harness hook matchers and permissions still fit.
         return tool.name if single else f"{tool.server_id}__{tool.name}"
 
+    def listed(tool: Any) -> bool:
+        return not config.tool_routing or tool.qualified_name in unlocked or config.is_pinned(tool.qualified_name)
+
+    def write_catalog(tools: list[Any]) -> None:
+        directory = Path(config.tool_catalog_dir).expanduser()
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{'-'.join(sorted(u.server_id for u in config.upstream_configs))}.json"
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps([{"name": exposed(t), "description": t.description or ""} for t in tools]))
+        temporary.replace(path)
+
     @asynccontextmanager
     async def lifespan(_server: Any):
         async with runtime:
+            if config.tool_catalog_dir:
+                write_catalog([tool for tool, _ in await runtime.transparent_tools()])
             yield {"runtime": runtime}
 
     async def list_tools(_ctx: Any, _params: Any) -> Any:
-        return types.ListToolsResult(tools=[
-            types.Tool(name=exposed(tool), title=tool.title, description=tool.description, input_schema=schema)
-            for tool, schema in await runtime.transparent_tools()
-        ])
+        tools = [types.Tool(name=exposed(tool), title=tool.title, description=tool.description, input_schema=schema)
+                 for tool, schema in await runtime.transparent_tools() if listed(tool)]
+        return types.ListToolsResult(tools=[find, *tools] if config.tool_routing else tools)
 
-    async def call_tool(_ctx: Any, params: Any) -> Any:
+    async def find_tools(ctx: Any, arguments: dict[str, Any]) -> Any:
+        limit = arguments.get("limit")
+        limit = limit if isinstance(limit, int) and 1 <= limit <= 10 else 5
+        visible = {exposed(tool): tool for tool, _ in await runtime.transparent_tools()}
+        ranked = rank_tools(str(arguments.get("task", "")),
+                            [(name, tool.description or "") for name, tool in visible.items()], limit)
+        new = {visible[name].qualified_name for name, _ in ranked} - unlocked
+        if new:
+            unlocked.update(new)
+            await ctx.session.send_tool_list_changed()
+        found = [{"name": name, "summary": (visible[name].description or "").split(". ")[0][:160]}
+                 for name, _ in ranked]
+        reply = {"tools": found} if found else {"tools": [], "note": "No tool matched; describe the task in other words."}
+        return types.CallToolResult(content=[types.TextContent(type="text", text=json.dumps(reply))])
+
+    async def call_tool(ctx: Any, params: Any) -> Any:
+        if config.tool_routing and params.name == find.name:
+            return await find_tools(ctx, dict(params.arguments or {}))
         names = {exposed(tool): tool.qualified_name for tool, _ in await runtime.transparent_tools()}
         try:
             if params.name not in names:
@@ -430,7 +471,10 @@ def run_mcp_server(
 
         async def serve() -> None:
             async with stdio_server() as (read, write):
-                await server.run(read, write, server.create_initialization_options())
+                from mcp.server.lowlevel import NotificationOptions
+
+                options = NotificationOptions(tools_changed=True)
+                await server.run(read, write, server.create_initialization_options(options))
 
         anyio.run(serve)
         return
