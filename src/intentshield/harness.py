@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .mcp_inspect import distinctive_values, scan_output, self_disclosure_fields
+from .mcp_inspect import authority_values, distinctive_values, scan_output, self_disclosure_fields, sourced_from
 
 _READ = frozenset({
     "get", "list", "search", "read", "find", "fetch", "query", "retrieve", "show", "view", "describe",
@@ -64,6 +64,9 @@ class HarnessGuard:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, intent TEXT NOT NULL, "
                         "taint TEXT NOT NULL, updated REAL NOT NULL)")
+        # Recipients, URLs, accounts and paths seen in any tool output of the session.
+        self.db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
+                        "PRIMARY KEY (session, value))")
 
     def _load(self, session: str) -> tuple[str, set[str]]:
         row = self.db.execute("SELECT intent, taint FROM sessions WHERE id = ?", (session,)).fetchone()
@@ -98,13 +101,22 @@ class HarnessGuard:
         if untrusted:
             return Verdict("deny", "An argument value came from a tool output that contained injected "
                                    f"instructions, not from the user: {', '.join(sorted(untrusted)[:3])}.")
-        if is_mutation(tool) and (self.review == "always" or (self.review == "tainted" and taint)):
+        observed = {row[0] for row in self.db.execute("SELECT value FROM observed WHERE session = ?", (session,))}
+        sourced = sourced_from(authority_values(arguments), observed, distinctive_values(intent))
+        if sourced and self.review != "never":
+            # The scanners may have missed the output it came from; the user decides.
+            verdict.decision = "ask"
+            verdict.reason = ("An argument value came from a tool output, not from the user: "
+                              f"{', '.join(sorted(sourced)[:3])}. Confirm this call.")
+        elif is_mutation(tool) and (self.review == "always" or (self.review == "tainted" and taint)):
             verdict.decision = "ask"
             verdict.reason = ("A tool output in this session tried to instruct the agent; confirm this call."
                               if taint else "IntentShield asks for confirmation of state-changing calls.")
         return verdict
 
     def result(self, session: str, tool: str, output: Any) -> Verdict:
+        self.db.executemany("INSERT OR IGNORE INTO observed VALUES (?, ?)",
+                            [(session, value) for value in authority_values(output)])
         intent, taint = self._load(session)
         findings = scan_output(output, trusted=intent)
         if not findings:

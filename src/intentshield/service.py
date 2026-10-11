@@ -185,7 +185,7 @@ class IntentShieldService:
             raise KeyError(f"Unknown run: {run_id}")
         signals, assessment = self._security_assessment(run["user_intent"], call)
         veto = self.pre_policy_check(run_id, run["user_intent"], call) if self.pre_policy_check else None
-        if veto:
+        if veto and veto is not ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE:
             return self._result(run_id, call, signals, Decision.BLOCK, [veto], assessment=assessment)
         outcome = self.policy.evaluate(PolicyContext(
             run_id=run_id,
@@ -195,6 +195,7 @@ class IntentShieldService:
             injection_score=signals.injection_score,
             intent_alignment=signals.intent_alignment,
             approval_verified=False,
+            untrusted_source=veto is ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE,
             security_disposition=(
                 assessment.disposition.value if assessment else "CLEAR_FOR_POLICY"
             ),
@@ -261,8 +262,10 @@ class IntentShieldService:
         approval_verified, approval_error = self._approval_state(run_id, call, fingerprint)
         if approval_error:
             return self._blocked(run_id, call, approval_error, signals, assessment)
+        # The check vetoes with a BLOCK code, or flags a value from a tool output; the
+        # policy turns the flag into review.
         veto = self.pre_policy_check(run_id, user_intent, call) if self.pre_policy_check else None
-        if veto:
+        if veto and veto is not ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE:
             self._consume_denied_approval(call, fingerprint, approval_verified)
             return self._blocked(run_id, call, veto, signals, assessment)
 
@@ -288,6 +291,7 @@ class IntentShieldService:
             injection_score=signals.injection_score,
             intent_alignment=signals.intent_alignment,
             approval_verified=approval_verified,
+            untrusted_source=veto is ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE,
             security_disposition=(
                 assessment.disposition.value if assessment else "CLEAR_FOR_POLICY"
             ),
@@ -346,6 +350,10 @@ class IntentShieldService:
                 self.storage.finish_run(run_id, Decision.ALLOW.value)
                 return response
 
+        if not spec.mutation and approval_verified and call.approval_id \
+                and not self.storage.consume_approval(call.approval_id, fingerprint):
+            # An approved read runs once, like an approved mutation.
+            return self._blocked(run_id, call, ReasonCode.BLOCK_APPROVAL_CONSUMED, signals, assessment)
         parsed = spec.parse_arguments(outcome.parsed_arguments or call.arguments)
         try:
             result = spec.executor(parsed)

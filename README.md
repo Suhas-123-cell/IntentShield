@@ -216,7 +216,13 @@ The proxy guards all three places an MCP attack enters (plan and status:
 - **Arguments.** A call carrying a distinctive value the user never gave is
   `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` when that value came from a tainted output in
   the run or from another tool's description: the right action with an
-  attacker-chosen recipient, account or path.
+  attacker-chosen recipient, account or path. Detection is not the gate: a
+  recipient, URL, account or path whose only source is *any* tool output in the
+  run (flagged or not) sends the call to review with
+  `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`, read or write. Paths and URLs inside a
+  directory or site the user named count as the user's. Turn this off with
+  `review_output_sourced_arguments: false`; benign retrieve-then-act flows ("pay
+  the account in this invoice") then run without asking.
 - **Self-disclosure parameters.** A schema parameter that asks for the agent's
   model, system prompt or conversation (`llm_model_name`, `system_prompt`, ...) is
   removed from the schema the agent sees. Any value the agent sends for it is dropped;
@@ -286,7 +292,8 @@ stay flagged (the poisoned tool is treated as another server's, so shadowing app
 | zero-width characters inside words | 100% | 10.4% |
 
 Both scanners now NFKC-normalize, drop invisible format characters and map common
-Cyrillic/Greek look-alikes before matching; false flags on the 362 clean tools stay
+Cyrillic/Greek look-alikes before matching, and also scan base64, hex, URL- and
+HTML-escaped text decoded up to three layers deep; false flags on the 362 clean tools stay
 at 3. Paraphrase survives mostly through the shadowing check: of the 1,265 descriptions
 the rules flag without it, the rules alone still flag 42.7% after paraphrase, so an attacker who also avoids naming
 another server's tool would get through. Whether every rewrite still steers a model
@@ -719,6 +726,8 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
     from a tool output with injected instructions and not from the user;
   - scan every MCP result; an injected one taints the session and the model is told
     it is data, not a request (`--outputs block` replaces the result instead);
+  - ask before any MCP call carrying a recipient, URL, account or path that came
+    only from a tool output, flagged or not (unless `--review never`);
   - ask before state-changing MCP calls once the session is tainted
     (`--review always|tainted|never`, or `INTENTSHIELD_HOOK_REVIEW`; `--outputs` reads
     `INTENTSHIELD_HOOK_OUTPUTS`).

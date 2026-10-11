@@ -18,6 +18,7 @@ class ReasonCode(StrEnum):
     ALLOW_APPROVAL_VERIFIED = "ALLOW_APPROVAL_VERIFIED"
     ALLOW_IDEMPOTENT_REPLAY = "ALLOW_IDEMPOTENT_REPLAY"
     REVIEW_MUTATION_REQUIRES_APPROVAL = "REVIEW_MUTATION_REQUIRES_APPROVAL"
+    REVIEW_UNTRUSTED_ARGUMENT_SOURCE = "REVIEW_UNTRUSTED_ARGUMENT_SOURCE"
     BLOCK_TOOL_NOT_REGISTERED = "BLOCK_TOOL_NOT_REGISTERED"
     BLOCK_SCHEMA_DRIFT = "BLOCK_SCHEMA_DRIFT"
     BLOCK_TOOL_NOT_ALLOWED = "BLOCK_TOOL_NOT_ALLOWED"
@@ -120,6 +121,8 @@ class PolicyContext(BaseModel):
     injection_score: float = Field(ge=0.0, le=1.0)
     intent_alignment: float = Field(ge=0.0, le=1.0)
     approval_verified: bool = False
+    # An argument (recipient, URL, account, path) came from a tool output, not the user.
+    untrusted_source: bool = False
     security_disposition: Literal["CLEAR_FOR_POLICY", "REVIEW", "BLOCK"] = (
         "CLEAR_FOR_POLICY"
     )
