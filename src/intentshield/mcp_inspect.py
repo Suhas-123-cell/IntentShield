@@ -5,10 +5,14 @@ rules only produce evidence (rule names); the proxy decides what to do with it.
 """
 from __future__ import annotations
 
+import base64
+import binascii
+import html
 import json
 import re
 import unicodedata
 from typing import Any, Iterable
+from urllib.parse import unquote
 
 _I = re.I
 # Rules for text that should describe a tool, not instruct the agent.
@@ -94,8 +98,54 @@ def _normalize(text: str) -> str:
     return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
 
 
+_BASE64 = re.compile(r"[A-Za-z0-9+/_\-]{16,}={0,2}")
+_HEX = re.compile(r"\b(?:[0-9a-fA-F]{2}){8,}\b")
+
+
+def _readable(raw: bytes) -> str | None:
+    """Decoded bytes count only if they read as prose, or are another encoded layer;
+    hashes and keys decode to noise."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    printable = sum(ch.isprintable() or ch.isspace() for ch in text)
+    readable = printable >= 0.95 * len(text) and (" " in text or _BASE64.fullmatch(text.strip()))
+    return text if readable else None
+
+
+def _decoded(text: str) -> list[str]:
+    """Payloads an LLM can decode on its own: base64, hex, URL and HTML escapes. Decoded
+    up to three layers deep so the rules see them; the original text is scanned too."""
+    found: list[str] = []
+    layer = [text]
+    for _ in range(3):
+        next_layer = []
+        for item in layer:
+            for decoded in (unquote(item) if "%" in item else item, html.unescape(item) if "&" in item else item):
+                if decoded != item:
+                    next_layer.append(decoded)
+            for token in _BASE64.findall(item):
+                padded = token + "=" * (-len(token) % 4)
+                try:
+                    raw = base64.urlsafe_b64decode(padded) if re.search(r"[-_]", token) \
+                        else base64.b64decode(padded, validate=True)
+                except (binascii.Error, ValueError):
+                    continue
+                if (decoded := _readable(raw)) is not None:
+                    next_layer.append(decoded)
+            for token in _HEX.findall(item):
+                if (decoded := _readable(bytes.fromhex(token))) is not None:
+                    next_layer.append(decoded)
+        if not next_layer:
+            break
+        found += next_layer
+        layer = next_layer
+    return found
+
+
 def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "") -> list[str]:
-    text = _normalize(text)
+    text = _normalize("\n".join([text, *_decoded(text)]))
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
     trusted = " ".join(_normalize(trusted).lower().split())
     return [name for name, pattern in rules
@@ -178,12 +228,28 @@ _VALUE_PATTERNS = (
 )
 
 
-def distinctive_values(value: Any) -> set[str]:
+def distinctive_values(value: Any, patterns: tuple[re.Pattern[str], ...] = _VALUE_PATTERNS) -> set[str]:
     """Values specific enough that their source can be traced: emails, URLs, accounts, paths, ids."""
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     found: set[str] = set()
-    for pattern in _VALUE_PATTERNS:
+    for pattern in patterns:
         for match in pattern.findall(text):
             item = re.sub(r"[\s\-]", "", match) if match[:1].isdigit() else match
             found.add(item.strip(".,;:").lower())
     return {item for item in found if len(item) >= 6}
+
+
+def authority_values(value: Any) -> set[str]:
+    """Distinctive values that decide where data or money goes or what gets touched:
+    emails, URLs, accounts and paths. Generic ids are left out (picking an id from a
+    search result is how agents normally work), and so are numbers under nine digits
+    (dates, amounts)."""
+    return {item for item in distinctive_values(value, _VALUE_PATTERNS[:5])
+            if not item.isdigit() or len(item) >= 9}
+
+
+def sourced_from(values: set[str], source: set[str], user_values: set[str]) -> set[str]:
+    """The values that came from ``source`` and not from the user. A path or URL inside a
+    directory or site the user named counts as the user's own."""
+    prefixes = tuple(item.rstrip("/") + "/" for item in user_values if "/" in item)
+    return {item for item in values & source - user_values if not item.startswith(prefixes)}
