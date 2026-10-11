@@ -185,7 +185,7 @@ class IntentShieldService:
             raise KeyError(f"Unknown run: {run_id}")
         signals, assessment = self._security_assessment(run["user_intent"], call)
         veto = self.pre_policy_check(run_id, run["user_intent"], call) if self.pre_policy_check else None
-        if veto and veto is not ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE:
+        if veto and not veto.startswith("REVIEW_"):
             return self._result(run_id, call, signals, Decision.BLOCK, [veto], assessment=assessment)
         outcome = self.policy.evaluate(PolicyContext(
             run_id=run_id,
@@ -195,7 +195,7 @@ class IntentShieldService:
             injection_score=signals.injection_score,
             intent_alignment=signals.intent_alignment,
             approval_verified=False,
-            untrusted_source=veto is ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE,
+            review_reason=veto if veto and veto.startswith("REVIEW_") else None,
             security_disposition=(
                 assessment.disposition.value if assessment else "CLEAR_FOR_POLICY"
             ),
@@ -262,10 +262,10 @@ class IntentShieldService:
         approval_verified, approval_error = self._approval_state(run_id, call, fingerprint)
         if approval_error:
             return self._blocked(run_id, call, approval_error, signals, assessment)
-        # The check vetoes with a BLOCK code, or flags a value from a tool output; the
-        # policy turns the flag into review.
+        # The check vetoes with a BLOCK code, or returns REVIEW evidence that the policy
+        # turns into review once every blocking check has passed.
         veto = self.pre_policy_check(run_id, user_intent, call) if self.pre_policy_check else None
-        if veto and veto is not ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE:
+        if veto and not veto.startswith("REVIEW_"):
             self._consume_denied_approval(call, fingerprint, approval_verified)
             return self._blocked(run_id, call, veto, signals, assessment)
 
@@ -291,7 +291,7 @@ class IntentShieldService:
             injection_score=signals.injection_score,
             intent_alignment=signals.intent_alignment,
             approval_verified=approval_verified,
-            untrusted_source=veto is ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE,
+            review_reason=veto if veto and veto.startswith("REVIEW_") else None,
             security_disposition=(
                 assessment.disposition.value if assessment else "CLEAR_FOR_POLICY"
             ),

@@ -12,9 +12,10 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .injection_classifier import InjectionClassifier
 from .mcp_inspect import (
-    authority_values, distinctive_values, scan_description, scan_output, self_disclosure_fields,
-    sourced_from, tool_text,
+    authority_values, distinctive_values, scan_description, scan_output, scan_server,
+    self_disclosure_fields, sourced_from, tool_text,
 )
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
@@ -48,6 +49,10 @@ class MCPProxyConfig(BaseModel):
     # A recipient, URL, account or path whose only source is a tool output sends the
     # call to review, whether or not the scanners flagged that output.
     review_output_sourced_arguments: bool = True
+    # Optional local classifier (``intentshield.injection_training``) run on descriptions
+    # and outputs the rules pass. A hit withholds the description or flags the output
+    # and sends affected calls to review; it never allows anything.
+    injection_classifier_dir: str | None = None
     allowed_resources: set[str] = Field(default_factory=set)
     allowed_destinations: list[str] = Field(default_factory=list)
     call_budget: int = Field(default=8, ge=1)
@@ -215,6 +220,13 @@ class MCPProxyRuntime:
         self._tainted: dict[str, set[str]] = {}
         # run_id -> recipients, URLs, accounts and paths seen in any tool output.
         self._observed: dict[str, set[str]] = {}
+        self._classifier = (InjectionClassifier(config.injection_classifier_dir)
+                            if config.injection_classifier_dir else None)
+        if self._classifier and not self._classifier.ready:
+            raise ValueError(f"injection_classifier_dir is not usable: {self._classifier.reason}")
+        # Tools whose description, and run_id -> values from outputs, the classifier flagged.
+        self._suspect_tools: set[str] = set()
+        self._suspect_values: dict[str, set[str]] = {}
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -298,6 +310,12 @@ class MCPProxyRuntime:
     def _build_registry(self, tools: list[MCPTool]) -> dict[str, ToolSpec]:
         registry: dict[str, ToolSpec] = {}
         self._quarantined, self._description_values, self._redacted = {}, {}, {}
+        # An instruction split across one server's tools quarantines all of them.
+        for server_id in dict.fromkeys(tool.server_id for tool in tools):
+            own = [tool for tool in tools if tool.server_id == server_id]
+            split = scan_server(tool_text(t.description, t.input_schema, t.title) for t in own)
+            if split and self.config.quarantine_poisoned_tools:
+                self._quarantined.update({tool.qualified_name: list(split) for tool in own})
         for tool in tools:
             qualified = tool.qualified_name
             # Untrusted text: scanned for poisoning; a reference to another
@@ -308,7 +326,10 @@ class MCPProxyRuntime:
                 text, {other.name for other in tools if other.server_id != tool.server_id} - own
             )
             if findings and self.config.quarantine_poisoned_tools:
-                self._quarantined[qualified] = findings
+                self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
+            if self._classifier and not findings and qualified not in self._quarantined \
+                    and self._classifier.flags(text):
+                self._suspect_tools.add(qualified)
             self._description_values[qualified] = distinctive_values(text)
             hidden = self_disclosure_fields(tool.input_schema)
             if hidden:
@@ -362,6 +383,7 @@ class MCPProxyRuntime:
                     if qualified in self._quarantined
                     else tool.description
                     if self.config.expose_upstream_descriptions and tool.description
+                    and qualified not in self._suspect_tools
                     else f"Guarded MCP tool {qualified}; upstream description withheld as untrusted."
                 ),
                 args_model=MCPArguments,
@@ -408,6 +430,7 @@ class MCPProxyRuntime:
             item["quarantined"] = item["name"] in self._quarantined
             item["poisoning_findings"] = self._quarantined.get(item["name"], [])
             item["redacted_fields"] = sorted(self._redacted.get(item["name"], ()))
+            item["classifier_flagged"] = item["name"] in self._suspect_tools
         return catalog
 
     async def _refresh_catalog(self) -> None:
@@ -436,12 +459,14 @@ class MCPProxyRuntime:
         # or from another tool's description.
         values = distinctive_values(call.arguments) - distinctive_values(user_intent)
         if not values:
-            return None
+            return ReasonCode.REVIEW_CLASSIFIER_FLAGGED if call.tool_name in self._suspect_tools else None
         if values & self._tainted.get(run_id, set()):
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        if call.tool_name in self._suspect_tools or values & self._suspect_values.get(run_id, set()):
+            return ReasonCode.REVIEW_CLASSIFIER_FLAGGED
         # Detection is not the gate: a value the scanners missed still came from a tool.
         if self.config.review_output_sourced_arguments and sourced_from(
             authority_values(call.arguments), self._observed.get(run_id, set()),
@@ -454,6 +479,11 @@ class MCPProxyRuntime:
         self._observed.setdefault(run_id, set()).update(authority_values(result.get("upstream", result)))
         findings = scan_output(result.get("upstream", result))
         if not findings:
+            upstream = result.get("upstream", result)
+            if self._classifier and self._classifier.flags(json.dumps(upstream, ensure_ascii=False)):
+                self._suspect_values.setdefault(run_id, set()).update(distinctive_values(upstream))
+                self._service().storage.add_event(run_id, "MCP_OUTPUT_SUSPECTED", {"tool_name": call.tool_name})
+                return {**result, "injection_suspected": True, "injection_findings": ["semantic_instruction"]}
             return result
         values = distinctive_values(result.get("upstream", result))
         self._tainted.setdefault(run_id, set()).update(values)

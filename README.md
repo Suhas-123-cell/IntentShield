@@ -138,6 +138,44 @@ Inspect readiness:
 curl http://127.0.0.1:8000/api/security/status
 ```
 
+## Injection classifier
+
+An optional second stage for the MCP proxy and the hooks: a DeBERTa-v3-small binary
+classifier (`data` / `instruction`) run only on descriptions and outputs the rules
+pass. It is off unless configured, and its hits are evidence for review only.
+
+```bash
+# needs a local Ollama model for the generated outputs and translations
+.venv/bin/python benchmarks/injection_data.py --data artifacts/data/MCPTox-Benchmark
+HF_HUB_OFFLINE=1 .venv/bin/python -m intentshield.injection_training \
+  --dataset artifacts/injection/dataset.jsonl --batch-size 8
+```
+
+The dataset is MCPTox clean and poisoned descriptions, tool outputs written by
+qwen2.5:7b (benign ones with instructions meant for humans; injected ones in polite,
+false-error, as-the-user and new-task styles) and translations of 20% of rows into six
+languages. Rows are split by MCPTox server (60/10/30); MSB is not used, so its held-out
+split stays clean.
+
+First run (11 October 2026, 1,931 train / 660 validation / 918 test rows, 3 epochs):
+
+| Held-out test servers | Result |
+|---|---|
+| Injections caught (descriptions, outputs, all six languages) | 716/716 |
+| Benign text flagged, overall | 20.3% (41/202) |
+| Clean MCPTox descriptions flagged | 20.4% (22/108) |
+| Benign generated outputs flagged | 12.1% (8/66) |
+| Hand-written attack probes (polite, false error, Spanish, polite description) | 4/4 |
+| Hand-written benign probes | 2/4 flagged |
+
+This is a negative result. The threshold sits at the top of its grid (0.99) and still
+flags one benign row in five, including "please submit your timesheets by Friday and
+send questions to hr@acme.com" and "run npm install, then copy .env.example to .env".
+The model learned "imperative plus an address" rather than "addressed to the agent".
+Benign examples are scarce (about 5 injected rows per benign one) and the training loss
+reached 0.0001, so scores saturate near 1.0. Do not enable it on this artifact; a usable
+one needs many more benign rows with human-directed instructions.
+
 ## Production settings
 
 | Variable | Purpose |
@@ -203,10 +241,14 @@ The proxy guards all three places an MCP attack enters (related work and next st
 - **Descriptions.** `mcp_inspect.scan_description` checks every upstream tool's
   description and schema text for poisoning (instruction overrides, hidden
   `<IMPORTANT>` blocks, "before calling X you must first call Y", concealment,
-  sensitive paths, argument overrides, coercion). A flagged tool is quarantined:
+  sensitive paths, argument overrides, coercion, references to other tools' outputs,
+  shipping data to a fixed outside address). A flagged tool is quarantined:
   shown unavailable, its text never reaches the agent, every call is
   `BLOCK_TOOL_QUARANTINED`. A description naming another server's tool is
-  flagged as shadowing. The drift fingerprint covers description, title,
+  flagged as shadowing. Each server's tool texts are also scanned together, in
+  catalog order with line breaks folded; an instruction that only appears when they
+  are joined (split across tools, as in ShareLock) quarantines every tool of that
+  server. The drift fingerprint covers description, title,
   annotations and schemas, so any rug pull fails closed.
 - **Outputs.** Every upstream result is scanned, including for user impersonation
   ("I am the user"), task hijack ("before you can solve the task") and
@@ -229,6 +271,13 @@ The proxy guards all three places an MCP attack enters (related work and next st
   an empty string stands in when the upstream schema requires the field.
 - **Reads.** With `lenient_reads`, an ungrounded read is evidence rather than a
   block; mutations stay strict.
+- **Semantic second stage (optional).** `injection_classifier_dir` points at a local
+  DeBERTa classifier (see "Injection classifier" below) that reads descriptions and
+  outputs the rules pass. A flagged description is withheld and every call to that
+  tool is `REVIEW_CLASSIFIER_FLAGGED`; a flagged output is marked
+  `injection_suspected` and any later call carrying one of its values goes to
+  review. It never blocks and never allows; a configured but broken artifact stops
+  the proxy from starting.
 
 ### MCPTox results (tool poisoning, 11 models)
 
@@ -730,7 +779,10 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
     only from a tool output, flagged or not (unless `--review never`);
   - ask before state-changing MCP calls once the session is tainted
     (`--review always|tainted|never`, or `INTENTSHIELD_HOOK_REVIEW`; `--outputs` reads
-    `INTENTSHIELD_HOOK_OUTPUTS`).
+    `INTENTSHIELD_HOOK_OUTPUTS`);
+  - optionally run the injection classifier on results the rules pass
+    (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
+    result hook, so it is off by default).
   A hook that crashes denies the call. Built-in tools (shell, file edits) are left
   to the harness.
 - **Transparent proxy** (`intentshield-mcp --transparent --config <file>`, stdio only)

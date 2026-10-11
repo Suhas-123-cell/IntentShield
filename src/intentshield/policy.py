@@ -126,12 +126,12 @@ class PolicyEngine:
 
         if spec.mutation and not call.idempotency_key:
             return self._block(ReasonCode.BLOCK_IDEMPOTENCY_REQUIRED)
-        if (spec.mutation or context.untrusted_source) and not context.approval_verified:
+        if (spec.mutation or context.review_reason) and not context.approval_verified:
             return PolicyOutcome(
                 decision=Decision.REVIEW,
                 reason_codes=[
                     *([ReasonCode.REVIEW_MUTATION_REQUIRES_APPROVAL] if spec.mutation else []),
-                    *([ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE] if context.untrusted_source else []),
+                    *([context.review_reason] if context.review_reason else []),
                 ],
                 parsed_arguments=parsed,
             )
