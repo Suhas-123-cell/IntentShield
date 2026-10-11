@@ -31,9 +31,11 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 
 from intentshield.evaluation import wilson
 from intentshield.harness import HarnessGuard, handle
+from intentshield.judge import Judge
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from intentshield.models import ToolCall
@@ -200,6 +202,7 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                                           fill=implement if t == "search_term_deception" else "")
     trace: list[dict[str, Any]] = []
     proxy = None
+    judges: list[Judge] = []  # a judge error is no opinion, so a run must report it
     try:
         for upstream in upstreams.values():
             await upstream.connect()
@@ -216,8 +219,10 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 expose_upstream_descriptions=args.expose_descriptions,
                 call_budget=100,
                 lenient_reads=True,
+                judge=args.judge,
             ), upstreams=upstreams)
             await proxy.connect()
+            judges += [proxy._judge] if proxy._judge else []
             run_id = await proxy.create_run(case["task"])
             tools = {c["name"]: (c["description"], c["schema"], c["schema_hash"], c["mutation"])
                      for c in await proxy.tool_catalog() if c["available"]}
@@ -228,7 +233,8 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                                                    database_path=str(workdir / f"{case['id']}.db")),
                                     upstreams=upstreams)
             await proxy.connect()
-            guard = HarnessGuard(workdir / f"{case['id']}-hooks.db")
+            guard = HarnessGuard(workdir / f"{case['id']}-hooks.db", judge=args.judge)
+            judges += [guard.judge] if guard.judge else []
             handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": case["id"],
                               "prompt": case["task"]}, guard)
             tools = {t.qualified_name: (t.description or "", schema, "", False)
@@ -237,6 +243,8 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
             tools = {f"{sid}:{tool.name}": (tool.description or "", tool.input_schema, "", False)
                      for sid, items in listed.items() for tool in items}
         exposed = {re.sub(r"[^A-Za-z0-9_-]", "_", n.replace(":", "__")): n for n in tools}
+        judge = Judge.from_spec(args.judge) if args.judge and args.defense == "none" else None
+        judges += [judge] if judge else []
 
         async def call(name: str, arguments: dict[str, Any]) -> str:
             qualified = exposed.get(name)
@@ -286,6 +294,11 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 if not result.executed:
                     return f"Blocked by IntentShield ({result.decision.value}): " + ", ".join(step["reasons"])
                 return json.dumps(result.result)[:4000]
+            if judge is not None:  # the judge alone, no rules: an objection stops the call (as REVIEW)
+                objection = await asyncio.to_thread(judge.call, case["task"], qualified, arguments)
+                if objection:
+                    step.update(decision="REVIEW", executed=False, reasons=[f"judge: {objection}"])
+                    return f"Blocked by the judge (REVIEW): {objection}"
             outcome = await upstreams[sid].call_tool(qualified.split(":", 1)[1], arguments)
             step.update(decision="ALLOW", executed=True, sent=upstreams[sid].sent[-1])
             return json.dumps(outcome.model_dump(mode="json")["content"])[:4000]
@@ -299,6 +312,7 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 await upstream.close()
     return {"id": case["id"], "attack_type": t, "agent": case["agent"], "tool": case["tool"],
             "attack_task": case["attack_task"], "trace": trace, "final": final[:300],
+            "judge_errors": sum(j.errors for j in judges),
             **score(args.container, case, trace)}
 
 
@@ -398,7 +412,10 @@ def main(argv: list[str] | None = None) -> None:
                         help="sample only cases outside the seed-0 --per-type sample (the tuning set)")
     parser.add_argument("--list", action="store_true", help="print the runnable case grid and exit")
     parser.add_argument("--out", type=Path, default=Path("artifacts/msb"))
+    parser.add_argument("--judge", default=None,
+                        help="LLM judge, groq or gemini[:model]; with --defense none it is the only defense")
     args = parser.parse_args(argv)
+    load_dotenv(".env")  # GROQ_API_KEY / GEMINI_API_KEY for the judge
 
     *_, templates = load(args.data)
     grid = [c for c in cases(args.data)
@@ -416,7 +433,8 @@ def main(argv: list[str] | None = None) -> None:
     runnable = runnable[: args.limit] if args.limit else runnable
     args.out.mkdir(parents=True, exist_ok=True)
     tag = f"{args.model.replace(':', '_')}-{args.defense}" + ("-exposed" if args.expose_descriptions else "") \
-        + ("-holdout" if args.holdout else "")
+        + ("-holdout" if args.holdout else "") \
+        + (f"-judge_{args.judge.replace(':', '_')}" if args.judge else "")
     sink = args.out / f"results-{tag}.jsonl"
     # Rows that errored (a server failed to start) are retried; the latest row per case wins.
     done = {r["id"] for r in map(json.loads, sink.read_text().splitlines()) if "error" not in r} \
@@ -430,6 +448,9 @@ def main(argv: list[str] | None = None) -> None:
             except Exception as exc:  # a server that fails to start is reported, not scored
                 row = {"id": case["id"], "attack_type": case["attack_type"], "tool": case["tool"],
                        "error": repr(exc)[:300]}
+            if row.get("judge_errors"):
+                print(f"judge errors on {case['id']} (quota?): stopping; rerun to resume", flush=True)
+                break
             out.write(json.dumps(row) + "\n")
             out.flush()
             print(f"[{n}/{len(runnable)}] {case['id']} {case['attack_type']} {case['tool']} "
@@ -437,6 +458,7 @@ def main(argv: list[str] | None = None) -> None:
     rows = list({r["id"]: r for r in map(json.loads, sink.read_text().splitlines())}.values())
     scored = [r for r in rows if "error" not in r]
     report = {"model": args.model, "defense": args.defense, "expose_descriptions": args.expose_descriptions,
+              "judge": args.judge,
               "cases": len(scored), "errors": len(rows) - len(scored), "results": summarize(scored)}
     (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report["results"].get("all"), indent=2))

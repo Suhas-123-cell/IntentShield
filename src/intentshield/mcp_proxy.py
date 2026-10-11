@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .injection_classifier import InjectionClassifier
+from .judge import Judge
 from .mcp_inspect import (
     authority_values, distinctive_values, scan_description, scan_output, scan_server,
     self_disclosure_fields, sourced_from, tool_text,
@@ -53,6 +54,11 @@ class MCPProxyConfig(BaseModel):
     # and outputs the rules pass. A hit withholds the description or flags the output
     # and sends affected calls to review; it never allows anything.
     injection_classifier_dir: str | None = None
+    # Optional LLM judge (``judge.py``): "groq" or "gemini", optionally ":model". It reads
+    # descriptions the rules pass, and each read-only call that would otherwise run against
+    # the user's request; an objection withholds the tool or sends the call to review.
+    # It never allows anything. The key comes from GROQ_API_KEY or GEMINI_API_KEY.
+    judge: str | None = None
     # Transparent mode: list only intentshield_find_tools plus ``pinned_tools`` (qualified-name
     # patterns); each search unlocks its matches and tells the client the list changed, so
     # unused tool descriptions are not sent with every model request. Not a security
@@ -237,7 +243,9 @@ class MCPProxyRuntime:
         if self._classifier and not self._classifier.ready:
             raise ValueError(f"injection_classifier_dir is not usable: {self._classifier.reason}")
         # Tools whose description, and run_id -> values from outputs, the classifier flagged.
-        self._suspect_tools: set[str] = set()
+        self._judge = Judge.from_spec(config.judge) if config.judge else None
+        # Tools whose description passed the rules but not the classifier or the judge.
+        self._suspect_tools: dict[str, ReasonCode] = {}
         self._suspect_values: dict[str, set[str]] = {}
 
     async def __aenter__(self) -> "MCPProxyRuntime":
@@ -339,9 +347,11 @@ class MCPProxyRuntime:
             )
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
-            if self._classifier and not findings and qualified not in self._quarantined \
-                    and self._classifier.flags(text):
-                self._suspect_tools.add(qualified)
+            if not findings and qualified not in self._quarantined:
+                if self._classifier and self._classifier.flags(text):
+                    self._suspect_tools[qualified] = ReasonCode.REVIEW_CLASSIFIER_FLAGGED
+                elif self._judge and self._judge.tool(qualified, text):
+                    self._suspect_tools[qualified] = ReasonCode.REVIEW_JUDGE_FLAGGED
             self._description_values[qualified] = distinctive_values(text)
             hidden = self_disclosure_fields(tool.input_schema)
             if hidden:
@@ -442,7 +452,8 @@ class MCPProxyRuntime:
             item["quarantined"] = item["name"] in self._quarantined
             item["poisoning_findings"] = self._quarantined.get(item["name"], [])
             item["redacted_fields"] = sorted(self._redacted.get(item["name"], ()))
-            item["classifier_flagged"] = item["name"] in self._suspect_tools
+            item["classifier_flagged"] = self._suspect_tools.get(item["name"]) == ReasonCode.REVIEW_CLASSIFIER_FLAGGED
+            item["judge_flagged"] = self._suspect_tools.get(item["name"]) == ReasonCode.REVIEW_JUDGE_FLAGGED
         return catalog
 
     async def _refresh_catalog(self) -> None:
@@ -464,6 +475,18 @@ class MCPProxyRuntime:
             )
 
     def _pre_policy_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
+        verdict = self._rule_check(run_id, user_intent, call)
+        # The judge only sees calls that would run: blocked ones are blocked, and
+        # mutations already wait on a human.
+        if verdict is None and self._judge and self.config.is_read_only(call.tool_name):
+            objection = self._judge.call(user_intent, call.tool_name, call.arguments)
+            if objection:
+                self._service().storage.add_event(run_id, "MCP_JUDGE_FLAGGED",
+                                                  {"tool_name": call.tool_name, "reason": objection})
+                return ReasonCode.REVIEW_JUDGE_FLAGGED
+        return verdict
+
+    def _rule_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
         if call.tool_name in self._quarantined:
             return ReasonCode.BLOCK_TOOL_QUARANTINED
         # Argument provenance: a distinctive value (email, URL, account, path, id)
@@ -471,13 +494,15 @@ class MCPProxyRuntime:
         # or from another tool's description.
         values = distinctive_values(call.arguments) - distinctive_values(user_intent)
         if not values:
-            return ReasonCode.REVIEW_CLASSIFIER_FLAGGED if call.tool_name in self._suspect_tools else None
+            return self._suspect_tools.get(call.tool_name)
         if values & self._tainted.get(run_id, set()):
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
-        if call.tool_name in self._suspect_tools or values & self._suspect_values.get(run_id, set()):
+        if call.tool_name in self._suspect_tools:
+            return self._suspect_tools[call.tool_name]
+        if values & self._suspect_values.get(run_id, set()):
             return ReasonCode.REVIEW_CLASSIFIER_FLAGGED
         # Detection is not the gate: a value the scanners missed still came from a tool.
         if self.config.review_output_sourced_arguments and sourced_from(
@@ -535,7 +560,9 @@ class MCPProxyRuntime:
         """Upstream tools an MCP client may see directly: not quarantined, not drifted, with
         self-disclosure parameters removed from the schema."""
         await self._refresh_catalog()
-        return [(tool, self._visible_schemas[tool.qualified_name]) for tool in self._tools
+        withheld = "Description withheld by IntentShield: it may try to instruct the agent."
+        return [(tool.model_copy(update={"description": withheld}) if tool.qualified_name in self._suspect_tools
+                 else tool, self._visible_schemas[tool.qualified_name]) for tool in self._tools
                 if tool.qualified_name not in self._quarantined and tool.qualified_name not in self._drifted_tools]
 
     async def forward(self, name: str, arguments: dict[str, Any]) -> tuple[MCPCallResult, list[str]]:
