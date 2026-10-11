@@ -10,6 +10,7 @@ import pytest
 
 from intentshield import harness
 from intentshield.harness import HarnessGuard, handle, is_mutation
+from intentshield.mcp_inspect import rank_tools
 
 from test_mcp_guardrail import POISON, Fixture, runtime
 
@@ -147,3 +148,60 @@ def test_values_from_an_unflagged_output_need_confirmation(tmp_path: Path):
                                    tool_input={"path": "~/billing/march.pdf"}), g) is None
     assert HarnessGuard(tmp_path / "hooks.db", review="never").call(
         "s1", "bank:get_payee", {"account": "DE89370400440532013000"}).decision == "allow"
+
+
+def test_rank_tools_matches_names_and_descriptions():
+    tools = [("send_email", "Send an email to a recipient."), ("read_file", "Reads the contents of a file."),
+             ("list_directory", "List files in a directory."), ("get_weather", "Current weather for a city.")]
+    assert [name for name, _ in rank_tools("email the report to my manager", tools)][0] == "send_email"
+    assert [name for name, _ in rank_tools("which files are in ~/docs", tools, 2)] == ["read_file", "list_directory"]
+    assert rank_tools("hello there", tools) == []
+
+
+def test_tool_routing_lists_only_the_search_tool_until_asked(tmp_path: Path):
+    from mcp import Client
+
+    from intentshield.mcp_server import create_transparent_mcp_server
+
+    upstream = Fixture({"read_page": "Read a web page.", "send_message": "Send a message to a contact.", "add": POISON})
+    shield = runtime(tmp_path, upstream, tool_routing=True, pinned_tools=["web:read_page"],
+                     tool_catalog_dir=str(tmp_path / "tools"))
+    server = create_transparent_mcp_server(shield.config, runtime=shield)
+    notes: list[object] = []
+
+    async def note(message: object) -> None:
+        notes.append(message)
+
+    async def exercise() -> None:
+        async with Client(server, mode="legacy", message_handler=note) as client:
+            assert {t.name for t in (await client.list_tools()).tools} == {"intentshield_find_tools", "read_page"}
+            found = await client.call_tool("intentshield_find_tools", {"task": "send a message to Bob"})
+            assert json.loads(found.content[0].text)["tools"][0]["name"] == "send_message"
+            assert {t.name for t in (await client.list_tools()).tools} == {"intentshield_find_tools", "read_page", "send_message"}
+            await asyncio.sleep(0.05)
+            assert any("tools/list_changed" in str(n) for n in notes)
+            # Routing saves tokens; it is not a boundary, and quarantine still is.
+            assert not (await client.call_tool("send_message", {"value": "hi"})).is_error
+            assert (await client.call_tool("add", {"value": "1"})).is_error
+
+    asyncio.run(exercise())
+    catalog = json.loads((tmp_path / "tools" / "web.json").read_text())
+    assert {t["name"] for t in catalog} == {"read_page", "send_message"}
+
+
+def test_prompt_hook_names_the_matching_tools(tmp_path: Path):
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "mail.json").write_text(json.dumps([
+        {"name": "send_email", "description": "Send an email."}, {"name": "search_emails", "description": "Search mail."}]))
+    (tmp_path / "tools" / "fs.json").write_text(json.dumps([
+        {"name": n, "description": d} for n, d in [("read_file", "Read a file."), ("write_file", "Write a file."),
+                                                  ("list_directory", "List a directory."), ("move_file", "Move a file.")]]))
+    (tmp_path / "tools" / "broken.json").write_text("{not json")
+    g = guard(tmp_path, catalog=tmp_path / "tools")
+    hint = handle("claude", claude("UserPromptSubmit", prompt="Email Dana the notes"), g)["hookSpecificOutput"]
+    assert hint["hookEventName"] == "UserPromptSubmit" and "send_email" in hint["additionalContext"]
+    assert "read_file" not in hint["additionalContext"]
+    assert handle("gemini", {"hook_event_name": "BeforeAgent", "session_id": "g", "prompt": "list my directory"},
+                  g)["hookSpecificOutput"]["additionalContext"].count("list_directory") == 1
+    assert handle("claude", claude("UserPromptSubmit", prompt="hello"), g) is None
+    assert handle("claude", claude("UserPromptSubmit", prompt="email Dana"), guard(tmp_path / "other")) is None

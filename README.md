@@ -809,6 +809,37 @@ Wrap a server for the proxy layer, e.g. in Claude Code's `.mcp.json`:
   "args": ["--transparent", "--config", "configs/harness/transparent-filesystem.json"]}}}
 ```
 
+### Point the model at the right tool
+
+Two optional features cut the tokens spent on tools the task does not need. Both rank
+tools by keyword (BM25 over the tool name, counted twice, and the first 300 characters of
+its description). They are conveniences, not security decisions.
+
+- **Search-first tool list** (`"tool_routing": true` in the proxy config). The proxy
+  lists only `intentshield_find_tools` plus any `pinned_tools` (qualified-name
+  patterns, e.g. `"filesystem:read_*"`). The model asks it for a task in a few words; the
+  top matches (5 by default) are unlocked and the client gets `tools/list_changed`, so
+  their descriptions and schemas are sent from then on and the rest never are. Every
+  visible tool stays callable by name, and quarantine still applies. The client must
+  handle `list_changed` (MCP protocol versions up to 2025-11-25; the 2026-07-28
+  protocol's subscription path is not implemented).
+- **Per-prompt hint.** With `"tool_catalog_dir": "~/.intentshield/tools"` in each proxy
+  config, the proxy writes its visible tool names and descriptions there at start. The
+  prompt hook (`UserPromptSubmit` in Claude Code and Codex, `BeforeAgent` in Gemini CLI)
+  then adds one line naming the five best matches for the prompt. It reads
+  `--catalog DIR` (default `~/.intentshield/tools`, or `INTENTSHIELD_HOOK_CATALOG`) and
+  stays quiet when nothing matches or there are five tools or fewer. Cursor's prompt hook
+  cannot add context. Only names reach the model, never description text.
+
+On MCPTox (324 queries over 45 servers, the expected tool taken as the majority choice of
+the models that ignored the poisoned description) the expected tool ranked first for 80%
+of queries, in the top 3 for 90% and in the top 5 for 92%; 6% matched no tool, because
+keywords miss synonyms ("bill" for an invoice tool). MCPTox catalogs are small (median 7
+tools, about 470 characters of descriptions), so routing pays off with many servers
+connected: the 45 catalogs together are about 75k characters, roughly 19k tokens sent with
+every request. A malicious server can still word its descriptions to be ranked first; the
+300-character cap limits keyword stuffing, it does not stop it.
+
 Cost: a hook is a short-lived process, about 36 ms per MCP call on an M5 (mostly
 Python start-up); the checks themselves take under a millisecond. The adapters follow
 each harness's documented hook format and are tested on those event shapes
