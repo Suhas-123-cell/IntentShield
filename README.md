@@ -197,8 +197,8 @@ on InjecAgent); the harness check uses Claude Code with Haiku. No published-defe
 
 ### MCP guardrail layers
 
-The proxy guards all three places an MCP attack enters (plan and status:
-[docs/mcp-guardrail-plan.md](docs/mcp-guardrail-plan.md)):
+The proxy guards all three places an MCP attack enters (related work and next steps:
+[docs/related-work.md](docs/related-work.md)):
 
 - **Descriptions.** `mcp_inspect.scan_description` checks every upstream tool's
   description and schema text for poisoning (instruction overrides, hidden

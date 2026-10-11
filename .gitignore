@@ -14,3 +14,4 @@ artifacts/
 benchmarks/harness_live/calls.jsonl
 CLAUDE.md
 AGENTS.md
+docs/mcp-guardrail-plan.md
