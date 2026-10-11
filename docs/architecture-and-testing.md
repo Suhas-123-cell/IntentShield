@@ -556,7 +556,7 @@ The runners in `benchmarks/` need external datasets under `artifacts/data/` (ign
 | `injecagent.py`, `asb.py`, `agentdojo_run.py` | The benchmark data, Ollama (AgentDojo also supports Google) | Yes |
 | `msb.py --defense none\|intentshield\|hooks` | MSB checkout, the `intentshield-msb` Docker container, Ollama | Yes |
 
-Results and their caveats are in the README; the plan and next steps are in [mcp-guardrail-plan.md](mcp-guardrail-plan.md).
+Results and their caveats are in the README; related work and next steps are in [related-work.md](related-work.md).
 
 **16. Completion checklist and practical limits**
 
