@@ -14,6 +14,49 @@ dual-graph defense) that go further than IntentShield's version. A paper has to 
 systems and evaluation contribution for MCP harnesses, not as a new defense idea, and it has
 to fix the weakness below before it is submitted.
 
+## Update 2026-10-12: second search and a stricter verdict
+
+A second search (arXiv, abstracts plus experiment sections where noted) found that the
+angles listed below as "new or uncommon" have since been covered or crowded:
+
+| Angle | Close work found |
+|---|---|
+| Security of coding-agent harnesses | HarnessSecurity-Bench (2610.07639): ten built-in mechanisms, six harnesses incl. Claude Code, Codex CLI, Gemini CLI, 2,500 trials; notes attacks reaching protected operations through alternative execution paths. Approval Laundering (2609.38983): approval-execution binding failures in Claude Code, Codex CLI, Cursor. CapScope (2609.08371): capability-scoped authorization through harness extension hooks. Hook-update supply chain (2609.03884). Red-teaming six coding agents (2509.05755); MCP clients under tool poisoning (2603.21642) |
+| Rules versus LLM judges | "Evaluate the Stack, Not the Layer" (2610.07359): one deterministic layer plus four LLM judges on 1,119 labelled actions, measures whether their errors are independent. AgentTrust (2606.08539): rules cannot decide semantic threats by construction |
+| Reviewer load | "Oversight Has a Capacity" (2606.08919), "Habituation at the Gate" (2606.22721), agent security as agent-human interaction (2605.24309), MiniScope (2512.11147) |
+| Schema-level parameter removal | The Stochastic Deputy (2609.14780) removes tenant identity from MCP schemas; the self-disclosure attack itself is MSB's out-of-scope-parameter attack |
+| Tool routing | RAG-MCP and AgentDojo's tool filter; not a contribution |
+
+Verdict: as a defense paper IntentShield is not publishable at a strong venue today.
+Every mechanism has prior art, and a reviewer would also cite: no adaptive attacker; only
+7-9B local agents; MSB run on a keyless subset with injections moved to where a proxy can
+see them; description rules tuned on MCPTox; no baseline defenses run; the hook path
+tested live only in Claude Code with three prompts; 46% of benign calls sent to review;
+the trained injection classifier is a negative result.
+
+Candidate contributions that survive the search, strongest first:
+
+1. **What third-party hooks cannot see.** A measurement and attack study of hook-based
+   MCP guards across harnesses: which MCP channels and execution paths bypass
+   pre/post-tool-call hooks (tool descriptions, MCP resources and prompts, sampling and
+   elicitation, `list_changed` mid-session, subagent and parallel calls, hook timeouts
+   and crashes failing open, argument-rewrite limits); one attack per gap; a hook-only
+   guard against each; the transparent proxy as the fix, with utility cost. No paper
+   found does this. Nearest: HarnessSecurity-Bench (built-in mechanisms, not third-party
+   guards) and CapScope (hooks for coding-agent authority, not MCP channels). Every gap
+   above is a hypothesis until tested; Claude Code and Gemini CLI can be tested for free.
+   Findings in shipping harnesses need responsible disclosure.
+2. **Rules plus an evidence-only LLM judge on held-out live MCP servers, with reviewer
+   load.** Incremental over 2610.07359 unless the live execution and harness path add
+   something; better as one section of (1).
+3. **Hard negatives for output-injection detectors.** Benign tool outputs that contain
+   instructions meant for people, which small detectors flag (20% here). Check overlap
+   with InjecGuard's NotInject first; needs human-validated labels, not only generated ones.
+
+Needed for any of them: an adaptive attacker (plan item 7), one frontier agent model,
+baselines (Llama Prompt Guard 2 and an LLM judge are both on Groq's free tier), and a
+limitations section that states the MSB modifications.
+
 ## Closest work
 
 | Work | Layer | Mechanism | Overlap with IntentShield | Where it goes further / differs |
