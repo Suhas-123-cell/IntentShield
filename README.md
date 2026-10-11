@@ -227,6 +227,11 @@ policy cost reported as a 100% false block for that category.
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
 | guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
 | agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs |
+| guard channel coverage | hook-vs-proxy visibility of all five MCP channels, measured live on Claude Code and Gemini CLI (`benchmarks/coverage/`, [docs/coverage-study.md](docs/coverage-study.md)) | per-channel live attacks, Codex and Cursor |
+
+The channel-coverage study is the project's main research result: a guard installed as a
+harness hook scoped to MCP tool calls mediates only the tool-call and tool-result channels,
+while a transparent proxy mediates or closes all five. See [docs/contribution.md](docs/contribution.md).
 
 MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
@@ -278,6 +283,14 @@ The proxy guards all three places an MCP attack enters (related work and next st
   `injection_suspected` and any later call carrying one of its values goes to
   review. It never blocks and never allows; a configured but broken artifact stops
   the proxy from starting.
+- **LLM call judge (optional).** `"judge": "groq"` or `"gemini"` (key from
+  `GROQ_API_KEY` / `GEMINI_API_KEY`, free tiers work) runs a second-stage check on
+  descriptions the rules pass and on each read-only call, asking whether the call
+  serves the user's request. It sees only the user's prompt and the call's name and
+  arguments, never tool outputs, so injected text reaches it only through arguments.
+  Like the classifier it is evidence: it can send a call to `REVIEW_JUDGE_FLAGGED` or
+  withhold a tool, never authorize. The hooks take the same `--judge`
+  (`INTENTSHIELD_HOOK_JUDGE`). See `src/intentshield/judge.py`.
 
 ### MCPTox results (tool poisoning, 11 models)
 
