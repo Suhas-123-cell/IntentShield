@@ -36,16 +36,18 @@ the trained injection classifier is a negative result.
 
 Candidate contributions that survive the search, strongest first:
 
-1. **What third-party hooks cannot see.** A measurement and attack study of hook-based
-   MCP guards across harnesses: which MCP channels and execution paths bypass
-   pre/post-tool-call hooks (tool descriptions, MCP resources and prompts, sampling and
-   elicitation, `list_changed` mid-session, subagent and parallel calls, hook timeouts
-   and crashes failing open, argument-rewrite limits); one attack per gap; a hook-only
-   guard against each; the transparent proxy as the fix, with utility cost. No paper
-   found does this. Nearest: HarnessSecurity-Bench (built-in mechanisms, not third-party
-   guards) and CapScope (hooks for coding-agent authority, not MCP channels). Every gap
-   above is a hypothesis until tested; Claude Code and Gemini CLI can be tested for free.
-   Findings in shipping harnesses need responsible disclosure.
+1. **What third-party hooks cannot see (chosen; first result measured 2026-10-12).** A
+   measurement and attack study of hook-based MCP guards across harnesses: which MCP channels
+   bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts, sampling
+   and elicitation), the transparent proxy as the fix, with utility cost. The coverage matrix
+   is now measured on Claude Code and Gemini CLI: a hook scoped to MCP tool calls sees only
+   the tool-call and tool-result channels; descriptions, resources and prompts reach the model
+   but not the hook in time to block; the proxy mediates descriptions and closes the resource
+   and prompt channels. See [coverage-study.md](coverage-study.md), [contribution.md](contribution.md)
+   and [paper-draft.md](paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in
+   mechanisms, not third-party guards) and CapScope (hooks for coding-agent authority, not MCP
+   channels). Still a hypothesis until confirmed with live per-channel attacks (§3.5 of the
+   draft); findings in shipping harnesses need responsible disclosure.
 2. **Rules plus an evidence-only LLM judge on held-out live MCP servers, with reviewer
    load.** Incremental over 2610.07359 unless the live execution and harness path add
    something; better as one section of (1).
