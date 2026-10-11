@@ -59,8 +59,13 @@ class HarnessGuard:
     """Per-session intent and taint, shared by every hook process of one harness session."""
 
     def __init__(self, path: str | Path, review: str = "tainted", outputs: str = "warn",
-                 classifier: str | None = None, catalog: str | Path | None = None) -> None:
+                 classifier: str | None = None, catalog: str | Path | None = None,
+                 judge: str | None = None) -> None:
         self.review, self.outputs = review, outputs
+        self.judge = None
+        if judge:
+            from .judge import Judge
+            self.judge = Judge.from_spec(judge)
         self.catalog = Path(catalog).expanduser() if catalog else None
         self.classifier = None
         if classifier:  # imported only when asked for: PyTorch slows every hook start
@@ -138,6 +143,12 @@ class HarnessGuard:
             verdict.decision = "ask"
             verdict.reason = ("A tool output in this session tried to instruct the agent; confirm this call."
                               if taint else "IntentShield asks for confirmation of state-changing calls.")
+        if verdict.decision == "allow" and self.judge and self.review != "never":
+            # Evidence only: an objection asks the user; agreement adds nothing.
+            objection = self.judge.call(intent, tool, arguments)
+            if objection:
+                verdict.decision = "ask"
+                verdict.reason = f"IntentShield's judge: {objection} Confirm this call."
         return verdict
 
     def result(self, session: str, tool: str, output: Any) -> Verdict:
@@ -280,11 +291,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--catalog", default=os.getenv("INTENTSHIELD_HOOK_CATALOG",
                                                        str(Path.home() / ".intentshield" / "tools")),
                         help="directory the transparent proxies write tool catalogs to (tool_catalog_dir)")
+    parser.add_argument("--judge", default=os.getenv("INTENTSHIELD_HOOK_JUDGE") or None,
+                        help="LLM judge for calls the rules allow: groq or gemini[:model] (needs its API key)")
     args = parser.parse_args(argv)
     event: dict[str, Any] = {}
     try:
         event = json.loads(sys.stdin.read() or "{}")
-        reply = handle(args.harness, event, HarnessGuard(args.db, args.review, args.outputs, args.classifier, args.catalog))
+        reply = handle(args.harness, event, HarnessGuard(args.db, args.review, args.outputs, args.classifier, args.catalog, args.judge))
     except Exception as exc:  # fail closed on calls, open on everything else
         if event.get("hook_event_name") in ("PreToolUse", "BeforeTool", "beforeMCPExecution"):
             print(f"IntentShield hook failed: {exc}", file=sys.stderr)
