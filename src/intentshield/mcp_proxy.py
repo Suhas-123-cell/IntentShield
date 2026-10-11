@@ -53,6 +53,15 @@ class MCPProxyConfig(BaseModel):
     # and outputs the rules pass. A hit withholds the description or flags the output
     # and sends affected calls to review; it never allows anything.
     injection_classifier_dir: str | None = None
+    # Transparent mode: list only intentshield_find_tools plus ``pinned_tools`` (qualified-name
+    # patterns); each search unlocks its matches and tells the client the list changed, so
+    # unused tool descriptions are not sent with every model request. Not a security
+    # boundary: every visible tool stays callable by name.
+    tool_routing: bool = False
+    pinned_tools: list[str] = Field(default_factory=list)
+    # Transparent mode writes the visible tool names and descriptions here at start, for the
+    # hooks' per-prompt tool hint (``intentshield-hook --catalog``).
+    tool_catalog_dir: str | None = None
     allowed_resources: set[str] = Field(default_factory=set)
     allowed_destinations: list[str] = Field(default_factory=list)
     call_budget: int = Field(default=8, ge=1)
@@ -123,6 +132,9 @@ class MCPProxyConfig(BaseModel):
         # An unqualified ``read`` rule must not accidentally authorize the same
         # raw tool name on every connected server.
         return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+
+    def is_pinned(self, name: str) -> bool:
+        return self._matches(name, self.pinned_tools)
 
     def is_allowed(self, name: str) -> bool:
         return self._matches(name, self.allowed_tools)

@@ -24,7 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .mcp_inspect import authority_values, distinctive_values, scan_output, self_disclosure_fields, sourced_from
+from .mcp_inspect import (authority_values, distinctive_values, rank_tools, scan_output, self_disclosure_fields,
+                          sourced_from)
 
 _READ = frozenset({
     "get", "list", "search", "read", "find", "fetch", "query", "retrieve", "show", "view", "describe",
@@ -58,8 +59,9 @@ class HarnessGuard:
     """Per-session intent and taint, shared by every hook process of one harness session."""
 
     def __init__(self, path: str | Path, review: str = "tainted", outputs: str = "warn",
-                 classifier: str | None = None) -> None:
+                 classifier: str | None = None, catalog: str | Path | None = None) -> None:
         self.review, self.outputs = review, outputs
+        self.catalog = Path(catalog).expanduser() if catalog else None
         self.classifier = None
         if classifier:  # imported only when asked for: PyTorch slows every hook start
             from .injection_classifier import InjectionClassifier
@@ -84,12 +86,28 @@ class HarnessGuard:
                         "intent = excluded.intent, taint = excluded.taint, updated = excluded.updated",
                         (session, intent, json.dumps(sorted(taint)), time.time()))
 
-    def prompt(self, session: str, text: str) -> None:
-        """Every user prompt in the session is trusted intent; nothing else is."""
+    def prompt(self, session: str, text: str) -> str:
+        """Every user prompt in the session is trusted intent; nothing else is. Returns a
+        note naming the MCP tools that match the prompt, or an empty string."""
         self.db.execute("BEGIN IMMEDIATE")
         intent, taint = self._load(session)
         self._save(session, f"{intent}\n{text}".strip(), taint)
         self.db.execute("COMMIT")
+        return self.tool_hint(text)
+
+    def tool_hint(self, text: str, limit: int = 5) -> str:
+        """Ranks the tools the transparent proxies wrote to ``catalog`` against the prompt."""
+        tools: list[tuple[str, str]] = []
+        for path in sorted(self.catalog.glob("*.json")) if self.catalog and self.catalog.is_dir() else ():
+            try:
+                tools += [(str(t["name"]), str(t.get("description", ""))) for t in json.loads(path.read_text())]
+            except (OSError, ValueError, TypeError, KeyError):
+                continue  # a broken catalog only costs the hint
+        ranked = rank_tools(text, tools, limit) if len(tools) > limit else []
+        if not ranked:
+            return ""
+        return (f"IntentShield: the MCP tools matching this request by keyword are {', '.join(n for n, _ in ranked)}. "
+                "Start with these. This is a hint, not a permission.")
 
     def call(self, session: str, tool: str, arguments: dict[str, Any]) -> Verdict:
         intent, taint = self._load(session)
@@ -168,8 +186,8 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
 
     if harness in ("claude", "codex"):
         if name == "UserPromptSubmit":
-            guard.prompt(session, event.get("prompt", ""))
-            return None
+            hint = guard.prompt(session, event.get("prompt", ""))
+            return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": hint}} if hint else None
         split = _split_claude(event.get("tool_name", ""))
         if split is None:
             return None
@@ -220,8 +238,8 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
 
     if harness == "gemini":
         if name == "BeforeAgent":
-            guard.prompt(session, event.get("prompt", ""))
-            return None
+            hint = guard.prompt(session, event.get("prompt", ""))
+            return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": hint}} if hint else None
         if "mcp_context" not in event:
             return None  # built-in tool, not MCP
         context = event.get("mcp_context") or {}
@@ -259,11 +277,14 @@ def main(argv: list[str] | None = None) -> None:
                         help="warn: keep an injected result and warn the model; block: replace it")
     parser.add_argument("--classifier", default=os.getenv("INTENTSHIELD_HOOK_CLASSIFIER") or None,
                         help="injection classifier artifact to run on results the rules pass (slower)")
+    parser.add_argument("--catalog", default=os.getenv("INTENTSHIELD_HOOK_CATALOG",
+                                                       str(Path.home() / ".intentshield" / "tools")),
+                        help="directory the transparent proxies write tool catalogs to (tool_catalog_dir)")
     args = parser.parse_args(argv)
     event: dict[str, Any] = {}
     try:
         event = json.loads(sys.stdin.read() or "{}")
-        reply = handle(args.harness, event, HarnessGuard(args.db, args.review, args.outputs, args.classifier))
+        reply = handle(args.harness, event, HarnessGuard(args.db, args.review, args.outputs, args.classifier, args.catalog))
     except Exception as exc:  # fail closed on calls, open on everything else
         if event.get("hook_event_name") in ("PreToolUse", "BeforeTool", "beforeMCPExecution"):
             print(f"IntentShield hook failed: {exc}", file=sys.stderr)
