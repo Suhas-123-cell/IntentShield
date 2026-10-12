@@ -1,25 +1,25 @@
 # The contribution, in detail
 
-This file states precisely what in IntentShield is a research contribution, what is not, the
-evidence for the claim, how it differs from each closely related paper, and what remains to be
-done before it is publishable. It is the honest version: most of IntentShield is engineering
-over prior art, and one measured result is new.
+This file sets out what in IntentShield could be a research contribution, the evidence, how
+it compares with the closest papers, and whether it is worth publishing. It is the honest
+version: most of IntentShield is engineering over prior art.
 
-## 1. The one-sentence claim
+**Verdict (2026-10-12, after review): it is not worth submitting to a peer-reviewed venue as
+it stands.** The candidate claim below was measured, but on review it is thin and partly
+known (§5). Two routes could still produce a paper (§7).
 
-> A third-party MCP guard installed as a harness hook scoped to tool calls — the way every
-> shipping guard installs — does not achieve *complete mediation*: of the five
-> attacker-controllable MCP channels, it observes only two (tool call, tool result) in time to
-> act; tool descriptions, resource contents, and prompt contents reach the model but not the
-> hook. A transparent protocol-level proxy restores complete mediation, and we measure the
-> cost of doing so.
+## 1. The claim as first stated
 
-Everything below supports, bounds, or qualifies that sentence.
+> A third-party MCP guard installed as a harness hook scoped to tool calls, which is how
+> shipping guards install, does not achieve *complete mediation*. Of the five
+> attacker-controllable MCP channels, it observes only two (tool call and tool result) in
+> time to act. Tool descriptions, resource contents and prompt contents reach the model but
+> not the hook. A transparent protocol-level proxy restores complete mediation, and we
+> measure what that costs.
 
-## 2. Why this is a contribution and the rest is not
+## 2. Every mechanism is prior art
 
-IntentShield has many parts. Checked against the literature (two searches, Oct 2026), each
-*mechanism* is prior art:
+Checked against the literature (two searches, Oct 2026):
 
 | Mechanism in IntentShield | Prior art that owns it |
 |---|---|
@@ -31,107 +31,138 @@ IntentShield has many parts. Checked against the literature (two searches, Oct 2
 | Tool routing to save tokens | RAG-MCP, AgentDojo tool filter |
 | Self-disclosure parameter redaction | The Stochastic Deputy (2609.14780), MSB's own attack |
 
-So none of these, alone, is publishable. What is *not* in the literature is the **placement**
-question: given that the whole industry now guards MCP at the harness hook, does that placement
-see everything it must? That is a complete-mediation question (Saltzer & Schroeder, 1975), and
-nobody has answered it per channel, across harnesses, for third-party guards.
+None of these is publishable on its own. The candidate novelty was the **placement**
+question instead: the industry now guards MCP at the harness hook, so does that placement see
+everything it must? That is a complete-mediation question (Saltzer & Schroeder, 1975).
 
-## 3. The claim stated as a reference-monitor property
+## 3. The claim as a reference-monitor property
 
-A reference monitor must have **complete mediation**: every access to every protected object
-passes through it. Treat each MCP channel that can carry attacker text as an object class:
+A reference monitor needs **complete mediation**: every access to every protected object
+passes through it. Each MCP channel that can carry attacker text is an object class:
 
 1. tool **description** (server-authored metadata the model reads to choose a tool)
 2. tool **result** (server-authored output)
 3. **resource** contents (server-authored documents the client fetches)
-4. **prompt** contents (server-authored prompt templates / slash commands)
+4. **prompt** contents (server-authored prompt templates or slash commands)
 5. server-initiated **sampling / elicitation**
 
-A guard achieves complete mediation iff it observes all five *before* they can affect an
-action. The claim: a hook scoped to tool calls mediates {2} fully and {1} only after the
-fact; {3,4,5} do not reach it; a proxy mediates {1,2} and closes {3,4,5}.
+A guard achieves complete mediation only if it observes all five before they can affect an
+action.
 
 ## 4. The evidence (measured 2026-10-12)
 
 Method and raw data: [coverage-study.md](coverage-study.md), reproducible with
-`benchmarks/coverage/run.py`. A probe server plants a unique benign marker in each channel; a
+`benchmarks/coverage/run.py`. A probe server plants a unique benign marker in each channel. A
 passive hook logs which event delivered each marker and under which tool name.
-
-Per-channel visibility to the guard:
 
 | Channel | Claude Code hook (`mcp__.*`) | Gemini CLI hook (`BeforeTool`) | Transparent proxy |
 |---|---|---|---|
 | Tool result | observed, PostToolUse | observed, AfterTool | observed (`tools/call`) |
 | Tool description | post-turn only (`Stop`) | model hooks only | observed (`tools/list`) |
-| Resource content | non-MCP tool name only | not reached by the model | **closed** (`resources/read` 1→0) |
-| Prompt content | post-turn only (`Stop`) | model hooks only | **closed** (`prompts/get` 1→0) |
+| Resource content | non-MCP tool name only | not reached by the model | closed (`resources/read` 1→0) |
+| Prompt content | post-turn only (`Stop`) | model hooks only | closed (`prompts/get` 1→0) |
 | Elicitation | not observed | not observed | not forwarded |
 
-The proxy drives server-side `resources/read` and `prompts/get` to **zero** on both harnesses
-because it exposes only tools; it mediates every `tools/list` (14–15 calls), so descriptions
-are gated before the model sees them.
+What the cells mean:
+- **"post-turn only (`Stop`)":** the text reached the model's context, but the hook event
+  that carried it fires after the turn. That is too late to block the call it influenced.
+- **"non-MCP tool name":** Claude Code surfaced the resource under its built-in
+  `ReadMcpResourceTool`. A `mcp__.*` matcher misses it; a `*` matcher would not.
+- **"closed":** the proxy exposes only tools, so the server never received `resources/read` or
+  `prompts/get` on either harness. The proxy mediated every `tools/list` call (14–15 per run).
 
-Two consequences stated carefully:
-- "post-turn only (`Stop`)" means the text *did* reach the model's context; the hook that
-  carried it fires after the turn, too late to block the call it influenced. A guard built on
-  `PreToolUse`/`PostToolUse` scoped to `mcp__.*` therefore never gets a chance to act on it.
-- "non-MCP tool name" means Claude Code surfaced the resource under the built-in
-  `ReadMcpResourceTool`, which a guard matching `mcp__.*` does not match — so the standard
-  scoping misses it even though a `*` matcher would not.
+## 5. Why it is not publishable as it stands
 
-## 5. How it differs from the closest papers
+1. **The one gap that is structural is already known in substance.** Tool descriptions are
+   the only channel that both harnesses' tool hooks miss. That follows directly from the hook
+   input schemas: `PreToolUse` carries the tool name and arguments, not the description.
+   Description scanners such as mcp-scan, MCP-Guard and Tool-Guard exist for this reason, so
+   a reviewer would call the gap known.
+2. **Two of the three misses are configuration, not structure.** A `*` matcher in Claude
+   Code sees resource reads under `ReadMcpResourceTool`. Gemini CLI's model-level hooks
+   (`BeforeModel`, `BeforeToolSelection`) do carry prompts and tool declarations.
+3. **The proxy's complete mediation partly comes from dropping channels.** It closes
+   resources and prompts by not forwarding them, which loses functionality rather than
+   mediating it. Real mediation would forward them under the same checks as tool results.
+4. **The evidence is thin.** It covers two harnesses, one small model each and one run. It
+   uses benign markers only, so no harm was shown, and the elicitation row is inconclusive
+   because of SDK errors.
+5. **The area is crowded and fast-moving.** HarnessSecurity-Bench (2610.07639) covers six
+   harnesses with a ten-mechanism taxonomy. COPEX (2610.04378) attacks the MCP channels.
+   "Measuring and Exploiting Implicit Trust" (2609.18217) fragments payloads across channels
+   and already evaluated seven third-party MCP tools. "Breaking the Protocol" (2601.17549)
+   and CapScope (2609.08371) are adjacent.
+6. **The supporting MSB numbers carry a known flaw.** The MSB runner names its servers
+   `task`, `attack` and `addition`, and the agent model and the LLM judge see those names
+   inside tool names. Every MSB number so far was measured that way. On current code, the
+   gateway also reaches the task tool less often than at the frozen commit (52.5% vs 63.6%),
+   and the cause is not yet isolated.
 
-- **HarnessSecurity-Bench (2610.07639):** measures the harnesses' *own built-in* mechanisms
-  (allowlists, sandbox, read-only) and notes attacks reaching protected ops by alternative
-  paths. It does not measure *third-party guard* visibility, and has no per-MCP-channel matrix.
-- **COPEX (2610.04378), "Implicit Trust" (2609.18217):** attack the MCP channels and even
-  fragment payloads across them, but deliberately *isolate the model* with a fixed stack; they
-  evaluate model susceptibility, not guard placement. They are our threat model, not our result.
-- **Fail-open studies / vendor docs:** cover what happens when a hook crashes or times out —
-  orthogonal. Our point is that three channels never reach the hook even when it runs perfectly.
-- **CapScope (2609.08371):** capability-scoped authorization via harness hooks, for
-  coding-agent file/command authority, not MCP-channel coverage.
+## 6. The numbers that hold up
 
-The delta is the matrix in §4 plus the "a proxy closes the resource/prompt channels" result.
+These stay valid whatever happens to the paper question. They are evidence for an artifact
+or tool paper, not a research claim on their own.
 
-## 6. The supporting (not headline) numbers
+- **MSB held-out, live servers, guard frozen at `05bb91a`** (`benchmarks/msb.py`): executed
+  harm went from 22–53% to **0.0%** on qwen2.5:7b, llama3.1:8b and Ornith-1.5-9B. The task
+  tool was still reached in 60–67% of cases. Through the hook path, harm was 0.0% and the
+  task tool executed in 64–69% of cases. The naming caveat in §5 applies.
+- **MSB re-run on current code** (qwen2.5:7b, 2026-10-12):
 
-These are already measured and make the "cost of mediation" argument; they are not themselves
-the contribution.
+  | Setup | Harm executed | Task tool executed | Task tool reached |
+  |---|---|---|---|
+  | Gateway | 0.0% | 34.7% | 52.5% |
+  | Gateway + Groq judge | 0.0% | 27.5% | 52.3% |
+  | Hooks | 0.0% | 64.2% | 64.2% |
+  | Hooks + Groq judge | 0.0% | 62.1% | 64.8% |
 
-- **MSB held-out, live servers** (`benchmarks/msb.py`): executed harm 22–53% → **0.0%** on
-  qwen2.5:7b, llama3.1:8b, Ornith-9B; task tool still reached 60–67%; ~46% of benign calls
-  sent to human review. The latest run on current code holds at 0.0% harm.
-- **MCPTox replay** (no inference): full proxy 0.4% attack success, 95.4% of poisoned-tool
-  calls blocked, 3.5% benign false block.
-- **Rules vs. LLM judge** on held-out MCPTox descriptions: recall 96.4% / 99.7% / 100%
-  (rules / judge / either); clean false-flag 1.9% / 4.6% / 6.5%.
-- **Injection classifier:** a negative result — 20% benign false-flag; off by default.
+  The judge's only catches on MSB were tools named `attack:...`, so they don't count.
+- **MCPTox replay** (no inference): the full proxy has 0.4% attack success, blocks 95.4% of
+  poisoned-tool calls, and falsely blocks 3.5% of benign calls. 46.3% of benign calls go to
+  human review.
+- **Rules vs. LLM judge on held-out MCPTox descriptions** (Gemini 3.5 Flash-Lite, real tool
+  names, so no label leak):
 
-## 7. What is required before this is publishable
+  | | Rules | Judge | Either |
+  |---|---|---|---|
+  | Poisoned descriptions flagged (recall) | 96.4% | 99.7% | 100% |
+  | Clean descriptions falsely flagged | 1.9% | 4.6% | 6.5% |
+- **Tool routing** (BM25 over 45 MCPTox catalogs, 324 queries): the right tool ranks first
+  in 80% of queries, in the top three in 90%, and in the top five in 92%.
+- **Injection classifier:** a negative result. It falsely flags 20.3% of benign rows, so it
+  is off by default.
+- **Tests:** 145 pass and 1 is skipped. All 146 pass with the HTTP end-to-end test enabled.
 
-Status: **a measured hypothesis, workshop-strength, not yet submittable.** Required:
+## 7. Two routes that could still produce a paper
 
-1. **Per-channel live attacks (§3.5 of [paper-draft.md](paper-draft.md)):** one benign-looking
-   injection per missed channel, run against a hook-only guard, harm measured — turning "the
-   guard can't see it" into "the guard doesn't stop it". Then the same under hooks+proxy.
-2. **Codex CLI and Cursor** added to the matrix (two harnesses is thin).
-3. **One frontier agent model** (Claude in Claude Code, Gemini in Gemini CLI).
-4. **An adaptive attacker** (Groq free-tier `gpt-oss-120b`), per the "attacker moves second"
-   literature.
-5. **Baselines:** Llama Prompt Guard 2 (Groq), an LLM judge (built), and the harnesses' own
-   built-in settings.
-6. **Responsible disclosure** of any confirmed gap to Anthropic, Google, OpenAI and Cursor
-   before release.
+**Route 1: a tool or artifact paper (cheaper, closer to done).** The subject would be a
+cross-harness MCP guard: hooks for Claude Code, Codex CLI, Cursor and Gemini CLI plus a
+transparent proxy, evaluated held out on live servers. It needs:
+1. Neutral MSB server names, then a re-run of the unguarded, gateway and hooks setups. This
+   is free on local Ollama.
+2. The gateway utility drop isolated and fixed, by bisecting the commits after `05bb91a`.
+3. At least one baseline on the same split, such as Llama Prompt Guard 2 (Groq free tier) or
+   an MCP-Guard-style detector.
+4. Reviewer load reported as a metric, plus one stronger agent model on a free tier.
+5. A limitations section that states the MSB modifications.
 
-All of 1–5 are feasible on a free/local budget. Target venue: a security workshop (AISec,
-SaTML, the Agents-in-the-Wild workshop that published COPEX) or arXiv first; a top venue only
-after 1–5 and a second harness pair.
+Venues: demo or artifact tracks, a software paper, or arXiv first.
+
+**Route 2: a measurement study (the only route with a research claim, and much more
+work).** It would measure the channel coverage of shipping guards across four to six
+harnesses, in each harness's default and recommended guard configuration. It needs:
+- Per-channel payloads that are benign but measurably change behavior.
+- Several models and repeated runs.
+- A proxy that forwards resources and prompts under checks instead of dropping them, with
+  its measured cost.
+- Responsible disclosure to the harness vendors before release.
+
+The claim would then rest on observed behavior across the ecosystem, not on two harnesses
+and benign markers.
 
 ## 8. Honest ceiling
 
-If the live per-channel attacks confirm the matrix, this is a solid workshop paper and a real,
-citable contribution: *the dominant MCP-guard deployment model is structurally incomplete, and
-here is the coverage map and the fix.* It is not, on its own evidence today, a top-tier paper,
-and no amount of framing makes the individual mechanisms novel. The value is the placement
-finding, not the guard.
+IntentShield is solid engineering with a careful held-out evaluation. None of its mechanisms
+is novel. On review, the placement finding is too thin, and partly a known consequence of
+the hook schemas. On today's evidence, the realistic outcome is an artifact or tool paper
+(route 1). A research paper needs route 2, and no amount of framing substitutes for it.
