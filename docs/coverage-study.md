@@ -48,6 +48,15 @@ Server-side request counts (how the proxy closes the resource/prompt channels):
 
 ## Finding
 
+> **Review note (2026-10-12):** the finding below is stated as first written. It is weaker
+> than it reads:
+>
+> - Only the description gap is structural, and it follows from the hook input schemas.
+> - A `*` matcher sees the resource read, and Gemini CLI's model hooks carry prompts.
+> - The proxy closes resources and prompts by not forwarding them, which is not mediation.
+>
+> See [contribution.md](contribution.md) §5.
+
 A hook scoped to MCP tool calls — the way every shipping MCP guard registers — mediates only
 the **tool-call and tool-result** channels. The **tool description, resource content and
 prompt content** reach the model but never reach that hook in time to block it: in Claude Code
@@ -62,7 +71,11 @@ the proxy `resources/read` and `prompts/get` fall to zero on both harnesses, bec
 exposes only tools. This is the structural reason IntentShield pairs hooks with a proxy rather
 than shipping hooks alone.
 
-## Why this is a contribution
+## Why this was thought to be a contribution
+
+Superseded by the verdict in [contribution.md](contribution.md): not publishable as it stands.
+"Implicit Trust" (2609.18217) already evaluated third-party MCP tools, and the reasons in the
+review note above apply. The original argument follows.
 
 Prior work is adjacent but distinct. HarnessSecurity-Bench (2610.07639) measures harnesses'
 own built-in settings, not third-party guards, and notes alternative execution paths without a
@@ -81,7 +94,7 @@ paper needs: the same matrix under real injections on each channel (the threat m
 2609.18217 supply); Codex and Cursor; an adaptive attacker; and the utility/review cost of
 closing the channels, which `benchmarks/msb.py` already measures for the tool-call channel.
 
-## Paper framing
+## Paper framing (as first planned; see contribution.md §7 for the two routes now proposed)
 
 Title: *Complete Mediation for MCP: Why Hook-Scoped Guards Miss the Description, Resource and
 Prompt Channels.* Sections: threat model (five channels) → coverage matrix (this result) →

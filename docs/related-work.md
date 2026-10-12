@@ -36,7 +36,8 @@ the trained injection classifier is a negative result.
 
 Candidate contributions that survive the search, strongest first:
 
-1. **What third-party hooks cannot see (chosen; first result measured 2026-10-12).** A
+1. **What third-party hooks cannot see (chosen and measured 2026-10-12; on review not
+   publishable as it stands; see [contribution.md](contribution.md) §5 and §7).** A
    measurement and attack study of hook-based MCP guards across harnesses: which MCP channels
    bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts, sampling
    and elicitation), the transparent proxy as the fix, with utility cost. The coverage matrix
@@ -148,8 +149,10 @@ In order of value per effort:
    Cost to measure: benign retrieve-then-act flows ("reply to the sender") now need review.
    Implemented as `authority_values` (emails, URLs, IBANs, 9+ digit numbers, paths; generic
    ids left out) recorded from every output; paths and URLs inside one the user named are
-   exempt; `review_output_sourced_arguments` turns it off. Not yet measured on MSB benign
-   utility, which this lowers.
+   exempt; `review_output_sourced_arguments` turns it off. The MSB re-run on current code
+   (2026-10-12) shows the gateway reaching the task tool less often (52.5% vs 63.6%). None of
+   the lost calls carries `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`: they are intent-mismatch blocks
+   and mutation reviews, so the cause is elsewhere and not yet isolated.
 2. **Decode before scanning (done 2026-10-11).** Base64, hex, URL and HTML-entity decoding of long tokens, then
    rescan. Cheap, deterministic, closes the encoded row.
 3. **Server-level description scan (done 2026-10-11).** Also scan the concatenation of all of a server's

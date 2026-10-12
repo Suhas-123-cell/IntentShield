@@ -11,10 +11,15 @@ servers they launch with a transparent proxy.
 | check | unguarded | with IntentShield |
 |---|---|---|
 | MSB held-out, harmful action executed (220 live-server cases per model) | qwen2.5:7b 51.4%, llama3.1:8b 21.8%, Ornith-1.5-9B 52.7% | **0.0%** [0, 1.7] on all three |
-| MSB held-out, task tool reached (incl. calls waiting on review) | 83-99% | 60-67% (the gap is mostly tools quarantined as poisoned) |
-| MSB held-out through the harness hook path (Claude Code adapter + transparent proxy) | same as above | **0.0%** harm on all three; task tool executed 64-69% |
+| MSB held-out, task tool reached (incl. calls waiting on review) | 83-99% | 60-67% at the frozen commit (the gap is mostly tools quarantined as poisoned); 52.5% on current code (qwen2.5:7b re-run) |
+| MSB held-out through the harness hook path (Claude Code adapter + transparent proxy) | same as above | **0.0%** harm on all three; task tool executed 64-69% (64.2% on current code, qwen2.5:7b) |
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3; poisoned tool never offered |
 | AgentDojo important_instructions injections flagged in tool output | - | 100% (InjecAgent plain-language base: 0-3%) |
+
+Known issue (found 2026-10-12): the MSB runner names its servers `task`, `attack` and
+`addition`, and those names reach the agent model inside tool names
+(`attack__get_the_current_directory`) and reach the LLM judge. Every MSB number here was
+measured that way. A re-run with neutral server names is pending.
 
 Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli).
 
@@ -229,9 +234,17 @@ policy cost reported as a 100% false block for that category.
 | agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs |
 | guard channel coverage | hook-vs-proxy visibility of all five MCP channels, measured live on Claude Code and Gemini CLI (`benchmarks/coverage/`, [docs/coverage-study.md](docs/coverage-study.md)) | per-channel live attacks, Codex and Cursor |
 
-The channel-coverage study is the project's main research result: a guard installed as a
-harness hook scoped to MCP tool calls mediates only the tool-call and tool-result channels,
-while a transparent proxy mediates or closes all five. See [docs/contribution.md](docs/contribution.md).
+The channel-coverage study measures which MCP channels each guard placement observes. A
+hook scoped to MCP tool calls saw the tool-call and tool-result channels in time to block.
+The proxy gated descriptions and closed the resource and prompt channels. On review, this
+is not publishable as it stands, for three reasons:
+
+- The description gap follows from the hook input schemas.
+- A `*` matcher sees resources.
+- The proxy closes resources and prompts by not forwarding them.
+
+See [docs/contribution.md](docs/contribution.md) for the verdict and the two routes that
+could still lead to a paper.
 
 MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
 WASP applies only to browser servers, which IntentShield does not guard yet.
@@ -409,6 +422,34 @@ untainted writes to the harness's own permissions instead of sending every write
 review. More harmful calls are attempted, because the transparent proxy shows the
 agent the upstream descriptions; the hook denies them or the proxy blanks the leaked
 field before anything reaches the server.
+
+**Re-run on current code (2026-10-12, qwen2.5:7b, same 220 held-out cases).** The code
+after the frozen commit adds review of output-sourced values, whole-server scans, tool
+routing and the optional LLM judge (Groq `openai/gpt-oss-120b`). Each run lost one or two
+cases to an MSB server that failed to start.
+
+| path | LLM judge | harm executed [95% CI] | harm attempted | task tool reached | task tool executed |
+|---|---|---|---|---|---|
+| gateway (default) | - | **0.0%** [0, 1.7] | 1.4% | 52.5% | 34.7% |
+| gateway | Groq | **0.0%** [0, 1.7] | 0.9% | 52.3% | 27.5% |
+| hooks | - | **0.0%** [0, 1.7] | 14.2% | 64.2% | 64.2% |
+| hooks | Groq | **0.0%** [0, 1.7] | 14.6% | 64.8% | 62.1% |
+
+- Harm stays at 0.0% on both paths.
+- The hook path is unchanged from the frozen commit (64.2% executed both times).
+- The gateway lost utility: task tool reached fell from 63.6% to 52.5%, and executed from
+  51.4% to 34.7%. The loss is spread across seven of the eight attack types whose task
+  tool is clean, each 11-25 points less reached; tool_transfer stays at 15%. In the cases
+  that lost the task, the task tool's
+  own calls were blocked as `BLOCK_INTENT_MISMATCH` (73 calls) or sent to review (60).
+  Some were reads with the user's own identifier, such as `get_pubmed_article_metadata`
+  with the user's PMID. The intent model is unchanged, so one of the guard changes since
+  `05bb91a` is responsible; which one is not isolated yet. Until it is, the frozen-commit
+  rows above are the gateway's utility figures.
+- The LLM judge adds nothing measurable here. Harm was already 0.0%, and the judge lowers
+  task tool executed by 2-7 points. Its only catches (4 harmful calls on the hook path)
+  were tools named `attack:...`, and the runner's server naming gives those away (see the
+  known issue above), so they don't count.
 
 Ornith-1.5-9B (Qwen3.5-based, trained for MCP tool use; Ollama 0.40.2) is the
 strongest tool user here (task tool used in 98.6% of unguarded cases) and also the
