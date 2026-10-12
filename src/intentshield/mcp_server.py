@@ -355,8 +355,9 @@ def create_proxy_mcp_server(config: Any) -> Any:
 
 def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
     """An MCP server that shows the upstream's own tools, for harnesses that guard calls
-    with hooks: quarantined or drifted tools are hidden, self-disclosure parameters are
-    removed, and an output carrying injected instructions is flagged in front of it. With
+    with hooks: quarantined or drifted tools are hidden (a drifted tool stays hidden for the
+    session, even if the upstream restores it, and a call says why it is refused),
+    self-disclosure parameters are removed, and an output carrying injected instructions is flagged in front of it. With
     ``tool_routing`` it lists only a search tool until the agent asks for what it needs."""
     from mcp import types
     from mcp.server.lowlevel import Server
@@ -424,7 +425,9 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         names = {exposed(tool): tool.qualified_name for tool, _ in await runtime.transparent_tools()}
         try:
             if params.name not in names:
-                raise MCPRemoteToolError(f"Tool {params.name} is not available through IntentShield")
+                reasons = {exposed(tool): reason for tool, reason in await runtime.hidden_tools()}
+                raise MCPRemoteToolError(reasons.get(params.name)
+                                         or f"Tool {params.name} is not available through IntentShield")
             result, findings = await runtime.forward(names[params.name], dict(params.arguments or {}))
         except MCPRemoteToolError as exc:
             return types.CallToolResult(content=[types.TextContent(type="text", text=str(exc))], is_error=True)

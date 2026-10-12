@@ -565,14 +565,26 @@ class MCPProxyRuntime:
                  else tool, self._visible_schemas[tool.qualified_name]) for tool in self._tools
                 if tool.qualified_name not in self._quarantined and tool.qualified_name not in self._drifted_tools]
 
+    def _blocked_reason(self, name: str) -> str | None:
+        if name in self._quarantined:
+            return f"{name} is quarantined: its description matched poisoning rules"
+        if name in self._drifted_tools:
+            return f"{name} changed after connect (possible rug pull) and is blocked"
+        return None
+
+    async def hidden_tools(self) -> list[tuple[MCPTool, str]]:
+        """Tools ``transparent_tools`` leaves out, with the reason a call to one is refused.
+        A drifted tool stays blocked for the rest of the session, even if the upstream
+        later restores it: the fingerprint is bound once at connect and never re-bound."""
+        await self._refresh_catalog()
+        return [(tool, reason) for tool in self._tools if (reason := self._blocked_reason(tool.qualified_name))]
+
     async def forward(self, name: str, arguments: dict[str, Any]) -> tuple[MCPCallResult, list[str]]:
         """Transparent mode: call an upstream tool on the catalog layer's terms only. The
         intent-bound call policy runs in the harness hooks, which see the user's prompt."""
         await self._refresh_catalog()
-        if name in self._quarantined:
-            raise MCPRemoteToolError(f"{name} is quarantined: its description matched poisoning rules")
-        if name in self._drifted_tools:
-            raise MCPRemoteToolError(f"{name} changed after connect and is blocked")
+        if reason := self._blocked_reason(name):
+            raise MCPRemoteToolError(reason)
         tool = next((t for t in self._tools if t.qualified_name == name), None)
         if tool is None:
             raise MCPRemoteToolError(f"Unknown tool {name}")
