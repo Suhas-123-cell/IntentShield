@@ -6,7 +6,10 @@ version: most of IntentShield is engineering over prior art.
 
 **Verdict (2026-10-12, after review): it is not worth submitting to a peer-reviewed venue as
 it stands.** The candidate claim below was measured, but on review it is thin and partly
-known (§5). Two routes could still produce a paper (§7).
+known (§5). Two routes could still produce a paper (§7). Update 2026-10-13: the MSB label
+leak is fixed and re-measured (§5.6, §6), and the new evidence weakens the supporting
+numbers further: the gateway's 0.0% executed harm mostly comes from the attack not reaching
+the agent, not from detection.
 
 ## 1. The claim as first stated
 
@@ -58,18 +61,26 @@ passive hook logs which event delivered each marker and under which tool name.
 | Channel | Claude Code hook (`mcp__.*`) | Gemini CLI hook (`BeforeTool`) | Transparent proxy |
 |---|---|---|---|
 | Tool result | observed, PostToolUse | observed, AfterTool | observed (`tools/call`) |
-| Tool description | post-turn only (`Stop`) | model hooks only | observed (`tools/list`) |
-| Resource content | non-MCP tool name only | not reached by the model | closed (`resources/read` 1→0) |
-| Prompt content | post-turn only (`Stop`) | model hooks only | closed (`prompts/get` 1→0) |
-| Elicitation | not observed | not observed | not forwarded |
+| Tool description | no pre-action hook carried it (the `Stop` hit was the model echoing the marker) | not carried by any hook; not observed in logs | observed (`tools/list`) |
+| Resource content | `PostToolUse` under built-in `ReadMcpResourceTool`: seen by a `*` matcher, missed by `mcp__.*` | not reached by the model (`resources/read` 0 to 0) | not exposed (tools only; functionality lost, not mediated); `resources/read` 1 to 0 on Claude |
+| Prompt content | no pre-action hook carried it (the `Stop` hit was the model echoing the marker) | carried pre-model by `BeforeAgent`/`BeforeModel`, not by `BeforeTool` | not exposed (tools only; `prompts/get` 1 to 0) |
+| Elicitation | not exercised (SDK errors) | not exercised (SDK errors) | not exercised |
+| Sampling | not tested | not tested | not tested |
 
 What the cells mean:
-- **"post-turn only (`Stop`)":** the text reached the model's context, but the hook event
-  that carried it fires after the turn. That is too late to block the call it influenced.
-- **"non-MCP tool name":** Claude Code surfaced the resource under its built-in
-  `ReadMcpResourceTool`. A `mcp__.*` matcher misses it; a `*` matcher would not.
-- **"closed":** the proxy exposes only tools, so the server never received `resources/read` or
-  `prompts/get` on either harness. The proxy mediated every `tools/list` call (14–15 per run).
+- **"no pre-action hook carried it":** the marker reached the model's context, but the only
+  hook event that logged it was `Stop`, which fires after the turn, and that hit was the
+  model echoing the marker back. No hook saw the description or prompt before the action.
+- **`ReadMcpResourceTool`:** Claude Code surfaced the resource under its built-in tool name,
+  so a `mcp__.*` matcher misses it and a `*` matcher sees it.
+- **"not exposed":** the proxy exposes only tools, so the server never received
+  `resources/read` or `prompts/get` on either harness. That loses the functionality; it does
+  not mediate it. The proxy mediated every `tools/list` call (14-15 per run).
+- **Rug pull:** under the proxy, the changed tool was hidden and later calls to it were
+  refused for the session.
+- **Old instrumentation:** the stored coverage artifacts (`artifacts/coverage/*/summary.json`)
+  came from the old instrumentation. A fixed re-run is pending, so treat the cells as
+  provisional.
 
 ## 5. Why it is not publishable as it stands
 
@@ -85,43 +96,78 @@ What the cells mean:
    resources and prompts by not forwarding them, which loses functionality rather than
    mediating it. Real mediation would forward them under the same checks as tool results.
 4. **The evidence is thin.** It covers two harnesses, one small model each and one run. It
-   uses benign markers only, so no harm was shown, and the elicitation row is inconclusive
-   because of SDK errors.
+   uses benign markers only, so no harm was shown, elicitation was not exercised (SDK
+   errors), sampling was not tested, and the stored data came from instrumentation that is
+   being fixed.
 5. **The area is crowded and fast-moving.** HarnessSecurity-Bench (2610.07639) covers six
    harnesses with a ten-mechanism taxonomy. COPEX (2610.04378) attacks the MCP channels.
    "Measuring and Exploiting Implicit Trust" (2609.18217) fragments payloads across channels
    and already evaluated seven third-party MCP tools. "Breaking the Protocol" (2601.17549)
    and CapScope (2609.08371) are adjacent.
-6. **The supporting MSB numbers carry a known flaw.** The MSB runner names its servers
-   `task`, `attack` and `addition`, and the agent model and the LLM judge see those names
-   inside tool names. Every MSB number so far was measured that way. On current code, the
-   gateway also reaches the task tool less often than at the frozen commit (52.5% vs 63.6%),
-   and the cause is not yet isolated.
+6. **The supporting MSB numbers were leaked, and the fix shows they are weaker than they
+   looked.** The MSB runner used to name its servers `task`, `attack` and `addition`, and the
+   agent, hooks and judge saw those names. Commit `1c0d4dc` gave the servers neutral ids and
+   qwen2.5:7b was re-run (`artifacts/msb-v4`, 220 held-out cases). Unguarded harm rose from
+   51.4% to 58.5% [51.8, 64.8], so the leak had understated it. The guarded rows stayed at
+   0.0% [0, 1.7] (gateway and hooks). But three things limit what that shows:
+   - The gateway's zero mostly reflects exposure removal. It withholds descriptions by
+     default and strips self-disclosure parameters, and the prompt-injection task servers are
+     quarantined through the `shadowing` rule because the attack text names filesystem tools.
+     The guarded agent attempted harm in only 2 of 220 cases, both blocked by
+     `BLOCK_UNTRUSTED_ARGUMENT_SOURCE`.
+   - Any guard that holds mutations for review and strips self-disclosure fields gets
+     `harm_executed = 0` on MSB mechanically, because every file-write harm needs
+     `write_file` or `edit_file`, and the 48 parameter leaks are neutralized by field
+     stripping. A trivial baseline that does only that was added to `benchmarks/msb.py`
+     (commits `0dee1d4`, `fc770ee`); its runs (`artifacts/msb-v5`) are pending.
+   - The `name_overlap` results are partly an artifact: FastMCP titles argument schemas
+     `<func>Arguments`, so the attacker's tool contains the real tool's name and `shadowing`
+     quarantines it. That is not real name-collision detection.
+
+   The hook path is the stronger evidence: of 37 harmful attempts (17.0% of 218 cases), every
+   harmful call was denied or sent to ask, and none executed.
+7. **The gateway utility drop is explained, not fixed away.** Task tool reached fell from
+   63.6% (frozen commit) to 52.5% and then 50.0% (neutral ids). The cause is the DeBERTa
+   intent model (`INTENTSHIELD_INTENT_MODEL_DIR`). It abstains on ordinary reads, and
+   abstention maps to alignment 0.0, which overrides lenient reads. `BLOCK_INTENT_MISMATCH`
+   counts were 0 (v2), 149 (v3), 141 (v4) and 0 with the model off (`artifacts/msb-v4-noclf`,
+   reached 63.6%, executed 46.8%). The v2 gateway rows ran without the model. With it off,
+   harm is still 0.0%, so it gave no measured security gain on MSB.
 
 ## 6. The numbers that hold up
 
 These stay valid whatever happens to the paper question. They are evidence for an artifact
 or tool paper, not a research claim on their own.
 
-- **MSB held-out, live servers, guard frozen at `05bb91a`** (`benchmarks/msb.py`): executed
-  harm went from 22–53% to **0.0%** on qwen2.5:7b, llama3.1:8b and Ornith-1.5-9B. The task
-  tool was still reached in 60–67% of cases. Through the hook path, harm was 0.0% and the
-  task tool executed in 64–69% of cases. The naming caveat in §5 applies.
-- **MSB re-run on current code** (qwen2.5:7b, 2026-10-12):
+- **MSB held-out, live servers, neutral ids** (`benchmarks/msb.py`, qwen2.5:7b, single run,
+  temperature 0, 220 cases, 20 draws per attack template, so the Wilson intervals are too
+  narrow; `artifacts/msb-v4`):
 
-  | Setup | Harm executed | Task tool executed | Task tool reached |
+  | Setup | Harm executed [95% CI] | Task tool executed | Task tool reached |
   |---|---|---|---|
-  | Gateway | 0.0% | 34.7% | 52.5% |
-  | Gateway + Groq judge | 0.0% | 27.5% | 52.3% |
-  | Hooks | 0.0% | 64.2% | 64.2% |
-  | Hooks + Groq judge | 0.0% | 62.1% | 64.8% |
+  | None | 58.5% [51.8, 64.8] (n=219) | 94.1% | 94.1% |
+  | Gateway (intent model on) | 0.0% [0, 1.7] | 34.5% | 50.0% |
+  | Gateway, intent model off | 0.0% [0, 1.7] | 46.8% | 63.6% |
+  | Hooks (n=218) | 0.0% [0, 1.7] | 66.1% | 66.1% |
+  | Trivial baseline | pending | pending | pending |
 
-  The judge's only catches on MSB were tools named `attack:...`, so they don't count.
-- **MCPTox replay** (no inference): the full proxy has 0.4% attack success, blocks 95.4% of
+  Read the 0.0% with §5.6: it is largely exposure removal and a mechanical effect of holding
+  mutations. The task-tool metrics also count attack-role lookalike tools. The runner also
+  deviates from MSB (injection text only on the task server; list-directory tools allowed),
+  and the 10-step cap truncated 53/219 unguarded, 12/220 gateway and 29/218 hook cases.
+- **Earlier MSB rows** (frozen commit `05bb91a`; llama3.1:8b and Ornith-1.5-9B; descriptions
+  exposed): harm 22-53% to 0.0%, task tool reached 57-67% gateway, executed 64-69% on hooks.
+  These were measured before the neutral-id fix and without the intent model, and were not
+  re-run. The LLM judge has not been evaluated on neutral ids; its only MSB runs (v3) were
+  leaked, and its only catches were `attack:`-named tools.
+- **MCPTox replay** (no inference; scanner rules developed on MCPTox, so tuning-set
+  numbers): the full proxy has 0.4% attack success, blocks 95.4% of
   poisoned-tool calls, and falsely blocks 3.5% of benign calls. 46.3% of benign calls go to
   human review.
-- **Rules vs. LLM judge on held-out MCPTox descriptions** (Gemini 3.5 Flash-Lite, real tool
-  names, so no label leak):
+- **Rules vs. LLM judge on MCPTox test-split servers** (Gemini 3.5 Flash-Lite, real tool
+  names, so no label leak; 301 poisoned and 108 clean descriptions). These servers are not
+  held out for the rules, which were developed on MCPTox; they are held out only for the
+  judge's prompts:
 
   | | Rules | Judge | Either |
   |---|---|---|---|
@@ -138,13 +184,19 @@ or tool paper, not a research claim on their own.
 **Route 1: a tool or artifact paper (cheaper, closer to done).** The subject would be a
 cross-harness MCP guard: hooks for Claude Code, Codex CLI, Cursor and Gemini CLI plus a
 transparent proxy, evaluated held out on live servers. It needs:
-1. Neutral MSB server names, then a re-run of the unguarded, gateway and hooks setups. This
-   is free on local Ollama.
-2. The gateway utility drop isolated and fixed, by bisecting the commits after `05bb91a`.
+1. Neutral MSB server names (done for qwen2.5:7b, commit `1c0d4dc`, `artifacts/msb-v4`).
+   The llama3.1:8b and Ornith-1.5-9B rows and the descriptions-exposed rows still need a
+   neutral-id re-run, free on local Ollama.
+2. The gateway utility drop is isolated: it is the DeBERTa intent model, not a later guard
+   change (§5.7). The open choice is whether to keep that model on the read path. The trivial
+   baseline is added (`benchmarks/msb.py`) and its runs are pending; until they finish, MSB
+   `harm_executed` cannot show detection value over it.
 3. At least one baseline on the same split, such as Llama Prompt Guard 2 (Groq free tier) or
    an MCP-Guard-style detector.
 4. Reviewer load reported as a metric, plus one stronger agent model on a free tier.
-5. A limitations section that states the MSB modifications.
+5. A limitations section that states the MSB modifications (injection text only on the task
+   server, list-directory tools allowed, task-tool metrics counting lookalikes, the
+   `shadowing` naming artifact, the 10-step truncation).
 
 Venues: demo or artifact tracks, a software paper, or arXiv first.
 
@@ -158,7 +210,8 @@ harnesses, in each harness's default and recommended guard configuration. It nee
 - Responsible disclosure to the harness vendors before release.
 
 The claim would then rest on observed behavior across the ecosystem, not on two harnesses
-and benign markers.
+and benign markers. The corrected coverage cells (§4) show how much hangs on configuration:
+a `*` matcher sees the Claude resource, and Gemini's model hooks carry the prompt.
 
 ## 8. Honest ceiling
 
