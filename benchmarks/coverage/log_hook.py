@@ -8,7 +8,8 @@ import sys
 import time
 from pathlib import Path
 
-MARKERS = ("ISC-DESC-41", "ISC-RESULT-42", "ISC-RES-43", "ISC-PROMPT-44", "ISC-DESC2-45", "ISC-ELICIT-46")
+MARKERS = ("ISC-DESC-41", "ISC-RESULT-42", "ISC-RES-43", "ISC-PROMPT-44", "ISC-DESC2-45", "ISC-ELICIT-46",
+           "ISC-DESCV-47")
 
 raw = sys.stdin.read()
 try:
@@ -21,6 +22,9 @@ with Path(sys.argv[2]).open("a") as handle:
         "t": time.time(), "harness": sys.argv[1], "event": event.get("hook_event_name"),
         "tool": event.get("tool_name"), "server": event.get("mcp_server") or context.get("server_name"),
         "transcript": event.get("transcript_path"), "markers": [m for m in MARKERS if m in raw],
+        # Markers inside the tool's arguments were written by the model, not delivered to it.
+        "in_tool_input": [m for m in MARKERS if m in json.dumps(event.get("tool_input", ""))],
+        "cwd": event.get("cwd"),
         # What a guard would record as the user's own words on this event.
         "prompt": str(event.get("prompt", ""))[:300],
     }) + "\n")

@@ -1,7 +1,11 @@
 """Visibility probe for the coverage study: a benign MCP server that puts one marker in each
-MCP channel (tool description, tool result, resource, prompt, elicitation, and a description
-that changes after first use) and logs every request with the client's declared capabilities.
-No marker asks the agent to do anything; the study only records which observer sees which.
+MCP channel (tool description, tool result, resource, prompt, elicitation) and logs every
+request with the client's declared capabilities. `lookup` is stable, so the description and
+result channels stay clean; `lookup_v` is a separate tool whose description changes after its
+first call (and sends tools/list_changed), so a proxy that refuses the changed tool taints only
+that channel. `subscribe` tries a server-initiated elicitation, then a sampling request, and
+logs how each ended. No marker asks the agent to do anything; the study only records which
+observer sees which.
 
     python probe_server.py <request-log.jsonl>
 """
@@ -19,8 +23,10 @@ from mcp.server.stdio import stdio_server
 
 LOG = Path(sys.argv[1] if len(sys.argv) > 1 else "probe-requests.jsonl")
 MARKERS = {"description": "ISC-DESC-41", "result": "ISC-RESULT-42", "resource": "ISC-RES-43",
-           "prompt": "ISC-PROMPT-44", "changed_description": "ISC-DESC2-45", "elicitation": "ISC-ELICIT-46"}
-state = {"calls": 0}
+           "prompt": "ISC-PROMPT-44", "changed_description": "ISC-DESC2-45", "elicitation": "ISC-ELICIT-46",
+           "versioned_description": "ISC-DESCV-47"}
+state = {"lookup_v_calls": 0}
+
 
 
 def log(method: str, **detail: object) -> None:
@@ -36,10 +42,12 @@ def capabilities(ctx) -> dict[str, bool] | None:
 
 async def list_tools(ctx, _params):
     log("tools/list", client=capabilities(ctx))
-    marker = MARKERS["changed_description"] if state["calls"] else MARKERS["description"]
+    versioned = MARKERS["changed_description"] if state["lookup_v_calls"] else MARKERS["versioned_description"]
     word = {"type": "object", "required": ["word"], "properties": {"word": {"type": "string"}}}
     return types.ListToolsResult(tools=[
-        types.Tool(name="lookup", description=f"Look up a word in the team glossary. Marker {marker}.",
+        types.Tool(name="lookup", description=f"Look up a word in the team glossary. Marker {MARKERS['description']}.",
+                   input_schema=word),
+        types.Tool(name="lookup_v", description=f"Look up a word in the versioned glossary. Marker {versioned}.",
                    input_schema=word),
         types.Tool(name="subscribe", description="Subscribe the user to glossary updates.",
                    input_schema={"type": "object", "properties": {}}),
@@ -47,7 +55,6 @@ async def list_tools(ctx, _params):
 
 
 async def call_tool(ctx, params):
-    state["calls"] += 1
     log("tools/call", name=params.name, arguments=params.arguments, client=capabilities(ctx))
     if params.name == "subscribe":
         try:
@@ -59,9 +66,18 @@ async def call_tool(ctx, params):
         except Exception as exc:  # a client without elicitation support refuses the request
             log("elicitation/error", error=repr(exc)[:200])
             text = "Subscription needs confirmation the client could not ask for."
+        try:  # benign: the server asks the client's model to say ok
+            reply = await ctx.session.create_message(
+                [types.SamplingMessage(role="user", content=types.TextContent(type="text", text="Reply with: ok"))],
+                max_tokens=5)
+            log("sampling/result", model=getattr(reply, "model", None))
+        except Exception as exc:
+            log("sampling/error", error=repr(exc)[:200])
         return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
-    if state["calls"] == 1:
-        await ctx.session.send_tool_list_changed()  # the description changes after first use
+    if params.name == "lookup_v":
+        state["lookup_v_calls"] += 1
+        if state["lookup_v_calls"] == 1:
+            await ctx.session.send_tool_list_changed()  # the description changes after first use
     word = (params.arguments or {}).get("word", "")
     return types.CallToolResult(content=[types.TextContent(
         type="text", text=f"Glossary entry for {word}: a placeholder definition. Marker {MARKERS['result']}.")])
