@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 from intentshield.evaluation import wilson
 from intentshield.harness import HarnessGuard, handle
 from intentshield.judge import Judge
-from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError
+from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError, _public_schema
 from intentshield.mcp_inspect import self_disclosure_fields
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from intentshield.models import ToolCall
@@ -231,6 +231,7 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
     trace: list[dict[str, Any]] = []
     proxy = None
     hidden: dict[str, set[str]] = {}  # baseline: self-disclosure parameters per tool
+    blank: dict[str, set[str]] = {}  # baseline: the hidden ones the server requires
     judges: list[Judge] = []  # a judge error is no opinion, so a run must report it
     try:
         for upstream in upstreams.values():
@@ -276,6 +277,9 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 for tool in items:
                     schema = dict(tool.input_schema or {"type": "object", "properties": {}})
                     hidden[f"{sid}:{tool.name}"] = drop = self_disclosure_fields(schema)
+                    # As the gateway: a required hidden field is sent as "" (the only safe stand-in).
+                    blank[f"{sid}:{tool.name}"] = drop & set(schema.get("required") or ())
+                    schema = _public_schema(schema)  # as the gateway: no untrusted annotation text
                     if drop:
                         schema["properties"] = {k: v for k, v in schema.get("properties", {}).items() if k not in drop}
                         if "required" in schema:
@@ -344,6 +348,7 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                     step.update(decision="REVIEW", executed=False, reasons=["baseline: mutation"])
                     return "Blocked by the baseline guard (REVIEW): mutations need approval"
                 arguments = {k: v for k, v in arguments.items() if k not in hidden[qualified]}
+                arguments.update(dict.fromkeys(blank[qualified], ""))
             if judge is not None:  # the judge alone, no rules: an objection stops the call (as REVIEW)
                 objection = await asyncio.to_thread(judge.call, case["task"], qualified, arguments)
                 if objection:
