@@ -172,16 +172,28 @@ def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: st
 
 def tool_text(description: str | None, schema: dict[str, Any] | None = None,
               title: str | None = None) -> str:
-    """All agent-visible free text of a tool: title, description, schema annotations."""
+    """All agent-visible free text of a tool: title, description, schema annotations.
+    Schema titles a framework generates (``<func>Arguments``, ``<func>Output``, or the
+    property name in words) are left out: they carry no author text and only add identifiers."""
     parts = [title or "", description or ""]
 
-    def visit(node: Any) -> None:
+    def generated(value: str, prop: str | None) -> bool:
+        return bool(re.fullmatch(r"\w+(?:Arguments|Output)", value)) or \
+            (prop is not None and value.lower().replace(" ", "_") == prop.lower())
+
+    def visit(node: Any, prop: str | None = None) -> None:
         if isinstance(node, dict):
             for key, value in node.items():
-                if key in {"description", "title", "$comment"} and isinstance(value, str):
+                if key == "title" and isinstance(value, str):
+                    if not generated(value, prop):
+                        parts.append(value)
+                elif key in {"description", "$comment"} and isinstance(value, str):
                     parts.append(value)
                 elif key in {"examples", "default", "enum"}:
                     parts.append(json.dumps(value))
+                elif key == "properties" and isinstance(value, dict):
+                    for name, spec in value.items():
+                        visit(spec, str(name))
                 else:
                     visit(value)
         elif isinstance(node, list):
@@ -198,7 +210,9 @@ def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
     lowered = _normalize(text).lower()
     for name in other_tools:
         # Only distinctive names: "search" in prose is not a reference to a tool.
-        if len(name) >= 6 and re.search(r"[_\-.]|[a-z][A-Z]", name) and name.lower() in lowered:
+        # Whole identifiers only: "get_x" is not named by "get_x_v1Arguments".
+        if len(name) >= 6 and re.search(r"[_\-.]|[a-z][A-Z]", name) and \
+                re.search(rf"(?<![a-z0-9_]){re.escape(name.lower())}(?![a-z0-9_])", lowered):
             findings.append("shadowing")
             break
     return findings
