@@ -41,7 +41,9 @@ _WRITE = frozenset({
 
 
 def is_mutation(tool: str) -> bool:
-    """A tool name with a write verb, or with no read verb, may change state."""
+    """A tool name with a write verb, or with no read verb, may change state. Only the tool
+    part of "server:tool" counts: a read verb in the server name must not hide a write."""
+    tool = tool.partition(":")[2] or tool
     words = set(re.findall(r"[a-z0-9]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", tool).lower()))
     return bool(words & _WRITE) or not words & _READ
 
@@ -207,6 +209,11 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
             v = guard.call(session, tool, _as_dict(event.get("tool_input")))
             if v.decision == "allow" and v.arguments is None:
                 return None  # no opinion: the harness's own permission flow decides
+            if v.decision == "allow" and is_mutation(tool):
+                # A rewrite must not turn "no opinion" into an explicit allow for a state change.
+                v.decision = "ask"
+                v.reason = v.context + (" Confirm this call." if harness == "claude"
+                                        else " Call the tool again with those fields empty.")
             decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
             out: dict[str, Any] = {"hookEventName": "PreToolUse", "permissionDecision": decision,
                                    "permissionDecisionReason": v.reason or v.context}
@@ -235,8 +242,9 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
         tool = f"{event.get('mcp_server_name') or event.get('server') or 'mcp'}:{event.get('tool_name', '')}"
         if name == "beforeMCPExecution":
             v = guard.call(session, tool, _as_dict(event.get("tool_input")))
-            if v.arguments is not None and v.decision == "allow":
-                # Cursor cannot rewrite arguments; the agent is told what to resend.
+            if v.arguments is not None and v.decision != "deny":
+                # Cursor cannot rewrite arguments, and an approved ask would send them as they are;
+                # the agent is told what to resend, and any confirmation comes with that call.
                 v = Verdict("deny", v.context + " Call the tool again with those fields empty.")
             reply: dict[str, Any] = {"permission": v.decision}
             if v.reason:
@@ -297,6 +305,12 @@ def main(argv: list[str] | None = None) -> None:
     event: dict[str, Any] = {}
     try:
         event = json.loads(sys.stdin.read() or "{}")
+        if not isinstance(event, dict):
+            raise ValueError("event is not a JSON object")
+    except ValueError as exc:  # the event kind is unknown and may be a call: fail closed
+        print(f"IntentShield hook could not read its event: {exc}", file=sys.stderr)
+        sys.exit(2)
+    try:
         reply = handle(args.harness, event, HarnessGuard(args.db, args.review, args.outputs, args.classifier, args.catalog, args.judge))
     except Exception as exc:  # fail closed on calls, open on everything else
         if event.get("hook_event_name") in ("PreToolUse", "BeforeTool", "beforeMCPExecution"):
