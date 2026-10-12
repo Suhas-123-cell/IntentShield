@@ -38,6 +38,7 @@ from intentshield.evaluation import wilson
 from intentshield.harness import HarnessGuard, handle
 from intentshield.judge import Judge
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError
+from intentshield.mcp_inspect import self_disclosure_fields
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from intentshield.models import ToolCall
 from intentshield.security_agents import _WRITE_ACTIONS
@@ -229,6 +230,7 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                                           fill=implement if t == "search_term_deception" else "")
     trace: list[dict[str, Any]] = []
     proxy = None
+    hidden: dict[str, set[str]] = {}  # baseline: self-disclosure parameters per tool
     judges: list[Judge] = []  # a judge error is no opinion, so a run must report it
     try:
         for upstream in upstreams.values():
@@ -266,6 +268,21 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                               "prompt": case["task"]}, guard)
             tools = {t.qualified_name: (t.description or "", schema, "", False)
                      for t, schema in await proxy.transparent_tools()}
+        elif args.defense == "baseline":
+            # The trivial guard: withhold descriptions, strip self-disclosure parameters, hold
+            # every mutation for review. Nothing else (no quarantine, output scan or provenance).
+            tools = {}
+            for sid, items in listed.items():
+                for tool in items:
+                    schema = dict(tool.input_schema or {"type": "object", "properties": {}})
+                    hidden[f"{sid}:{tool.name}"] = drop = self_disclosure_fields(schema)
+                    if drop:
+                        schema["properties"] = {k: v for k, v in schema.get("properties", {}).items() if k not in drop}
+                        if "required" in schema:
+                            schema["required"] = [r for r in schema["required"] if r not in drop]
+                    description = (tool.description or "" if args.expose_descriptions
+                                   else f"MCP tool {sid}:{tool.name}; upstream description withheld as untrusted.")
+                    tools[f"{sid}:{tool.name}"] = (description, schema, "", is_mutation(tool.name))
         else:
             tools = {f"{sid}:{tool.name}": (tool.description or "", tool.input_schema, "", False)
                      for sid, items in listed.items() for tool in items}
@@ -322,6 +339,11 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 if not result.executed:
                     return f"Blocked by IntentShield ({result.decision.value}): " + ", ".join(step["reasons"])
                 return json.dumps(result.result)[:4000]
+            if args.defense == "baseline":
+                if tools[qualified][3]:  # a human decision, never approved here (as the gateway's REVIEW)
+                    step.update(decision="REVIEW", executed=False, reasons=["baseline: mutation"])
+                    return "Blocked by the baseline guard (REVIEW): mutations need approval"
+                arguments = {k: v for k, v in arguments.items() if k not in hidden[qualified]}
             if judge is not None:  # the judge alone, no rules: an objection stops the call (as REVIEW)
                 objection = await asyncio.to_thread(judge.call, case["task"], qualified, arguments)
                 if objection:
@@ -434,7 +456,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--container", default="intentshield-msb")
     parser.add_argument("--model", default="qwen2.5:7b")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
-    parser.add_argument("--defense", choices=("none", "intentshield", "hooks"), default="intentshield")
+    parser.add_argument("--defense", choices=("none", "intentshield", "hooks", "baseline"), default="intentshield")
     parser.add_argument("--expose-descriptions", action="store_true",
                         help="forward upstream descriptions (the proxy withholds them by default)")
     parser.add_argument("--attack-types", default="all")
