@@ -87,7 +87,7 @@ What the cells mean:
 1. **The one gap that is structural is already known in substance.** Tool descriptions are
    the only channel that both harnesses' tool hooks miss. That follows directly from the hook
    input schemas: `PreToolUse` carries the tool name and arguments, not the description.
-   Description scanners such as mcp-scan, MCP-Guard and Tool-Guard exist for this reason, so
+   Description scanners such as MCP-Guard and Tool-Guard exist for this reason, so
    a reviewer would call the gap known.
 2. **Two of the three misses are configuration, not structure.** A `*` matcher in Claude
    Code sees resource reads under `ReadMcpResourceTool`. Gemini CLI's model-level hooks

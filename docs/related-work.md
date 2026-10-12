@@ -7,8 +7,8 @@ only; claims about other systems below come from their abstracts, not from rerun
 
 The *combination* IntentShield ships is uncommon: one deterministic guard that covers
 descriptions, outputs and arguments, plugs into four real harnesses through hooks and a
-transparent proxy, and is held out on live MCP servers (MSB). No single paper found does all
-of that. But each mechanism on its own has close prior work, and the strongest one,
+transparent proxy, and is evaluated on live MCP servers (MSB, with held-out cases but the same
+attack templates). No single paper found does all of that. But each mechanism on its own has close prior work, and the strongest one,
 argument-level provenance, is now the subject of dedicated papers (PACT, ToolFence, the
 dual-graph defense) that go further than IntentShield's version. A paper has to be framed as a
 systems and evaluation contribution for MCP harnesses, not as a new defense idea, and it has
@@ -32,7 +32,9 @@ Every mechanism has prior art, and a reviewer would also cite: no adaptive attac
 7-9B local agents; MSB run on a keyless subset with injections moved to where a proxy can
 see them; description rules tuned on MCPTox; no baseline defenses run; the hook path
 tested live only in Claude Code with three prompts; 46% of benign calls sent to review;
-the trained injection classifier is a negative result.
+the trained injection classifier is a negative result. The MSB result is also weaker than
+it looks: the gateway's 0.0% executed harm largely reflects removed exposure, and any guard
+that holds mutations for review and strips self-disclosure fields gets 0% mechanically.
 
 Candidate contributions that survive the search, strongest first:
 
@@ -41,10 +43,12 @@ Candidate contributions that survive the search, strongest first:
    measurement and attack study of hook-based MCP guards across harnesses: which MCP channels
    bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts, sampling
    and elicitation), the transparent proxy as the fix, with utility cost. The coverage matrix
-   is now measured on Claude Code and Gemini CLI: a hook scoped to MCP tool calls sees only
-   the tool-call and tool-result channels; descriptions, resources and prompts reach the model
-   but not the hook in time to block; the proxy mediates descriptions and closes the resource
-   and prompt channels. See [coverage-study.md](coverage-study.md), [contribution.md](contribution.md)
+   is now measured on Claude Code and Gemini CLI with benign markers (provisional: the stored
+   data came from the old instrumentation, and a fixed re-run is pending): a hook scoped to
+   MCP tool calls saw the tool-call and tool-result channels; no pre-action hook carried
+   descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks
+   carried the prompt; the proxy mediates descriptions and does not expose resources or
+   prompts (functionality lost, not mediated). See [coverage-study.md](coverage-study.md), [contribution.md](contribution.md)
    and [paper-draft.md](paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in
    mechanisms, not third-party guards) and CapScope (hooks for coding-agent authority, not MCP
    channels). Still a hypothesis until confirmed with live per-channel attacks (§3.5 of the
@@ -93,12 +97,20 @@ harder target than in-band detection, but has only one weak data point.
 
 New or uncommon:
 - Harness integration: one guard behind Claude Code, Codex CLI, Cursor and Gemini CLI hooks,
-  plus a transparent proxy for the MCP servers they launch. No paper found evaluates a defense
-  through real harness hooks.
+  plus a transparent proxy for the MCP servers they launch. Not a new idea: CapScope
+  (2609.08371) already does capability-scoped authorization through harness extension hooks,
+  and HarnessSecurity-Bench (2610.07639) and Approval Laundering (2609.38983) study harness
+  mechanisms. What is less common is one rule set shared across four harnesses plus a proxy,
+  evaluated on live MCP servers through the hook path.
 - Self-disclosure parameter redaction (schemas asking for the agent's model, system prompt or
-  conversation). Not found as a named defense.
-- Held-out evaluation on live MSB servers through both a gateway and the hook path, three
-  backbones, 0.0% executed harm.
+  conversation). Not new: The Stochastic Deputy (2609.14780) removes tenant identity from MCP
+  schemas, and the self-disclosure attack is MSB's own out-of-scope-parameter attack. We found
+  no paper that names it as a defense for model or prompt disclosure, but that is a thin
+  novelty claim.
+- Evaluation on live MSB servers through both a gateway and the hook path. With neutral server
+  ids (qwen2.5:7b only) executed harm was 0.0% on both, but that zero largely comes from
+  removed exposure and held mutations, and a trivial baseline is pending. Held-out cases share
+  the tuning templates.
 
 Not new:
 - Argument provenance (PACT, ToolFence, dual-graph, CaMeL), regex description scanning
@@ -149,10 +161,13 @@ In order of value per effort:
    Cost to measure: benign retrieve-then-act flows ("reply to the sender") now need review.
    Implemented as `authority_values` (emails, URLs, IBANs, 9+ digit numbers, paths; generic
    ids left out) recorded from every output; paths and URLs inside one the user named are
-   exempt; `review_output_sourced_arguments` turns it off. The MSB re-run on current code
-   (2026-10-12) shows the gateway reaching the task tool less often (52.5% vs 63.6%). None of
-   the lost calls carries `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`: they are intent-mismatch blocks
-   and mutation reviews, so the cause is elsewhere and not yet isolated.
+   exempt; `review_output_sourced_arguments` turns it off. The MSB re-run on later code
+   (2026-10-12) showed the gateway reaching the task tool less often (52.5% vs 63.6%). That
+   drop is not from this change. It is the DeBERTa intent model
+   (`INTENTSHIELD_INTENT_MODEL_DIR`), which abstains on ordinary reads; abstention maps to
+   alignment 0.0 and overrides lenient reads. `BLOCK_INTENT_MISMATCH` counts: 0 (frozen
+   commit, which ran without the model), 149 (v3), 141 (neutral ids, v4), 0 with the model
+   off (reached 63.6%). `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` fired 4-5 times in 220 cases.
 2. **Decode before scanning (done 2026-10-11).** Base64, hex, URL and HTML-entity decoding of long tokens, then
    rescan. Cheap, deterministic, closes the encoded row.
 3. **Server-level description scan (done 2026-10-11).** Also scan the concatenation of all of a server's
