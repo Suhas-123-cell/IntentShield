@@ -1,6 +1,6 @@
 **IntentShield: current architecture and detailed testing guide**
 
-This guide describes the application on 10 October 2026 (`main` after commit `091cfd2`). Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
+This guide describes the application on 13 October 2026 (after commit `fc770ee`). Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
 
 **1. What the application currently does**
 
@@ -15,7 +15,7 @@ There are three ways into the gateway, plus a harness mode that applies the same
 | Agent-facing MCP server | Codex, Claude, or another MCP client submits an explicit call | Simulated tools without a proxy config, or configured real upstream MCP servers |
 | Harness hooks + transparent proxy | The harness's own model calls MCP tools directly | The harness, after `intentshield-hook` returns allow, deny or ask; the transparent proxy forwards to the upstream server |
 
-The proposal source does not supply authorization scores or approval decisions. The three gateway paths use the same `IntentShieldService` and deterministic `PolicyEngine`. The harness mode does not: `harness.py` keeps per-session intent and taint in SQLite and applies the `mcp_inspect` rules (self-disclosure redaction, argument injection, argument provenance, output scanning), and the transparent proxy applies only the catalog layer (quarantine, rug pull, schema redaction, output flagging). Confirmation of state-changing calls is left to the harness's own permission flow.
+The proposal source does not supply authorization scores or approval decisions. The three gateway paths use the same `IntentShieldService` and deterministic `PolicyEngine`. The harness mode does not: `harness.py` keeps per-session intent and taint in SQLite and applies the `mcp_inspect` rules (self-disclosure redaction, argument injection, argument provenance, output scanning), and the transparent proxy applies only the catalog layer (quarantine, rug pull, schema redaction, output flagging). `harness.py` can itself ask the user before a state-changing MCP call (`--review always|tainted|never`, default `tainted`), and Claude Code and Cursor honor the ask; Codex CLI and Gemini CLI turn asks into denials. The transparent proxy never asks. Built-in tools (shell, file edits) are left to the harness's own permission flow.
 
 ```mermaid
 flowchart TD
@@ -219,7 +219,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_model_gateway.py` | Fake Gemini responses, missing credentials before network, malformed/multiple/unknown calls, no-action, redaction, preflight and approval integration. |
 | `test_intent_classifier.py` | Dataset balance/group isolation, manifest/hash failures, qualification, abstention, fake inference, action-family adapter. |
 | `test_mcp_server.py`, `test_mcp_upstream.py` | Gateway surface, upstream configuration/client normalization, policy bridge and transport behavior. |
-| `test_mcp_e2e.py`, `test_mcp_verify.py` | Real stdio upstreams/downstream subprocess, multiple upstreams, schema drift and verifier behavior. |
+| `test_mcp_e2e.py`, `test_mcp_verify.py` | Real stdio upstreams/downstream subprocess, multiple upstreams, schema drift (gateway path only; no test covers rug-pull handling in the transparent proxy) and verifier behavior. |
 | `test_mcp_http_e2e.py` | Real process-level HTTP downstream plus stdio/HTTP upstreams, verifier, 401 rejection, authenticated rejection and shutdown. |
 | `test_mcp_guardrail.py`, `test_lenient_reads.py` | Description and output scanners, server-level split scan, encoded payloads, quarantine, rug pull, output taint, argument provenance and output-sourced review, Unicode evasion, self-disclosure redaction, lenient reads. |
 | `test_injection_classifier.py` | Injection classifier artifact checks (missing, tampered), proxy and hook wiring with a stub model. |
@@ -563,7 +563,7 @@ Results and their caveats are in the README; related work and next steps are in 
 
 **16. Completion checklist and practical limits**
 
-For a thorough test of the current implementation, collect these results: all 143 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
+For a thorough test of the current implementation, collect these results: all 146 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 
