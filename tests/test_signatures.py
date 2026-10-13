@@ -22,6 +22,10 @@ BENIGN = ["Please share the agenda with the team before Friday.", "The vendor li
     (r"(\w+\s){2,}customer list", "nested quantifier"), (r"(?<=x)send the customer list", "lookaround"),
     (r"(send)\s+\1 the customer list", "backreference"), (r"\bplease\b", "too few literal"),
     ("[unclosed customer list", "does not compile"), ("x" * 201, "too long"), ("  ", "empty"),
+    (r"send\s+the\s+file\s+to\s+audit@canary\.example", "address"),
+    (r"forward\s+the\s+customer\s+list\s+to\s+https?\S+", "address"),
+    (r"forward\s+the\s+report\s+to\s+partner\.com", "address"),
+    (r"transfer\s+5000\s+dollars\s+to\s+the\s+account", "number"),
 ])
 def test_unsafe_or_trivial_patterns_are_refused(pattern, problem):
     assert problem in safety_problem(pattern)
@@ -30,6 +34,7 @@ def test_unsafe_or_trivial_patterns_are_refused(pattern, problem):
 def test_bounded_and_optional_groups_are_allowed():
     assert safety_problem(GOOD) is None
     assert safety_problem(r"(\w+\s){3}customer\s+list") is None
+    assert safety_problem(r"send\s+\d+\s+files\s+to\s+the\s+vendor") is None  # \d and {3} are not literal numbers
 
 
 def test_gate_needs_the_source_to_match_and_no_benign_text_to():

@@ -8,6 +8,8 @@ passes every gate:
 - it compiles, is at most ``MAX_PATTERN`` characters, and has no construct prone to catastrophic
   backtracking (nested quantifiers, backreferences, lookarounds);
 - it carries at least ``MIN_LITERAL`` literal letters, so it cannot be as broad as ``\\bplease\\b``;
+- it names no email address, URL, domain or number, which change between variants of one attack
+  (a rule on the attacker's address only blocklists that address, which argument provenance does);
 - it matches the example it came from;
 - it matches no benign text of the gate corpus.
 
@@ -35,6 +37,9 @@ MAX_PATTERN, MIN_LITERAL, MAX_PROPOSALS = 200, 12, 3
 _NESTED = re.compile(r"\((?:[^()\\]|\\.)*[+*}](?:[^()\\]|\\.)*\)\s*(?:[+*]|\{\d*,\d*\})")
 _LOOKAROUND_OR_BACKREF = re.compile(r"\(\?(?:<?[=!]|P=|<)|\\[1-9]|\\k<")
 _LITERAL = re.compile(r"\\.|\[[^\]]*\]|[A-Za-z]")
+_SPECIFIC = re.compile(r"@|https?\b|://|\bwww\b|\\?\.(?:com|net|org|io|dev|example|test)\b", re.IGNORECASE)
+# Quantifier bounds and class escapes (\d, \s) are not literal numbers.
+_NOT_LITERAL = re.compile(r"\{\d*,?\d*\}|\\[A-Za-z]")
 PROMPT = """You write detection rules for prompt injections. The text below was confirmed by a human \
 reviewer as an injection: it tries to make an AI assistant do something its user did not ask for.
 
@@ -69,6 +74,8 @@ def safety_problem(pattern: str) -> str | None:
         re.compile(pattern, re.IGNORECASE)
     except re.error as exc:
         return f"does not compile: {exc}"
+    if _SPECIFIC.search(pattern) or re.search(r"[0-9]", _NOT_LITERAL.sub("", pattern)):
+        return "names an address, URL, domain or number"
     literal = sum(1 for token in _LITERAL.findall(pattern) if len(token) == 1)
     if literal < MIN_LITERAL:
         return "too few literal letters"
