@@ -145,3 +145,20 @@ def test_agent_token_guards_mcp_endpoint_but_not_control_route(monkeypatch):
         json={"decision": "bogus"},
         headers={"authorization": "Bearer control-secret"},
     ).status_code == 422
+    control = {"authorization": "Bearer control-secret"}
+    # Learning routes share the control credential; the demo config has learning off.
+    assert client.get("/control/learning").status_code == 401
+    assert client.get("/control/learning", headers={"authorization": "Bearer agent-secret"}).status_code == 401
+    assert client.get("/control/learning", headers=control).json() == {"enabled": False}
+    assert client.post("/control/learning/examples", json={"text": "x", "label": "injection"}).status_code == 401
+    assert client.post("/control/learning/examples", json={"text": 3}, headers=control).status_code == 422
+    assert client.post("/control/learning/examples", json={"text": "x", "label": "injection"},
+                       headers=control).status_code == 409
+    # A label that contradicts the decision is refused before anything is decided.
+    refused = client.post("/control/approvals/x", json={"decision": "reject", "learn": "benign"}, headers=control)
+    assert refused.status_code == 409 and "learn must be" in refused.json()["error"]
+    assert client.get("/control/rules").status_code == 401
+    assert client.get("/control/rules", headers=control).json() == {"enabled": False}
+    assert client.post("/control/rules/propose", json={"example_id": "x"}, headers=control).status_code == 409
+    assert client.post("/control/rules/r1", json={"decision": "maybe"}, headers=control).status_code == 422
+    assert client.post("/control/rules/r1", json={"decision": "approve"}, headers=control).status_code == 409

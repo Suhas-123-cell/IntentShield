@@ -162,8 +162,13 @@ def _decoded(text: str) -> list[str]:
     return found
 
 
+def readable(text: str) -> str:
+    """The text the rules read: the raw text plus its decoded layers, normalized."""
+    return _normalize("\n".join([text, *_decoded(text)]))
+
+
 def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "") -> list[str]:
-    text = _normalize("\n".join([text, *_decoded(text)]))
+    text = readable(text)
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
     trusted = " ".join(_normalize(trusted).lower().split())
     return [name for name, pattern in rules
