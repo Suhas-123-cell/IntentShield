@@ -191,6 +191,21 @@ or tool paper, not a research claim on their own.
   is off by default.
 - **Tests:** 145 pass and 1 is skipped. All 146 pass with the HTTP end-to-end test enabled.
 
+## 6b. Adaptive detection (2026-10-13): does it change the verdict?
+
+No. It adds tool features and two measurements, not a research claim:
+
+- The injection evaluation with hard benign texts mostly sharpens the negative results. The local
+  classifier flags 24.4% of benign texts and 113 of 142 hard ones. The exemplar detector generalizes
+  only to what resembles its seeds.
+- On a local adaptive attacker (42 seeds, one model, simulated rule approval), learning cut evasions
+  from 16/42 to 13/42. That is not significant, and the attacker produced few valid attempts. A
+  claim would need a stronger attacker, more seeds, several attacker models, real operator decisions,
+  and a measured reviewer cost.
+- One real bug was found on the way (a tokenizer flag that fragmented DeBERTa input at run time). It
+  explains why the classifier did worse in use than its training report, and it bears on the intent
+  model too.
+
 ## 7. Two routes that could still produce a paper
 
 **Route 1: a tool or artifact paper (cheaper, closer to done).** The subject would be a
