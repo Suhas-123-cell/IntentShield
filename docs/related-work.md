@@ -163,12 +163,12 @@ In order of value per effort:
    Implemented as `authority_values` (emails, URLs, IBANs, 9+ digit numbers, paths; generic
    ids left out) recorded from every output; paths and URLs inside one the user named are
    exempt; `review_output_sourced_arguments` turns it off. The MSB re-run on later code
-   (2026-10-12) showed the gateway reaching the task tool less often (52.5% vs 63.6%). That
+   (2026-10-12) showed the gateway reaching the task tool less often (45.7% vs 56.4%). That
    drop is not from this change. It is the DeBERTa intent model
-   (`INTENTSHIELD_INTENT_MODEL_DIR`), which abstains on ordinary reads; abstention maps to
-   alignment 0.0 and overrides lenient reads. `BLOCK_INTENT_MISMATCH` counts: 0 (frozen
+   (`INTENTSHIELD_INTENT_MODEL_DIR`), which abstains on ordinary reads; abstention mapped to
+   alignment 0.0 and overrode lenient reads (no opinion since `14150e7`; re-run pending). `BLOCK_INTENT_MISMATCH` counts: 0 (frozen
    commit, which ran without the model), 149 (v3), 141 (neutral ids, v4), 0 with the model
-   off (reached 63.6%). `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` fired 4-5 times in 220 cases.
+   off (reached 54.5%). `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` fired 4-5 times in 220 cases.
 2. **Decode before scanning (done 2026-10-11).** Base64, hex, URL and HTML-entity decoding of long tokens, then
    rescan. Cheap, deterministic, closes the encoded row.
 3. **Server-level description scan (done 2026-10-11).** Also scan the concatenation of all of a server's
