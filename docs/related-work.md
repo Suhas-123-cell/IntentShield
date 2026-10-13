@@ -43,8 +43,8 @@ Candidate contributions that survive the search, strongest first:
    measurement and attack study of hook-based MCP guards across harnesses: which MCP channels
    bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts, sampling
    and elicitation), the transparent proxy as the fix, with utility cost. The coverage matrix
-   is now measured on Claude Code and Gemini CLI with benign markers (provisional: the stored
-   data came from the old instrumentation, and a fixed re-run is pending): a hook scoped to
+   is now measured on Claude Code and Gemini CLI with benign markers (re-run with the fixed
+   instrumentation on 2026-10-13, one run per cell): a hook scoped to
    MCP tool calls saw the tool-call and tool-result channels; no pre-action hook carried
    descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks
    carried the prompt; the proxy mediates descriptions and does not expose resources or
@@ -166,7 +166,7 @@ In order of value per effort:
    (2026-10-12) showed the gateway reaching the task tool less often (45.7% vs 56.4%). That
    drop is not from this change. It is the DeBERTa intent model
    (`INTENTSHIELD_INTENT_MODEL_DIR`), which abstains on ordinary reads; abstention mapped to
-   alignment 0.0 and overrode lenient reads (no opinion since `14150e7`; re-run pending). `BLOCK_INTENT_MISMATCH` counts: 0 (frozen
+   alignment 0.0 and overrode lenient reads (no opinion since `14150e7`; on the v7 re-run blocked legitimate task calls fell from 18.7% to 7.3%, against 0.5% with the model off). `BLOCK_INTENT_MISMATCH` counts: 0 (frozen
    commit, which ran without the model), 149 (v3), 141 (neutral ids, v4), 0 with the model
    off (reached 54.5%). `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` fired 4-5 times in 220 cases.
 2. **Decode before scanning (done 2026-10-11).** Base64, hex, URL and HTML-entity decoding of long tokens, then

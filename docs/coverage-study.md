@@ -8,8 +8,8 @@ logging hook, four benign prompts, headless Claude Code and Gemini CLI). Raw log
 which had five problems (listed under "Instrumentation fixes"). Every cell below was re-scored
 by hand from the stored `hooks.jsonl`, `probe.jsonl` and answer files, not read from the stored
 `summary.json`, whose "hook events carrying it" lists mix input delivery with the model's own
-output. **A re-run with the fixed instrumentation is pending**; until it exists, treat the table
-as a careful reading of one contaminated run, not a clean measurement.
+output. The re-run with the fixed instrumentation (2026-10-13, below) confirms these cells and
+corrects one; the 2026-10-12 artifacts are kept in `artifacts/coverage-2026-10-12/`.
 
 **Scope.** n = 1 run per cell, one model per harness (Claude Haiku; Gemini 3.1 Flash-Lite as the
 main model), benign markers, nothing blocks: this measures visibility only. The Gemini "tools"
@@ -100,7 +100,32 @@ harness made:
 - Not supported by this data: that any channel is "bypassed" in the sense of an attack succeeding
   (no attack was run), or anything about elicitation and sampling.
 
-## Instrumentation fixes (applied after this run; re-run pending)
+## Re-run with the fixed instrumentation (2026-10-13)
+
+Same harnesses and models (Claude Haiku; gemini-3.1-flash-lite), five prompts, each in its own
+project directory, all four runs exited cleanly. Data in `artifacts/coverage/<harness>-<mode>/`,
+compact table in `artifacts/coverage-2026-10-13-table.txt`. "Reached" is whether the marker reached
+the model's context (transcript or answer); "delivered by" lists hook events that carried it as
+input, not as the model's own output.
+
+| channel | claude direct | claude proxy | gemini direct | gemini proxy |
+|---|---|---|---|---|
+| description | reached; delivered by none | reached; delivered by none | reached; delivered by none | reached; delivered by none |
+| tool result | reached; `PostToolUse` | reached; `PostToolUse` | reached; `AfterTool` | reached; `AfterTool` |
+| resource | reached; `PostToolUse` (`ReadMcpResourceTool`) | not exposed | not reached | not exposed |
+| prompt | reached; delivered by none (echo in `Stop`) | not exposed | reached; `BeforeAgent`, `BeforeModel` | not exposed |
+| changed description (rug pull) | not reached | not reached (tool hidden) | reached; delivered by none | not reached (tool hidden) |
+| versioned description | reached; delivered by none | reached; delivered by none | reached; delivered by none | reached; delivered by none |
+| elicitation, sampling | not exercised (no back channel) | not exercised | not exercised (method not found) | not exercised |
+
+What changed against the 2026-10-12 reading: in Gemini CLI the tool description did reach the
+model (it was "not observed" before), and still no hook delivered it; hooks saw it only where the
+model repeated it, including inside its own `run_shell_command` calls. Sampling is now measured
+(not exercised) instead of untested. Through the transparent proxy the descriptions reached the
+model because the proxy forwards the descriptions of tools that pass its scans; it withholds only
+flagged ones. One run per cell; this is visibility, not attack success.
+
+## Instrumentation fixes (applied before the 2026-10-13 re-run)
 
 1. Hook events are classified as input delivery or model echo and reported separately
    (`delivered_by`, `echoed_in`). A tool event counts as delivery only for the probe's MCP tools

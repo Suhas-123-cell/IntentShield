@@ -78,9 +78,10 @@ What the cells mean:
   not mediate it. The proxy mediated every `tools/list` call (14-15 per run).
 - **Rug pull:** under the proxy, the changed tool was hidden and later calls to it were
   refused for the session.
-- **Old instrumentation:** the stored coverage artifacts (`artifacts/coverage/*/summary.json`)
-  came from the old instrumentation. A fixed re-run is pending, so treat the cells as
-  provisional.
+- **Re-run:** the cells are from the 2026-10-13 re-run with the fixed instrumentation, which
+  separates hook events that delivered a marker from those that only echoed it. It confirmed the
+  earlier cells; Gemini's description reached the model but no hook delivered it, and neither
+  harness exercised elicitation or sampling. One run per cell.
 
 ## 5. Why it is not publishable as it stands
 
@@ -134,7 +135,7 @@ What the cells mean:
    56.4% (frozen commit) to 45.7% and then 42.3% (neutral ids). The cause is the DeBERTa
    intent model (`INTENTSHIELD_INTENT_MODEL_DIR`). It abstains on ordinary reads, and
    abstention mapped to alignment 0.0, which overrides lenient reads (an abstention gives no
-   opinion since `14150e7`; re-run pending). `BLOCK_INTENT_MISMATCH`
+   opinion since `14150e7`; on the v7 re-run blocked legitimate task calls fell from 18.7% to 7.3%, still above the 0.5% with the model off). `BLOCK_INTENT_MISMATCH`
    counts were 0 (v2), 149 (v3), 141 (v4) and 0 with the model off (`artifacts/msb-v4-noclf`,
    reached 54.5%, executed 40.0%). The v2 gateway rows ran without the model. With it off,
    harm is still 0.0%, so it gave no measured security gain on MSB.
