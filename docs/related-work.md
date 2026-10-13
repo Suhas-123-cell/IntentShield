@@ -109,7 +109,8 @@ New or uncommon:
   novelty claim.
 - Evaluation on live MSB servers through both a gateway and the hook path. With neutral server
   ids (qwen2.5:7b only) executed harm was 0.0% on both, but that zero largely comes from
-  removed exposure and held mutations, and a trivial baseline is pending. Held-out cases share
+  removed exposure and held mutations: a trivial baseline (withhold descriptions, hold
+  every mutation) also reaches 0.0%, but leaves 47 harmful calls for the reviewer, the gateway none. Held-out cases share
   the tuning templates.
 
 Not new:
