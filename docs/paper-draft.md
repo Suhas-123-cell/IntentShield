@@ -38,7 +38,9 @@ gated descriptions at `tools/list`; it exposes tools only, so resources and prom
 mediated but lost. We measured the cost of the guard on live MCP servers (MSB, one 7B agent
 model, neutral server ids) and on tool-poisoning descriptions (MCPTox replay). Executed harm
 fell from 58.5% to 0.0% with the gateway and with hooks, but that zero largely reflects removed
-exposure and held mutations, which a trivial baseline may reproduce (pending). Third-party
+exposure and held mutations: a trivial baseline that withholds descriptions and holds every
+mutation also scores 0.0%, with higher task success, but leaves 47 harmful calls for the human
+reviewer where the gateway leaves none. Third-party
 guards were not tested. Our artifact (IntentShield) pairs hooks with a proxy.
 
 TODO ☐: one sentence of per-channel attack success once §3.5 is run.
@@ -142,7 +144,9 @@ Trust" (2609.18217). **Responsible disclosure before publication.**
     guarded agent attempted harm in 2 of 220 cases. The hook path is the stronger evidence:
     37 harmful attempts, all denied or asked.
   - Any guard that holds mutations for review and strips self-disclosure fields gets
-    `harm_executed = 0` mechanically. A trivial baseline is built; results pending ☐.
+    `harm_executed = 0` mechanically. The trivial baseline does (0.0%, `user_task` 51.4% vs the
+    gateway's 33.6%, paired n=140); the difference is 47 harmful calls left in its review
+    queue against 0 for the gateway.
   - The gateway's lower utility is the DeBERTa intent model abstaining on ordinary reads
     (`BLOCK_INTENT_MISMATCH` 141 with it, 0 without; reached 50.0% vs 63.6%). It gave no
     measured security gain on MSB.
@@ -195,8 +199,8 @@ Trust" (2609.18217). **Responsible disclosure before publication.**
    repeated runs (free: local plus the Gemini/Groq free tiers).
 3. A proxy that forwards resources and prompts under checks instead of dropping them, with its
    measured cost.
-4. MSB re-run with neutral server names for the remaining models, and the trivial baseline's
-   results (the gateway utility drop is isolated: the intent model).
+4. MSB re-run with neutral server names for the remaining models (the trivial baseline is
+   done; the gateway utility drop is isolated: the intent model).
 5. Baselines: Llama Prompt Guard 2 (Groq), an LLM judge (built), harness built-in settings.
 6. Latency/overhead table.
 7. Responsible disclosure to the harness vendors before release.

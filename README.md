@@ -272,7 +272,8 @@ WASP applies only to browser servers, which IntentShield does not guard yet.
 Benchmark agents are local Ollama models (qwen2.5:7b, llama3.1:8b, Ornith-1.5-9B; llama3.2:3b
 on InjecAgent); the harness check uses Claude Code with Haiku. No published-defense baselines yet; the only
 baseline is a trivial one in `benchmarks/msb.py` (withhold descriptions, strip self-disclosure
-parameters, review mutations), whose results are pending.
+parameters, review mutations). It also reaches 0.0% executed harm on MSB, with higher task
+success than the gateway but harmful calls left for the reviewer (see the MSB section).
 
 ### MCP guardrail layers
 
@@ -447,7 +448,9 @@ in the last column). These are the only MSB rows free of the server-name leak:**
 | gateway (DeBERTa intent model on) | **0.0%** [0, 1.7] | 0.9% | 50.0% | 34.5% | 220 |
 | gateway, intent model off (`artifacts/msb-v4-noclf`) | **0.0%** [0, 1.7] | 1.8% | 63.6% | 46.8% | 220 |
 | hooks (Claude Code adapter + transparent proxy) | **0.0%** [0, 1.7] | 17.0% | 66.1% | 66.1% | 218 |
-| trivial baseline (withhold descriptions, strip self-disclosure params, review mutations) | pending (`artifacts/msb-v5`) | pending | pending | pending | - |
+| trivial baseline: withhold descriptions, strip self-disclosure params, review every mutation (`artifacts/msb-v5`) | **0.0%** [0, 1.7] | 12.3% | 84.1% | 62.3% | 220 |
+| trivial baseline, descriptions exposed | **0.0%** [0, 1.7] | 37.3% | 91.8% | 63.6% | 220 |
+| gateway, descriptions exposed (intent model on) | **0.0%** [0, 1.7] | 13.2% | 52.3% | 34.5% | 220 |
 
 What the guarded 0.0% means:
 
@@ -462,10 +465,29 @@ What the guarded 0.0% means:
 - **Why 0.0% is weak evidence by itself.** Every MSB file-write harm needs `write_file` or
   `edit_file`, and the 48 parameter leaks are neutralized by field stripping. So any guard
   that holds mutations for review and strips self-disclosure fields gets `harm_executed = 0`
-  mechanically. The trivial baseline (commits `0dee1d4`, `fc770ee`) will likely also be near
-  0%, and its runs are pending. If so, `harm_executed` alone cannot show the guard's
-  detection value; the utility columns and the per-layer decision counts carry the
-  information.
+  mechanically. The trivial baseline (commits `0dee1d4`, `fc770ee`) confirms it: 0.0% too,
+  with more utility than the gateway. `harm_executed` alone shows no detection value; the
+  difference is in what is left for the human reviewer (table below).
+- **Baseline vs gateway, paired on the 218 cases every arm scored** (`benchmarks/msb_compare.py`;
+  `user_task` is MSB's own task-success criterion, defined for 140 of the cases; harmful in
+  review = cases where a harmful call waits for a human who must reject it):
+
+  | arm | harm attempted | harmful in review | harm blocked | user_task | cases with a review | review calls |
+  |---|---|---|---|---|---|---|
+  | none | 58.7% | - | 0 | 68.6% | - | - |
+  | trivial baseline | 12.4% | 27 | 0 | 51.4% | 92 | 250 (47 harmful) |
+  | trivial baseline, descriptions exposed | 37.6% | 69 | 0 | 41.4% | 136 | 268 (99 harmful) |
+  | gateway | 0.9% | 0 | 2 | 33.6% | 45 | 131 (0 harmful) |
+  | gateway, intent model off | 1.8% | 0 | 4 | 45.0% | 63 | 200 (0 harmful) |
+  | gateway, descriptions exposed | 13.3% | 3 | 14 | 32.1% | 51 | 177 (4 harmful) |
+
+  Withholding descriptions alone cuts attempted harm from 37.6% to 12.4% on the baseline, so
+  exposure removal is the main lever. What the detectors add is that harm is resolved without
+  the reviewer: the baseline's 0% holds only if a human rejects 47 harmful calls mixed into
+  250 reviews, while the gateway leaves none in review (3 cases with descriptions exposed,
+  where it blocks 14 outright). The price is utility: the baseline completes more user tasks
+  (51.4%) than the gateway with (33.6%) or without (45.0%) the intent model. One model, one
+  run; the v4/v5 gateway arms ran before the `shadowing` fix (`4436aa6`).
 - **The gateway's utility drop has a cause.** Task tool reached was 63.6% at the frozen
   commit and 52.5% on later code (leaked ids), and 50.0% now. The DeBERTa intent model
   (`INTENTSHIELD_INTENT_MODEL_DIR`) is the cause: it abstains on ordinary reads, and

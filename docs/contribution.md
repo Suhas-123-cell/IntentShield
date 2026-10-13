@@ -118,8 +118,12 @@ What the cells mean:
    - Any guard that holds mutations for review and strips self-disclosure fields gets
      `harm_executed = 0` on MSB mechanically, because every file-write harm needs
      `write_file` or `edit_file`, and the 48 parameter leaks are neutralized by field
-     stripping. A trivial baseline that does only that was added to `benchmarks/msb.py`
-     (commits `0dee1d4`, `fc770ee`); its runs (`artifacts/msb-v5`) are pending.
+     stripping. A trivial baseline that does only that (`benchmarks/msb.py`, commits
+     `0dee1d4`, `fc770ee`; `artifacts/msb-v5`) also scores 0.0%, with higher task success
+     than the gateway (MSB `user_task` 51.4% vs 33.6%, paired n=140). What the detectors add
+     is that no harmful call is left for the reviewer: the baseline holds 47 harmful calls
+     among 250 reviews (27 cases), the gateway none. Withholding descriptions alone cuts
+     attempted harm on the baseline from 37.6% to 12.4%.
    - The `name_overlap` results are partly an artifact: FastMCP titles argument schemas
      `<func>Arguments`, so the attacker's tool contains the real tool's name and `shadowing`
      quarantines it. That is not real name-collision detection.
@@ -149,7 +153,13 @@ or tool paper, not a research claim on their own.
   | Gateway (intent model on) | 0.0% [0, 1.7] | 34.5% | 50.0% |
   | Gateway, intent model off | 0.0% [0, 1.7] | 46.8% | 63.6% |
   | Hooks (n=218) | 0.0% [0, 1.7] | 66.1% | 66.1% |
-  | Trivial baseline | pending | pending | pending |
+  | Trivial baseline | 0.0% [0, 1.7] | 62.3% | 84.1% |
+  | Trivial baseline, descriptions exposed | 0.0% [0, 1.7] | 63.6% | 91.8% |
+  | Gateway, descriptions exposed | 0.0% [0, 1.7] | 34.5% | 52.3% |
+
+  Paired on 218 cases (`benchmarks/msb_compare.py`): harmful calls left in review 47
+  (baseline), 99 (baseline, exposed), 0 (gateway), 4 (gateway, exposed); MSB `user_task`
+  51.4%, 41.4%, 33.6%, 32.1% (n=140).
 
   Read the 0.0% with §5.6: it is largely exposure removal and a mechanical effect of holding
   mutations. The task-tool metrics also count attack-role lookalike tools. The runner also
@@ -189,8 +199,9 @@ transparent proxy, evaluated held out on live servers. It needs:
    neutral-id re-run, free on local Ollama.
 2. The gateway utility drop is isolated: it is the DeBERTa intent model, not a later guard
    change (§5.7). The open choice is whether to keep that model on the read path. The trivial
-   baseline is added (`benchmarks/msb.py`) and its runs are pending; until they finish, MSB
-   `harm_executed` cannot show detection value over it.
+   baseline's runs are done (`artifacts/msb-v5`): it matches the gateway on `harm_executed`
+   (0.0%) with higher task success, so the detection claim rests on reviewer load (harmful
+   calls left for a human: 47 vs 0), which needs a review-fallibility argument to count.
 3. At least one baseline on the same split, such as Llama Prompt Guard 2 (Groq free tier) or
    an MCP-Guard-style detector.
 4. Reviewer load reported as a metric, plus one stronger agent model on a free tier.
