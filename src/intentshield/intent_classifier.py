@@ -73,11 +73,12 @@ def _load_transformers_model(artifact_dir: Path) -> tuple[Any, Any, Any]:
         AutoTokenizer,
     )
 
+    # No fix_mistral_regex: transformers 4.57 suggests it for DeBERTa's tokenizer, but it splits
+    # words into fragments ("Ignore" -> "I", "gno", "re"), so a model trained without it reads noise.
     tokenizer = AutoTokenizer.from_pretrained(
         artifact_dir,
         local_files_only=True,
         trust_remote_code=False,
-        fix_mistral_regex=True,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         artifact_dir, local_files_only=True, trust_remote_code=False,

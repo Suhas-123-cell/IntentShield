@@ -85,3 +85,25 @@ def test_hook_warns_on_flagged_result_and_asks_before_its_values(tmp_path: Path,
                               "tool_input": {"id": "AB12345678"}}, g)["hookSpecificOutput"]
     assert asked["permissionDecision"] == "ask"
     assert harness.HarnessGuard(tmp_path / "h2.db").classifier is None
+
+
+def test_model_loader_does_not_mangle_deberta_tokenization(monkeypatch, tmp_path: Path):
+    # fix_mistral_regex splits DeBERTa words into fragments; the classifier was trained without it.
+    import sys
+    import types
+
+    seen = {}
+
+    class Auto:
+        @staticmethod
+        def from_pretrained(path, **kwargs):
+            seen.setdefault("kwargs", []).append(kwargs)
+            return types.SimpleNamespace(eval=lambda: None)
+
+    fake = types.SimpleNamespace(AutoTokenizer=Auto, AutoModelForSequenceClassification=Auto)
+    monkeypatch.setitem(sys.modules, "transformers", fake)
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace())
+    from intentshield.intent_classifier import _load_transformers_model
+    _load_transformers_model(tmp_path)
+    assert all("fix_mistral_regex" not in kwargs for kwargs in seen["kwargs"])
+    assert all(kwargs.get("local_files_only") for kwargs in seen["kwargs"])
