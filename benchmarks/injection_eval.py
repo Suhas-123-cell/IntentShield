@@ -10,6 +10,9 @@ Corpus (label ``instruction`` = tries to steer the agent, ``data`` = benign):
   17 user-case response templates with the attacker slot left empty as benign.
 - AgentDojo (``artifacts/data/agentdojo-strings.jsonl``, benchmarks/agentdojo_export.py): five attacks'
   injection texts and the suites' default environment strings as benign.
+- Hard benign texts (``artifacts/injection/hard_negatives.jsonl``, benchmarks/hard_negatives.py): agent-
+  addressed guidance, quoted attacks and human-to-human requests. Split by topic; ``test`` is scored, and
+  ``train`` may seed learned detectors.
 External rows are never trained on (split ``external``). The family of a row is its source, with the
 translations of each source merged into one ``_translated`` family.
 
@@ -47,8 +50,10 @@ def family_of(source: str) -> str:
     return f"{base}_translated" if language in LANGUAGES else source
 
 
-def load_corpus(dataset: Path, injecagent: Path, agentdojo: Path) -> list[dict[str, Any]]:
+def load_corpus(dataset: Path, injecagent: Path, agentdojo: Path, hard: Path | None = None) -> list[dict[str, Any]]:
     rows = [json.loads(line) for line in dataset.read_text().splitlines()] if dataset.exists() else []
+    if hard and hard.exists():
+        rows += [json.loads(line) for line in hard.read_text().splitlines() if line.strip()]
     if injecagent.exists():
         seen = set()
         for setting in INJECAGENT_SETTINGS:
@@ -81,6 +86,18 @@ def detectors(args: argparse.Namespace) -> dict[str, Detector]:
         if not classifier.ready:
             sys.exit(f"classifier not usable: {classifier.reason}")
         found["classifier"] = lambda text, kind: classifier.flags(text)
+    if args.prompt_guard:
+        from intentshield.prompt_guard import PromptGuard
+        guard = PromptGuard(args.prompt_guard, threshold=args.prompt_guard_threshold,
+                            cache=Path("artifacts/injection-eval/prompt-guard-scores.jsonl"))
+        found["prompt_guard"] = lambda text, kind: guard.flags(text)
+    if args.exemplars:
+        from intentshield.exemplars import Embedder, ExemplarIndex
+        embedder = Embedder(args.embedder)
+        if not embedder.ready:
+            sys.exit(f"embedder not usable: {embedder.reason}")
+        index = ExemplarIndex.load(args.exemplars, embedder)
+        found["exemplars"] = lambda text, kind: index.flags(text)
     if args.judge:
         from intentshield.judge import Judge
         judge = Judge.from_spec(args.judge)
@@ -139,10 +156,17 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--splits", default="test,external", help="dataset splits to score (external = never trained on)")
     parser.add_argument("--classifier", default=None, help="injection classifier artifact dir")
     parser.add_argument("--judge", default=None, help="groq or gemini[:model]; descriptions only, uses free-tier quota")
+    parser.add_argument("--prompt-guard", nargs="?", const="meta-llama/llama-prompt-guard-2-86m", default=None,
+                        help="Llama Prompt Guard 2 on Groq (free tier; scores cached on disk)")
+    parser.add_argument("--prompt-guard-threshold", type=float, default=0.5)
+    parser.add_argument("--exemplars", type=Path, default=None, help="exemplar index dir (intentshield.exemplars)")
+    parser.add_argument("--embedder", type=Path, default=Path("artifacts/embedder-e5-small"))
+    parser.add_argument("--hard", type=Path, default=Path("artifacts/injection/hard_negatives.jsonl"))
     parser.add_argument("--out", type=Path, default=Path("artifacts/injection-eval/report.json"))
     args = parser.parse_args(argv)
     load_dotenv(".env")
-    rows = [r for r in load_corpus(args.dataset, args.injecagent, args.agentdojo) if r["split"] in args.splits.split(",")]
+    rows = [r for r in load_corpus(args.dataset, args.injecagent, args.agentdojo, args.hard)
+            if r["split"] in args.splits.split(",")]
     report = evaluate(rows, detectors(args))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({"rows": len(rows), "splits": args.splits, "detectors": report}, indent=2))

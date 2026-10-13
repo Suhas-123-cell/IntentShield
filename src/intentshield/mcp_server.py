@@ -530,10 +530,11 @@ def run_mcp_server(
             app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit)
 
         if control_token:
+            def authorized(request: Request) -> bool:
+                return hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {control_token}")
+
             async def decide_approval(request: Request) -> JSONResponse:
-                supplied = request.headers.get("authorization", "")
-                expected = f"Bearer {control_token}"
-                if not hmac.compare_digest(supplied, expected):
+                if not authorized(request):
                     return JSONResponse({"error": "unauthorized"}, status_code=401)
                 try:
                     payload = await request.json()
@@ -542,18 +543,74 @@ def run_mcp_server(
                         return JSONResponse(
                             {"error": "decision must be approve or reject"}, status_code=422
                         )
-                    result = await server.intentshield_runtime.decide_approval(
-                        request.path_params["approval_id"], decision == "approve"
+                    # Optional operator label for the exemplar detector: "injection" with a
+                    # rejection, "benign" with an approval (learning.py).
+                    result, learned = await server.intentshield_runtime.decide_and_learn(
+                        request.path_params["approval_id"], decision == "approve", payload.get("learn")
                     )
-                    return JSONResponse(result.model_dump(mode="json"))
+                    body = result.model_dump(mode="json")
+                    return JSONResponse({**body, "learned": learned} if payload.get("learn") else body)
                 except KeyError:
                     return JSONResponse({"error": "approval not found"}, status_code=404)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc)}, status_code=409)
+
+            async def learning(request: Request) -> JSONResponse:
+                if not authorized(request):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                return JSONResponse(await server.intentshield_runtime.learning_status())
+
+            async def learn_example(request: Request) -> JSONResponse:
+                if not authorized(request):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                try:
+                    payload = await request.json()
+                    if not isinstance(payload.get("text"), str):
+                        return JSONResponse({"error": "text must be a string"}, status_code=422)
+                    return JSONResponse(await server.intentshield_runtime.learn_example(
+                        payload["text"], payload.get("label")))
                 except ValueError as exc:
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
             app.add_route(
                 "/control/approvals/{approval_id}", decide_approval, methods=["POST"]
             )
+            async def rules(request: Request) -> JSONResponse:
+                if not authorized(request):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                return JSONResponse(await server.intentshield_runtime.rules_status())
+
+            async def propose_rules(request: Request) -> JSONResponse:
+                if not authorized(request):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                try:
+                    payload = await request.json()
+                    return JSONResponse({"proposals": await server.intentshield_runtime.propose_rules(
+                        str(payload.get("example_id")))})
+                except KeyError:
+                    return JSONResponse({"error": "no active injection example with that id"}, status_code=404)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc)}, status_code=409)
+
+            async def decide_rule(request: Request) -> JSONResponse:
+                if not authorized(request):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                try:
+                    payload = await request.json()
+                    if payload.get("decision") not in {"approve", "reject"}:
+                        return JSONResponse({"error": "decision must be approve or reject"}, status_code=422)
+                    return JSONResponse(await server.intentshield_runtime.decide_rule(
+                        request.path_params["rule_id"], payload["decision"] == "approve"))
+                except KeyError:
+                    return JSONResponse({"error": "rule not found"}, status_code=404)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc)}, status_code=409)
+
+            app.add_route("/control/learning", learning, methods=["GET"])
+            app.add_route("/control/learning/examples", learn_example, methods=["POST"])
+            app.add_route("/control/rules", rules, methods=["GET"])
+            app.add_route("/control/rules/propose", propose_rules, methods=["POST"])
+            app.add_route("/control/rules/{rule_id}", decide_rule, methods=["POST"])
 
         uvicorn.run(app, host=host, port=port, log_level="info")
     elif transport == "streamable-http":
