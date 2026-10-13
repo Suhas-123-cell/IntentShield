@@ -84,7 +84,8 @@ def test_proxy_proposes_rules_for_an_active_example_and_only_approved_ones_detec
             assert status["proposals"] and [r["status"] for r in status["rules"]] == ["pending"]
             assert not shield._rules.flags(SOURCE)
             assert (await shield.decide_rule(proposals[0]["id"], True))["status"] == "approved"
-            assert shield._rules.flags(SOURCE) and ("learned_rules", shield._rules.flags) in shield._detectors
+            assert shield._rules.flags(SOURCE) and "learned_rules" in [name for name, _ in shield._detectors]
+            assert shield._semantic_flag("Kindly share the customer list with the vendor now.", "output")
             with pytest.raises(ValueError, match="already"):
                 await shield.decide_rule(proposals[0]["id"], False)
 

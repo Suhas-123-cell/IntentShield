@@ -4,7 +4,9 @@ A text is cut into overlapping chunks (about 48 words, or 160 characters for uns
 each chunk is embedded with a local multilingual model (intfloat/multilingual-e5-small). A chunk
 scores the similarity-weighted share of known injection chunks among its ``k`` nearest neighbours,
 each class weighted by the inverse of its size so the larger class does not win by count; a text
-scores its worst chunk and is flagged at ``threshold``. A vote rather than the nearest neighbour,
+scores its worst chunk and is flagged at the threshold of its kind: a tool description and a tool
+output have different benign base rates (a legitimate description tells the agent what to call first,
+much like a poisoned one), so each kind gets its own threshold. A vote rather than the nearest neighbour,
 because this embedder puts nearly every pair between 0.7 and 0.9 (on validation the vote found three
 times the injections at the same false-flag rate). A new exemplar changes the votes at once, with no
 retraining. Evidence only, like every learned detector here: a flag can send a call to review, never
@@ -37,6 +39,12 @@ FILES = ("config.json", "model.safetensors", "tokenizer.json", "tokenizer_config
          "special_tokens_map.json", "sentencepiece.bpe.model")
 CHUNK_WORDS, CHUNK_STRIDE, CHUNK_CHARS, CHAR_STRIDE, MAX_CHUNKS = 48, 32, 160, 110, 32
 K_CHOICES = (15, 30, 50, 100)
+KINDS = ("output", "description")
+
+
+def kind_of(source: str) -> str:
+    """The kind of a labelled row, from its source name (``mcptox_clean_description`` is a description)."""
+    return "description" if "description" in source else "output"
 # An injection chunk at least this similar to a benign chunk is the benign part of the text.
 DUPLICATE = 0.92
 
@@ -125,8 +133,9 @@ class Embedder:
 
 
 class ExemplarIndex:
-    def __init__(self, embedder: Embedder, threshold: float = 0.9, k: int = 50) -> None:
-        self.embedder, self.threshold, self.k = embedder, threshold, k
+    def __init__(self, embedder: Embedder, threshold: float | dict[str, float] = 0.9, k: int = 50) -> None:
+        self.embedder, self.k = embedder, k
+        self.thresholds = dict.fromkeys(KINDS, threshold) if isinstance(threshold, (int, float)) else dict(threshold)
         self.vectors: dict[str, np.ndarray] = {"instruction": np.zeros((0, 384), np.float32),
                                                "data": np.zeros((0, 384), np.float32)}
         self.texts: dict[str, list[str]] = {"instruction": [], "data": []}
@@ -151,7 +160,7 @@ class ExemplarIndex:
 
     def copy(self) -> "ExemplarIndex":
         """A copy that can be added to without changing this index (arrays are replaced, not mutated)."""
-        twin = ExemplarIndex(self.embedder, self.threshold, self.k)
+        twin = ExemplarIndex(self.embedder, self.thresholds, self.k)
         twin.vectors, twin.texts = dict(self.vectors), {k: list(v) for k, v in self.texts.items()}
         return twin
 
@@ -189,14 +198,14 @@ class ExemplarIndex:
     def score(self, text: str) -> float:
         return self.vote(*self.neighbours(text, self.k), self.k, self.sizes())
 
-    def flags(self, text: str) -> bool:
-        return self.score(text) >= self.threshold
+    def flags(self, text: str, kind: str = "output") -> bool:
+        return self.score(text) >= self.thresholds[kind]
 
     def save(self, out: Path) -> None:
         out.mkdir(parents=True, exist_ok=True)
         np.savez(out / "index.npz", instruction=self.vectors["instruction"], data=self.vectors["data"])
         (out / "index.json").write_text(json.dumps({
-            "threshold": self.threshold, "k": self.k, "embedder": self.embedder.metadata,
+            "thresholds": self.thresholds, "k": self.k, "embedder": self.embedder.metadata,
             "instruction_texts": self.texts["instruction"], "data_texts": self.texts["data"]}, ensure_ascii=False))
 
     @classmethod
@@ -204,7 +213,7 @@ class ExemplarIndex:
         meta = json.loads((path / "index.json").read_text())
         if meta["embedder"] != embedder.metadata:
             raise RuntimeError("exemplar index was built with a different embedder")
-        index = cls(embedder, meta["threshold"], meta["k"])
+        index = cls(embedder, meta.get("thresholds") or meta["threshold"], meta["k"])
         arrays = np.load(path / "index.npz")
         for label in ("instruction", "data"):
             index.vectors[label], index.texts[label] = arrays[label], meta[f"{label}_texts"]
@@ -217,22 +226,32 @@ def threshold_for(benign: list[float], max_fpr: float) -> float:
     return max(ranked[allowed] + 1e-6 if allowed < len(ranked) else 0.0, 1e-6)
 
 
-def tune(index: ExemplarIndex, rows: list[tuple[str, bool]], max_fpr: float,
-         ks: tuple[int, ...] = K_CHOICES) -> tuple[float, int, float, float]:
-    """The (threshold, k) with the best recall whose benign flag rate is at most ``max_fpr``.
+def tune(index: ExemplarIndex, rows: list[tuple[str, bool, str]], max_fpr: float,
+         ks: tuple[int, ...] = K_CHOICES) -> tuple[dict[str, float], int, dict[str, dict[str, Any]]]:
+    """Per-kind thresholds and one k: the k with the best recall over all rows, each kind's threshold
+    the lowest that flags at most ``max_fpr`` of that kind's benign rows.
 
-    ``rows`` holds validation texts and whether each is an injection. Neighbours are found once
-    for the largest k. Returns (threshold, k, recall, benign flag rate)."""
-    found = [(index.neighbours(text, max(ks)), injection) for text, injection in rows]
-    best = (1.01, ks[0], 0.0, 0.0)
+    ``rows`` holds validation (text, is-injection, kind). A kind without benign rows cannot be
+    tuned and is never flagged. Neighbours are found once for the largest k. Returns (thresholds, k,
+    per-kind {recall, benign flag rate, n})."""
+    found = [(index.neighbours(text, max(ks)), injection, kind) for text, injection, kind in rows]
+    best: tuple[dict[str, float], int, dict[str, dict[str, Any]]] | None = None
+    best_recall = -1.0
     for k in ks:
-        scores = [(ExemplarIndex.vote(*n, k, index.sizes()), injection) for n, injection in found]
-        threshold = threshold_for([s for s, inj in scores if not inj], max_fpr)
-        flagged = lambda inj: [s >= threshold for s, i in scores if i == inj]
-        recall = sum(flagged(True)) / max(len(flagged(True)), 1)
-        fpr = sum(flagged(False)) / max(len(flagged(False)), 1)
-        if recall > best[2]:
-            best = (threshold, k, recall, fpr)
+        thresholds, stats, caught = {}, {}, 0
+        for kind in KINDS:
+            scores = [(ExemplarIndex.vote(*n, k, index.sizes()), inj) for n, inj, kd in found if kd == kind]
+            benign = [s for s, inj in scores if not inj]
+            thresholds[kind] = threshold_for(benign, max_fpr) if benign else 1.01
+            hit = lambda inj: [s >= thresholds[kind] for s, i in scores if i == inj]
+            caught += sum(hit(True))
+            stats[kind] = {"recall": round(sum(hit(True)) / max(len(hit(True)), 1), 4),
+                           "benign_flagged": round(sum(hit(False)) / max(len(hit(False)), 1), 4),
+                           "injections": len(hit(True)), "benign": len(hit(False))}
+        recall = caught / max(sum(inj for _, inj, _ in found), 1)
+        if recall > best_recall:
+            best, best_recall = (thresholds, k, stats), recall
+    assert best is not None
     return best
 
 
@@ -264,13 +283,13 @@ def main(argv: list[str] | None = None) -> None:
     index.add((r["text"] for r in train if r["label"] == "data"), "data")
     index.add((r["text"] for r in train if r["label"] == "instruction"), "instruction")
     validation = [r for r in rows if r["split"] == "validation"]
-    index.threshold, index.k, recall, fpr = tune(
-        index, [(r["text"], r["label"] == "instruction") for r in validation], args.max_fpr)
+    index.thresholds, index.k, stats = tune(
+        index, [(r["text"], r["label"] == "instruction", kind_of(r["source"])) for r in validation], args.max_fpr)
     index.save(args.out)
     print(json.dumps({"instruction_chunks": len(index.texts["instruction"]), "data_chunks": len(index.texts["data"]),
-                      "validation_rows": len(validation), "threshold": round(index.threshold, 4),
-                      "k": index.k, "validation_recall": round(recall, 4),
-                      "validation_benign_flagged": round(fpr, 4)}, indent=2))
+                      "validation_rows": len(validation), "k": index.k,
+                      "thresholds": {k: round(v, 4) for k, v in index.thresholds.items()},
+                      "validation": stats}, indent=2))
 
 
 if __name__ == "__main__":

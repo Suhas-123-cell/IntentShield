@@ -72,3 +72,16 @@ def test_any_of_flags_when_one_applicable_detector_does():
     assert injection_eval.any_of({"a": no, "b": yes})("x", "output") is True
     assert injection_eval.any_of({"a": no, "b": skip})("x", "output") is False
     assert injection_eval.any_of({"a": skip})("x", "output") is None
+
+
+def test_combine_adds_any_of_columns_and_rows_out_dumps_verdicts(tmp_path: Path, monkeypatch):
+    rows_out = tmp_path / "rows.jsonl"
+    corpus = _corpus(tmp_path)
+    monkeypatch.setattr(injection_eval, "load_corpus", lambda *a: corpus)
+    injection_eval.main(["--combine", "rules+rules", "--rows-out", str(rows_out), "--out", str(tmp_path / "r.json"),
+                         "--hard", str(tmp_path / "none.jsonl")])
+    report = json.loads((tmp_path / "r.json").read_text())["detectors"]
+    assert set(report) == {"rules", "rules+rules", "any"}
+    assert report["rules+rules"]["recall"] == report["rules"]["recall"]
+    rows = [json.loads(line) for line in rows_out.read_text().splitlines()]
+    assert rows and all(set(r["verdicts"]) == {"rules", "rules+rules", "any"} and "text" not in r for r in rows)
