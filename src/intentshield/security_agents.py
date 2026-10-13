@@ -103,7 +103,8 @@ class IntentClassifierResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    alignment_score: float = Field(ge=0.0, le=1.0)
+    # None means the classifier abstained: it gives no opinion and grounding stays deterministic.
+    alignment_score: float | None = Field(ge=0.0, le=1.0)
     label: str = Field(min_length=1, max_length=100)
 
 
