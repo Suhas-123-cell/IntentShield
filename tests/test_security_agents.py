@@ -172,7 +172,7 @@ def test_grounded_mutation_can_only_request_policy_review():
 
 
 class FixedClassifier:
-    def __init__(self, score: float) -> None:
+    def __init__(self, score: float | None) -> None:
         self.score = score
 
     def predict(self, *_args: Any) -> IntentClassifierResult:
@@ -193,6 +193,20 @@ def test_local_classifier_can_make_fusion_more_conservative_not_less():
     assert EvidenceReason.LOCAL_CLASSIFIER_USED in low.reason_codes
     assert high.intent_alignment == 0.95
 
+
+
+def test_classifier_abstention_leaves_deterministic_grounding_unchanged():
+    proposed = call(resource="inbox")
+    for intent in ("Read my inbox", "Read the welcome note"):
+        alone = SecurityAnalysisSupervisor().analyze(intent, proposed, metadata())
+        abstained = SecurityAnalysisSupervisor(classifier=FixedClassifier(None)).analyze(
+            intent, proposed, metadata()
+        )
+
+        assert abstained.intent_alignment == alone.intent_alignment
+        assert abstained.disposition is alone.disposition
+        assert abstained.grounding.classifier_score is None
+        assert abstained.fail_closed is False
 
 def test_read_summary_language_is_grounded_to_a_read_tool():
     result = SecurityAnalysisSupervisor().analyze(

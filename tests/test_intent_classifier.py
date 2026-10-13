@@ -176,6 +176,23 @@ def test_grounding_adapter_compares_against_trusted_tool_family(tmp_path: Path):
     assert adapter.predict("Send an email", call, read).alignment_score == 0.0
 
 
+
+def test_grounding_adapter_abstention_is_no_opinion_but_failure_still_vetoes(tmp_path: Path):
+    _artifact(tmp_path)
+    abstaining = DebertaIntentClassifier(
+        tmp_path,
+        loader=lambda _path: (_Tokenizer(), _Model([0.47, 0.12, 0.41]), _Torch()),
+    )
+    call = ToolCall(tool_name="read_paper", arguments={}, schema_hash="trusted")
+    read = TrustedToolMetadata(name="read_paper", schema_hash="trusted", mutation=False)
+
+    result = DebertaGroundingAdapter(abstaining).predict("Analyze the paper", call, read)
+    assert result.alignment_score is None
+    assert result.label == "unknown"
+
+    broken = DebertaIntentClassifier(tmp_path, loader=lambda _path: (_ for _ in ()).throw(OSError("gone")))
+    assert DebertaGroundingAdapter(broken).predict("Analyze the paper", call, read).alignment_score == 0.0
+
 def test_dataset_loader_rejects_template_group_leakage(tmp_path: Path):
     rows = [
         {"text": "Read A", "label": "read", "action": "x", "split": "train", "group": "leak"},
