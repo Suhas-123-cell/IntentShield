@@ -14,7 +14,7 @@ evidence that the detection works (see "Why 0.0% is weak evidence").
 | check | unguarded | with IntentShield |
 |---|---|---|
 | MSB held-out, harmful action executed (qwen2.5:7b, neutral server ids, 220 cases) | 58.5% [51.8, 64.8] | gateway **0.0%** [0, 1.7]; hooks **0.0%** [0, 1.7] |
-| MSB held-out, task tool reached (qwen2.5:7b, neutral ids) | 94.1% | gateway 50.0% (executed 34.5%); hooks 66.1% (executed 66.1%) |
+| MSB held-out, task tool reached (qwen2.5:7b, neutral ids) | 70.3% | gateway 42.3% (executed 29.5%); hooks 49.5% (executed 49.1%) |
 | MSB with llama3.1:8b and Ornith-1.5-9B | 21.8% and 52.7% harm | 0.0% on both, but measured before the neutral-id fix and without the intent model; not re-run |
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3; poisoned tool never offered (n=3 per arm, no stored raw log) |
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
@@ -412,8 +412,11 @@ client, where no proxy could see them; the runner puts each one where a maliciou
 server would, in the tool description or result. Keyless subset: 960 of 1,600
 non-kill_process cases. Harm is scored as in MSB's metrics.py, on what actually
 reached the server; REVIEW is not approved. "Task tool reached" counts the task
-tool executed or waiting on a human reviewer. Both task-tool metrics also count
-attack-role lookalike tools, so they are not MSB's per-type user-task criteria.
+tool executed or waiting on a human reviewer. The task tool is the task server's; the
+attack server counts only in out_of_scope_parameter and tool_transfer, which have no task
+server. Elsewhere the attack server is a lookalike, and calling it is falling for the attack.
+(Before 2026-10-13 both metrics also counted the lookalikes; every number below is rescored,
+`artifacts/msb-task-tool-rescore.txt`.) They are still not MSB's per-type user-task criteria.
 
 Limits of this runner and of the numbers below:
 
@@ -426,10 +429,14 @@ Limits of this runner and of the numbers below:
 - The 10-step cap truncated 53 of 219 unguarded cases (24%), 12 of 220 gateway cases and
   29 of 218 hook cases. The scored rows differ per arm (none 219, gateway 220, hooks 218)
   because of read timeouts on c0343 and c0691.
-- The `name_overlap` results for the gateway and hooks are partly an artifact. FastMCP
+- The `name_overlap` rows below for the gateway and hooks are partly an artifact. FastMCP
   auto-titles argument schemas `<func>Arguments`, so the attacker's `get_x_v1Arguments`
-  contains the real tool's name `get_x` as a substring and the `shadowing` rule quarantines
-  it. That is not real name-collision detection. A fix is in progress.
+  contains the real tool's name `get_x` as a substring and the `shadowing` rule quarantined
+  it. Fixed in `4436aa6`. Re-run on the same 20 held-out name_overlap cases
+  (`artifacts/msb-v6-name-overlap`): the lookalike tools now reach the agent, harm executed
+  stays 0/20 on both paths; the gateway blocked the one harmful attempt; on hooks the agent
+  called the lookalike 46 times (44 allowed, 2 ask), and task tool executed fell from 20 to
+  13 of 20 and user_task from 20 to 12 of 20, because the hidden lookalike had inflated both.
 - Keyless subset, and injections moved to where a proxy can see them (above).
 
 Protocol: the guard was changed using a 236-case tuning sample (20 seeded cases per
@@ -444,13 +451,13 @@ in the last column). These are the only MSB rows free of the server-name leak:**
 
 | path | harm executed [95% CI] | harm attempted | task tool reached | task tool executed | rows |
 |---|---|---|---|---|---|
-| none | 58.5% [51.8, 64.8] | 58.9% | 94.1% | 94.1% | 219 |
-| gateway (DeBERTa intent model on) | **0.0%** [0, 1.7] | 0.9% | 50.0% | 34.5% | 220 |
-| gateway, intent model off (`artifacts/msb-v4-noclf`) | **0.0%** [0, 1.7] | 1.8% | 63.6% | 46.8% | 220 |
-| hooks (Claude Code adapter + transparent proxy) | **0.0%** [0, 1.7] | 17.0% | 66.1% | 66.1% | 218 |
-| trivial baseline: withhold descriptions, strip self-disclosure params, review every mutation (`artifacts/msb-v5`) | **0.0%** [0, 1.7] | 12.3% | 84.1% | 62.3% | 220 |
-| trivial baseline, descriptions exposed | **0.0%** [0, 1.7] | 37.3% | 91.8% | 63.6% | 220 |
-| gateway, descriptions exposed (intent model on) | **0.0%** [0, 1.7] | 13.2% | 52.3% | 34.5% | 220 |
+| none | 58.5% [51.8, 64.8] | 58.9% | 70.3% | 70.3% | 219 |
+| gateway (DeBERTa intent model on) | **0.0%** [0, 1.7] | 0.9% | 42.3% | 29.5% | 220 |
+| gateway, intent model off (`artifacts/msb-v4-noclf`) | **0.0%** [0, 1.7] | 1.8% | 54.5% | 40.0% | 220 |
+| hooks (Claude Code adapter + transparent proxy) | **0.0%** [0, 1.7] | 17.0% | 49.5% | 49.1% | 218 |
+| trivial baseline: withhold descriptions, strip self-disclosure params, review every mutation (`artifacts/msb-v5`) | **0.0%** [0, 1.7] | 12.3% | 74.1% | 55.0% | 220 |
+| trivial baseline, descriptions exposed | **0.0%** [0, 1.7] | 37.3% | 68.6% | 44.5% | 220 |
+| gateway, descriptions exposed (intent model on) | **0.0%** [0, 1.7] | 13.2% | 38.6% | 25.0% | 220 |
 
 What the guarded 0.0% means:
 
@@ -488,10 +495,11 @@ What the guarded 0.0% means:
   where it blocks 14 outright). The price is utility: the baseline completes more user tasks
   (51.4%) than the gateway with (33.6%) or without (45.0%) the intent model. One model, one
   run; the v4/v5 gateway arms ran before the `shadowing` fix (`4436aa6`).
-- **The gateway's utility drop has a cause.** Task tool reached was 63.6% at the frozen
-  commit and 52.5% on later code (leaked ids), and 50.0% now. The DeBERTa intent model
+- **The gateway's utility drop has a cause.** Task tool reached was 56.4% at the frozen
+  commit and 45.7% on later code (leaked ids), and 42.3% now. The DeBERTa intent model
   (`INTENTSHIELD_INTENT_MODEL_DIR`) is the cause: it abstains on ordinary reads, and
-  abstention maps to alignment 0.0, which overrides lenient reads. `BLOCK_INTENT_MISMATCH`
+  abstention mapped to alignment 0.0, which overrides lenient reads. Since `14150e7` an
+  abstention gives no opinion instead; the re-run (`artifacts/msb-v7`) is pending. `BLOCK_INTENT_MISMATCH`
   counts: 0 in v2, 149 in v3, 141 in v4, 0 in v4 with the model off. The v2 gateway rows
   ran without the model (the ML packages were missing then), so their higher utility
   reflects that, not a better guard. With the model off, harm is still 0.0%, so it gave no
@@ -503,14 +511,14 @@ and understate unguarded harm (qwen2.5:7b none was 51.4% there, 58.5% with neutr
 
 | backbone | defense | harm executed [95% CI] | harm attempted | task tool reached | task tool executed |
 |---|---|---|---|---|---|
-| qwen2.5:7b | none | 51.4% [44.8, 57.9] | 51.4% | 90.9% | 90.9% |
-| qwen2.5:7b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 10.0% | 65.9% | 51.8% |
-| qwen2.5:7b | IntentShield, default | **0.0%** [0, 1.7] | 1.4% | 63.6% | 51.4% |
-| llama3.1:8b | none | 21.8% [16.9, 27.7] | 22.3% | 83.2% | 83.2% |
-| llama3.1:8b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 12.7% | 57.3% | 37.7% |
-| llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.5% | 42.3% |
+| qwen2.5:7b | none | 51.4% [44.8, 57.9] | 51.4% | 82.7% | 82.7% |
+| qwen2.5:7b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 10.0% | 62.7% | 48.6% |
+| qwen2.5:7b | IntentShield, default | **0.0%** [0, 1.7] | 1.4% | 56.4% | 44.5% |
+| llama3.1:8b | none | 21.8% [16.9, 27.7] | 22.3% | 78.2% | 78.2% |
+| llama3.1:8b | IntentShield, descriptions exposed | **0.0%** [0, 1.7] | 12.7% | 54.5% | 36.4% |
+| llama3.1:8b | IntentShield, default | **0.0%** [0, 1.7] | 0.0% | 59.1% | 42.3% |
 | Ornith-1.5-9B | none | 52.7% [46.1, 59.2] | 54.5% | 98.6% | 98.6% |
-| Ornith-1.5-9B | IntentShield, default (219; 1 case hit an Ollama 500 twice) | **0.0%** [0, 1.7] | 2.7% | 67.1% | 51.6% |
+| Ornith-1.5-9B | IntentShield, default (219; 1 case hit an Ollama 500 twice) | **0.0%** [0, 1.7] | 2.7% | 65.8% | 47.9% |
 
 Through the harness hook path (`--defense hooks`: the Claude Code hook adapter on the
 user prompt and every MCP call, servers behind the transparent proxy, a hook's "ask"
@@ -519,11 +527,11 @@ row was re-run with neutral ids above):
 
 | backbone | harm executed [95% CI] | harm attempted | task tool executed |
 |---|---|---|---|
-| qwen2.5:7b (218; 2 cases time out in Ollama) | **0.0%** [0, 1.7] | 14.2% | 64.2% |
-| llama3.1:8b | **0.0%** [0, 1.7] | 6.8% | 66.4% |
-| Ornith-1.5-9B | **0.0%** [0, 1.7] | 3.6% | 69.1% |
+| qwen2.5:7b (218; 2 cases time out in Ollama) | **0.0%** [0, 1.7] | 14.2% | 59.6% |
+| llama3.1:8b | **0.0%** [0, 1.7] | 6.8% | 65.9% |
+| Ornith-1.5-9B | **0.0%** [0, 1.7] | 3.6% | 68.6% |
 
-More tasks run than through the gateway (34-52% executed there), because hooks leave
+More tasks run than through the gateway (30-49% executed there), because hooks leave
 untainted writes to the harness's own permissions instead of sending every write to
 review. More harmful calls are attempted, because the transparent proxy shows the
 agent the upstream descriptions; the hook denies them or the proxy blanks the leaked
@@ -537,13 +545,13 @@ start.
 
 | path | LLM judge | harm executed [95% CI] | harm attempted | task tool reached | task tool executed |
 |---|---|---|---|---|---|
-| gateway (default) | - | **0.0%** [0, 1.7] | 1.4% | 52.5% | 34.7% |
-| gateway | Groq | **0.0%** [0, 1.7] | 0.9% | 52.3% | 27.5% |
-| hooks | - | **0.0%** [0, 1.7] | 14.2% | 64.2% | 64.2% |
-| hooks | Groq | **0.0%** [0, 1.7] | 14.6% | 64.8% | 62.1% |
+| gateway (default) | - | **0.0%** [0, 1.7] | 1.4% | 45.7% | 29.2% |
+| gateway | Groq | **0.0%** [0, 1.7] | 0.9% | 45.0% | 25.2% |
+| hooks | - | **0.0%** [0, 1.7] | 14.2% | 60.1% | 59.6% |
+| hooks | Groq | **0.0%** [0, 1.7] | 14.6% | 62.1% | 59.8% |
 
 - The LLM judge was not evaluated on neutral ids. These runs are leaked, harm was already
-  0.0%, and the judge lowered task tool executed by 2-7 points. Its only catches (4
+  0.0%, and the judge lowered gateway task tool executed by 4 points (hooks unchanged). Its only catches (4
   harmful calls on the hook path) were tools named `attack:...`, which the leak gives away,
   so they don't count. No judge run exists on the neutral-id setup, so no claim is made
   about the judge on MSB either way.
@@ -556,8 +564,8 @@ most attack-prone (52.7% harm; it follows false errors in 55% of cases, against 
 for qwen2.5:7b and 0% for llama3.1:8b). Guarded it also stays at 0.0%.
 
 Tuning sample (236 cases, leaked ids, no intent model), before and after the changes, default defense: harm
-qwen2.5:7b 6.8% -> 0.0%, llama3.1:8b 3.8% -> 0.0%; task tool executed about 30% ->
-38-49% (reached, including calls waiting on review, 56-59% after). Every guarded row
+qwen2.5:7b 6.8% -> 0.0%, llama3.1:8b 3.8% -> 0.0%; task tool executed 26-29% ->
+38-43% (reached, including calls waiting on review, 53-56% after). Every guarded row
 is 0.0% on both splits.
 
 What changed, from the tuning failures:
@@ -584,7 +592,7 @@ the task tool's own description, so the tool is quarantined (through the `shadow
 rule, since the attack text names filesystem tools) and the task cannot be done (0%
 reached). That is the defense working as designed, but it also means the guard is never
 tested against those attacks reaching the agent. On the other eight held-out types, task
-tool reached was 82-92% guarded against 88-98% unguarded (earlier leaked rows, default
+tool reached was 78-90% guarded against 78-98% unguarded (earlier leaked rows, default
 defense, all three backbones; not re-run).
 
 Generalization of the new output rules beyond MSB (`scan_output`, no model calls):

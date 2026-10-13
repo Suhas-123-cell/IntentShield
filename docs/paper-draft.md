@@ -137,8 +137,8 @@ Trust" (2609.18217). **Responsible disclosure before publication.**
 
 - **Live servers (MSB held-out, `benchmarks/msb.py`, qwen2.5:7b, neutral server ids,
   `artifacts/msb-v4`, 220 cases, single run, temperature 0):** executed harm 58.5% [51.8,
-  64.8] unguarded; gateway 0.0% [0, 1.7]; hooks 0.0% [0, 1.7]. Task tool reached 94.1% none,
-  50.0% gateway, 66.1% hooks (executed 94.1%, 34.5%, 66.1%). Caveats:
+  64.8] unguarded; gateway 0.0% [0, 1.7]; hooks 0.0% [0, 1.7]. Task tool reached 70.3% none,
+  42.3% gateway, 49.5% hooks (executed 70.3%, 29.5%, 49.1%). Caveats:
   - The zero mostly reflects exposure removal (descriptions withheld, self-disclosure
     parameters stripped, prompt-injection task servers quarantined through `shadowing`); the
     guarded agent attempted harm in 2 of 220 cases. The hook path is the stronger evidence:
@@ -148,7 +148,7 @@ Trust" (2609.18217). **Responsible disclosure before publication.**
     gateway's 33.6%, paired n=140); the difference is 47 harmful calls left in its review
     queue against 0 for the gateway.
   - The gateway's lower utility is the DeBERTa intent model abstaining on ordinary reads
-    (`BLOCK_INTENT_MISMATCH` 141 with it, 0 without; reached 50.0% vs 63.6%). It gave no
+    (`BLOCK_INTENT_MISMATCH` 141 with it, 0 without; reached 42.3% vs 54.5%). It gave no
     measured security gain on MSB.
   - llama3.1:8b, Ornith-1.5-9B and descriptions-exposed rows were measured before the
     neutral-id fix and without the intent model; not re-run ☐. The LLM judge was not

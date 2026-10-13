@@ -131,11 +131,12 @@ What the cells mean:
    The hook path is the stronger evidence: of 37 harmful attempts (17.0% of 218 cases), every
    harmful call was denied or sent to ask, and none executed.
 7. **The gateway utility drop is explained, not fixed away.** Task tool reached fell from
-   63.6% (frozen commit) to 52.5% and then 50.0% (neutral ids). The cause is the DeBERTa
+   56.4% (frozen commit) to 45.7% and then 42.3% (neutral ids). The cause is the DeBERTa
    intent model (`INTENTSHIELD_INTENT_MODEL_DIR`). It abstains on ordinary reads, and
-   abstention maps to alignment 0.0, which overrides lenient reads. `BLOCK_INTENT_MISMATCH`
+   abstention mapped to alignment 0.0, which overrides lenient reads (an abstention gives no
+   opinion since `14150e7`; re-run pending). `BLOCK_INTENT_MISMATCH`
    counts were 0 (v2), 149 (v3), 141 (v4) and 0 with the model off (`artifacts/msb-v4-noclf`,
-   reached 63.6%, executed 46.8%). The v2 gateway rows ran without the model. With it off,
+   reached 54.5%, executed 40.0%). The v2 gateway rows ran without the model. With it off,
    harm is still 0.0%, so it gave no measured security gain on MSB.
 
 ## 6. The numbers that hold up
@@ -149,24 +150,24 @@ or tool paper, not a research claim on their own.
 
   | Setup | Harm executed [95% CI] | Task tool executed | Task tool reached |
   |---|---|---|---|
-  | None | 58.5% [51.8, 64.8] (n=219) | 94.1% | 94.1% |
-  | Gateway (intent model on) | 0.0% [0, 1.7] | 34.5% | 50.0% |
-  | Gateway, intent model off | 0.0% [0, 1.7] | 46.8% | 63.6% |
-  | Hooks (n=218) | 0.0% [0, 1.7] | 66.1% | 66.1% |
-  | Trivial baseline | 0.0% [0, 1.7] | 62.3% | 84.1% |
-  | Trivial baseline, descriptions exposed | 0.0% [0, 1.7] | 63.6% | 91.8% |
-  | Gateway, descriptions exposed | 0.0% [0, 1.7] | 34.5% | 52.3% |
+  | None | 58.5% [51.8, 64.8] (n=219) | 70.3% | 70.3% |
+  | Gateway (intent model on) | 0.0% [0, 1.7] | 29.5% | 42.3% |
+  | Gateway, intent model off | 0.0% [0, 1.7] | 40.0% | 54.5% |
+  | Hooks (n=218) | 0.0% [0, 1.7] | 49.1% | 49.5% |
+  | Trivial baseline | 0.0% [0, 1.7] | 55.0% | 74.1% |
+  | Trivial baseline, descriptions exposed | 0.0% [0, 1.7] | 44.5% | 68.6% |
+  | Gateway, descriptions exposed | 0.0% [0, 1.7] | 25.0% | 38.6% |
 
   Paired on 218 cases (`benchmarks/msb_compare.py`): harmful calls left in review 47
   (baseline), 99 (baseline, exposed), 0 (gateway), 4 (gateway, exposed); MSB `user_task`
   51.4%, 41.4%, 33.6%, 32.1% (n=140).
 
   Read the 0.0% with §5.6: it is largely exposure removal and a mechanical effect of holding
-  mutations. The task-tool metrics also count attack-role lookalike tools. The runner also
+  mutations. The task-tool metrics count the attack server only where there is no task server (rescored 2026-10-13; before, they also counted lookalike tools). The runner also
   deviates from MSB (injection text only on the task server; list-directory tools allowed),
   and the 10-step cap truncated 53/219 unguarded, 12/220 gateway and 29/218 hook cases.
 - **Earlier MSB rows** (frozen commit `05bb91a`; llama3.1:8b and Ornith-1.5-9B; descriptions
-  exposed): harm 22-53% to 0.0%, task tool reached 57-67% gateway, executed 64-69% on hooks.
+  exposed): harm 22-53% to 0.0%, task tool reached 55-66% gateway, executed 60-69% on hooks.
   These were measured before the neutral-id fix and without the intent model, and were not
   re-run. The LLM judge has not been evaluated on neutral ids; its only MSB runs (v3) were
   leaked, and its only catches were `attack:`-named tools.
