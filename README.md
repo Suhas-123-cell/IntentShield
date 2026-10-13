@@ -193,6 +193,17 @@ Benign examples are scarce (about 5 injected rows per benign one) and the traini
 reached 0.0001, so scores saturate near 1.0. Do not enable it on this artifact; a usable
 one needs many more benign rows with human-directed instructions.
 
+**Loader bug, found and fixed 2026-10-13 (`dc8aee0`).** The shared model loader passed
+`fix_mistral_regex=True` to the tokenizer (transformers 4.57 suggests it). For DeBERTa it
+splits words into fragments ("Ignore" became "I", "gno", "re"), so the classifier, trained
+without it, read noise at run time: through the runtime path it caught 19.4% of the held-out
+injections, not the 100% its training report shows. Fixed, the runtime path matches the report.
+On the injection evaluation with hard benign texts (below) it is still unusable: 46.5% of
+injections caught and 24.4% of benign texts flagged, including 100% of human-to-human requests
+and of reports quoting an attack, 78% of legitimate tool-usage guidance and 44% of agent-
+addressed hints. The DeBERTa intent model was trained with the same flag, so its training and
+run time agree, but it learned from fragmented tokens; retraining it is untested.
+
 ## Production settings
 
 | Variable | Purpose |
@@ -244,20 +255,26 @@ policy cost reported as a 100% false block for that category.
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
 | guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
 | agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs |
-| guard channel coverage | hook-vs-proxy visibility of the MCP channels, measured live on Claude Code and Gemini CLI with benign markers (`benchmarks/coverage/`, [docs/coverage-study.md](docs/coverage-study.md)); stored data came from the old instrumentation, a fixed re-run is pending | per-channel live attacks, Codex and Cursor, elicitation (SDK errors) and sampling (not tested) |
+| guard channel coverage | hook-vs-proxy visibility of the MCP channels, measured live on Claude Code and Gemini CLI with benign markers (`benchmarks/coverage/`, [docs/coverage-study.md](docs/coverage-study.md)); re-run with the fixed instrumentation on 2026-10-13 | per-channel live attacks, Codex and Cursor, elicitation and sampling (neither harness exercised them) |
 
 The channel-coverage study measures which MCP channels each guard placement observes, with
 benign markers only. In it a hook scoped to MCP tool calls (`mcp__.*`) saw the tool-call and
 tool-result channels. No pre-action hook carried the Claude Code description or prompt (the
 `Stop` hit was the model echoing the marker). In Gemini CLI the prompt was carried before the
-model by `BeforeAgent`/`BeforeModel`, not by `BeforeTool`, and the tool description was not
-carried by any hook and not observed in the logs. The Claude resource arrived as a
+model by `BeforeAgent`/`BeforeModel`, not by `BeforeTool`, and the tool description reached the
+model but was carried by no hook: hooks saw it only where the model repeated it (`AfterModel`,
+`AfterAgent`, and inside its own `run_shell_command` calls). The Claude resource arrived as a
 `PostToolUse` event under the built-in `ReadMcpResourceTool`: a `*` matcher saw it, `mcp__.*`
 missed it. The proxy exposes tools only, so resources and prompts are not exposed
 (functionality lost, not mediated); `resources/read` went 1 to 0 on Claude and 0 to 0 on
-Gemini. Elicitation was not exercised (SDK errors) and sampling was not tested. Under the
-proxy a rug-pulled tool was hidden and later calls to it were refused for the rest of the
-session. The stored artifacts come from the old instrumentation; a fixed re-run is pending.
+Gemini. Neither harness exercised elicitation or sampling (no back channel, or method not
+found). Under the proxy a rug-pulled tool was hidden and later calls to it were refused for the
+rest of the session. The transparent proxy forwards the descriptions of tools that pass its
+scans, so the benign description markers reached the model through it, as intended. These
+cells are from the 2026-10-13 re-run with the fixed instrumentation, which separates hook
+events that delivered a marker from those that only echoed it (Haiku and gemini-3.1-flash-lite,
+`artifacts/coverage/`, table in `artifacts/coverage-2026-10-13-table.txt`; the earlier data is in
+`artifacts/coverage-2026-10-12/`). One run per cell.
 On review this is not publishable as it stands, for three reasons:
 
 - The description gap follows from the hook input schemas.
@@ -499,8 +516,16 @@ What the guarded 0.0% means:
   commit and 45.7% on later code (leaked ids), and 42.3% now. The DeBERTa intent model
   (`INTENTSHIELD_INTENT_MODEL_DIR`) is the cause: it abstains on ordinary reads, and
   abstention mapped to alignment 0.0, which overrides lenient reads. Since `14150e7` an
-  abstention gives no opinion instead; the re-run (`artifacts/msb-v7`) is pending. `BLOCK_INTENT_MISMATCH`
-  counts: 0 in v2, 149 in v3, 141 in v4, 0 in v4 with the model off. The v2 gateway rows
+  abstention gives no opinion instead. Re-run on the same 220 held-out cases (`artifacts/msb-v7`,
+  which also has the `shadowing` fix; paired on 219 in `artifacts/msb-compare-v4-v7.txt`):
+  harm executed 0.0% again (5 harmful attempts, all blocked), legitimate task calls blocked
+  18.7% -> 7.3%, task tool reached 42.0% -> 50.7%, user_task 33.6% -> 39.3% (n=140; CIs
+  overlap). The model is still a net cost: with it off, 0.5% of task calls are blocked and
+  user_task is 45.0%. The remaining blocks are confident wrong predictions, not abstentions; the
+  model was trained on tokens a loader flag had split into fragments (see the injection
+  classifier section). v7 shared the Ollama server with other generation jobs for part of the
+  run. `BLOCK_INTENT_MISMATCH` counts: 0 in v2, 149 in v3, 141 in v4, 75 in v7, 0 in v4 with
+  the model off. The v2 gateway rows
   ran without the model (the ML packages were missing then), so their higher utility
   reflects that, not a better guard. With the model off, harm is still 0.0%, so it gave no
   measured security gain on MSB.

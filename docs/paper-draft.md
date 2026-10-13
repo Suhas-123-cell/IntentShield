@@ -79,26 +79,27 @@ TODO ☐: one sentence of per-channel attack success once §3.5 is run.
 - **Adversary goal:** get attacker-controlled text into the model's context on a channel the
   guard does not mediate.
 
-## 3. Channel coverage study  (provisional: old instrumentation, fixed re-run pending)
+## 3. Channel coverage study
 
 ### 3.1 Method
 Probe server (`benchmarks/coverage/probe_server.py`) marks each channel; passive logging hook
 (`log_hook.py`) on every event; headless harness, four benign prompts; direct vs. proxy.
 Reproducible: `benchmarks/coverage/run.py`. Full description in `docs/coverage-study.md`.
 
-### 3.2 Result (measured 2026-10-12; provisional)
+### 3.2 Result (re-measured 2026-10-13 with the fixed instrumentation; one run per cell)
 
 | MCP channel | Claude hook (`mcp__.*`) | Gemini hook (`BeforeTool`) | Transparent proxy |
 |---|---|---|---|
 | Tool result | seen (PostToolUse) | seen (AfterTool) | seen (every `tools/call`) |
-| Tool description | no pre-action hook carried it (the `Stop` hit was the model echoing the marker) | not carried by any hook; not observed in logs | seen (every `tools/list`) |
+| Tool description | reached the model; no hook delivered it (only the model's echo in `Stop`) | reached the model; no hook delivered it (only echoes in `AfterModel`/`AfterAgent` and the model's own shell calls) | seen (every `tools/list`) |
 | Resource content | `PostToolUse` under built-in `ReadMcpResourceTool`: seen by a `*` matcher, missed by `mcp__.*` | not reached (`resources/read` 0 to 0) | not exposed (tools only; functionality lost, not mediated); `resources/read` 1 to 0 on Claude |
 | Prompt content | no pre-action hook carried it (the `Stop` hit was the model echoing the marker) | carried pre-model by `BeforeAgent`/`BeforeModel`, not by `BeforeTool` | not exposed (tools only; `prompts/get` 1 to 0) |
-| Elicitation | not exercised (SDK errors) | not exercised (SDK errors) | not exercised |
-| Sampling | not tested | not tested | not tested |
+| Elicitation | not exercised (no back channel) | not exercised (method not found) | not exercised |
+| Sampling | not exercised (no back channel) | not exercised (method not found) | not exercised |
 
-Server-side counts table (from `docs/coverage-study.md`). The stored artifacts came from the
-old instrumentation; a fixed re-run is pending.
+Server-side counts table (from `docs/coverage-study.md`). Data: `artifacts/coverage/` (re-run
+2026-10-13, Haiku and gemini-3.1-flash-lite); the 2026-10-12 data is kept in
+`artifacts/coverage-2026-10-12/`.
 
 ### 3.3 Finding
 A hook scoped to MCP tool calls observed the tool-call and tool-result channels. Descriptions
