@@ -131,7 +131,6 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         args.base_model,
         revision=args.base_model_revision,
         trust_remote_code=False,
-        fix_mistral_regex=True,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         args.base_model,
