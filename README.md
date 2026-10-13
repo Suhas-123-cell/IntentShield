@@ -19,6 +19,9 @@ evidence that the detection works (see "Why 0.0% is weak evidence").
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3; poisoned tool never offered (n=3 per arm, no stored raw log) |
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
+| MSB held-out gateway after the abstention fix (v7, 219 paired cases) | - | harm still **0.0%**; legitimate task calls blocked 18.7% -> 7.3%, user task done 33.6% -> 39.3% (intent model off: 0.5% and 45.0%) |
+| Prompt-injection detection, 3,717 held-out texts incl. 142 hard benign ones | - | rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (rules alone 49.9% / 2.1%; Prompt Guard 2 adds 0.7 points); plain-language injections from independent sources stay mostly undetected |
+| Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
 All MSB rows are a single run at temperature 0 with one agent model per row. The Wilson
 intervals treat cases as independent, but the 220 cases are 20 draws from each attack
@@ -30,7 +33,7 @@ Neutral server ids (commit `1c0d4dc`): before it, the MSB runner named its serve
 unguarded harm (qwen2.5:7b was 51.4% with it, 58.5% without). Only the qwen2.5:7b rows
 were re-run with neutral ids (`artifacts/msb-v4`).
 
-Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli).
+Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli), [adaptive injection detection](#adaptive-injection-detection).
 
 ## What is implemented
 
@@ -52,6 +55,11 @@ Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#gua
 - Gemini-native function calling for the web proposal path (the optional LLM judge can also use Groq; see "LLM call judge")
 - Evidence-only detection and grounding agents feeding the deterministic policy engine
 - A locally trained DeBERTa-v3-small intent classifier with abstention and artifact integrity checks
+- Optional learned injection detectors beside the rules, all evidence only:
+  - Llama Prompt Guard 2 on Groq's free tier.
+  - A local embedding nearest-neighbour detector (exemplars).
+  - Learning from operator labels, behind a regression gate.
+  - Regex rules proposed by a local model that the operator approves.
 - Model proposals normalized into the same deterministic policy and approval boundary
 - A deterministic local MCP server and end-to-end harness; no API key or paid model required
 - FastAPI endpoints and scripted benign, injection, and approval scenarios
@@ -76,6 +84,16 @@ Run the test suite:
 ```bash
 .venv/bin/pytest -q
 ```
+
+Optional extras:
+
+- `requirements-ml.txt` (torch, transformers, sentencepiece, protobuf) is needed for the local
+  DeBERTa intent and injection classifiers and the exemplar embedder. Install it with
+  `uv pip install --python .venv/bin/python -r requirements-ml.txt`. A plain `uv sync` removes it
+  again.
+- `--extra learning` (numpy) is needed for the exemplar detector and for learning from operator
+  labels.
+- `--extra dev` includes both pytest and numpy, which is what CI runs: `uv sync --extra dev --frozen`.
 
 For the current architecture, complete testing sequence, expected decisions,
 and failure diagnosis, see the [architecture and testing guide](docs/architecture-and-testing.md).
@@ -334,7 +352,7 @@ policy cost reported as a 100% false block for that category.
 | tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice (attack success 0% even unguarded); MSB (held-out: 0.0% harm, qwen2.5:7b re-run with neutral ids); self-disclosure redaction | adaptive attackers |
 | tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking and slack, ASB observation injection, MSB | AgentDojo travel and workspace (run, but 0% utility with or without the guard, so uninformative), more attacks |
 | false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
-| guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`) | optimization attacks, output scanner |
+| guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`); a local model rewriting blocked output injections against rules + exemplars, static vs learning (`benchmarks/adaptive_attacker.py`, 42 seeds) | optimization attacks, stronger attacker models, real operator decisions |
 | agent harnesses | hooks for Claude Code (live check), Codex CLI, Cursor, Gemini CLI (event-shape tests) | live Codex, Cursor and Gemini CLI runs |
 | guard channel coverage | hook-vs-proxy visibility of the MCP channels, measured live on Claude Code and Gemini CLI with benign markers (`benchmarks/coverage/`, [docs/coverage-study.md](docs/coverage-study.md)); re-run with the fixed instrumentation on 2026-10-13 | per-channel live attacks, Codex and Cursor, elicitation and sampling (neither harness exercised them) |
 
@@ -417,7 +435,21 @@ The proxy guards all three places an MCP attack enters (related work and next st
   tool is `REVIEW_CLASSIFIER_FLAGGED`; a flagged output is marked
   `injection_suspected` and any later call carrying one of its values goes to
   review. It never blocks and never allows; a configured but broken artifact stops
-  the proxy from starting.
+  the proxy from starting. Do not enable it: it flags 24% of benign texts (see "Injection
+  classifier").
+- **Prompt Guard 2 (optional).** `"prompt_guard": "meta-llama/llama-prompt-guard-2-86m"` (key from
+  `GROQ_API_KEY`). It is read like the classifier and has the same effect. It catches explicit
+  "ignore previous" styles and little else (see
+  [Adaptive injection detection](#adaptive-injection-detection)).
+- **Exemplar detector and learning (optional).**
+  - `exemplar_index_dir`: an index from `python -m intentshield.exemplars seed`, used with
+    `embedder_dir`. It flags outputs only by default and has the same effect as the classifier.
+  - `learning_regression`: JSONL files whose `validation` rows form the regression gate. It
+    lets the operator teach the index through the control endpoint.
+  - `signature_model`: a local Ollama model. It lets the operator ask for regex rules that wait
+    for approval.
+
+  See [Teach the detector](#teach-the-detector-operator-labels-and-induced-rules).
 - **LLM call judge (optional).** `"judge": "groq"` or `"gemini"` (key from
   `GROQ_API_KEY` / `GEMINI_API_KEY`, free tiers work) runs a second-stage check on
   descriptions the rules pass and on each read-only call, asking whether the call
@@ -1226,8 +1258,12 @@ can run without a token for development.
 ## Security boundary
 
 Model output, upstream tool descriptions, schemas, annotations, and results are
-untrusted input. Gemini may propose a call; detection, grounding, and DeBERTa
-produce immutable evidence only. None can approve or execute. The deterministic
+untrusted input. Gemini may propose a call; detection, grounding, DeBERTa and the
+learned injection detectors (Prompt Guard 2, exemplars, approved induced rules)
+produce immutable evidence only. None can approve or execute. Only the operator,
+through the bearer-protected control endpoint, can label text for learning or
+approve an induced rule. Tool output is what gets labelled; it never chooses a
+label. Learning changes only the exemplar detector, behind a regression gate. The deterministic
 policy engine remains the sole authorization boundary and the service remains
 the sole executor path. IntentShield validates arguments against the bound
 upstream schema before invoking MCP. Catalog drift fails closed until restart.
