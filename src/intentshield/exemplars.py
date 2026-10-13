@@ -269,6 +269,10 @@ def main(argv: list[str] | None = None) -> None:
     seed.add_argument("--dataset", type=Path, default=Path("artifacts/injection/dataset.jsonl"))
     seed.add_argument("--hard", type=Path, default=Path("artifacts/injection/hard_negatives.jsonl"))
     seed.add_argument("--max-fpr", type=float, default=0.01, help="benign flag rate allowed on validation")
+    seed.add_argument("--kinds", default="output",
+                      help="kinds the index may flag (output, description). Descriptions are off by default: "
+                           "on held-out hard descriptions the tuned threshold flagged 12 of 36 legitimate "
+                           "usage-guidance descriptions (validation held only 20 such texts)")
     seed.add_argument("--out", type=Path, default=Path("artifacts/exemplars"))
     args = parser.parse_args(argv)
     if args.command == "download":
@@ -285,6 +289,8 @@ def main(argv: list[str] | None = None) -> None:
     validation = [r for r in rows if r["split"] == "validation"]
     index.thresholds, index.k, stats = tune(
         index, [(r["text"], r["label"] == "instruction", kind_of(r["source"])) for r in validation], args.max_fpr)
+    for kind in set(KINDS) - set(args.kinds.split(",")):
+        index.thresholds[kind] = 1.01  # never flagged
     index.save(args.out)
     print(json.dumps({"instruction_chunks": len(index.texts["instruction"]), "data_chunks": len(index.texts["data"]),
                       "validation_rows": len(validation), "k": index.k,

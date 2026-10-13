@@ -235,15 +235,29 @@ injections caught and the share of benign texts flagged:
 | detector | injections caught | benign flagged | hard benign flagged |
 |---|---|---|---|
 | rules | 49.9% | 2.1% | 14/142 (12 are quoted attacks) |
+| Prompt Guard 2 (86M, Groq) | 40.2% | 2.0% | 12/142 (all quoted attacks) |
+| exemplars, descriptions and outputs | 21.9% | 3.4% | 16/142 (15 are usage-guidance descriptions) |
 | injection classifier | 46.5% | 24.4% | 113/142 |
-| exemplars (single threshold) | 20.7% | 2.4% | 9/142 |
-| any of the three | 70.4% | 25.3% | 116/142 |
+| rules + Prompt Guard | 51.1% | 2.6% | 15/142 |
+| **rules + exemplars on outputs only** (default since this table) | **57.8%** | **2.5%** | **15/142** |
+| rules + Prompt Guard + exemplars on outputs | 58.5% | 2.9% | 15/142 |
+| any of the four | 70.6% | 25.9% | 118/142 |
 
-The exemplar detector catches what resembles its seeds (MCPTox 86.7%, generated styles
-61-81%). It barely catches independent families (InjecAgent base 1/1,054, AgentDojo 4-30%), so
-it adds little until it has learned from them. Per-kind thresholds (`93161b7`) came after this
-table. Prompt Guard 2 numbers follow when its free-tier run completes
-(`artifacts/injection-eval/report.json`).
+These come from `artifacts/injection-eval/report.json`, and the per-row verdicts are in `rows.jsonl`.
+The output-only rows were computed from those verdicts. Each detector covers different ground:
+
+- **Prompt Guard 2** catches the explicit styles: "ignore previous" 27/27, and the "enhanced"
+  InjecAgent attacks 1,054/1,054, which the rules also catch. It adds 1.2 points to the rules.
+  It catches no plain-language injection: polite and as-the-user outputs 0/144, InjecAgent base
+  6/1,054, AgentDojo `direct` 0/27.
+- **The exemplar detector** catches what resembles its seeds: generated styles 64-76%, MCPTox
+  87%. On descriptions its tuned threshold also flagged 12 of 36 legitimate usage-guidance
+  descriptions; validation held only 20 such texts. So the index now flags outputs only by
+  default (`--kinds output`).
+- **No usable detector** catches plain-language injections from an independent source.
+  InjecAgent base stays at 1.5% for rules + Prompt Guard + exemplars, and AgentDojo `direct` at
+  1/27. Only the unusable classifier does better there: 30% of InjecAgent `ds` base, at a 24%
+  benign flag rate. That is the gap learning from confirmed attacks is meant to close (below).
 
 **Adaptive attacker** (`benchmarks/adaptive_attacker.py`). These are defensive measurements
 of IntentShield's own detectors with benign canary addresses. 42 held-out seeds come from the
