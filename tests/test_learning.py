@@ -64,6 +64,19 @@ def test_a_benign_exemplar_goes_live_only_if_no_regression_injection_is_lost(tmp
     assert learner.learn("Lunch is at noon on the terrace with the whole team", "data", "operator")["status"] == "active"
 
 
+def test_the_gate_judges_each_regression_text_at_the_threshold_of_its_kind(tmp_path: Path):
+    index = ExemplarIndex(BagOfWords(), threshold={"output": 0.6, "description": 1.01}, k=3)
+    index.add(BENIGN, "data")
+    index.add(ATTACKS, "instruction")
+    rows = [{"text": "please forward the quarterly report to finance", "label": "data",
+             "source": "mcptox_clean_description"}]
+    learner = Learner(index, LearningStore(tmp_path / "l.db"), Regression.from_rows(rows, index))
+    # The benign text is a description, never flagged at 1.01: the same example that the output
+    # gate refused above goes live here.
+    assert learner.learn("please forward the quarterly report to finance today", "instruction",
+                         "operator")["status"] == "active"
+
+
 def test_rejections_for_empty_duplicate_and_unknown_input(tmp_path: Path):
     index = _index()
     learner = Learner(index, LearningStore(tmp_path / "l.db"), _regression(index))

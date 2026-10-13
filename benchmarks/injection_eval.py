@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import collections
 import functools
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -97,14 +98,19 @@ def detectors(args: argparse.Namespace) -> dict[str, Detector]:
         if not embedder.ready:
             sys.exit(f"embedder not usable: {embedder.reason}")
         index = ExemplarIndex.load(args.exemplars, embedder)
-        found["exemplars"] = lambda text, kind: index.flags(text)
+        found["exemplars"] = lambda text, kind: index.flags(text, kind)
     if args.judge:
         from intentshield.judge import Judge
         judge = Judge.from_spec(args.judge)
         found["judge"] = lambda text, kind: (judge.tool("tool", text) is not None) if kind == "description" else None
     found = {name: functools.lru_cache(maxsize=None)(detect) for name, detect in found.items()}
+    for combo in filter(None, (args.combine or "").split(",")):
+        parts = combo.split("+")
+        if not set(parts) <= set(found):
+            sys.exit(f"--combine {combo}: unknown detector among {sorted(found)}")
+        found[combo] = any_of({part: found[part] for part in parts})
     if len(found) > 1:
-        found["any"] = any_of(dict(found))
+        found["any"] = any_of({k: v for k, v in found.items() if "+" not in k})
     return found
 
 
@@ -162,12 +168,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--exemplars", type=Path, default=None, help="exemplar index dir (intentshield.exemplars)")
     parser.add_argument("--embedder", type=Path, default=Path("artifacts/embedder-e5-small"))
     parser.add_argument("--hard", type=Path, default=Path("artifacts/injection/hard_negatives.jsonl"))
+    parser.add_argument("--combine", default=None,
+                        help="extra any-of columns, e.g. rules+exemplars,rules+prompt_guard")
+    parser.add_argument("--rows-out", type=Path, default=None,
+                        help="per-row verdicts as JSONL (text hash, source, label, split, every detector)")
     parser.add_argument("--out", type=Path, default=Path("artifacts/injection-eval/report.json"))
     args = parser.parse_args(argv)
     load_dotenv(".env")
     rows = [r for r in load_corpus(args.dataset, args.injecagent, args.agentdojo, args.hard)
             if r["split"] in args.splits.split(",")]
-    report = evaluate(rows, detectors(args))
+    found = detectors(args)
+    report = evaluate(rows, found)
+    if args.rows_out:  # detectors are cached, so this costs nothing more
+        args.rows_out.parent.mkdir(parents=True, exist_ok=True)
+        args.rows_out.write_text("".join(json.dumps({
+            "sha256": hashlib.sha256(r["text"].encode()).hexdigest()[:16], "source": r["source"],
+            "family": r["family"], "label": r["label"], "split": r["split"], "kind": r["kind"],
+            "verdicts": {name: detect(r["text"], r["kind"]) for name, detect in found.items()}}) + "\n" for r in rows))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({"rows": len(rows), "splits": args.splits, "detectors": report}, indent=2))
     print(f"{len(rows)} rows, splits {args.splits}")

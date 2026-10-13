@@ -258,13 +258,16 @@ class MCPProxyRuntime:
                             if config.injection_classifier_dir else None)
         if self._classifier and not self._classifier.ready:
             raise ValueError(f"injection_classifier_dir is not usable: {self._classifier.reason}")
-        # Learned detectors, in order: (name, flags). Each reads text the rules passed.
-        self._detectors: list[tuple[str, Callable[[str], bool | None]]] = []
+        # Learned detectors, in order: (name, flags(text, kind)), kind "description" or "output".
+        # Each reads text the rules passed.
+        self._detectors: list[tuple[str, Callable[[str, str], bool | None]]] = []
         if self._classifier:
-            self._detectors.append(("injection_classifier", self._classifier.flags))
+            classifier = self._classifier
+            self._detectors.append(("injection_classifier", lambda text, kind: classifier.flags(text)))
         if config.prompt_guard:
             from .prompt_guard import PromptGuard
-            self._detectors.append(("prompt_guard", PromptGuard(config.prompt_guard).flags))
+            guard = PromptGuard(config.prompt_guard)
+            self._detectors.append(("prompt_guard", lambda text, kind: guard.flags(text)))
         self._learner: Any = None
         self._rules: Any = None
         self._rule_benign: list[str] = []
@@ -284,7 +287,8 @@ class MCPProxyRuntime:
                 self._learner = Learner(exemplars, LearningStore(config.database_path), regression)
                 from .signatures import LearnedRules, RuleStore
                 self._rules = LearnedRules(RuleStore(config.database_path))
-                self._detectors.append(("learned_rules", self._rules.flags))
+                rules = self._rules
+                self._detectors.append(("learned_rules", lambda text, kind: rules.flags(text)))
                 # Benign texts a proposed rule must not match: every split but the held-out test.
                 self._rule_benign = [r["text"] for r in rows if r.get("label") == "data" and r.get("split") != "test"]
         elif config.learning_regression:
@@ -396,7 +400,7 @@ class MCPProxyRuntime:
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
             if not findings and qualified not in self._quarantined:
-                if self._semantic_flag(text):
+                if self._semantic_flag(text, "description"):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_CLASSIFIER_FLAGGED
                 elif self._judge and self._judge.tool(qualified, text):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_JUDGE_FLAGGED
@@ -560,10 +564,11 @@ class MCPProxyRuntime:
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         return None
 
-    def _semantic_flag(self, text: str) -> str | None:
-        """The first learned detector that flags ``text``, or None. Evidence only."""
+    def _semantic_flag(self, text: str, kind: str) -> str | None:
+        """The first learned detector that flags ``text`` (a ``description`` or an ``output``), or None.
+        Evidence only."""
         for name, flags in self._detectors:
-            if flags(text):
+            if flags(text, kind):
                 return name
         return None
 
@@ -572,7 +577,7 @@ class MCPProxyRuntime:
         self._observed.setdefault(run_id, set()).update(authority_values(upstream))
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
-        detector = None if findings else self._semantic_flag(text)
+        detector = None if findings else self._semantic_flag(text, "output")
         outputs = self._outputs.setdefault(run_id, [])
         outputs.append({"tool_name": call.tool_name, "text": text, "values": distinctive_values(upstream),
                         "flagged": bool(findings or detector)})

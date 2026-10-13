@@ -26,7 +26,7 @@ from typing import Any, Iterator
 
 import numpy as np
 
-from .exemplars import ExemplarIndex, chunks
+from .exemplars import ExemplarIndex, chunks, kind_of
 
 LABELS = ("instruction", "data")
 ORIGINS = ("operator", "review_reject", "review_approve")
@@ -73,30 +73,31 @@ class LearningStore:
 
 
 class Regression:
-    """Benign and injection texts the gate re-scores, embedded once (chunk vectors per text)."""
+    """Benign and injection texts the gate re-scores, embedded once (chunk vectors per text), each
+    judged at the threshold of its kind (output or description)."""
 
-    def __init__(self, benign: list[np.ndarray], injections: list[np.ndarray]) -> None:
+    def __init__(self, benign: list[tuple[np.ndarray, str]], injections: list[tuple[np.ndarray, str]]) -> None:
         self.benign, self.injections = benign, injections
 
     @classmethod
     def from_rows(cls, rows: list[dict[str, Any]], index: ExemplarIndex, cache: Path | None = None) -> "Regression":
-        texts = sorted({(r["text"], r["label"]) for r in rows if r.get("label") in LABELS})
+        texts = sorted({(r["text"], r["label"], kind_of(r.get("source", ""))) for r in rows if r.get("label") in LABELS})
         key = hashlib.sha256(json.dumps([texts, index.embedder.metadata]).encode()).hexdigest()[:16]
         path = cache / f"regression-{key}.npz" if cache else None
         if path and path.exists():
             stored = np.load(path)
             vectors = [stored[f"t{i}"] for i in range(len(texts))]
         else:
-            vectors = [index.embed_text(text) for text, _ in texts]
+            vectors = [index.embed_text(text) for text, _, _ in texts]
             if path:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 np.savez(path, **{f"t{i}": v for i, v in enumerate(vectors)})
-        return cls([v for v, (_, label) in zip(vectors, texts) if label == "data"],
-                   [v for v, (_, label) in zip(vectors, texts) if label == "instruction"])
+        return cls([(v, kind) for v, (_, label, kind) in zip(vectors, texts) if label == "data"],
+                   [(v, kind) for v, (_, label, kind) in zip(vectors, texts) if label == "instruction"])
 
     def flagged(self, index: ExemplarIndex) -> tuple[int, int]:
         """(benign texts flagged, injections flagged) under ``index``."""
-        flag = lambda vectors: index.score_vectors(vectors) >= index.threshold
+        flag = lambda item: index.score_vectors(item[0]) >= index.thresholds[item[1]]
         return sum(map(flag, self.benign)), sum(map(flag, self.injections))
 
 

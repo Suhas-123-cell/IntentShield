@@ -835,6 +835,46 @@ curl -X POST \
 The endpoint is absent when `INTENTSHIELD_CONTROL_TOKEN` is unset. Bind to
 localhost unless you have added TLS and a production authentication layer.
 
+### Teach the detector (operator labels and induced rules)
+
+With `exemplar_index_dir` and `learning_regression` set in the proxy config, the
+operator can teach the exemplar detector (`src/intentshield/learning.py`). Only the
+operator labels; tool output is what gets labelled, never who labels. A decision may
+carry a label: `injection` with a rejection, `benign` with an approval. The proxy
+learns the outputs whose values the reviewed call reused (for `injection`, any flagged
+output of the run when none was reused), and an approval never teaches a flagged output
+as benign:
+
+```bash
+curl -X POST -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" -H "content-type: application/json" \
+  -d '{"decision":"reject","learn":"injection"}' http://127.0.0.1:8001/control/approvals/APPROVAL_ID
+# label a text directly, and see what was learned and why
+curl -X POST ... -d '{"text":"...","label":"injection"}' http://127.0.0.1:8001/control/learning/examples
+curl -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" http://127.0.0.1:8001/control/learning
+```
+
+Every example passes a regression gate before it goes live: an injection example is
+refused if any benign text of the regression set (the `validation` rows of the
+`learning_regression` files) becomes flagged, a benign one if any regression injection
+stops being flagged. Refused examples stay listed with their gate result. Learned
+examples persist in the proxy database and are replayed at start. Learning changes only
+the exemplar detector: rules, quarantine and the review of mutations are untouched.
+
+With `signature_model` set (a local Ollama model), the operator can ask for rules for a
+learned injection. Proposals must compile, avoid nested quantifiers, lookarounds and
+backreferences, carry at least 12 literal letters, match their source and match no
+non-test benign text; the ones that pass wait as `pending` until approved:
+
+```bash
+curl -X POST ... -d '{"example_id":"EXAMPLE_ID"}' http://127.0.0.1:8001/control/rules/propose
+curl -X POST ... -d '{"decision":"approve"}' http://127.0.0.1:8001/control/rules/RULE_ID
+curl -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" http://127.0.0.1:8001/control/rules
+```
+
+Learned examples, approved rules, Prompt Guard 2 (`prompt_guard`) and the local
+classifier are all evidence: a hit withholds a description or sends calls that reuse an
+output's values to review; none of them allows anything.
+
 ### Configure another upstream server
 
 Use the `upstreams` array to connect one or more servers. For a local stdio
