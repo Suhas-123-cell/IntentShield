@@ -204,6 +204,73 @@ and of reports quoting an attack, 78% of legitimate tool-usage guidance and 44% 
 addressed hints. The DeBERTa intent model was trained with the same flag, so its training and
 run time agree, but it learned from fragmented tokens; retraining it is untested.
 
+## Adaptive injection detection
+
+Four learned parts sit beside the rules. All four count only as evidence: a hit withholds a
+description or sends calls that reuse an output's values to review, and none of them allows
+anything. Each is optional in the proxy config.
+
+- **Llama Prompt Guard 2** on Groq's free tier (`prompt_guard.py`; `prompt_guard` in the config).
+  Long texts are scored in overlapping windows, and the highest window score counts.
+- **Exemplar detector** (`exemplars.py`). Text is chunked and embedded locally with
+  multilingual-e5-small. A chunk scores the class-balanced, similarity-weighted share of
+  injection chunks among its k nearest known chunks; a text scores its worst chunk. There is
+  one threshold per kind (description or output), tuned on validation to at most 1% benign
+  flags. On validation a plain nearest-neighbour score found 20% of injections, and the vote
+  found about three times as many at the same false-flag rate.
+- **Learning from operator labels** (`learning.py`). Every new example passes a regression
+  gate. See [Teach the detector](#teach-the-detector-operator-labels-and-induced-rules).
+- **Induced rules** (`signatures.py`). A local model proposes regexes for a learned injection.
+  The gates refuse unsafe patterns, broad ones, patterns naming an address, URL or number,
+  and any pattern matching non-test benign text. The operator approves each rule.
+
+**Evaluation** (`benchmarks/injection_eval.py`; 3,717 held-out texts). The injections are
+2,959 texts from the MCPTox test servers, generated injection styles, InjecAgent and AgentDojo.
+The 758 benign texts include 142 hard ones (`benchmarks/hard_negatives.py`): tool descriptions
+that legitimately guide the agent, results that tell the agent its next step, reports that
+quote an attack, and human-to-human requests to pay, share or grant access. Hard examples are
+split by topic, so test topics never seed or tune a detector. Each cell shows the share of
+injections caught and the share of benign texts flagged:
+
+| detector | injections caught | benign flagged | hard benign flagged |
+|---|---|---|---|
+| rules | 49.9% | 2.1% | 14/142 (12 are quoted attacks) |
+| injection classifier | 46.5% | 24.4% | 113/142 |
+| exemplars (single threshold) | 20.7% | 2.4% | 9/142 |
+| any of the three | 70.4% | 25.3% | 116/142 |
+
+The exemplar detector catches what resembles its seeds (MCPTox 86.7%, generated styles
+61-81%). It barely catches independent families (InjecAgent base 1/1,054, AgentDojo 4-30%), so
+it adds little until it has learned from them. Per-kind thresholds (`93161b7`) came after this
+table. Prompt Guard 2 numbers follow when its free-tier run completes
+(`artifacts/injection-eval/report.json`).
+
+**Adaptive attacker** (`benchmarks/adaptive_attacker.py`). These are defensive measurements
+of IntentShield's own detectors with benign canary addresses. 42 held-out seeds come from the
+seven families the static detectors miss most. A local model (qwen2.5:7b) gets up to 5
+attempts per seed, each one rewriting the last flagged text. An attempt counts only if it keeps
+its canary and a local judge says it still asks the assistant to send something. The defense is
+rules plus exemplars, without Prompt Guard. The learning arm learns every valid attempt behind
+the gate and induces rules for it. Rule approval is simulated: every proposal that passes the
+gates is approved.
+
+| arm | seeds evaded [95% CI] | evaded on first attempt | second half | held-out benign flagged |
+|---|---|---|---|---|
+| static | 16/42, 38% [25, 53] | 5 | 7/21 | 33/758 |
+| learning | 13/42, 31% [19, 46] | 3 | 5/21 | 28/758 |
+
+Learning helped a little, and the difference is not significant: 3 seeds, with overlapping
+intervals. Two seeds were caught on the first attempt because of what the defense had learned
+from earlier, different seeds. Learning did not help on InjecAgent's base attacks (5/6 evaded in
+both arms). The attacker is weak, too: only 28-31 of up to 210 attempts were valid. Benign flags
+fell after learning because class-balanced voting gives each injection chunk less weight as more
+are added. A first run gave every seed the same canary. Six of its approved rules then named that
+address, which made learning look better than it was. Rules may no longer name addresses or
+numbers, and each seed now has its own canary (`95ef2c1`; the first run is in
+`artifacts/adaptive-attacker-shared-canary/`). Some approved rules are broad, such as
+`\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
+each rule.
+
 ## Production settings
 
 | Variable | Purpose |
