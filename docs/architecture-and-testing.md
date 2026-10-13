@@ -192,7 +192,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `145 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+For this revision, expect `187 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -203,7 +203,7 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 146 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 12 October 2026 all 146 passed with HTTP enabled; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+There are 188 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 13 October 2026 all 188 passed with HTTP enabled; on 12 October 2026 all 146 then collected passed; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
 
 The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
