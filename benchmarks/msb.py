@@ -252,9 +252,11 @@ async def run_case(data: Path, case: dict[str, Any], args: argparse.Namespace,
                 call_budget=100,
                 lenient_reads=True,
                 judge=args.judge,
+                prompt_guard=args.prompt_guard,
             ), upstreams=upstreams)
             await proxy.connect()
             judges += [proxy._judge] if proxy._judge else []
+            judges += [proxy._prompt_guard] if proxy._prompt_guard else []  # unscored text stops the run too
             run_id = await proxy.create_run(case["task"])
             tools = {c["name"]: (c["description"], c["schema"], c["schema_hash"], c["mutation"])
                      for c in await proxy.tool_catalog() if c["available"]}
@@ -564,9 +566,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--rescore", type=Path, default=None, metavar="DIR",
                         help="recompute the trace metrics of DIR's results-*.jsonl without Docker; "
                              "writes report-*-rescored.json to --out")
+    parser.add_argument("--prompt-guard", nargs="?", const="meta-llama/llama-prompt-guard-2-86m", default=None,
+                        metavar="MODEL", help="add Llama Prompt Guard 2 on Groq to the gateway's detectors")
     args = parser.parse_args(argv)
     if args.judge and args.defense == "baseline":  # no judge hook there; the tag would still claim one
         parser.error("--judge has no effect with --defense baseline")
+    if args.prompt_guard and args.defense != "intentshield":
+        parser.error("--prompt-guard needs --defense intentshield")
     if args.rescore:
         grid = cases(args.data)
         args.out.mkdir(parents=True, exist_ok=True)
@@ -597,7 +603,8 @@ def main(argv: list[str] | None = None) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     tag = f"{args.model.replace(':', '_')}-{args.defense}" + ("-exposed" if args.expose_descriptions else "") \
         + ("-holdout" if args.holdout else "") \
-        + (f"-judge_{args.judge.replace(':', '_')}" if args.judge else "")
+        + (f"-judge_{args.judge.replace(':', '_')}" if args.judge else "") \
+        + (f"-pg_{args.prompt_guard.rsplit('-', 1)[-1]}" if args.prompt_guard else "")
     sink = args.out / f"results-{tag}.jsonl"
     # Rows that errored (a server failed to start) are retried; the latest row per case wins.
     done = {r["id"] for r in map(json.loads, sink.read_text().splitlines()) if "error" not in r} \
@@ -621,7 +628,7 @@ def main(argv: list[str] | None = None) -> None:
     rows = list({r["id"]: r for r in map(json.loads, sink.read_text().splitlines())}.values())
     scored = [r for r in rows if "error" not in r]
     report = {"model": args.model, "defense": args.defense, "expose_descriptions": args.expose_descriptions,
-              "judge": args.judge,
+              "judge": args.judge, "prompt_guard": args.prompt_guard,
               "cases": len(scored), "errors": len(rows) - len(scored), "results": summarize(scored)}
     (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report["results"].get("all"), indent=2))
