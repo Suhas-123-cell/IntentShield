@@ -6,7 +6,9 @@ version: most of IntentShield is engineering over prior art.
 
 **Verdict (2026-10-12, after review): it is not worth submitting to a peer-reviewed venue as
 it stands.** The candidate claim below was measured, but on review it is thin and partly
-known (§5). Two routes could still produce a paper (§7). Update 2026-10-13: the MSB label
+known (§5). Two routes could still produce a paper (§7); a third, an evaluation-methodology
+paper built on the trivial baseline, is audited against 19 papers in §9 and failed its
+AgentDojo kill test (§9.5): the floor's parity with detectors holds on MSB only. Update 2026-10-13: the MSB label
 leak is fixed and re-measured (§5.6, §6), and the new evidence weakens the supporting
 numbers further: the gateway's 0.0% executed harm mostly comes from the attack not reaching
 the agent, not from detection.
@@ -247,3 +249,211 @@ IntentShield is solid engineering with a careful held-out evaluation. None of it
 is novel. On review, the placement finding is too thin, and partly a known consequence of
 the hook schemas. On today's evidence, the realistic outcome is an artifact or tool paper
 (route 1). A research paper needs route 2, and no amount of framing substitutes for it.
+
+## 9. Route 3: an evaluation-methodology paper (audited 2026-10-14)
+
+**The idea.** On MSB, executed harm cannot tell guards apart. Every guard arm that holds
+mutations scores 0.0%, including the trivial baseline with no detection
+(`artifacts/msb-compare-v4-v5-exposure.txt`, 218 paired cases). The arms separate only on
+the stages before execution:
+
+| Arm | Executed | Attempted | Reached review | `user_task` (n=140) |
+|---|---|---|---|---|
+| none | 58.3% | 58.7% | — | 68.6% |
+| trivial baseline | 0.0% | 12.4% | 12.4% | 51.4% |
+| trivial baseline, descriptions exposed | 0.0% | 37.6% | 31.6% | 41.4% |
+| gateway | 0.0% | 0.9% | 0.0% | 33.6% |
+| gateway, intent model off | 0.0% | 1.8% | 0.0% | 45.0% |
+| hooks | 0.0% | 17.0% | 0.0% (20 blocked) | 58.6% |
+
+The mechanism is now confirmed from the MSB paper itself (Tab. 9): five of its six attack
+tasks are judged by environment state after `write_file`, `edit_file` or `kill_process`. The
+sixth (`llm_model_name` supplied as a parameter) is neutralized by field stripping. So any guard
+that holds mutations and strips self-disclosure fields scores 0% by construction.
+
+### 9.1 Literature audit: how 19 papers score outcomes
+
+Papers read in full HTML on 2026-10-14. These are the questions that decide whether the idea
+is new. "Structural floor" means a baseline that only removes exposure or authority (block or
+hold all side effects, withhold descriptions, read-only), with no detection.
+
+| Paper | Eval type | Held/ask/review outcome | Structural floor | Utility | Reviewer load |
+|---|---|---|---|---|---|
+| MSB 2510.15994 | live loop, state oracle | no HITL; not discussed | no (MCIP only) | PUA, NRP | no |
+| MCP-SafetyBench 2512.15163 | live loop, signature detectors | no HITL; DSR = 1−ASR, so refusals and no-ops count as defended | no (safety prompt only) | not under defense | no |
+| MCPSecBench 2508.13220 | 3 GUI hosts, LLM judge | hosts' own approval dialogs present; handling **not stated** | no | no | no |
+| MCPTox 2508.14925 | proposed calls, poisoned tool never executed | n/a | no | no | no |
+| MCP-TDP 2605.24069 | Cline sandbox, side-effect forensics | no gate ("agent has permission to execute") | no | no | no |
+| COPEX 2610.04378 | fixed orchestrator, oracle + judge | none; the judge defaults to "detected" when unsure | no | no | no |
+| MCP-Guard 2508.10991 | static classification | n/a | no | no | no |
+| MCPShield 2602.14281 | 76 malicious servers | none | no | benign FP only | no |
+| TrustShiftProbe 2608.23763 | live loop, read-heavy domains | none | no | no | no |
+| ShieldNet 2604.04426 | network traces | alerts only | no | no | no |
+| Tool-Guard 2606.20922 | AgentDojo, ASB | none | tool filter only | yes | no |
+| PACT 2605.11039 | AgentDojo | blocks; no HITL | **no**, but states "invocation-level quarantining can reach perfect security" | benign only | no |
+| ToolFence 2609.37196 | AgentDojo | denial = recoverable; HITL future work | tool filter only | clean + under attack | judge calls/task |
+| CapScope 2609.08371 | 300 runs, Pi agent | "interactive approval is disabled" | no deny-all-writes | yes | no |
+| Execution control 2606.29073 | 10 hand-built cases | "held at a waiting-for-approval state" scored **blocked**; no approver model | B1 has per-call approval | no | no |
+| HarnessSecurity-Bench 2610.07639 | 6 harnesses, 2,500 trials, state oracles | approvals routed to an **LLM reviewer** (Qwen3.8-27B) | **yes, in effect**: read-only mode ASR 8.3%→0.8% at −34 pp utility; network isolation 57.1%→0.8% at −24.5 pp | yes | no |
+| Evaluate the Stack 2610.07359 | 1,119 static labelled actions | scored both ways; review-as-catch "reversed five conclusions"; "Any metric that credits escalation as a catch scores a deferring layer well" | n/a | n/a | no human layer |
+| Oversight Has a Capacity 2606.08919 | 125 labelled actions, simulated reviewer | reviewer reliability r(ℓ) decays past capacity C; "more human oversight can make a system less safe" | n/a | n/a | **yes (simulated)** |
+| Habituation at the Gate 2606.22721 | 11,429 real reviews of agent PRs | approval 30.1%→36.8% early to late, comments −22% | n/a | n/a | no miss rate measured |
+
+Also read for context: Approval Laundering 2609.38983 shows that what is approved is not always
+what executes in Claude Code (bound-gap rate 1.0 for scope and temporal laundering, 0.45 for
+argument laundering, n=19-20 per class). So "approved" is not a safe endpoint either. Implicit
+Trust 2609.18217 tested seven third-party MCP tools; the best blocked 2 of 30 payload-channel
+combinations.
+
+### 9.2 What the audit changes
+
+1. **The "benchmarks count review as safe" framing is mostly a strawman.** Only 2606.29073
+   scores a held call as blocked with no follow-up. Most MCP defense papers have no
+   human-in-the-loop at all: they block. Drop this as the headline.
+2. **The structural-floor gap is real and wide.** None of the 15 defense and benchmark papers above HarnessSecurity-Bench in the table
+   runs a no-detection structural baseline. Two run AgentDojo's tool filter, and PACT concedes
+   the point in one sentence. HarnessSecurity-Bench is the exception, with read-only mode and
+   network isolation as harness mechanisms on coding tasks rather than MCP defenses; it must be
+   cited as the closest precedent.
+3. **Utility is often missing.** It is not reported under defense in 10 of those 15 (MSB, Tool-Guard, PACT, ToolFence and CapScope report it).
+   Without it, a structural floor cannot even be compared.
+4. **Success criteria are inconsistent across benchmarks.** MCPTox counts proposed calls,
+   MSB checks state after execution, MCP-SafetyBench counts any refusal as defended, and COPEX's
+   judge defaults to "detected". The same guard can score very differently. COPEX already asks
+   that the oracle be stated per attack.
+5. **The fallible-reviewer metric is not new.** Oversight Has a Capacity owns the reviewer model
+   and the danger-through metric, and Evaluate the Stack owns the review-accounting point. Use
+   their model; do not claim it.
+
+### 9.3 The contribution that survives
+
+> On live MCP benchmarks, a guard with no detection (withhold descriptions, strip
+> self-disclosure fields, hold every mutation) matches every detector-based guard on executed
+> harm, because the benchmarks' harms are mutations. Published MCP defenses are evaluated
+> without this structural floor, often without utility, and with incompatible success
+> oracles. We report the full funnel (exposed → attempted → reached review → executed),
+> utility, and the review queue for the floor and for detector-based guards on two benchmarks
+> and several models. We then apply the capacity-limited reviewer model of 2606.08919 to
+> live queues: the detectors' measurable value is the harm they keep out of the queue
+> (31.6% of cases for the exposed floor vs 0-1.4% for the gateway).
+
+Delta over the closest work:
+- **Execution control 2606.29073:** hand-built cases, not a live benchmark.
+- **HarnessSecurity-Bench:** harness settings on coding tasks, not MCP defenses, and an LLM
+  approver.
+- **Evaluate the Stack, Oversight Has a Capacity:** static labelled actions, not live agent
+  queues.
+
+The delta is the live MCP agent setting plus the structural floor plus the audit. That is
+incremental, but it is a checkable claim that does not need IntentShield's mechanisms to be new.
+
+**Honest ceiling:** a workshop paper or an evaluation, benchmark or SoK-style short paper (agent-safety
+workshops, SaTML, AISec), arXiv first. It is not a main-track research contribution unless the floor
+result holds on 3+ benchmarks and 3+ models and is shown to flip a published ranking.
+
+### 9.4 Experiments needed (free or local)
+
+1. **MSB with more models.** Run the none, floor and gateway arms (plus the intent-model-off
+   gateway) with llama3.1:8b and a third local model, and 3 runs at temperature > 0. Report
+   confidence intervals bootstrapped by template, since 20 draws per template are not
+   independent.
+2. **Second benchmark: MCP-SafetyBench** (`artifacts/data/MCPSafety`). Run the floor arm and
+   check how much of its harm is mutation-gated. Its attacks are wider (credential theft,
+   preference manipulation), so the floor may not saturate there. That is a finding either way:
+   it would show which attack classes a structural floor cannot reach.
+3. **Third check: AgentDojo** (own venv exists). A "hold every side-effecting call" floor next
+   to the published PACT, ToolFence and Tool-Guard numbers, on utility and utility under attack.
+   This is the strongest version: AgentDojo is what the defense papers actually report on.
+4. **Queue analysis.** Apply r(ℓ) from 2606.08919 to the per-case review queues. Use their
+   C and slope values, and sweep them; never present it as measured human behaviour.
+5. **Oracle sensitivity.** Rescore one benchmark's runs under its own oracle and under MSB-style
+   execution plus state, to measure how much the choice of oracle alone moves ASR.
+6. **Pitfalls appendix with measured effects.**
+   - Role names in server ids: upstream MSB `main.py:89,103` names servers `attack-…` and
+     `addition-…`; the agent sees bare tool names there, but a gateway or judge that sees server
+     ids does not.
+   - Lookalike task-tool scoring: 94.0% → 70.2%.
+   - Step truncation: 24% unguarded vs 5% gateway.
+   - FastMCP `<func>Arguments` titles.
+
+**Kill criterion:** if the AgentDojo floor (item 3) does not come close to the published
+defenses on security, or loses far more utility than they do, the claim shrinks to "MSB-specific".
+That is still a useful note to the MSB authors, but not a paper.
+
+### 9.5 Kill test on AgentDojo (run 2026-10-14): the floor does not match the published defenses
+
+`benchmarks/agentdojo_floor.py`, with no model calls; table in `artifacts/agentdojo-floor/table-v1.txt`.
+
+- **`static`:** reads AgentDojo v1's ground truth.
+- **`replay`:** re-scores the AgentDojo authors' published trajectories (`ethz-spylab/agentdojo`
+  `runs/`, 97 benign and 629 attacked runs per model, `important_instructions`) for a floor
+  that holds every mutating call.
+  - Until the reviewer rejects a held call, the floor's trajectory is identical to the logged one,
+    so security and the review queue are exact. Utility under attack after a rejection is not, and is
+    reported as an interval.
+  - A held call counts as harmful when it calls the attacker's ground-truth function with an
+    attacker-only value (IBAN, address, URL, id, password), per user-task and injection-task pair.
+  - **Validation:** the oracle flags a harmful call in 278 of 279 GPT-4o successes on goals that need
+    a mutation, and in 157 of 157, 199 of 199 and 246 of 247 for the other runs. On benign runs it
+    matches 0 calls on seven of the eight models; on gpt-4o-mini it matches 7 checks out of 576, all
+    one wrong refund to the attacker's IBAN.
+
+**Static.**
+- **Gated goals:** 25 of 27 injection goals need a mutation. Of the other two, travel 6 only asks
+  the model to *say* something, and Slack 3 visits a URL through a read.
+- **Read-only ceiling:** only 37 of 97 user tasks (38.1%) can be finished with no mutation.
+- **Known artifact:** banking user_task_15 legitimately sets the rent recipient to the attacker's
+  IBAN, so in that pair the attack coincides with the user's request.
+
+**Replay, GPT-4o (2024-05-13).**
+- **Undefended:** benign utility 69.1%, utility under attack 50.1%, attack success 47.7%.
+- **Floor with a perfect reviewer:** attack success 3.5%, all of it from the two read-only goals
+  plus the user_task_15 artifact.
+- **Fallible reviewer** (approves a harmful call with probability p): attack success 5.7% at p=0.05,
+  7.9% at p=0.1, 16.8% at p=0.3.
+- **Review queue:** 55.7% of benign tasks need at least one review, at 0.75 reviews per task. 48.6%
+  of attacked runs put a harmful call in the reviewer's queue.
+- **Read-only floor, no human:** benign utility 27.8 to 28.9%.
+
+**Comparison with published GPT-4o defenses (same logs):**
+- tool filter: 6.8% attack success, 56.3% utility under attack
+- PI detector: 7.9% and 21.1%
+- spotlighting: 41.7%
+- repeat prompt: 27.8%
+
+From the papers: ToolFence 0.9% attack success with a 1.5-point clean-utility drop (GPT-4o-2024-08-06),
+Tool-Guard 2.1%. Both use no human.
+
+**Verdict on the kill test: the claim does not transfer.**
+- **Without a human:** the floor loses about 41 points of benign utility (69% to 28%); ToolFence loses
+  1.5.
+- **With a human:** it matches the defenses on attack success only if the reviewer is near perfect.
+  The reviewer sees half of all tasks and a harmful call in about half of all attacked runs. At
+  p=0.1 the floor leaks 7.9%, worse than ToolFence or Tool-Guard.
+- **Scope:** "a detection-free floor matches every guard" is therefore an MSB property. MSB's harms
+  are all mutations and its success check ignores held calls. It is not a general one.
+
+**What is left of route 3:**
+1. **A benchmark-design note, not a defense claim.** Whether executed harm saturates depends on
+   whether the benchmark's harms are all mutations:
+   - MSB: 6/6 attack tasks
+   - AgentDojo: 25/27 goals
+   - others unchecked
+
+   On MSB a structural floor gets 0% and the metric cannot rank guards. On AgentDojo it cannot reach
+   the read-only goals, and it pays in utility or reviews.
+2. **The price of autonomy as a common currency.** Report each autonomous defense against a floor
+   with a fallible reviewer: the reviews it saves (here 0.75 per task, 56% of tasks) and the p at
+   which the floor's leakage matches it (ToolFence's 0.9% is below the floor's 3.5% even at p=0).
+   This is free to compute from published logs for any model and defense AgentDojo hosts, and it is
+   positive for the published defenses, not a critique. Prior art for the reviewer model:
+   2606.08919.
+
+Neither is more than a workshop note. Route 1 (artifact paper) remains the realistic main output.
+The AgentDojo replay tool and table can go into it as the baseline section.
+
+**Limits of this replay:**
+- The perfect reviewer knows the attacker's goal, so it is an upper bound on reviewer skill.
+- Utility under attack after a rejection is an interval ([30.8, 79.5] for GPT-4o), not measured.
+  Narrowing it needs live GPT-4o runs (paid) or a strong free-tier model.
+- Only `important_instructions` is replayed, on AgentDojo v1.
