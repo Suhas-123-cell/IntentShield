@@ -228,7 +228,8 @@ transparent proxy, evaluated held out on live servers. It needs:
    server, list-directory tools allowed, task-tool metrics counting lookalikes, the
    `shadowing` naming artifact, the 10-step truncation).
 
-Venues: demo or artifact tracks, a software paper, or arXiv first.
+Venues: demo or artifact tracks, a software paper, or arXiv first. Skeleton started in
+[artifact-paper.md](artifact-paper.md) (2026-10-14).
 
 **Route 2: a measurement study (the only route with a research claim, and much more
 work).** It would measure the channel coverage of shipping guards across four to six
