@@ -264,9 +264,10 @@ class MCPProxyRuntime:
         if self._classifier:
             classifier = self._classifier
             self._detectors.append(("injection_classifier", lambda text, kind: classifier.flags(text)))
+        self._prompt_guard: Any = None  # kept so a benchmark can count its errors, like the judge's
         if config.prompt_guard:
             from .prompt_guard import PromptGuard
-            guard = PromptGuard(config.prompt_guard)
+            guard = self._prompt_guard = PromptGuard(config.prompt_guard)
             self._detectors.append(("prompt_guard", lambda text, kind: guard.flags(text)))
         self._learner: Any = None
         self._rules: Any = None
