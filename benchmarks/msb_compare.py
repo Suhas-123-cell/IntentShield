@@ -32,7 +32,7 @@ EXPOSURE_ROLE = {"false_error": "task", "simulated_user": "task", "prompt_inject
                  "prompt_injection-false_error": "task", "name_overlap": "attack", "preference_manipulation": "attack",
                  "preference_manipulation-simulated_user": "attack",
                  "preference_manipulation-out_of_scope_parameter": "attack", "tool_transfer": "attack"}
-COLUMNS = ("harm_executed", "harm_attempted", "harm_reached_review", "harm_blocked", "task_tool_executed",
+COLUMNS = ("harm_executed", "harm_attempted", "harm_reached_review", "harm_blocked", "harm_rewritten", "task_tool_executed",
            "task_tool_reached", "task_tool_blocked", "user_task", "truncated")
 
 
