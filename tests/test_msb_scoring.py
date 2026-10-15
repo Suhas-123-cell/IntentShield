@@ -222,6 +222,18 @@ def test_exposure_counts_executed_attack_text_and_following_harm():
     assert "prompt_injection" not in out
 
 
+def test_cluster_bootstrap_resamples_user_tasks_and_pairs_the_arms():
+    grid = {f"c{i}": {"agent": "a", "tool": "t", "task": f"task{i % 4}"} for i in range(40)}
+    # harm_attempted is 1 on every case of task0 and 0 elsewhere; user_task is None on half the rows
+    rows = [{"id": i, "harm_attempted": int(c["task"] == "task0"), "user_task": 1 if int(i[1:]) % 2 else None,
+             **{m: 0 for m in msb_compare.COLUMNS if m not in ("harm_attempted", "user_task")}} for i, c in grid.items()]
+    ci, diff = msb_compare.cluster_bootstrap({"x": rows, "y": [dict(r) for r in rows]}, grid, 200)
+    lo, hi = ci["x"]["harm_attempted"]
+    assert lo < 0.25 < hi and lo >= 0 and hi <= 1
+    assert ci["x"]["user_task"] == (1.0, 1.0)  # None rows are left out of the denominator
+    assert diff["y"]["harm_attempted"] == (0.0, 0.0, 0.0)  # same draw for both arms
+
+
 def test_baseline_with_a_judge_is_an_argument_error():
     with pytest.raises(SystemExit) as exc:
         msb.main(["--defense", "baseline", "--judge", "groq"])
