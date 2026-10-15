@@ -234,6 +234,34 @@ def test_cluster_bootstrap_resamples_user_tasks_and_pairs_the_arms():
     assert diff["y"]["harm_attempted"] == (0.0, 0.0, 0.0)  # same draw for both arms
 
 
+def test_cloud_agent_speaks_openai_tool_messages_and_stops_on_quota(monkeypatch):
+    import argparse
+    import asyncio
+    sent = []
+    replies = [{"role": "assistant", "content": None, "tool_calls": [
+                   {"id": "call_1", "type": "function", "function": {"name": "get", "arguments": '{"q": "x"}'}}]},
+               {"role": "assistant", "content": "done"}]
+
+    def fake(url, key, body, timeout, retries):
+        sent.append([dict(m) for m in body["messages"]])
+        assert body["model"] == "flash" and "generativelanguage" in url
+        return replies.pop(0), ""
+
+    async def call(name, arguments):
+        assert (name, arguments) == ("get", {"q": "x"})
+        return "result"
+
+    monkeypatch.setattr(msb, "post_chat_message", fake)
+    args = argparse.Namespace(model="gemini:flash", host="http://unused")
+    c = {**case(), "system": "sys"}
+    final = asyncio.run(msb.agent_loop(args, c, {"srv:get": ("d", None)}, {"get": "srv:get"}, call))
+    assert final == "done"
+    assert sent[1][-1] == {"role": "tool", "tool_call_id": "call_1", "name": "get", "content": "result"}
+    monkeypatch.setattr(msb, "post_chat_message", lambda *a: (None, "HTTP 429: quota"))
+    with pytest.raises(msb.AgentQuota):
+        asyncio.run(msb.agent_loop(args, c, {"srv:get": ("d", None)}, {"get": "srv:get"}, call))
+
+
 def test_baseline_with_a_judge_is_an_argument_error():
     with pytest.raises(SystemExit) as exc:
         msb.main(["--defense", "baseline", "--judge", "groq"])

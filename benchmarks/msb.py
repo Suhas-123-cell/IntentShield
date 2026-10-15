@@ -24,6 +24,7 @@ import asyncio
 import collections
 import hashlib
 import json
+import os
 import random
 import re
 import subprocess
@@ -36,7 +37,7 @@ from dotenv import load_dotenv
 
 from intentshield.evaluation import wilson
 from intentshield.harness import HarnessGuard, handle
-from intentshield.judge import Judge
+from intentshield.judge import PROVIDERS, Judge, post_chat_message
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError, _public_schema
 from intentshield.mcp_inspect import self_disclosure_fields
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
@@ -382,13 +383,22 @@ async def agent_loop(args: argparse.Namespace, case: dict[str, Any], tools: dict
              for short, q in exposed.items()]
     messages: list[dict[str, Any]] = [{"role": "system", "content": case["system"]},
                                       {"role": "user", "content": case["task"]}]
+    provider, _, cloud_model = args.model.partition(":")
+    cloud = PROVIDERS.get(provider)  # gemini:<model> or groq:<model>; anything else is an Ollama model
     async with httpx.AsyncClient(base_url=args.host, timeout=600) as client:
         for _ in range(10):  # MSB's max_steps
-            response = await client.post("/api/chat", json={
-                "model": args.model, "messages": messages, "tools": specs, "stream": False,
-                "options": {"temperature": 0, "num_ctx": 16384}})
-            response.raise_for_status()
-            message = response.json()["message"]
+            if cloud:
+                url, env, default, _ = cloud
+                message, error = await asyncio.to_thread(post_chat_message, url, os.environ.get(env, ""), {
+                    "model": cloud_model or default, "messages": messages, "tools": specs, "temperature": 0}, 120, 6)
+                if message is None:
+                    raise (AgentQuota if error.startswith("HTTP 429") else RuntimeError)(error)
+            else:
+                response = await client.post("/api/chat", json={
+                    "model": args.model, "messages": messages, "tools": specs, "stream": False,
+                    "options": {"temperature": 0, "num_ctx": 16384}})
+                response.raise_for_status()
+                message = response.json()["message"]
             messages.append(message)
             if not message.get("tool_calls"):
                 return message.get("content") or ""
@@ -397,9 +407,14 @@ async def agent_loop(args: argparse.Namespace, case: dict[str, Any], tools: dict
                 arguments = fn.get("arguments") or {}
                 if isinstance(arguments, str):
                     arguments = json.loads(arguments or "{}")
-                messages.append({"role": "tool", "tool_name": fn["name"],
-                                 "content": await call(fn["name"], arguments)})
+                result = await call(fn["name"], arguments)
+                messages.append({"role": "tool", "tool_call_id": tool_call.get("id"), "name": fn["name"], "content": result}
+                                if cloud else {"role": "tool", "tool_name": fn["name"], "content": result})
     return "(max steps)"
+
+
+class AgentQuota(RuntimeError):
+    """The cloud agent's rate limit outlasted the retries (a daily free-tier quota): stop, a rerun resumes."""
 
 
 def role_of(step: dict[str, Any]) -> str | None:
@@ -552,7 +567,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, default=Path("artifacts/data/MSB"))
     parser.add_argument("--container", default="intentshield-msb")
-    parser.add_argument("--model", default="qwen2.5:7b")
+    parser.add_argument("--model", default="qwen2.5:7b",
+                        help="an Ollama model, or a cloud agent as gemini:<model> / groq:<model> (key from .env)")
     parser.add_argument("--host", default="http://127.0.0.1:11434")
     parser.add_argument("--defense", choices=("none", "intentshield", "hooks", "baseline"), default="intentshield")
     parser.add_argument("--expose-descriptions", action="store_true",
@@ -561,6 +577,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--limit", type=int, default=None, help="first N runnable cases")
     parser.add_argument("--per-type", type=int, default=None, help="seeded sample of N cases per attack type")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--subsample", type=int, default=None, metavar="K",
+                        help="then keep a seeded K per attack type: a subset of the same split, still pairable")
     parser.add_argument("--holdout", action="store_true",
                         help="sample only cases outside the seed-0 --per-type sample (the tuning set)")
     parser.add_argument("--list", action="store_true", help="print the runnable case grid and exit")
@@ -588,7 +606,7 @@ def main(argv: list[str] | None = None) -> None:
             (args.out / f"report-{path.stem.removeprefix('results-')}-rescored.json").write_text(json.dumps(report, indent=2))
             print(path.name, f"n={len(scored)}", {m: v["k"] for m, v in report["results"]["all"].items()})
         return
-    load_dotenv(".env")  # GROQ_API_KEY / GEMINI_API_KEY for the judge
+    load_dotenv(".env")  # GROQ_API_KEY / GEMINI_API_KEY for the judge and a cloud agent
 
     *_, templates = load(args.data)
     grid = [c for c in cases(args.data)
@@ -603,6 +621,8 @@ def main(argv: list[str] | None = None) -> None:
         runnable = [c for c in runnable if c["id"] not in tuning]
     if args.per_type:
         runnable = sample(runnable, args.per_type, args.seed)
+    if args.subsample:
+        runnable = sample(runnable, args.subsample, args.seed)
     runnable = runnable[: args.limit] if args.limit else runnable
     args.out.mkdir(parents=True, exist_ok=True)
     tag = f"{args.model.replace(':', '_')}-{args.defense}" + ("-exposed" if args.expose_descriptions else "") \
@@ -619,6 +639,9 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             try:
                 row = asyncio.run(run_case(args.data, case, args, templates, Path(tmp)))
+            except AgentQuota as exc:
+                print(f"agent quota on {case['id']} ({exc}): stopping; rerun to resume", flush=True)
+                break
             except Exception as exc:  # a server that fails to start is reported, not scored
                 row = {"id": case["id"], "attack_type": case["attack_type"], "tool": case["tool"],
                        "error": repr(exc)[:300]}

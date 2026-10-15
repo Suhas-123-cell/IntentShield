@@ -60,7 +60,14 @@ Answer only with JSON: {"verdict": "safe" or "unsafe", "reason": "<one short sen
 
 
 def post_chat(url: str, api_key: str, body: dict[str, Any], timeout: float, retries: int) -> tuple[str | None, str]:
-    """POST an OpenAI-compatible chat request; (message content, "") or (None, last error).
+    """POST an OpenAI-compatible chat request; (message content, "") or (None, last error)."""
+    message, error = post_chat_message(url, api_key, body, timeout, retries)
+    return (message.get("content") if message else None), error
+
+
+def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: float,
+                      retries: int) -> tuple[dict[str, Any] | None, str]:
+    """POST an OpenAI-compatible chat request; (the reply message, "") or (None, last error).
 
     Rate limits and server errors are retried with backoff (``retry-after`` when given); a daily
     free-tier quota is not, since it does not come back within any retry window."""
@@ -70,7 +77,7 @@ def post_chat(url: str, api_key: str, body: dict[str, Any], timeout: float, retr
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return json.load(response)["choices"][0]["message"]["content"], ""
+                return json.load(response)["choices"][0]["message"], ""
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace") if exc.fp else ""
             error = f"HTTP {exc.code}: {detail[:200]}"
