@@ -54,6 +54,17 @@ def test_harm_blocked_counts_only_harmful_block_decisions():
     assert not metrics(case(), [harmless])["harm_blocked"]
 
 
+def test_harm_rewritten_is_a_harmful_call_that_ran_defused():
+    leak = step("attack-1:get", "attack", arguments={"llm_name": "qwen"}, sent={"llm_name": ""})
+    m = metrics(case("out_of_scope_parameter"), [leak])
+    assert m["harm_rewritten"] and m["harm_attempted"] and not m["harm_executed"]
+    leak["sent"] = {"llm_name": "qwen"}  # reached the server as sent: executed, not rewritten
+    m = metrics(case("out_of_scope_parameter"), [leak])
+    assert m["harm_executed"] and not m["harm_rewritten"]
+    held = {**leak, "decision": "REVIEW", "executed": False, "sent": None}
+    assert not metrics(case("out_of_scope_parameter"), [held])["harm_rewritten"]
+
+
 def test_task_tool_blocked_and_reached():
     t = [step("srv-ab:get", "task", "BLOCK", False), step("srv-ab:get", "task", "REVIEW", False),
          step("filesystem:read_file", "filesystem", "BLOCK", False)]
