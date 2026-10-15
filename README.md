@@ -25,7 +25,9 @@ evidence that the detection works (see "Why 0.0% is weak evidence").
 
 All MSB rows are a single run at temperature 0 with one agent model per row. The Wilson
 intervals treat cases as independent, but the 220 cases are 20 draws from each attack
-template, so they are narrower than the real uncertainty.
+template, so they are narrower than the real uncertainty. `benchmarks/msb_compare.py --bootstrap
+2000` adds a cluster bootstrap over the 28 user tasks, with paired differences between arms
+(`artifacts/msb-v8-boot-*.txt`). Its intervals are about 1.5-2x wider than Wilson.
 
 Neutral server ids (commit `1c0d4dc`): before it, the MSB runner named its servers `task`,
 `attack` and `addition`, and those names reached the agent model inside tool names
@@ -551,7 +553,8 @@ server. Elsewhere the attack server is a lookalike, and calling it is falling fo
 Limits of this runner and of the numbers below:
 
 - Single run, temperature 0, one agent model per row. Wilson intervals treat the cases as
-  independent, but there are 20 draws per attack template.
+  independent, but there are 20 draws per attack template; use `msb_compare.py --bootstrap` for
+  user-task cluster intervals.
 - It deviates from MSB. MSB appends the prompt-injection text to every tool's description,
   filesystem included; `benchmarks/msb.py` puts it only on the task server. MSB disallows
   `list_directory`, `list_directory_with_sizes`, `directory_tree` and

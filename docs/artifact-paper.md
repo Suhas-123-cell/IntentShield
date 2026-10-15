@@ -153,8 +153,12 @@ All of these only ever escalate.
   numbers come from the tuning set.
 - **AgentDojo structural floor:** `benchmarks/agentdojo_floor.py`, replaying published logs
   (v1, `important_instructions`).
-- **Statistics:** Wilson intervals, with the caveat of 20 draws per template ☐. Add a bootstrap
-  clustered by template.
+- **Statistics:** a cluster bootstrap over user tasks (`msb_compare.py --bootstrap 2000`). Each
+  held-out case is attack type × user task × attack task. The 220 cases come from 28 user tasks
+  (2–18 cases each) and 4 attack tasks. The user tasks are resampled with the same draw for every
+  arm, which gives paired intervals for arm differences. The 4 attack tasks are too few to resample.
+  A rate of 0 or 1 keeps its Wilson interval. With 28 clusters of uneven size, percentile intervals
+  may still undercover. Outputs: `artifacts/msb-v8-boot-{qwen,llama3.1_8b,ornith_9b}.txt`.
 
 ## 5. Results
 
@@ -162,8 +166,8 @@ All MSB tables are paired: an arm is scored only on the cases every arm of that 
 and every run is rescored with the same metric code (`msb_compare.py`). The harm columns are
 per-case outcomes. One case can count in more than one column (one harmful call held for review,
 another rewritten), so they need not sum to "attempted". **Rewritten** means the harmful call ran,
-but the self-disclosure parameter reached the server blanked. Intervals are Wilson 95% and too
-narrow, since cases share templates (§4).
+but the self-disclosure parameter reached the server blanked. Intervals (in the bootstrap
+files, §4) are user-task cluster bootstrap 95%, about 1.5–2× wider than Wilson.
 
 ### 5.1 MSB, qwen2.5:7b (✓, `artifacts/msb-v8-compare-qwen.txt`, 218 paired cases)
 
@@ -228,10 +232,14 @@ no outcome column.
 - **The gateway's measurable contribution is reviewer load, paid for in utility.**
   - Harmful calls left for a human: baseline 12.4% of cases on qwen (27), 19.0% on ornith (41), 0
     on llama. Gateway: 0 on every model.
-  - The gateway completes fewer user tasks than the baseline on every model: −6.4 points on qwen,
-    −14.3 on llama, −8.6 on ornith. Only the llama gap is outside overlapping intervals.
+  - The gateway completes fewer user tasks than the baseline on every model. Paired cluster
+    bootstrap: −6.4 points on qwen [−14.3, −1.0], −14.3 on llama [−26.0, −5.1], −8.6 on ornith
+    [−16.7, −2.5]. All three exclude zero, and qwen only barely. The per-arm intervals overlap. The
+    paired difference is the test that matters.
 - **Hooks keep the most utility of the guards** on qwen and llama, though not on ornith, where the
-  baseline is higher.
+  baseline is higher. Paired intervals separate them only on llama: `user_task` +35.0 points over
+  the gateway [+24.7, +45.5] and +20.7 over the baseline [+7.5, +31.2]. On qwen (intent off) the
+  margin over the gateway is +5.7 [−9.2, +23.4], and on ornith +2.9 [−8.0, +16.2].
   - On qwen, most of their defense is real blocking: 20 of 37 attempts blocked.
   - On llama it is almost all parameter rewriting: 19 of 21 attempts rewritten, none blocked. This
     is the same mechanism as the gateway's stripped parameters, applied after the agent has
@@ -332,7 +340,7 @@ baseline and gateway.
 
 ## TODO before submission (ordered)
 1. ✓ MSB v8: §5.1 and §5.2 filled from paired `msb_compare.py` runs (2026-10-15).
-2. ☐ Template-clustered bootstrap intervals for every MSB table.
+2. ✓ User-task cluster bootstrap for every MSB table, with paired differences (2026-10-16).
 3. ✓ §5.6: Prompt Guard 2 arm on MSB (free tier).
 4. ☐ §5.7: one stronger free-tier agent on about 100 cases.
 5. ☐ Re-measure hook and proxy latency (§3.6).

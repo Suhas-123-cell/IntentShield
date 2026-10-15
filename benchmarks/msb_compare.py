@@ -11,13 +11,19 @@ Wilson CIs treat the cases as independent. They are not: each attack type is 20 
 few agent tasks per server, and the draws share a template, so the CIs are narrower than the real
 uncertainty. Read them as a floor, not as a test.
 
-    .venv/bin/python benchmarks/msb_compare.py [--exposure] [--data artifacts/data/MSB] [DIR_OR_FILE ...]
+--bootstrap B adds a cluster bootstrap: B resamples of the user tasks (agent, tool, task; 28 in the
+held-out split), the same draw for every arm, so it also gives paired intervals for each arm's
+difference from the first arm. The 4 attack tasks are too few to resample and are not clustered. A
+rate of 0 or 1 has a degenerate bootstrap interval and keeps its Wilson one.
+
+    .venv/bin/python benchmarks/msb_compare.py [--exposure] [--bootstrap 2000] [--data artifacts/data/MSB] [DIR_OR_FILE ...]
 """
 from __future__ import annotations
 
 import argparse
 import collections
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +97,51 @@ def exposure(rows: list[dict[str, Any]], grid: dict[str, dict[str, Any]]) -> dic
     return out
 
 
+def cluster_bootstrap(paired: dict[str, list[dict[str, Any]]], grid: dict[str, dict[str, Any]],
+                      reps: int, seed: int = 0) -> tuple[dict[str, dict[str, tuple[float, float]]],
+                                                         dict[str, dict[str, tuple[float, float, float]]]]:
+    """(arm -> metric -> 95% interval of the rate, arm -> metric -> (difference, lo, hi) from the first
+    arm). Percentile intervals over `reps` resamples of the user-task clusters, shared by all arms."""
+    def key(row):
+        case = grid[row["id"]]
+        return case["agent"], case["tool"], case["task"]
+
+    arms = list(paired)
+    clusters = sorted({key(r) for r in paired[arms[0]]})
+    # arm -> metric -> per cluster (k, n)
+    sums = {a: {m: [[0, 0] for _ in clusters] for m in COLUMNS} for a in arms}
+    index = {c: i for i, c in enumerate(clusters)}
+    for a in arms:
+        for row in paired[a]:
+            for m in COLUMNS:
+                if row.get(m) is not None:
+                    s = sums[a][m][index[key(row)]]
+                    s[0] += row[m]
+                    s[1] += 1
+    rng = random.Random(seed)
+    draws: dict[str, dict[str, list[float]]] = {a: {m: [] for m in COLUMNS} for a in arms}
+    for _ in range(reps):
+        pick = [rng.randrange(len(clusters)) for _ in clusters]
+        for a in arms:
+            for m in COLUMNS:
+                k = sum(sums[a][m][i][0] for i in pick)
+                n = sum(sums[a][m][i][1] for i in pick)
+                draws[a][m].append(k / n if n else float("nan"))
+
+    def pct(xs):
+        xs = sorted(x for x in xs if x == x)
+        return (xs[int(0.025 * (len(xs) - 1))], xs[int(0.975 * (len(xs) - 1))]) if xs else (float("nan"),) * 2
+
+    def rate(a, m):
+        k, n = sum(s[0] for s in sums[a][m]), sum(s[1] for s in sums[a][m])
+        return k / n if n else float("nan")
+
+    ci = {a: {m: pct(draws[a][m]) for m in COLUMNS} for a in arms}
+    diff = {a: {m: (rate(a, m) - rate(arms[0], m),
+                    *pct([x - y for x, y in zip(draws[a][m], draws[arms[0]][m])])) for m in COLUMNS} for a in arms[1:]}
+    return ci, diff
+
+
 def cell(m: dict[str, Any] | None) -> str:
     if not m:
         return "-"
@@ -108,6 +159,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("paths", nargs="*", type=Path, help=f"dirs or results files (default {', '.join(DEFAULT)})")
     parser.add_argument("--data", type=Path, default=Path("artifacts/data/MSB"))
     parser.add_argument("--exposure", action="store_true", help="exposure breakdown per arm")
+    parser.add_argument("--bootstrap", type=int, default=0, metavar="B",
+                        help="add user-task cluster bootstrap intervals with B resamples")
     args = parser.parse_args(argv)
 
     grid = msb.cases(args.data)
@@ -124,6 +177,20 @@ def main(argv: list[str] | None = None) -> None:
     print(table(["metric (k/n rate [95% Wilson])", *arms],
                 [["n", *[str(len(paired[a])) for a in arms]]] +
                 [[m, *[cell(summary[a].get("all", {}).get(m)) for a in arms]] for m in COLUMNS]))
+    if args.bootstrap and len(ids):
+        ci, diff = cluster_bootstrap(paired, by_id, args.bootstrap)
+
+        def boot(a, m):
+            s = summary[a]["all"][m]
+            lo, hi = s["ci95"] if s["k"] in (0, s["n"]) else ci[a][m]
+            return f"{100 * s['rate']:.1f}% [{100 * lo:.1f},{100 * hi:.1f}]" + ("w" if s["k"] in (0, s["n"]) else "")
+
+        print(f"\nCluster bootstrap by user task ({args.bootstrap} resamples; w = Wilson, rate 0 or 1)")
+        print(table(["metric", *arms], [[m, *[boot(a, m) for a in arms]] for m in COLUMNS]))
+        first = next(iter(arms))
+        print(f"\nPaired difference from {first}, points [95% cluster bootstrap]")
+        print(table(["metric", *diff], [[m, *[f"{100 * d:+.1f} [{100 * lo:+.1f},{100 * hi:+.1f}]"
+                                              for d, lo, hi in (diff[a][m] for a in diff)]] for m in COLUMNS]))
     print("\nDropped (not scored in this arm, scored in another):")
     for label, d in dropped(arms, errors).items():
         print(f"  {label}: errors {d['error'] or '-'}; not run {len(d['not_run'])}"
