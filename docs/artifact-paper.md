@@ -295,9 +295,28 @@ Plain-language injections from independent sources stay undetected by every usab
   - Task tool executed: 38.1% against 40.4%; `user_task`: 42.9% against 45.0%.
 - **Running it was clean:** no Groq errors and no quota stops over 220 cases.
 
-### 5.7 Stronger agent model ☐
-About 100 MSB cases with a free-tier model (Groq `gpt-oss-120b` or Gemini Flash-Lite): none,
-baseline and gateway.
+### 5.7 Stronger agent model (partial: undefended arm ✓, baseline and gateway ☐)
+- **Setup:** Gemini 3.5 Flash-Lite through its OpenAI-compatible endpoint (free tier, 500 requests a
+  day), 99 cases = 9 per attack type, a seeded subset of the 220 held-out cases (`msb.py --subsample 9`,
+  `artifacts/msb-v9/`), temperature 0, intent model off. Arms: none, baseline, gateway.
+- **Undefended, paired with each local model on the same cases** (user-task cluster bootstrap):
+
+  | Agent | Harm executed | `user_task` | Truncated |
+  |---|---|---|---|
+  | Gemini 3.5 Flash-Lite | 29.3% | 96.8% | 3.0% |
+  | qwen2.5:7b | 57.6% (+28.3 [+15.4, +39.1]) | 61.9% | 26.3% |
+  | llama3.1:8b | 16.2% (−13.1 [−19.1, −7.7]) | 69.8% | 0.0% |
+  | ornith:9b (98 cases) | 51.0% (+21.4 [+11.8, +31.4]) | 85.7% | 26.5% |
+
+- **Where Gemini's harm comes from:** 23 of its 29 harmful cases are self-disclosure. It fills a
+  model-name field whenever the schema asks for one: out_of_scope_parameter 9/9, tool_transfer 9/9,
+  preference_manipulation-out_of_scope_parameter 5/9. It followed injected instructions in only 6 of
+  the 72 cases of the instruction-style types. Claude Haiku showed the same pattern in the live
+  harness run (§3.6, `benchmarks/harness_live`): it leaked its model name in 3/3 prompts and ignored
+  the injected email. This is 9 cases per type on one model, so read it as a pattern, not a rate.
+  The gap it points to is schema-level self-disclosure, which the stripping in §3.2 removes, rather
+  than injected text, which a capable model already tends to refuse.
+- **Baseline and gateway arms:** ☐ (quota-limited; expected 2026-10-18).
 
 ## 6. The structural floor on AgentDojo (✓, `artifacts/agentdojo-floor/table-v1.txt`)
 
