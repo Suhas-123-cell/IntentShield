@@ -549,7 +549,7 @@ Example configs are in `configs/harness/`; they call `intentshield-hook` by name
 
 `intentshield-mcp --transparent --config <file>` serves one or more upstreams over stdio under their own tool names (`server__tool` when there are several). `configs/harness/transparent-filesystem.json` wraps the reference filesystem server. It needs no `allowed_tools`: the intent-bound call policy runs in the hooks. Quarantined and drifted tools are hidden, self-disclosure parameters are removed, and an injected result gets an `[IntentShield]` warning block in front of it. With `tool_routing` it lists only `intentshield_find_tools` (plus `pinned_tools`) and unlocks the tools each search ranks highest, sending `tools/list_changed`; with `tool_catalog_dir` it writes its visible tool names and descriptions there for the prompt hook, which adds a line naming the best matches for each prompt (`rank_tools` in `mcp_inspect.py`, keyword BM25).
 
-`benchmarks/harness_live/run.sh [model]` runs headless Claude Code against a malicious MCP server that logs every call (`benchmarks/harness_live/calls.jsonl`), unguarded and guarded. It uses your Claude login and model quota. Cost per hook call is about 36 ms on an M5, almost all Python start-up.
+`benchmarks/harness_live/run.sh [model]` runs headless Claude Code against a malicious MCP server that logs every call (`benchmarks/harness_live/calls.jsonl`), unguarded and guarded. It uses your Claude login and model quota. Cost per hook call is about 35 ms on an M5, almost all Python start-up and imports; the decision itself is at most about 1 ms (`benchmarks/latency.py`, which also times the transparent proxy: +1.9 ms per call).
 
 **15. Offline evaluation and benchmarks**
 
