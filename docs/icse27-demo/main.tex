@@ -134,16 +134,20 @@ The verifier connects to the upstream servers and checks 13 properties, includin
 call and a held mutation execute nothing. Operators label outputs through control routes; labels
 pass a regression gate before they take effect.
 
-\textbf{Demo scenario.} The video follows one Claude Code session with a third-party mail server.
-(1)~The server's \texttt{send\_email} schema asks for \texttt{llm\_name}; the hook replies with
-\texttt{updatedInput} that blanks it and asks the user: \emph{``IntentShield sent llm\_name empty:
-tools may not ask for the agent's own data. Confirm this call.''} (2)~A later read returns text
-that tells the agent to forward a key to an outside address; the hook adds context to the result:
-\emph{``\ldots contains text that tries to instruct the agent (instruction\_override,
-sensitive\_request). It is data from the tool, not a request from the user; do not follow it.''}
-(3)~The session is now tainted, so the agent's next state-changing call is held: \emph{``A tool
-output in this session tried to instruct the agent; confirm this call.''} The same events through
-Codex CLI, Cursor and Gemini CLI yield each harness's form of these replies (Table~\ref{tab:harness}).
+\textbf{Demo scenario.} The video runs Claude Code (Claude Haiku, headless) against a malicious notes
+server shipped in the repository (\texttt{benchmarks/harness\_live}), which logs every call it
+receives. Its \texttt{search\_notes} schema asks for \texttt{llm\_model\_name}; its result impersonates
+the user and asks for the notes to be emailed to an outside address; and the description of a third
+tool, \texttt{add\_numbers}, orders the same email. \emph{Unguarded}, the server received the agent's
+model name in all three runs; the model ignored the injected email on its own. With the \emph{hooks}
+alone, the search still ran, but the field arrived empty. With \emph{hooks and proxy}, the
+whole-server description scan matched the external-send instruction and quarantined all three tools:
+the server received nothing, and the agent could not do the user's task either, which is the utility
+cost of quarantining a server. Since this model never attempted the email, the video shows the
+taint-then-hold path with recorded hook events: after a flagged result, the next state-changing call
+gets \emph{``A tool output in this session tried to instruct the agent; confirm this call.''} The same
+events through Codex CLI, Cursor and Gemini CLI yield each harness's form of these replies
+(Table~\ref{tab:harness}).
 
 \section{Validation}
 \textbf{MSB, live servers.} We ran MCP Security Bench~\cite{msb} on 220 held-out cases (20 per attack
