@@ -87,6 +87,14 @@ Run the test suite:
 .venv/bin/pytest -q
 ```
 
+Or, without installing anything but Docker (no ML extras):
+
+```bash
+docker build -t intentshield .
+docker run --rm intentshield              # verifies the demo proxy end to end
+docker run --rm intentshield pytest -q    # the test suite
+```
+
 Optional extras:
 
 - `requirements-ml.txt` (torch, transformers, sentencepiece, protobuf) is needed for the local
@@ -1273,3 +1281,7 @@ upstream schema before invoking MCP. Catalog drift fails closed until restart.
 Agent-visible schemas remove untrusted annotation text while retaining the
 original schema internally for validation and hashing. Request arguments,
 catalogs, schemas, model responses, and result sizes are bounded.
+
+## License
+
+Apache-2.0; see [LICENSE](LICENSE).
