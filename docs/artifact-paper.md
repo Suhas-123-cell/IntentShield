@@ -138,7 +138,7 @@ All of these only ever escalate.
   | Harness | Config file and events | Rewrites arguments | Asks the user |
   |---|---|---|---|
   | Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` | yes | yes |
-  | Codex CLI | `~/.codex/config.toml`: same events | no | no: deny with a reason, then resend |
+  | Codex CLI | `~/.codex/config.toml`: same events | yes on reads; on a state change it denies with a resend reason | no: deny with a reason |
   | Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no | yes; a rewrite becomes deny-and-resend |
   | Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP only, via `mcp_context`) | yes | no: deny with a reason |
 
