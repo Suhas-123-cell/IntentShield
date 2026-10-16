@@ -132,7 +132,21 @@ All of these only ever escalate.
   - **transparent proxy:** 2.4 ms per `tools/call` against 0.5 ms direct (+1.9 ms, p95 2.5 ms over
     200 calls). Session start-up (spawn to `list_tools`) is 522 ms against 247 ms direct.
   - Both are small next to one model step (seconds on local 7–9B models).
-- Install path and configuration per harness ☐ (a short table).
+- **Install and configuration per harness** ✓. Each hook is `intentshield-hook <harness>`, and the
+  example configs are in `configs/harness/`.
+
+  | Harness | Config file and events | Rewrites arguments | Asks the user |
+  |---|---|---|---|
+  | Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` | yes | yes |
+  | Codex CLI | `~/.codex/config.toml`: same events | no | no: deny with a reason, then resend |
+  | Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no | yes; a rewrite becomes deny-and-resend |
+  | Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP only, via `mcp_context`) | yes | no: deny with a reason |
+
+  Each harness can also wrap its servers with the transparent proxy (`intentshield-mcp --transparent
+  --config <file>`, stdio only). On 2026-10-16, from a clean clone at `d7020be`, the installed CLI
+  turned the same self-disclosure call into the reply each row predicts. These were synthetic
+  events, not live harness sessions: of the four harnesses, only Claude Code has run live
+  (`benchmarks/harness_live`).
 
 ## 4. Evaluation setup
 
@@ -352,5 +366,8 @@ baseline and gateway.
 3. ✓ §5.6: Prompt Guard 2 arm on MSB (free tier).
 4. ☐ §5.7: one stronger free-tier agent on about 100 cases.
 5. ✓ Hook and proxy latency re-measured (§3.6, 2026-10-16).
-6. ☐ Install table per harness; README reproduction commands checked from a clean clone.
+6. ✓ Install table per harness (§3.6). Clean clone at `d7020be` (2026-10-16): `uv sync --extra dev
+   --frozen` and the tests (250 passed, 1 skipped; HTTP e2e passed), `intentshield-mcp-verify` in-process
+   and `--stdio` (13/13 checks), and the four hooks. ☐ Still unchecked from a clean clone: the ML extras,
+   the MSB Docker image and the benchmark commands.
 7. ☐ Pick the venue and its page limit, then cut.
