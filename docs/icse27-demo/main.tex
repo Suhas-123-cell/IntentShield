@@ -186,6 +186,13 @@ utility, clearly so only on llama ($+35.0$ [$+24.7$, $+45.5$] over the gateway).
 harmful attempts under hooks were blocked outright; on llama, 19 of 21 were defused by sending the
 self-disclosure parameter blank. Adding Prompt Guard~2 to the gateway changed nothing measurable.
 
+\textbf{A stronger agent.} Undefended on 99 of the same cases, Gemini 3.5 Flash-Lite executed harm
+in 29.3\% of cases and completed 96.8\% of user tasks. 23 of its 29 harmful cases were
+self-disclosure: it filled a model-name field whenever a schema asked for one, but followed injected
+instructions in only 6 of 72 cases (9 per type, one run). Claude Haiku behaved the same way in the live demo. For capable
+agents in this sample, what a schema asks for mattered more than injected text.
+% TODO: baseline and gateway arms (MSB v9), expected 2026-10-18.
+
 \textbf{Description poisoning (MCPTox~\cite{mcptox}).} Replaying the benchmark through the proxy,
 0.4\% of attacks succeed and 3.5\% of benign calls are wrongly blocked. The description rules were
 developed on MCPTox, so these are tuning-set numbers.
