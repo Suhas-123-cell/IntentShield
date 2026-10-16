@@ -122,8 +122,16 @@ and leaks 7.9% at a 10% reviewer error rate, which shows what autonomous defense
 All of these only ever escalate.
 
 ### 3.6 Engineering
-- Tests: 247 pass, 1 skipped; 248 with the HTTP end-to-end test ✓.
-- Overhead: about 36 ms per hook call ☐ (re-measure); proxy round-trip ☐.
+- Tests: 250 pass, 1 skipped; 251 with the HTTP end-to-end test ✓.
+- Overhead (`benchmarks/latency.py`, `artifacts/latency.json`, demo MCP server, intent model off,
+  2026-10-16) ✓:
+  - **hook:** 35 ms per event at the median, p95 under 37 ms, on read, write, small, 4 KB and
+    injected results. Bare Python start-up is 15 ms and imports take about 20 ms. The decision
+    itself, timed in-process, is 0.02–0.1 ms, and 1.1 ms on a 4 KB result. A
+    persistent hook process would remove almost all of it.
+  - **transparent proxy:** 2.4 ms per `tools/call` against 0.5 ms direct (+1.9 ms, p95 2.5 ms over
+    200 calls). Session start-up (spawn to `list_tools`) is 522 ms against 247 ms direct.
+  - Both are small next to one model step (seconds on local 7–9B models).
 - Install path and configuration per harness ☐ (a short table).
 
 ## 4. Evaluation setup
@@ -343,6 +351,6 @@ baseline and gateway.
 2. ✓ User-task cluster bootstrap for every MSB table, with paired differences (2026-10-16).
 3. ✓ §5.6: Prompt Guard 2 arm on MSB (free tier).
 4. ☐ §5.7: one stronger free-tier agent on about 100 cases.
-5. ☐ Re-measure hook and proxy latency (§3.6).
+5. ✓ Hook and proxy latency re-measured (§3.6, 2026-10-16).
 6. ☐ Install table per harness; README reproduction commands checked from a clean clone.
 7. ☐ Pick the venue and its page limit, then cut.
