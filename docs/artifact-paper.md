@@ -370,4 +370,6 @@ baseline and gateway.
    --frozen` and the tests (250 passed, 1 skipped; HTTP e2e passed), `intentshield-mcp-verify` in-process
    and `--stdio` (13/13 checks), and the four hooks. ☐ Still unchecked from a clean clone: the ML extras,
    the MSB Docker image and the benchmark commands.
-7. ☐ Pick the venue and its page limit, then cut.
+7. ✓ Venue: ICSE 2027 Tool Demonstration track (deadline Fri 23 Oct 2026 AoE; IEEEtran 10pt, 4 pages
+   including references; single-anonymous; 3–5 min YouTube video). Cut version: `docs/icse27-demo/`
+   (`tectonic main.tex`), 3 pages. ☐ Video, ☐ §5.7 Gemini row if MSB v9 finishes in time.

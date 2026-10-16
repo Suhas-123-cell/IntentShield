@@ -1,0 +1,7 @@
+.git
+.venv
+.env
+.claude
+artifacts
+*.db
+docs/icse27-demo/*.pdf

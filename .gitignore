@@ -15,3 +15,4 @@ benchmarks/harness_live/calls.jsonl
 CLAUDE.md
 AGENTS.md
 docs/mcp-guardrail-plan.md
+docs/icse27-demo/*.pdf
