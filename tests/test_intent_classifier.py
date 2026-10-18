@@ -173,7 +173,27 @@ def test_grounding_adapter_compares_against_trusted_tool_family(tmp_path: Path):
     read = mutation.model_copy(update={"mutation": False})
 
     assert adapter.predict("Send an email", call, mutation).alignment_score == 0.94
-    assert adapter.predict("Send an email", call, read).alignment_score == 0.0
+    # A mutation prompt covers the reads a change needs first.
+    assert adapter.predict("Send an email", call, read).alignment_score == 0.94
+
+
+def test_grounding_adapter_disagreement_is_no_opinion_not_a_veto(tmp_path: Path):
+    _artifact(tmp_path)
+    call = ToolCall(tool_name="send_email", arguments={}, schema_hash="trusted")
+    mutation = TrustedToolMetadata(name="send_email", schema_hash="trusted", mutation=True)
+    read = mutation.model_copy(update={"mutation": False})
+
+    def adapter(probabilities: list[float]) -> DebertaGroundingAdapter:
+        return DebertaGroundingAdapter(DebertaIntentClassifier(
+            tmp_path, loader=lambda _path: (_Tokenizer(), _Model(probabilities), _Torch()),
+        ))
+
+    reads = adapter([0.94, 0.03, 0.03])
+    assert reads.predict("Read the inbox", call, read).alignment_score == 0.94
+    assert reads.predict("Read the inbox", call, mutation).alignment_score is None
+    no_action = adapter([0.03, 0.03, 0.94])
+    assert no_action.predict("Analyze the paper", call, read).alignment_score is None
+    assert no_action.predict("Analyze the paper", call, mutation).alignment_score is None
 
 
 
