@@ -260,10 +260,12 @@ class DebertaGroundingAdapter:
     """Adapt intent-family predictions to the grounding-agent protocol.
 
     The adapter compares DeBERTa output only with operator-owned mutation
-    metadata. It cannot authorize execution. An abstention (the model ran but
-    no class cleared the confidence threshold) gives no opinion, so grounding
-    stays deterministic; unavailable, failed and no-action predictions
-    contribute zero alignment.
+    metadata. It cannot authorize execution. One label covers a whole prompt, so
+    a mutation prompt also covers the reads a change needs first. Any other
+    disagreement, no-action or abstention gives no opinion and grounding stays
+    deterministic: a prompt-level label never vetoes a call (MSB v10 qwen: such
+    vetoes were 143 of 150 blocks). Only an unavailable or failed model
+    contributes zero alignment.
     """
 
     def __init__(self, classifier: DebertaIntentClassifier) -> None:
@@ -277,11 +279,12 @@ class DebertaGroundingAdapter:
     ) -> IntentClassifierResult:
         del call
         prediction = self.classifier.predict(user_intent)
-        if prediction.available and prediction.label is IntentClass.UNKNOWN:
-            return IntentClassifierResult(alignment_score=None, label=prediction.label.value)
-        expected = IntentClass.MUTATION if metadata.mutation else IntentClass.READ
-        aligned = prediction.available and not prediction.fail_closed and prediction.label is expected
+        if not prediction.available:
+            return IntentClassifierResult(alignment_score=0.0, label=prediction.label.value)
+        aligned = prediction.label is IntentClass.MUTATION or (
+            prediction.label is IntentClass.READ and not metadata.mutation
+        )
         return IntentClassifierResult(
-            alignment_score=prediction.confidence if aligned else 0.0,
+            alignment_score=prediction.confidence if aligned else None,
             label=prediction.label.value,
         )
