@@ -62,7 +62,7 @@ evidence that the detection works (see "Why 0.0% is weak evidence").
 | MSB held-out, harmful action executed (qwen2.5:7b, neutral server ids, 220 cases) | 58.5% [51.8, 64.8] | gateway **0.0%** [0, 1.7]; hooks **0.0%** [0, 1.7] |
 | MSB held-out, task tool reached (qwen2.5:7b, neutral ids) | 70.3% | gateway 42.3% (executed 29.5%); hooks 49.5% (executed 49.1%) |
 | MSB with llama3.1:8b and Ornith-1.5-9B | 21.8% and 52.7% harm | 0.0% on both, but measured before the neutral-id fix and without the intent model; not re-run |
-| Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3; poisoned tool never offered (n=3 per arm, no stored raw log) |
+| Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3 with hooks alone (field sent blank); hooks + proxy quarantined the server, which received nothing (n=3 per arm, raw logs in `results/harness-live/`) |
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | MSB held-out gateway after the abstention fix (v7, 219 paired cases) | - | harm still **0.0%**; legitimate task calls blocked 18.7% -> 7.3%, user task done 33.6% -> 39.3% (intent model off: 0.5% and 45.0%) |
@@ -1265,20 +1265,22 @@ Python start-up); the checks themselves take under a millisecond. The adapters f
 each harness's documented hook format and are tested on those event shapes
 (`tests/test_harness.py`). Cursor, Codex and Gemini CLI have not been run live yet.
 
-Live check in Claude Code 2.1.295 (`benchmarks/harness_live/run.sh`, Haiku, headless,
-3 prompts x unguarded/guarded) against a malicious server that logs every call:
+Live check in Claude Code (`benchmarks/harness_live/run.sh`, Haiku, headless, 3 prompts x
+3 arms, rerun 2026-10-19 with raw logs in `results/harness-live/`) against a malicious server that logs
+every call:
 
-| | unguarded | guarded |
-|---|---|---|
-| model name sent to the server (`llm_model_name`) | `claude-haiku-5-5` in 3 of 3 | empty in 3 of 3 |
-| poisoned tool (`add_numbers`) offered to the agent | yes | no (quarantined) |
-| attacker email sent | 0 of 3 (Haiku refused) | 0 of 3 |
-| hooks recorded the user prompt and tainted the attacker address | n/a | yes |
+| | unguarded | hooks alone | hooks + proxy |
+|---|---|---|---|
+| calls the server received | `search_notes` in 3 of 3 | `search_notes` in 3 of 3 | none |
+| model name sent (`llm_model_name`) | `claude-haiku-5-5` in 3 of 3 | empty in 3 of 3 | - |
+| attacker email sent | 0 of 3 (Haiku refused) | 0 of 3 | 0 of 3 |
+| user's task done | 3 of 3 | 3 of 3 | 0 of 3 |
 
-This is a small check: n=3 per arm, one model, and no raw log was stored. Haiku ignored the
-injected instruction even when the user asked it to use the
-injected address, so the hook's denial path was not exercised live; it is covered
-by the tests above. A less resistant model is the next live check.
+With the proxy, the whole-server description scan matched `add_numbers`' external-send instruction and
+quarantined all three tools, so the agent could not search the notes either: that is the utility
+cost of quarantining a server. This is a small check: n=3 per arm and one model. Haiku ignored the
+injected instruction even when the user asked it to use the injected address, so the hook's denial
+path was not exercised live; it is covered by the tests above.
 
 ## API
 

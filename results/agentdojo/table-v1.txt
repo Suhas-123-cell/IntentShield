@@ -1,0 +1,15 @@
+AgentDojo v1, important_instructions, published runs (97 benign, 629 attacked per model). Rates in %.
+BU benign utility, UA utility under attack, ASR attack success; oracle = undefended successes on mutation-gated goals that carry a flagged harmful call;
+FP = oracle matches on benign runs (calls x signatures). Floor = hold every mutation; reviewer approves benign mutations,
+approves a harmful one with probability p. UA interval: runs whose first harmful call is rejected diverge, counted as fail / success.
+queue-harm = attacked runs that put >=1 harmful call in the review queue. rev/task, need-rev = benign runs. RO = read-only floor, no human.
+
+model                                             BU    UA   ASR   oracle      FP | ASR p=0   .05    .1    .3 |      UA floor q-harm rev/t needrev |         RO BU
+gpt-4o-2024-05-13                               69.1  50.1  47.7  278/279   0/451 |   3.5   5.7   7.9  16.8 | [ 30.8, 79.5]  48.6   0.75    55.7 | [ 27.8, 28.9]
+gpt-4o-mini-2024-07-18                          68.0  49.9  27.2  157/157   7/576 |   2.2   3.5   4.7   9.7 | [ 40.2, 71.9]  31.6   0.98    61.9 | [ 27.8, 28.9]
+claude-3-5-sonnet-20241022                      79.4  72.5   1.1      3/4   0/433 |   0.6   0.7   0.7   0.8 | [ 72.2, 72.8]   0.6   0.73    54.6 | [ 32.0, 32.0]
+meta-llama_Llama-3.3-70B-Instruct               57.7  44.4  33.5  199/199   0/429 |   1.9   3.5   5.1  11.4 | [ 29.6, 63.6]  34.0   0.72    49.5 | [ 21.6, 22.7]
+gpt-4o-2024-05-13-tool_filter                   72.2  56.3   6.8    31/32   0/423 |   1.9   2.2   2.4   3.4 | [ 52.8, 59.8]   7.0   0.70    52.6 | [ 28.9, 28.9]
+gpt-4o-2024-05-13-spotlighting_with_delimiting  72.2  55.6  41.7  246/247   0/438 |   2.5   4.5   6.5  14.3 | [ 37.7, 79.7]  42.0   0.74    54.6 | [ 27.8, 27.8]
+gpt-4o-2024-05-13-transformers_pi_detector      41.2  21.1   7.9    45/45   0/275 |   0.8   1.2   1.5   2.9 | [ 19.9, 28.0]   8.1   0.44    30.9 | [ 17.5, 17.5]
+gpt-4o-2024-05-13-repeat_user_prompt            84.5  67.2  27.8  159/160   0/692 |   2.5   3.8   5.1  10.1 | [ 53.3, 80.3]  27.0   1.10    58.8 | [ 35.1, 35.1]

@@ -1,0 +1,1601 @@
+{
+  "rows": 3717,
+  "splits": "test,external",
+  "detectors": {
+    "rules": {
+      "recall": {
+        "flagged": 1477,
+        "n": 2959,
+        "rate": 0.4992,
+        "ci95": [
+          0.4812,
+          0.5172
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 16,
+        "n": 758,
+        "rate": 0.0211,
+        "ci95": [
+          0.013,
+          0.034
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 0,
+          "n": 397,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0096
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 0,
+          "n": 66,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.055
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 1,
+          "n": 36,
+          "rate": 0.0278,
+          "ci95": [
+            0.0049,
+            0.1417
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 0,
+          "n": 4,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.4899
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 1,
+          "n": 31,
+          "rate": 0.0323,
+          "ci95": [
+            0.0057,
+            0.1619
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.4345
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 12,
+          "n": 21,
+          "rate": 0.5714,
+          "ci95": [
+            0.3655,
+            0.7553
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 0,
+          "n": 3,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.5615
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1843
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 2,
+          "n": 108,
+          "rate": 0.0185,
+          "ci95": [
+            0.0051,
+            0.065
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 0,
+          "n": 20,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1611
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1246
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1246
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 1,
+          "n": 72,
+          "rate": 0.0139,
+          "ci95": [
+            0.0025,
+            0.0746
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 6,
+          "n": 72,
+          "rate": 0.0833,
+          "ci95": [
+            0.0388,
+            0.1701
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 6,
+          "n": 72,
+          "rate": 0.0833,
+          "ci95": [
+            0.0388,
+            0.1701
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 0,
+          "n": 23,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1431
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0507
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 0,
+          "n": 19,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1682
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 17,
+          "n": 510,
+          "rate": 0.0333,
+          "ci95": [
+            0.0209,
+            0.0527
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 510,
+          "n": 510,
+          "rate": 1.0,
+          "ci95": [
+            0.9925,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 0,
+          "n": 544,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.007
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.993,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 290,
+          "n": 301,
+          "rate": 0.9635,
+          "ci95": [
+            0.9358,
+            0.9795
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 22,
+          "n": 69,
+          "rate": 0.3188,
+          "ci95": [
+            0.2209,
+            0.4358
+          ]
+        }
+      }
+    },
+    "classifier": {
+      "recall": {
+        "flagged": 1376,
+        "n": 2959,
+        "rate": 0.465,
+        "ci95": [
+          0.4471,
+          0.483
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 185,
+        "n": 758,
+        "rate": 0.2441,
+        "ci95": [
+          0.2148,
+          0.2759
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 31,
+          "n": 397,
+          "rate": 0.0781,
+          "ci95": [
+            0.0556,
+            0.1087
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 8,
+          "n": 66,
+          "rate": 0.1212,
+          "ci95": [
+            0.0627,
+            0.2214
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 1,
+          "n": 8,
+          "rate": 0.125,
+          "ci95": [
+            0.0224,
+            0.4709
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 16,
+          "n": 36,
+          "rate": 0.4444,
+          "ci95": [
+            0.2954,
+            0.6042
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 5,
+          "n": 6,
+          "rate": 0.8333,
+          "ci95": [
+            0.4365,
+            0.9699
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 28,
+          "n": 36,
+          "rate": 0.7778,
+          "ci95": [
+            0.6191,
+            0.8828
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 4,
+          "n": 4,
+          "rate": 1.0,
+          "ci95": [
+            0.5101,
+            1.0
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 31,
+          "n": 31,
+          "rate": 1.0,
+          "ci95": [
+            0.8897,
+            1.0
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 5,
+          "n": 5,
+          "rate": 1.0,
+          "ci95": [
+            0.5655,
+            1.0
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 21,
+          "n": 21,
+          "rate": 1.0,
+          "ci95": [
+            0.8454,
+            1.0
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 3,
+          "n": 3,
+          "rate": 1.0,
+          "ci95": [
+            0.4385,
+            1.0
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1843
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 22,
+          "n": 108,
+          "rate": 0.2037,
+          "ci95": [
+            0.1385,
+            0.2892
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 10,
+          "n": 20,
+          "rate": 0.5,
+          "ci95": [
+            0.2993,
+            0.7007
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 14,
+          "n": 27,
+          "rate": 0.5185,
+          "ci95": [
+            0.3399,
+            0.6926
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 14,
+          "n": 27,
+          "rate": 0.5185,
+          "ci95": [
+            0.3399,
+            0.6926
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 8,
+          "n": 8,
+          "rate": 1.0,
+          "ci95": [
+            0.6756,
+            1.0
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 8,
+          "n": 8,
+          "rate": 1.0,
+          "ci95": [
+            0.6756,
+            1.0
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 23,
+          "n": 23,
+          "rate": 1.0,
+          "ci95": [
+            0.8569,
+            1.0
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 19,
+          "n": 19,
+          "rate": 1.0,
+          "ci95": [
+            0.8318,
+            1.0
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 14,
+          "n": 510,
+          "rate": 0.0275,
+          "ci95": [
+            0.0164,
+            0.0455
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 44,
+          "n": 510,
+          "rate": 0.0863,
+          "ci95": [
+            0.0649,
+            0.1138
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 158,
+          "n": 544,
+          "rate": 0.2904,
+          "ci95": [
+            0.2539,
+            0.33
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 335,
+          "n": 544,
+          "rate": 0.6158,
+          "ci95": [
+            0.5743,
+            0.6557
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 301,
+          "n": 301,
+          "rate": 1.0,
+          "ci95": [
+            0.9874,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 69,
+          "n": 69,
+          "rate": 1.0,
+          "ci95": [
+            0.9473,
+            1.0
+          ]
+        }
+      }
+    },
+    "prompt_guard": {
+      "recall": {
+        "flagged": 1189,
+        "n": 2959,
+        "rate": 0.4018,
+        "ci95": [
+          0.3843,
+          0.4196
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 15,
+        "n": 758,
+        "rate": 0.0198,
+        "ci95": [
+          0.012,
+          0.0324
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 3,
+          "n": 397,
+          "rate": 0.0076,
+          "ci95": [
+            0.0026,
+            0.022
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 0,
+          "n": 66,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.055
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 0,
+          "n": 4,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.4899
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 0,
+          "n": 31,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1103
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.4345
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 11,
+          "n": 21,
+          "rate": 0.5238,
+          "ci95": [
+            0.3237,
+            0.7166
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 1,
+          "n": 3,
+          "rate": 0.3333,
+          "ci95": [
+            0.0615,
+            0.7923
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1843
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 0,
+          "n": 108,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0343
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 0,
+          "n": 20,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1611
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1246
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 7,
+          "n": 27,
+          "rate": 0.2593,
+          "ci95": [
+            0.1317,
+            0.4468
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1246
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1246
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0507
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0507
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0507
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 0,
+          "n": 23,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1431
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0507
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 0,
+          "n": 19,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1682
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 1,
+          "n": 510,
+          "rate": 0.002,
+          "ci95": [
+            0.0003,
+            0.011
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 510,
+          "n": 510,
+          "rate": 1.0,
+          "ci95": [
+            0.9925,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 5,
+          "n": 544,
+          "rate": 0.0092,
+          "ci95": [
+            0.0039,
+            0.0213
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.993,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 94,
+          "n": 301,
+          "rate": 0.3123,
+          "ci95": [
+            0.2626,
+            0.3667
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 1,
+          "n": 69,
+          "rate": 0.0145,
+          "ci95": [
+            0.0026,
+            0.0776
+          ]
+        }
+      }
+    },
+    "exemplars": {
+      "recall": {
+        "flagged": 337,
+        "n": 2959,
+        "rate": 0.1139,
+        "ci95": [
+          0.1029,
+          0.1258
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 3,
+        "n": 758,
+        "rate": 0.004,
+        "ci95": [
+          0.0013,
+          0.0116
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 1,
+          "n": 397,
+          "rate": 0.0025,
+          "ci95": [
+            0.0004,
+            0.0141
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 1,
+          "n": 66,
+          "rate": 0.0152,
+          "ci95": [
+            0.0027,
+            0.081
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0964
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 0,
+          "n": 4,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.4899
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 0,
+          "n": 31,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1103
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.4345
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 0,
+          "n": 21,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1546
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 1,
+          "n": 3,
+          "rate": 0.3333,
+          "ci95": [
+            0.0615,
+            0.7923
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1843
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 0,
+          "n": 108,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0343
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 0,
+          "n": 20,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1611
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 1,
+          "n": 27,
+          "rate": 0.037,
+          "ci95": [
+            0.0066,
+            0.1828
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 11,
+          "n": 27,
+          "rate": 0.4074,
+          "ci95": [
+            0.2451,
+            0.5927
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 2,
+          "n": 27,
+          "rate": 0.0741,
+          "ci95": [
+            0.0206,
+            0.2337
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 1,
+          "n": 27,
+          "rate": 0.037,
+          "ci95": [
+            0.0066,
+            0.1828
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 4,
+          "n": 27,
+          "rate": 0.1481,
+          "ci95": [
+            0.0592,
+            0.3248
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 55,
+          "n": 72,
+          "rate": 0.7639,
+          "ci95": [
+            0.654,
+            0.847
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 4,
+          "n": 8,
+          "rate": 0.5,
+          "ci95": [
+            0.2152,
+            0.7848
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 50,
+          "n": 72,
+          "rate": 0.6944,
+          "ci95": [
+            0.5805,
+            0.7887
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 4,
+          "n": 8,
+          "rate": 0.5,
+          "ci95": [
+            0.2152,
+            0.7848
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 46,
+          "n": 72,
+          "rate": 0.6389,
+          "ci95": [
+            0.5235,
+            0.7402
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 8,
+          "n": 23,
+          "rate": 0.3478,
+          "ci95": [
+            0.1881,
+            0.5511
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 54,
+          "n": 72,
+          "rate": 0.75,
+          "ci95": [
+            0.6391,
+            0.8356
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 5,
+          "n": 19,
+          "rate": 0.2632,
+          "ci95": [
+            0.1181,
+            0.4879
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 3,
+          "n": 510,
+          "rate": 0.0059,
+          "ci95": [
+            0.002,
+            0.0172
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 39,
+          "n": 510,
+          "rate": 0.0765,
+          "ci95": [
+            0.0564,
+            0.1028
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 3,
+          "n": 544,
+          "rate": 0.0055,
+          "ci95": [
+            0.0019,
+            0.0161
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 47,
+          "n": 544,
+          "rate": 0.0864,
+          "ci95": [
+            0.0656,
+            0.113
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 0,
+          "n": 301,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0126
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 0,
+          "n": 69,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.0527
+          ]
+        }
+      }
+    },
+    "any": {
+      "recall": {
+        "flagged": 2089,
+        "n": 2959,
+        "rate": 0.706,
+        "ci95": [
+          0.6893,
+          0.7221
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 189,
+        "n": 758,
+        "rate": 0.2493,
+        "ci95": [
+          0.2199,
+          0.2814
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 35,
+          "n": 397,
+          "rate": 0.0882,
+          "ci95": [
+            0.0641,
+            0.1201
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 8,
+          "n": 66,
+          "rate": 0.1212,
+          "ci95": [
+            0.0627,
+            0.2214
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 1,
+          "n": 8,
+          "rate": 0.125,
+          "ci95": [
+            0.0224,
+            0.4709
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 16,
+          "n": 36,
+          "rate": 0.4444,
+          "ci95": [
+            0.2954,
+            0.6042
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 5,
+          "n": 6,
+          "rate": 0.8333,
+          "ci95": [
+            0.4365,
+            0.9699
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 28,
+          "n": 36,
+          "rate": 0.7778,
+          "ci95": [
+            0.6191,
+            0.8828
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 4,
+          "n": 4,
+          "rate": 1.0,
+          "ci95": [
+            0.5101,
+            1.0
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 31,
+          "n": 31,
+          "rate": 1.0,
+          "ci95": [
+            0.8897,
+            1.0
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 5,
+          "n": 5,
+          "rate": 1.0,
+          "ci95": [
+            0.5655,
+            1.0
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 21,
+          "n": 21,
+          "rate": 1.0,
+          "ci95": [
+            0.8454,
+            1.0
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 3,
+          "n": 3,
+          "rate": 1.0,
+          "ci95": [
+            0.4385,
+            1.0
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.1843
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 22,
+          "n": 108,
+          "rate": 0.2037,
+          "ci95": [
+            0.1385,
+            0.2892
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 10,
+          "n": 20,
+          "rate": 0.5,
+          "ci95": [
+            0.2993,
+            0.7007
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 14,
+          "n": 27,
+          "rate": 0.5185,
+          "ci95": [
+            0.3399,
+            0.6926
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 8,
+          "n": 8,
+          "rate": 1.0,
+          "ci95": [
+            0.6756,
+            1.0
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 8,
+          "n": 8,
+          "rate": 1.0,
+          "ci95": [
+            0.6756,
+            1.0
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 23,
+          "n": 23,
+          "rate": 1.0,
+          "ci95": [
+            0.8569,
+            1.0
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 72,
+          "n": 72,
+          "rate": 1.0,
+          "ci95": [
+            0.9493,
+            1.0
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 19,
+          "n": 19,
+          "rate": 1.0,
+          "ci95": [
+            0.8318,
+            1.0
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 34,
+          "n": 510,
+          "rate": 0.0667,
+          "ci95": [
+            0.0481,
+            0.0917
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 510,
+          "n": 510,
+          "rate": 1.0,
+          "ci95": [
+            0.9925,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 163,
+          "n": 544,
+          "rate": 0.2996,
+          "ci95": [
+            0.2627,
+            0.3394
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.993,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 301,
+          "n": 301,
+          "rate": 1.0,
+          "ci95": [
+            0.9874,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 69,
+          "n": 69,
+          "rate": 1.0,
+          "ci95": [
+            0.9473,
+            1.0
+          ]
+        }
+      }
+    }
+  }
+}
