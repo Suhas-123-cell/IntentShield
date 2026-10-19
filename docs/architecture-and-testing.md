@@ -484,7 +484,7 @@ uv pip install --python .venv/bin/python -r requirements-ml.txt
 
 These packages are declared separately from the project's normal extras. A later exact `uv sync` can remove them as extraneous. Use `uv sync --locked --extra dev --inexact` to preserve manually installed packages, or reinstall them after syncing.
 
-If `artifacts/intent-deberta-v3-small` is absent, train it first:
+The trained model is `artifacts/intent-deberta-v3-small-v2` (Colab, `artifacts/colab-intent-retrain.ipynb`). The default path `artifacts/intent-deberta-v3-small` is absent, so the intent model is off unless `INTENTSHIELD_INTENT_MODEL_DIR` points at a model. To train one locally:
 
 ```bash
 .venv/bin/python -m intentshield.intent_training \
@@ -499,7 +499,7 @@ Review its qualification and evaluation report, then run real predictions direct
 import json
 from intentshield.intent_classifier import DebertaIntentClassifier
 
-classifier = DebertaIntentClassifier('artifacts/intent-deberta-v3-small')
+classifier = DebertaIntentClassifier('artifacts/intent-deberta-v3-small-v2')
 print(json.dumps(classifier.status().model_dump(mode='json'), indent=2))
 for text in (
     'Read my inbox',
@@ -516,9 +516,9 @@ PY
 
 Expect readiness, available predictions and plausible read/mutation/no-action families. Low confidence should abstain as `unknown`, not authorize anything. If a straightforward request is misclassified, record it as an evaluation failure even when the resulting gateway denial is safe. A readiness check validates preliminary artifact/dependency checks; the first successful prediction verifies lazy model loading actually worked.
 
-Restart the app with `INTENTSHIELD_INTENT_MODEL_DIR=artifacts/intent-deberta-v3-small`, inspect `/api/security/status`, and repeat the benign/review/negation cases. Inspect `security_assessment.grounding.classifier_label` and `classifier_score` in the run evidence to verify the model contributed. Do not leave the deliberate missing-artifact baseline override in this start command.
+Restart the app with `INTENTSHIELD_INTENT_MODEL_DIR=artifacts/intent-deberta-v3-small-v2`, inspect `/api/security/status`, and repeat the benign/review/negation cases. Inspect `security_assessment.grounding.classifier_label` and `classifier_score` in the run evidence to verify the model contributed. Do not leave the deliberate missing-artifact baseline override in this start command.
 
-Inspect `artifacts/intent-deberta-v3-small/evaluation_report.json` and `artifacts/intent-deberta-v3-small/intent_metadata.json`. For an independent evaluation, create new labeled paraphrases and mixed/negated requests that were not used for training or validation. Measure macro-F1, per-class recall and abstention rate on that fresh set. The current 18-example validation split is too small to establish broad performance.
+Inspect `evaluation_report.json` and `intent_metadata.json` in the model directory. For an independent evaluation, create new labeled paraphrases and mixed/negated requests that were not used for training or validation. Measure macro-F1, per-class recall and abstention rate on that fresh set. The current 18-example validation split is too small to establish broad performance.
 
 If you want to reproduce training while preserving the existing checkpoint:
 
