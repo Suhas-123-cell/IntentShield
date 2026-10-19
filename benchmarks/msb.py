@@ -28,7 +28,9 @@ import os
 import random
 import re
 import subprocess
+import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -563,6 +565,36 @@ def sample(runnable: list[dict[str, Any]], per_type: int, seed: int) -> list[dic
                   key=lambda c: c["id"])
 
 
+def provenance(args: argparse.Namespace) -> dict[str, Any]:
+    """What a run depended on, so a table can be traced to one commit, model build and intent model."""
+    def run(*command: str) -> str:
+        try:
+            return subprocess.run(command, capture_output=True, text=True, timeout=30).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+    intent_dir = os.getenv("INTENTSHIELD_INTENT_MODEL_DIR", "artifacts/intent-deberta-v3-small")
+    from intentshield.intent_classifier import DebertaIntentClassifier
+    status = DebertaIntentClassifier(intent_dir).status()
+    weights = Path(intent_dir) / "model.safetensors"
+    digest = ""
+    if args.model.partition(":")[0] not in PROVIDERS:
+        try:
+            tags = httpx.get(f"{args.host}/api/tags", timeout=10).json()["models"]
+            digest = next((m["digest"] for m in tags if m["name"] == args.model), "")
+        except (httpx.HTTPError, KeyError, ValueError):
+            pass
+    return {
+        "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "commit": run("git", "rev-parse", "HEAD"),
+        "dirty": bool(run("git", "status", "--porcelain", "--untracked-files=no", "--", "src", "benchmarks")),
+        "intent_model": {"dir": intent_dir, "ready": status.ready, "reason": status.reason,
+                         "sha256": hashlib.sha256(weights.read_bytes()).hexdigest() if status.ready else None},
+        "agent_model_digest": digest,
+        "container_image": run("docker", "inspect", "--format", "{{.Image}}", args.container),
+        "argv": sys.argv[1:],
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, default=Path("artifacts/data/MSB"))
@@ -633,6 +665,10 @@ def main(argv: list[str] | None = None) -> None:
     # Rows that errored (a server failed to start) are retried; the latest row per case wins.
     done = {r["id"] for r in map(json.loads, sink.read_text().splitlines()) if "error" not in r} \
         if sink.exists() else set()
+    # One entry per invocation: a resumed run lists every commit it ran under.
+    report_path = args.out / f"report-{tag}.json"
+    runs = json.loads(report_path.read_text()).get("provenance", []) if report_path.exists() and done else []
+    runs.append(provenance(args))
     with tempfile.TemporaryDirectory() as tmp, sink.open("a") as out:
         for n, case in enumerate(runnable, 1):
             if case["id"] in done:
@@ -656,8 +692,9 @@ def main(argv: list[str] | None = None) -> None:
     scored = [r for r in rows if "error" not in r]
     report = {"model": args.model, "defense": args.defense, "expose_descriptions": args.expose_descriptions,
               "judge": args.judge, "prompt_guard": args.prompt_guard,
-              "cases": len(scored), "errors": len(rows) - len(scored), "results": summarize(scored)}
-    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
+              "cases": len(scored), "errors": len(rows) - len(scored), "provenance": runs,
+              "results": summarize(scored)}
+    report_path.write_text(json.dumps(report, indent=2))
     print(json.dumps(report["results"].get("all"), indent=2))
 
 
