@@ -227,6 +227,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_exemplars.py` | Exemplar detector with a bag-of-words embedder: chunking (spaced and unspaced scripts), dropping the benign part of an injection, the class-balanced kNN vote, threshold/k tuning under a false-flag budget, save/load, embedder hash checks. |
 | `test_learning.py` | Learning from operator labels: the regression gate in both directions, refusals, replay into a fresh index, the cached regression vectors, and the proxy loop (a call rejected as `injection` teaches the detector to flag the next variant; an approval never teaches a flagged output as benign). |
 | `test_signatures.py` | Induced rules: unsafe and trivial patterns refused, the source and benign-corpus gates, pending-until-approved with single decisions, normalized matching, defensive parsing of model proposals, proxy wiring. |
+| `test_msb_scoring.py` | MSB scoring on synthetic traces (harm stages, rewritten parameters, task tool, user task), the paired comparison and cluster bootstrap, and `paper_numbers.py`'s benign-review count, self-disclosure test and manifest hash check. |
 | `test_injection_eval.py`, `test_adaptive_attacker.py` | The injection evaluation corpus (sources, splits, families, hard negatives) and per-family scoring; the adaptive-attacker protocol (held-out seeds, canary goal check, budget, learning only from valid tries). |
 | `test_judge.py` | LLM call judge: response parsing, per-model answer cache, fail-to-no-opinion on errors, proxy wiring (withholds flagged tools, reviews read-only calls only), hook wiring (asks only when the rules allow). Stubbed; no network. |
 | `test_harness.py` | Hook adapters for Claude Code, Codex CLI, Cursor and Gemini CLI on their documented event shapes, fail-closed hook crashes, mutation naming, transparent forwarding, tool ranking, search-first tool listing with `list_changed` over an in-process MCP client, and the per-prompt tool hint. |
@@ -562,13 +563,14 @@ The runners in `benchmarks/` need external datasets under `artifacts/data/` (ign
 | `mcptox.py --replay [--lenient-reads]` | MCPTox-Benchmark checkout | None; scores MCPTox's published responses |
 | `adaptive.py` | MCPTox-Benchmark checkout | None; rewrites flagged descriptions |
 | `injecagent.py`, `asb.py`, `agentdojo_run.py` | The benchmark data, Ollama (AgentDojo also supports Google) | Yes |
-| `msb.py --defense none\|intentshield\|hooks` | MSB checkout, the `intentshield-msb` Docker container, Ollama | Yes |
+| `msb.py --defense none\|baseline\|intentshield\|hooks` | MSB checkout, the `intentshield-msb` Docker container, Ollama (or a Gemini/Groq key) | Yes |
+| `msb_compare.py`, `paper_numbers.py` | MSB checkout for the case grid; `paper_numbers.py` reads the committed traces in `results/msb` | None; rescores stored traces |
 
-Results and their caveats are in the README; related work and next steps are in [related-work.md](related-work.md).
+Results and their caveats are in the README, and the raw outputs the papers cite are in [`results/`](../results/README.md); related work and next steps are in [related-work.md](related-work.md).
 
 **16. Completion checklist and practical limits**
 
-For a thorough test of the current implementation, collect these results: all 146 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
+For a thorough test of the current implementation, collect these results: all 254 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 
