@@ -4,6 +4,13 @@
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
 **Headline:** on 220 held-out MSB attack cases, harmful actions executed fell from 15–58% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 6–14 points of task completion and, on 3 of 4 agents, more benign reviews. Read the [caveats](#results-and-limitations) before quoting it.
 
+**Try it without cloning** (needs [uv](https://docs.astral.sh/uv/)): 13 checks against a bundled demo server, no build step.
+
+```sh
+curl -sO https://raw.githubusercontent.com/Suhas-123-cell/IntentShield/main/configs/mcp-proxy.uvx.json
+uvx --from git+https://github.com/Suhas-123-cell/IntentShield intentshield-mcp-verify --config mcp-proxy.uvx.json --stdio
+```
+
 ![IntentShield blocking an injected MCP call](docs/demo.gif)
 
 ## Quickstart

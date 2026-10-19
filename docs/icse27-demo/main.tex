@@ -224,8 +224,8 @@ legitimate task calls and added no measured safety; as advisory evidence it chan
 \section{Limitations and Related Work}
 Agents were three local 7--9B models and one hosted model on 99 cases; one run each at temperature 0. Our MSB runner deviates from MSB in
 stated ways (injection text only on the task server, directory listing allowed). The proxy drops MCP
-resources and prompts instead of mediating them. The reviewer is modeled, never measured, and no
-adaptive attacker was run. Hook replies were checked for all four harnesses; only Claude Code was run
+resources and prompts instead of mediating them. The reviewer is modeled, never measured, and the only
+adaptive attacker was weak (16 of 42 seeds evaded the static defense, 13 with learning). Hook replies were checked for all four harnesses; only Claude Code was run
 live end to end.
 
 Argument-level provenance and authorization are studied as research
@@ -238,7 +238,9 @@ fingerprints~\cite{trustshift}. \tool claims no new mechanism: it contributes a 
 cross-harness implementation with paired, held-out measurements, including where it does not help.
 
 \textbf{Availability.} \repo, Apache-2.0: source, 251 tests, harness configurations, a Dockerfile,
-the MSB, MCPTox and latency scripts, and the paired comparison tool.
+the MSB, MCPTox and latency scripts, and the paired comparison tool. It installs with one
+\texttt{uvx} command and no build step, after which the verifier passes 13 checks against a bundled
+demo server.
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
