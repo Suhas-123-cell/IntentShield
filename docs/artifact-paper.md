@@ -295,7 +295,7 @@ Plain-language injections from independent sources stay undetected by every usab
   - Task tool executed: 38.1% against 40.4%; `user_task`: 42.9% against 45.0%.
 - **Running it was clean:** no Groq errors and no quota stops over 220 cases.
 
-### 5.7 Stronger agent model (partial: undefended arm ✓, baseline and gateway ☐)
+### 5.7 Stronger agent model (✓, `artifacts/msb-v9-boot-gemini.txt`, 99 paired cases)
 - **Setup:** Gemini 3.5 Flash-Lite through its OpenAI-compatible endpoint (free tier, 500 requests a
   day), 99 cases = 9 per attack type, a seeded subset of the 220 held-out cases (`msb.py --subsample 9`,
   `artifacts/msb-v9/`), temperature 0, intent model off. Arms: none, baseline, gateway.
@@ -316,7 +316,20 @@ Plain-language injections from independent sources stay undetected by every usab
   the injected email. This is 9 cases per type on one model, so read it as a pattern, not a rate.
   The gap it points to is schema-level self-disclosure, which the stripping in §3.2 removes, rather
   than injected text, which a capable model already tends to refuse.
-- **Baseline and gateway arms:** ☐ (quota-limited; expected 2026-10-18).
+- **Baseline and gateway arms** (paired, user-task cluster bootstrap, baseline as reference):
+
+  | Arm | Harm executed | Harm reached review | `user_task` | Task tool reached |
+  |---|---|---|---|---|
+  | none | 29.3% | 0 | 96.8% (+30.2 [+14.6, +49.2]) | 96.0% |
+  | baseline | 0.0% | 2 | 66.7% | 95.0% |
+  | gateway | 0.0% | 0 | 58.7% (−7.9 [−19.6, +0.0]) | 69.7% (−25.3 [−38.9, −13.6]) |
+
+  - Both guards execute no harm. The gateway's agent never even attempted any (0/99): with the
+    model-name fields stripped from the schemas, Gemini had nothing to fill.
+  - The baseline's cost is the review queue for every mutation: 30 points of `user_task` below the
+    undefended run. The gateway's extra cost over the baseline is not clearly non-zero (interval
+    touches 0). Its reviews are 71 `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` (arguments copied from a tool
+    output) and 52 mutation approvals.
 
 ## 6. The structural floor on AgentDojo (✓, `artifacts/agentdojo-floor/table-v1.txt`)
 
@@ -336,9 +349,14 @@ Plain-language injections from independent sources stay undetected by every usab
 
 ## 7. What did not work (keep this section)
 
-1. **DeBERTa intent model.** It blocks 7–18% of legitimate task calls on MSB and adds no measured
-   safety, so it is off in all reported runs. A tokenizer bug (`fix_mistral_regex`) affected its
-   training; retraining is future work.
+1. **DeBERTa intent model.** It is off in all reported runs. Retrained with a clean tokenizer
+   (`artifacts/intent-deberta-v3-small-v2`, 30 epochs, 17/18 validation), it still blocked 9.6–29.2%
+   of task tool calls (MSB v10, `artifacts/msb-v10-boot-*.txt`): user_task vs baseline went from
+   −6.4/−14.3/−8.6 (off) to −19.3/−17.1/−23.7 on qwen/llama/ornith. The cause was the adapter, not
+   the model: one label per prompt vetoed every call of the other kind (143 of 150 qwen blocks;
+   a mutation prompt blocked the reads it needs first). Since `f9ba37c` a disagreement is no opinion.
+   MSB v11 (`artifacts/msb-v11-boot-*.txt`) then matches the intent-off arm (−7.9/−14.3/−11.5, harm 0):
+   advisory, it neither costs nor buys anything measurable.
 2. **Trained injection classifier:** it flags 24.4% of benign rows (113/142 hard negatives), so it
    is off.
 3. **LLM judge on MSB:** its only catches were on label-leaked server names before `1c0d4dc`; it

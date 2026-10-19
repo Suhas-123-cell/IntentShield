@@ -191,7 +191,10 @@ in 29.3\% of cases and completed 96.8\% of user tasks. 23 of its 29 harmful case
 self-disclosure: it filled a model-name field whenever a schema asked for one, but followed injected
 instructions in only 6 of 72 cases (9 per type, one run). Claude Haiku behaved the same way in the live demo. For capable
 agents in this sample, what a schema asks for mattered more than injected text.
-% TODO: baseline and gateway arms (MSB v9), expected 2026-10-18.
+With either guard Gemini executed no harm. The baseline left 2 harmful calls for review and the
+gateway none, because with the model-name fields stripped Gemini never attempted one. User tasks
+fell to 66.7\% under the baseline and 58.7\% under the gateway ($-7.9$ [$-19.6$, $0.0$]); most
+gateway reviews were arguments copied from tool output.
 
 \textbf{Description poisoning (MCPTox~\cite{mcptox}).} Replaying the benchmark through the proxy,
 0.4\% of attacks succeed and 3.5\% of benign calls are wrongly blocked. The description rules were
@@ -212,8 +215,8 @@ running any model. With a perfect reviewer, attack success falls from 47.7\% to 
 the reviewer wrongly approves 10\% of held calls; but 55.7\% of benign tasks then need a review. This
 is the currency in which autonomous defenses should be compared with human review~\cite{oversight}.
 
-\textbf{What did not work.} A DeBERTa intent model blocked 7--18\% of legitimate task calls and added
-no measured safety; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
+\textbf{What did not work.} A DeBERTa intent model, used as a per-prompt veto, blocked up to 29\% of
+legitimate task calls and added no measured safety; as advisory evidence it changed nothing; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
 
 \section{Limitations and Related Work}
 Agents were small local models; one run each at temperature 0. Our MSB runner deviates from MSB in
