@@ -33,9 +33,11 @@ withholds and scans tool descriptions, detects rug pulls, strips parameters that
 agent's own data, tracks values from tool outputs into later arguments, and holds state-changing
 calls for a human. On 220 held-out cases of MCP Security Bench with three local 7--9B agents, no guard
 that holds mutations, \tool's or a trivial baseline, lets a harmful call execute (15--58\%
-undefended). \tool's measurable gain is the reviewer's queue: it leaves no harmful call for review,
-where the baseline leaves one in up to 19\% of cases, at a cost of 6--14 points of task completion
-relative to the baseline. A hook decision costs at most about 1\,ms on top of 34\,ms of process
+undefended). What \tool changes is what the reviewer sees: no harmful call reaches the review queue, where the
+baseline puts one there in up to 19\% of cases. It pays 6--14 points of task completion relative to
+the baseline and, on three of four agents, more benign reviews. With a hosted agent (Gemini 3.5
+Flash-Lite), 23 of 29 undefended harms were self-disclosure through schema fields; with those fields
+stripped, the agent attempted none. A hook decision costs at most about 1\,ms on top of 34\,ms of process
 start-up; the proxy adds 1.9\,ms per call. We report negative results alongside these.
 Tool, tests and benchmark scripts: \repo. Video: \textbf{TODO YouTube URL}.
 \end{abstract}
@@ -179,7 +181,8 @@ hooks    & 0    & 2.3  & 50.7 & 0    & 0.9 & 57.1 & 0    & 1.4  & 54.0 \\
 Every guard that holds mutations executes no harm, the trivial baseline included: MSB's harms need a
 file write or a leaked model name, and both are held or stripped. The metric cannot rank these
 guards, so we report the funnel. \tool's gateway leaves no harmful call for a human (baseline: 27
-and 41 cases on qwen and ornith) and pays for it in utility. Its paired user-task difference from the
+and 41 cases on qwen and ornith) and pays for it in utility and, on two of three agents, in review load: reviews per case rise from
+0.57 to 0.69 on llama and from 1.48 to 1.99 on ornith, and fall from 1.15 to 0.93 on qwen. Its paired user-task difference from the
 baseline, from a bootstrap over the 28 user tasks the cases share, is $-6.4$ [$-14.3$, $-1.0$] on
 qwen, $-14.3$ [$-26.0$, $-5.1$] on llama and $-8.6$ [$-16.7$, $-2.5$] on ornith. Hooks keep more
 utility, clearly so only on llama ($+35.0$ [$+24.7$, $+45.5$] over the gateway). On qwen, 20 of 37
@@ -193,8 +196,8 @@ instructions in only 6 of 72 cases (9 per type, one run). Claude Haiku behaved t
 agents in this sample, what a schema asks for mattered more than injected text.
 With either guard Gemini executed no harm. The baseline left 2 harmful calls for review and the
 gateway none, because with the model-name fields stripped Gemini never attempted one. User tasks
-fell to 66.7\% under the baseline and 58.7\% under the gateway ($-7.9$ [$-19.6$, $0.0$]); most
-gateway reviews were arguments copied from tool output.
+fell to 66.7\% under the baseline and 58.7\% under the gateway ($-7.9$ [$-19.6$, $0.0$]); the gateway
+also held more calls for review (1.24 vs.\ 0.71 per case), mostly arguments copied from tool output.
 
 \textbf{Description poisoning (MCPTox~\cite{mcptox}).} Replaying the benchmark through the proxy,
 0.4\% of attacks succeed and 3.5\% of benign calls are wrongly blocked. The description rules were
@@ -219,7 +222,7 @@ is the currency in which autonomous defenses should be compared with human revie
 legitimate task calls and added no measured safety; as advisory evidence it changed nothing; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
 
 \section{Limitations and Related Work}
-Agents were small local models; one run each at temperature 0. Our MSB runner deviates from MSB in
+Agents were three local 7--9B models and one hosted model on 99 cases; one run each at temperature 0. Our MSB runner deviates from MSB in
 stated ways (injection text only on the task server, directory listing allowed). The proxy drops MCP
 resources and prompts instead of mediating them. The reviewer is modeled, never measured, and no
 adaptive attacker was run. Hook replies were checked for all four harnesses; only Claude Code was run
@@ -228,10 +231,13 @@ live end to end.
 Argument-level provenance and authorization are studied as research
 contributions~\cite{pact,toolfence,camel}; MCP-Guard~\cite{mcpguard} stacks learned detectors on a
 static scan. Harness hooks are studied in~\cite{capscope,harnessbench,laundering}, and review as a
-limited resource in~\cite{oversight,stack}. \tool claims no new mechanism: it contributes a tested,
+limited resource in~\cite{oversight,stack}. Recent work finds prompt-level guardrails weak against
+description poisoning~\cite{mcptdp}, guards at the network layer~\cite{shieldnet}, confines
+cross-domain resource access~\cite{aegis}, and benchmarks staged trust shifts, the rug pulls \tool
+fingerprints~\cite{trustshift}. \tool claims no new mechanism: it contributes a tested,
 cross-harness implementation with paired, held-out measurements, including where it does not help.
 
-\textbf{Availability.} \repo, Apache-2.0: source, 250 tests, harness configurations, a Dockerfile,
+\textbf{Availability.} \repo, Apache-2.0: source, 251 tests, harness configurations, a Dockerfile,
 the MSB, MCPTox and latency scripts, and the paired comparison tool.
 
 \bibliographystyle{IEEEtran}
