@@ -4,9 +4,7 @@
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
 **Headline:** on 220 held-out MSB attack cases with qwen2.5:7b, harmful actions executed fell from 58.5% unguarded to 0.0%, at the cost of the agent reaching its task tool less often (70.3% to 42.3% through the gateway). Read the [caveats](#results-and-limitations) before quoting it.
 
-<!-- Demo placeholder: record a 60-second docs/demo.gif, then uncomment the next line.
 ![IntentShield blocking an injected MCP call](docs/demo.gif)
--->
 
 ## Quickstart
 
