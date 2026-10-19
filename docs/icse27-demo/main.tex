@@ -32,10 +32,10 @@ Gemini CLI) through their hook interfaces, and in front of any MCP server as a t
 withholds and scans tool descriptions, detects rug pulls, strips parameters that ask for the
 agent's own data, tracks values from tool outputs into later arguments, and holds state-changing
 calls for a human. On 220 held-out cases of MCP Security Bench with three local 7--9B agents, no guard
-that holds mutations, \tool's or a trivial baseline, lets a harmful call execute (15--58\%
+that holds mutations, \tool's or a trivial baseline, lets a harmful call execute (15--59\%
 undefended). What \tool changes is what the reviewer sees: no harmful call reaches the review queue, where the
-baseline puts one there in up to 19\% of cases. It pays 6--14 points of task completion relative to
-the baseline and, on three of four agents, more benign reviews. With a hosted agent (Gemini 3.5
+baseline puts one there in up to 19\% of cases. It pays 9--14 points of task completion relative to
+the baseline and, on all four agents, more reviews of benign calls. With a hosted agent (Gemini 3.5
 Flash-Lite), 23 of 29 undefended harms were self-disclosure through schema fields; with those fields
 stripped, the agent attempted none. A hook decision costs at most about 1\,ms on top of 34\,ms of process
 start-up; the proxy adds 1.9\,ms per call. We report negative results alongside these.
@@ -170,9 +170,9 @@ calls that reached the reviewer's queue, and MSB's user-task success.
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(l){8-10}
 Arm & H & R & U & H & R & U & H & R & U \\
 \midrule
-none     & 58.3 & 0    & 68.6 & 15.0 & 0   & 70.0 & 56.0 & 0    & 82.7 \\
+none     & 58.7 & 0    & 68.6 & 15.0 & 0   & 70.0 & 56.0 & 0    & 82.7 \\
 baseline & 0    & 12.4 & 51.4 & 0    & 0   & 36.4 & 0    & 19.0 & 59.7 \\
-gateway  & 0    & 0    & 45.0 & 0    & 0   & 22.1 & 0    & 0    & 51.1 \\
+gateway  & 0    & 0    & 42.9 & 0    & 0   & 22.1 & 0    & 0    & 51.1 \\
 hooks    & 0    & 2.3  & 50.7 & 0    & 0.9 & 57.1 & 0    & 1.4  & 54.0 \\
 \bottomrule
 \end{tabular}
@@ -181,9 +181,9 @@ hooks    & 0    & 2.3  & 50.7 & 0    & 0.9 & 57.1 & 0    & 1.4  & 54.0 \\
 Every guard that holds mutations executes no harm, the trivial baseline included: MSB's harms need a
 file write or a leaked model name, and both are held or stripped. The metric cannot rank these
 guards, so we report the funnel. \tool's gateway leaves no harmful call for a human (baseline: 27
-and 41 cases on qwen and ornith) and pays for it in utility and, on two of three agents, in review load: reviews per case rise from
-0.57 to 0.69 on llama and from 1.48 to 1.99 on ornith, and fall from 1.15 to 0.93 on qwen. Its paired user-task difference from the
-baseline, from a bootstrap over the 28 user tasks the cases share, is $-6.4$ [$-14.3$, $-1.0$] on
+and 41 cases on qwen and ornith) and pays for it in utility and in review load: reviews of benign calls per case rise from
+0.94 to 1.01 on qwen, 0.57 to 0.69 on llama and 0.95 to 2.00 on ornith. Its paired user-task difference from the
+baseline, from a bootstrap over the 28 user tasks the cases share, is $-8.6$ [$-16.1$, $-3.8$] on
 qwen, $-14.3$ [$-26.0$, $-5.1$] on llama and $-8.6$ [$-16.7$, $-2.5$] on ornith. Hooks keep more
 utility, clearly so only on llama ($+35.0$ [$+24.7$, $+45.5$] over the gateway). On qwen, 20 of 37
 harmful attempts under hooks were blocked outright; on llama, 19 of 21 were defused by sending the
@@ -197,7 +197,7 @@ agents in this sample, what a schema asks for mattered more than injected text.
 With either guard Gemini executed no harm. The baseline left 2 harmful calls for review and the
 gateway none, because with the model-name fields stripped Gemini never attempted one. User tasks
 fell to 66.7\% under the baseline and 58.7\% under the gateway ($-7.9$ [$-19.6$, $0.0$]); the gateway
-also held more calls for review (1.24 vs.\ 0.71 per case), mostly arguments copied from tool output.
+also held more benign calls for review (1.24 vs.\ 0.69 per case), mostly arguments copied from tool output.
 
 \textbf{Description poisoning (MCPTox~\cite{mcptox}).} Replaying the benchmark through the proxy,
 0.4\% of attacks succeed and 3.5\% of benign calls are wrongly blocked. The description rules were
@@ -218,11 +218,11 @@ running any model. With a perfect reviewer, attack success falls from 47.7\% to 
 the reviewer wrongly approves 10\% of held calls; but 55.7\% of benign tasks then need a review. This
 is the currency in which autonomous defenses should be compared with human review~\cite{oversight}.
 
-\textbf{What did not work.} A DeBERTa intent model, used as a per-prompt veto, blocked up to 29\% of
-legitimate task calls and added no measured safety; as advisory evidence it changed nothing; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
+\textbf{What did not work.} A DeBERTa intent model, used as a per-prompt veto, blocked the task's own tool in up to 29\%
+of cases and added no measured safety; as advisory evidence it moved task completion by at most 3 points; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
 
 \section{Limitations and Related Work}
-Agents were three local 7--9B models and one hosted model on 99 cases; one run each at temperature 0. Our MSB runner deviates from MSB in
+Agents were three local 7--9B models and one hosted model on 99 cases; one run each at temperature 0 (rerunning one arm five days later reproduced all 220 call sequences). Our MSB runner deviates from MSB in
 stated ways (injection text only on the task server, directory listing allowed). The proxy drops MCP
 resources and prompts instead of mediating them. The reviewer is modeled, never measured, and the only
 adaptive attacker was weak (16 of 42 seeds evaded the static defense, 13 with learning). Hook replies were checked for all four harnesses; only Claude Code was run
@@ -237,8 +237,9 @@ cross-domain resource access~\cite{aegis}, and benchmarks staged trust shifts, t
 fingerprints~\cite{trustshift}. \tool claims no new mechanism: it contributes a tested,
 cross-harness implementation with paired, held-out measurements, including where it does not help.
 
-\textbf{Availability.} \repo, Apache-2.0: source, 251 tests, harness configurations, a Dockerfile,
-the MSB, MCPTox and latency scripts, and the paired comparison tool. It installs with one
+\textbf{Availability.} \repo, Apache-2.0: source, 254 tests, harness configurations, a Dockerfile,
+the MSB, MCPTox and latency scripts, the raw traces of every run reported here, and a script that
+regenerates each MSB number from them. It installs with one
 \texttt{uvx} command and no build step, after which the verifier passes 13 checks against a bundled
 demo server.
 

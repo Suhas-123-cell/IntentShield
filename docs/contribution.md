@@ -267,6 +267,10 @@ the stages before execution:
 | gateway, intent model off | 0.0% | 1.8% | 0.0% | 45.0% |
 | hooks | 0.0% | 17.0% | 0.0% (20 blocked) | 58.6% |
 
+> **Superseded 2026-10-20.** These are the 2026-10-12/13 qwen runs. On current code (MSB v12, `results/msb`)
+> none is 58.7% executed, the gateway with the intent model off 42.9% `user_task`, and the hooks row is the
+> intent-off run (50.7%, 2.3% reached review). Cite `benchmarks/paper_numbers.py`, not this table.
+
 The mechanism is now confirmed from the MSB paper itself (Tab. 9): five of its six attack
 tasks are judged by environment state after `write_file`, `edit_file` or `kill_process`. The
 sixth (`llm_model_name` supplied as a parameter) is neutralized by field stripping. So any guard

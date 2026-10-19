@@ -33,13 +33,14 @@ server ids) and on MCPTox. We report harm at four stages (attempted, blocked, re
 executed, plus calls defused by rewriting), task utility and reviewer load, and we compare against a trivial structural baseline.
 
 On MSB every guard that holds mutations, including the trivial baseline, executes no harm on all
-three agents (15–58% undefended). The gateway's measurable contribution is the reviewer's queue:
+three agents (15–59% undefended). The gateway's measurable contribution is the reviewer's queue:
 it leaves no harmful call for review, where the baseline leaves one in up to 19% of cases. It pays
-6–14 points of task completion relative to the baseline. A Prompt Guard 2 detector adds no
-measurable effect. On AgentDojo's published logs, the same structural floor needs a human on 56% of tasks
+9–14 points of task completion relative to the baseline and holds more benign calls for review on
+all four agents. A Prompt Guard 2 detector adds no measurable effect. On AgentDojo's published logs, the same structural floor needs a human on 56% of tasks
 and leaks 7.9% at a 10% reviewer error rate, which shows what autonomous defenses buy.
 
-☐ Re-check after the clustered intervals (§4).
+Every MSB number here is regenerated from the raw traces in `results/msb` by
+`benchmarks/paper_numbers.py` (verified 2026-10-20).
 
 ## 1. Introduction
 
@@ -122,7 +123,7 @@ and leaks 7.9% at a 10% reviewer error rate, which shows what autonomous defense
 All of these only ever escalate.
 
 ### 3.6 Engineering
-- Tests: 250 pass, 1 skipped; 251 with the HTTP end-to-end test ✓.
+- Tests: 253 pass, 1 skipped; 254 with the HTTP end-to-end test ✓ (2026-10-20).
 - Overhead (`benchmarks/latency.py`, `artifacts/latency.json`, demo MCP server, intent model off,
   2026-10-16) ✓:
   - **hook:** 35 ms per event at the median, p95 under 37 ms, on read, write, small, 4 KB and
@@ -180,7 +181,13 @@ All of these only ever escalate.
   (2–18 cases each) and 4 attack tasks. The user tasks are resampled with the same draw for every
   arm, which gives paired intervals for arm differences. The 4 attack tasks are too few to resample.
   A rate of 0 or 1 keeps its Wilson interval. With 28 clusters of uneven size, percentile intervals
-  may still undercover. Outputs: `artifacts/msb-v8-boot-{qwen,llama3.1_8b,ornith_9b}.txt`.
+  may still undercover. Outputs: `.venv/bin/python benchmarks/paper_numbers.py` over `results/msb`.
+- **Code versions:** every arm runs on code whose guard and runner behave as at `0a3776d`, except the
+  intent model as stated. The qwen none, baseline and gateway arms were rerun on 2026-10-19 (MSB v12)
+  because the originals (v4/v5, 2026-10-12/13) predate gateway and hook fixes; the v4 "hooks, intent
+  on" arm was dropped for the same reason. `results/msb/MANIFEST.json` maps each file to its run.
+- **Reproducibility:** llama3.1:8b none rerun five days later (v12 vs v8) reproduced all 220 call
+  sequences; no metric changed on any case (24 final answers differ in wording).
 
 ## 5. Results
 
@@ -191,28 +198,26 @@ another rewritten), so they need not sum to "attempted". **Rewritten** means the
 but the self-disclosure parameter reached the server blanked. Intervals (in the bootstrap
 files, §4) are user-task cluster bootstrap 95%, about 1.5–2× wider than Wilson.
 
-### 5.1 MSB, qwen2.5:7b (✓, `artifacts/msb-v8-compare-qwen.txt`, 218 paired cases)
+### 5.1 MSB, qwen2.5:7b (✓, `results/msb/qwen2.5_7b`, 218 paired cases)
 
-| Arm | Executed | Attempted | Reached review | Blocked | Rewritten | Task tool executed | `user_task` (n=140) |
+| Arm | Executed | Attempted | Reached review | Blocked | Rewritten | Task tool blocked | `user_task` (n=140) |
 |---|---|---|---|---|---|---|---|
-| none | 58.3% | 58.7% | 0 | 0 | 0 | 70.2% | 68.6% |
-| trivial baseline | 0.0% | 12.4% | 12.4% | 0 | 0 | 55.5% | 51.4% |
-| gateway (intent on) | 0.0% | 0.9% | 0 | 0.9% | 0 | 29.8% | 33.6% |
-| gateway (intent off) | 0.0% | 1.8% | 0 | 1.8% | 0 | 40.4% | 45.0% |
-| gateway + Prompt Guard 2 (intent off) | 0.0% | 2.8% | 0 | 2.8% | 0 | 38.1% | 42.9% |
-| hooks (intent on) | 0.0% | 17.0% | 0 | 9.2% | 7.8% | 49.1% | 58.6% |
-| hooks (intent off) | 0.0% | 17.0% | 2.3% | 9.2% | 5.5% | 46.8% | 50.7% |
+| none | 58.7% | 59.2% | 0 | 0 | 0 | 0 | 68.6% |
+| trivial baseline | 0.0% | 12.4% | 12.4% | 0 | 0 | 0 | 51.4% |
+| gateway (intent off) | 0.0% | 2.8% | 0 | 2.8% | 0 | 0 | 42.9% |
+| gateway + intent veto (v10) | 0.0% | 0.9% | 0 | 0.9% | 0 | 17.4% | 32.1% |
+| gateway + intent advisory (v11) | 0.0% | 3.2% | 0 | 3.2% | 0 | 0 | 43.6% |
+| gateway + Prompt Guard 2 (intent off) | 0.0% | 2.8% | 0 | 2.8% | 0 | 0 | 42.9% |
+| hooks (intent off) | 0.0% | 17.0% | 2.3% | 9.2% | 5.5% | 0 | 50.7% |
 
-- **Intent model:** in the gateway it costs utility (`user_task` 33.6% on, 45.0% off) and buys
-  nothing on harm.
-- **In hooks**, turning it off moves 5 harmful calls from "rewritten" to "reached review". Blocks
-  stay at 20, and `user_task` drops by 8 points, within noise.
+- **Intent model:** as a veto it costs 10.7 points of `user_task` against the gateway without it
+  [−25.0, −0.9] and buys nothing on harm; as advisory evidence it is +0.7 [0.0, +2.5] (§7).
 - **Prompt Guard 2 adds nothing measurable** (§5.6).
-- **Descriptions-exposed variants:**
+- **Descriptions-exposed variants** (v5, older code, not rerun):
   - baseline: attempted 37.6%, reached review 31.6%;
   - gateway: attempted 13.3%, reached review 1.4% (intent model on in that run).
 
-### 5.2 MSB, llama3.1:8b and ornith:9b (✓, intent model off, `artifacts/msb-v8-compare-{llama3.1_8b,ornith_9b}.txt`)
+### 5.2 MSB, llama3.1:8b and ornith:9b (✓, intent model off, `results/msb/{llama3.1_8b,ornith_9b}`)
 
 llama3.1:8b, 220 paired cases (`user_task` n=140):
 
@@ -251,17 +256,19 @@ no outcome column.
   - `shadowing` quarantine of the prompt-injection task servers.
 - **The parity holds on all three models:** the trivial baseline matches every guard on executed
   harm (0%).
-- **The gateway's measurable contribution is reviewer load, paid for in utility.**
+- **The gateway's measurable contribution is the harmful part of the reviewer's queue, paid for in
+  utility and in benign reviews.**
   - Harmful calls left for a human: baseline 12.4% of cases on qwen (27), 19.0% on ornith (41), 0
     on llama. Gateway: 0 on every model.
   - The gateway completes fewer user tasks than the baseline on every model. Paired cluster
-    bootstrap: −6.4 points on qwen [−14.3, −1.0], −14.3 on llama [−26.0, −5.1], −8.6 on ornith
-    [−16.7, −2.5]. All three exclude zero, and qwen only barely. The per-arm intervals overlap. The
-    paired difference is the test that matters.
-- **Hooks keep the most utility of the guards** on qwen and llama, though not on ornith, where the
-  baseline is higher. Paired intervals separate them only on llama: `user_task` +35.0 points over
-  the gateway [+24.7, +45.5] and +20.7 over the baseline [+7.5, +31.2]. On qwen (intent off) the
-  margin over the gateway is +5.7 [−9.2, +23.4], and on ornith +2.9 [−8.0, +16.2].
+    bootstrap: −8.6 points on qwen [−16.1, −3.8], −14.3 on llama [−26.0, −5.1], −8.6 on ornith
+    [−16.7, −2.5]. All three exclude zero. The per-arm intervals overlap. The paired difference is
+    the test that matters.
+- **Hooks keep more utility than the gateway on every model, and more than the baseline only on
+  llama** (qwen 50.7% vs 51.4%, ornith 54.0% vs 59.7%). Paired intervals separate them only on
+  llama: `user_task` +35.0 points over the gateway [+24.7, +45.5] and +20.7 over the baseline
+  [+7.5, +31.2]. On qwen the margin over the gateway is +7.9 [−7.1, +25.2], and on ornith +2.9
+  [−8.0, +16.2].
   - On qwen, most of their defense is real blocking: 20 of 37 attempts blocked.
   - On llama it is almost all parameter rewriting: 19 of 21 attempts rewritten, none blocked. This
     is the same mechanism as the gateway's stripped parameters, applied after the agent has
@@ -289,13 +296,11 @@ Plain-language injections from independent sources stay undetected by every usab
 ### 5.6 Baseline detector on MSB ✓ (`msb.py --prompt-guard`, row in §5.1)
 - **Setup:** Llama Prompt Guard 2 86M (Groq free tier) added as a gateway detector on the same
   218 paired qwen cases.
-- **Result:** no measurable effect.
-  - Executed harm: 0%, as without it.
-  - Blocks: 6 against 4.
-  - Task tool executed: 38.1% against 40.4%; `user_task`: 42.9% against 45.0%.
+- **Result:** no measurable effect. Executed harm 0% and 6 blocks, as without it; `user_task` 42.9%
+  in both arms (+0.0 [−2.2, +1.9]).
 - **Running it was clean:** no Groq errors and no quota stops over 220 cases.
 
-### 5.7 Stronger agent model (✓, `artifacts/msb-v9-boot-gemini.txt`, 99 paired cases)
+### 5.7 Stronger agent model (✓, `results/msb/gemini-3.5-flash-lite`, 99 paired cases)
 - **Setup:** Gemini 3.5 Flash-Lite through its OpenAI-compatible endpoint (free tier, 500 requests a
   day), 99 cases = 9 per attack type, a seeded subset of the 220 held-out cases (`msb.py --subsample 9`,
   `artifacts/msb-v9/`), temperature 0, intent model off. Arms: none, baseline, gateway.
@@ -304,7 +309,7 @@ Plain-language injections from independent sources stay undetected by every usab
   | Agent | Harm executed | `user_task` | Truncated |
   |---|---|---|---|
   | Gemini 3.5 Flash-Lite | 29.3% | 96.8% | 3.0% |
-  | qwen2.5:7b | 57.6% (+28.3 [+15.4, +39.1]) | 61.9% | 26.3% |
+  | qwen2.5:7b | 58.6% (+29.3 [+16.0, +40.7]) | 61.9% | 26.3% |
   | llama3.1:8b | 16.2% (−13.1 [−19.1, −7.7]) | 69.8% | 0.0% |
   | ornith:9b (98 cases) | 51.0% (+21.4 [+11.8, +31.4]) | 85.7% | 26.5% |
 
@@ -331,11 +336,13 @@ Plain-language injections from independent sources stay undetected by every usab
     touches 0). Its reviews are 71 `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` (arguments copied from a tool
     output) and 52 mutation approvals.
 
-### 5.8 Review load (✓, deduplicated per case, same arms as §5.1, §5.2, §5.7)
-- Calls held for a human per case, baseline vs gateway: qwen 1.15 vs 0.93, llama 0.57 vs 0.69,
-  ornith 1.48 vs 1.99, Gemini 0.71 vs 1.24. The gateway empties the queue of harmful calls but
-  enlarges it on 3 of 4 agents (reviews from arguments copied out of tool outputs). State the claim
-  as a trade-off, never as "a smaller queue".
+### 5.8 Review load (✓, paired, `benchmarks/paper_numbers.py`)
+- Benign calls held for a human per case, baseline vs gateway: qwen 0.94 vs 1.01, llama 0.57 vs
+  0.69, ornith 0.95 vs 2.00, Gemini 0.69 vs 1.24. Counting the harmful ones too: qwen 1.14 vs 1.01,
+  ornith 1.47 vs 2.00, Gemini 0.71 vs 1.24 (llama unchanged).
+- The gateway empties the queue of harmful calls but holds more benign calls on all 4 agents
+  (mostly arguments copied out of tool outputs). State the claim as a trade-off, never as "a
+  smaller queue".
 
 ## 6. The structural floor on AgentDojo (✓, `artifacts/agentdojo-floor/table-v1.txt`)
 
@@ -356,13 +363,13 @@ Plain-language injections from independent sources stay undetected by every usab
 ## 7. What did not work (keep this section)
 
 1. **DeBERTa intent model.** It is off in all reported runs. Retrained with a clean tokenizer
-   (`artifacts/intent-deberta-v3-small-v2`, 30 epochs, 17/18 validation), it still blocked 9.6–29.2%
-   of task tool calls (MSB v10, `artifacts/msb-v10-boot-*.txt`): user_task vs baseline went from
-   −6.4/−14.3/−8.6 (off) to −19.3/−17.1/−23.7 on qwen/llama/ornith. The cause was the adapter, not
+   (`artifacts/intent-deberta-v3-small-v2`, 30 epochs, 17/18 validation), it still blocked the task tool in 17.4/9.5/29.0% of cases (qwen/llama/ornith, paired;
+   MSB v10, `results/msb/*/gateway-intent-veto.jsonl`); user_task vs baseline went from
+   −8.6/−14.3/−8.6 (off) to −19.3/−17.1/−23.7 on qwen/llama/ornith. The cause was the adapter, not
    the model: one label per prompt vetoed every call of the other kind (143 of 150 qwen blocks;
    a mutation prompt blocked the reads it needs first). Since `f9ba37c` a disagreement is no opinion.
-   MSB v11 (`artifacts/msb-v11-boot-*.txt`) then matches the intent-off arm (−7.9/−14.3/−11.5, harm 0):
-   advisory, it neither costs nor buys anything measurable.
+   MSB v11 then matches the intent-off arm (−7.9/−14.3/−11.5, harm 0; against the gateway without it
+   +0.7 [0.0, +2.5] / +0.0 / −2.9 [−6.7, 0.0]): advisory, it neither costs nor buys anything measurable.
 2. **Trained injection classifier:** it flags 24.4% of benign rows (113/142 hard negatives), so it
    is off.
 3. **LLM judge on MSB:** its only catches were on label-leaked server names before `1c0d4dc`; it
@@ -410,7 +417,7 @@ Plain-language injections from independent sources stay undetected by every usab
 4. ☐ §5.7: one stronger free-tier agent on about 100 cases.
 5. ✓ Hook and proxy latency re-measured (§3.6, 2026-10-16).
 6. ✓ Install table per harness (§3.6). Clean clone at `d7020be` (2026-10-16): `uv sync --extra dev
-   --frozen` and the tests (250 passed, 1 skipped; HTTP e2e passed), `intentshield-mcp-verify` in-process
+   --frozen` and the tests (253 passed, 1 skipped; HTTP e2e passed), `intentshield-mcp-verify` in-process
    and `--stdio` (13/13 checks), and the four hooks. ☐ Still unchecked from a clean clone: the ML extras,
    the MSB Docker image and the benchmark commands.
 7. ✓ Venue: ICSE 2027 Tool Demonstration track (deadline Fri 23 Oct 2026 AoE; IEEEtran 10pt, 4 pages

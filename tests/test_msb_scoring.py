@@ -266,3 +266,30 @@ def test_baseline_with_a_judge_is_an_argument_error():
     with pytest.raises(SystemExit) as exc:
         msb.main(["--defense", "baseline", "--judge", "groq"])
     assert exc.value.code == 2
+
+
+def test_paper_numbers_counts_benign_reviews_and_self_disclosure_on_what_was_sent():
+    import paper_numbers
+
+    held = step("t:write", "task", decision="REVIEW", executed=False, arguments={"path": "c0002.txt"})
+    leaked = step("t:search", "task", arguments={"llm_model_name": "qwen"})
+    blanked = step("t:search", "task", arguments={"llm_model_name": "qwen"}, sent={"llm_model_name": ""})
+    row = {"id": "c0002", "trace": [held, step("t:read", "task", decision="REVIEW", executed=False)]}
+    assert paper_numbers.reviews(row) == 2
+    assert paper_numbers.reviews({**row, "trace": [held]}, {"c0002": case(cid="c0002")}) == 0
+    assert paper_numbers.self_disclosure({"trace": [leaked]})
+    assert not paper_numbers.self_disclosure({"trace": [blanked]})
+
+
+def test_paper_numbers_manifest_flags_missing_changed_and_unlisted_files(tmp_path):
+    import hashlib
+    import paper_numbers
+
+    (tmp_path / "m").mkdir()
+    for name in ("none", "baseline", "extra"):
+        (tmp_path / "m" / f"{name}.jsonl").write_text(name)
+    files = {"m/none.jsonl": {"sha256": hashlib.sha256(b"none").hexdigest()},
+             "m/baseline.jsonl": {"sha256": "0" * 64}, "m/gone.jsonl": {"sha256": "0" * 64}}
+    (tmp_path / "MANIFEST.json").write_text(json.dumps({"files": files}))
+    assert paper_numbers.check_manifest(tmp_path) == [
+        "sha256 mismatch m/baseline.jsonl", "missing m/gone.jsonl", "not in manifest m/extra.jsonl"]

@@ -1,0 +1,189 @@
+{
+ "files": {
+  "qwen2.5_7b/none.jsonl": {
+   "source": "artifacts/msb-v12/results-qwen2.5_7b-none-holdout.jsonl",
+   "sha256": "afc2aaecdf8e6c8a17a0c8805b8718a663e81eca553325283a56626ff68e83e2",
+   "provenance": [
+    {
+     "started": "2026-10-19T19:24:47+0530",
+     "commit": "0a3776dc303b4e716042e2c4f0c6778096789f93",
+     "dirty": false,
+     "intent_model": {
+      "dir": "/nonexistent",
+      "ready": false,
+      "reason": "classifier artifact metadata is missing: /nonexistent/intent_metadata.json",
+      "sha256": null
+     },
+     "agent_model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+     "container_image": "sha256:a713af77022a31ec1d227676881ad29925a2bce28bb3158190dc900485257428",
+     "argv": [
+      "--model",
+      "qwen2.5:7b",
+      "--defense",
+      "none",
+      "--per-type",
+      "20",
+      "--holdout",
+      "--out",
+      "artifacts/msb-v12"
+     ]
+    }
+   ]
+  },
+  "qwen2.5_7b/baseline.jsonl": {
+   "source": "artifacts/msb-v12/results-qwen2.5_7b-baseline-holdout.jsonl",
+   "sha256": "180a3376056fc20917bbe6a93075ac2b4796bd567fd31d01cada44cd22b5d80f",
+   "provenance": [
+    {
+     "started": "2026-10-19T21:09:39+0530",
+     "commit": "159feb325dbeacebefab51605f335edbfd10bb3b",
+     "dirty": false,
+     "intent_model": {
+      "dir": "/nonexistent",
+      "ready": false,
+      "reason": "classifier artifact metadata is missing: /nonexistent/intent_metadata.json",
+      "sha256": null
+     },
+     "agent_model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+     "container_image": "sha256:a713af77022a31ec1d227676881ad29925a2bce28bb3158190dc900485257428",
+     "argv": [
+      "--model",
+      "qwen2.5:7b",
+      "--defense",
+      "baseline",
+      "--per-type",
+      "20",
+      "--holdout",
+      "--out",
+      "artifacts/msb-v12"
+     ]
+    }
+   ]
+  },
+  "qwen2.5_7b/gateway.jsonl": {
+   "source": "artifacts/msb-v12/results-qwen2.5_7b-intentshield-holdout.jsonl",
+   "sha256": "c02a7d3dda22de78f79aeb4d61dae03c6c1e81ce58df16f31cb86a4c05d9c980",
+   "provenance": [
+    {
+     "started": "2026-10-19T22:13:19+0530",
+     "commit": "159feb325dbeacebefab51605f335edbfd10bb3b",
+     "dirty": false,
+     "intent_model": {
+      "dir": "/nonexistent",
+      "ready": false,
+      "reason": "classifier artifact metadata is missing: /nonexistent/intent_metadata.json",
+      "sha256": null
+     },
+     "agent_model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+     "container_image": "sha256:a713af77022a31ec1d227676881ad29925a2bce28bb3158190dc900485257428",
+     "argv": [
+      "--model",
+      "qwen2.5:7b",
+      "--defense",
+      "intentshield",
+      "--per-type",
+      "20",
+      "--holdout",
+      "--out",
+      "artifacts/msb-v12"
+     ]
+    }
+   ]
+  },
+  "qwen2.5_7b/hooks.jsonl": {
+   "source": "artifacts/msb-v8/results-qwen2.5_7b-hooks-holdout.jsonl",
+   "sha256": "54c3a5e4750bd9713672717ae17d595bdd12b88a5aa3fcf8e473468f4a259a78",
+   "provenance": null
+  },
+  "qwen2.5_7b/gateway-intent-veto.jsonl": {
+   "source": "artifacts/msb-v10/results-qwen2.5_7b-intentshield-holdout.jsonl",
+   "sha256": "bf9b47e0639079e27d34ff02e1321d0a5eeadd463ad0718d56931723033cdf7d",
+   "provenance": null
+  },
+  "qwen2.5_7b/gateway-intent-advisory.jsonl": {
+   "source": "artifacts/msb-v11/results-qwen2.5_7b-intentshield-holdout.jsonl",
+   "sha256": "feb03fd749bd0f67ffd171e3e656c5e0d7da09bc8f128d682cc2d3dadc9ea336",
+   "provenance": null
+  },
+  "qwen2.5_7b/gateway-prompt-guard.jsonl": {
+   "source": "artifacts/msb-v8/results-qwen2.5_7b-intentshield-holdout-pg_86m.jsonl",
+   "sha256": "7b6d1bbcdec406dc0f4b16bdffd9668da74bf17a6d8649cbe3fb1018cfc4ed94",
+   "provenance": null
+  },
+  "llama3.1_8b/none.jsonl": {
+   "source": "artifacts/msb-v8/results-llama3.1_8b-none-holdout.jsonl",
+   "sha256": "1d1554ea0af82e27fc89373fe880f358e4df03ff09d733a44ace7e762d0f4d03",
+   "provenance": null
+  },
+  "llama3.1_8b/baseline.jsonl": {
+   "source": "artifacts/msb-v8/results-llama3.1_8b-baseline-holdout.jsonl",
+   "sha256": "bd64fdeb0668bcec37382847821fd669856d0682d239b67473f787d70788f458",
+   "provenance": null
+  },
+  "llama3.1_8b/gateway.jsonl": {
+   "source": "artifacts/msb-v8/results-llama3.1_8b-intentshield-holdout.jsonl",
+   "sha256": "92767bed1439719f83ee5ebd34d2d9f651436c6412ae55adb75fdac681fb46c6",
+   "provenance": null
+  },
+  "llama3.1_8b/hooks.jsonl": {
+   "source": "artifacts/msb-v8/results-llama3.1_8b-hooks-holdout.jsonl",
+   "sha256": "748ddd2efd5f586baf95595379fadffa9d434b1767b3fc774a86f1757aea5d9b",
+   "provenance": null
+  },
+  "llama3.1_8b/gateway-intent-veto.jsonl": {
+   "source": "artifacts/msb-v10/results-llama3.1_8b-intentshield-holdout.jsonl",
+   "sha256": "73d8147f217faca1d55a2c73a4fb0023d847c0d058a1adecf862bd5baee817c0",
+   "provenance": null
+  },
+  "llama3.1_8b/gateway-intent-advisory.jsonl": {
+   "source": "artifacts/msb-v11/results-llama3.1_8b-intentshield-holdout.jsonl",
+   "sha256": "14f655113f45ed4013f8a3bf0b9e999a887fee98d7465d4ea36e255ba9e9cf57",
+   "provenance": null
+  },
+  "ornith_9b/none.jsonl": {
+   "source": "artifacts/msb-v8/results-ornith_9b-none-holdout.jsonl",
+   "sha256": "4d287a5f4feca58f504a6157f29c1d745b0a3318c6f044d0b55530c1280d7494",
+   "provenance": null
+  },
+  "ornith_9b/baseline.jsonl": {
+   "source": "artifacts/msb-v8/results-ornith_9b-baseline-holdout.jsonl",
+   "sha256": "816f336a5abac717a4abd7fd8d905a223e7aac8ef32a0dcc4c13849644a8120e",
+   "provenance": null
+  },
+  "ornith_9b/gateway.jsonl": {
+   "source": "artifacts/msb-v8/results-ornith_9b-intentshield-holdout.jsonl",
+   "sha256": "50f12c9385ae3a078da332494099c4fad86115bac2cbfb3ca9e08b8804b2b653",
+   "provenance": null
+  },
+  "ornith_9b/hooks.jsonl": {
+   "source": "artifacts/msb-v8/results-ornith_9b-hooks-holdout.jsonl",
+   "sha256": "d7c04c3e322e59696f902d8bd87505eda236c79b1214633cadd9525ca8eeef17",
+   "provenance": null
+  },
+  "ornith_9b/gateway-intent-veto.jsonl": {
+   "source": "artifacts/msb-v10/results-ornith_9b-intentshield-holdout.jsonl",
+   "sha256": "d3468775d6fc80edcb5f91f61d9e222cfbd1bef9c082922f86e2d1c1c71442f8",
+   "provenance": null
+  },
+  "ornith_9b/gateway-intent-advisory.jsonl": {
+   "source": "artifacts/msb-v11/results-ornith_9b-intentshield-holdout.jsonl",
+   "sha256": "f7a075d09968e8142d19c8ec9aa474fff83af48bd0d3aafec17c5eb655dbdfef",
+   "provenance": null
+  },
+  "gemini-3.5-flash-lite/none.jsonl": {
+   "source": "artifacts/msb-v9/results-gemini_gemini-3.5-flash-lite-none-holdout.jsonl",
+   "sha256": "4f4f87b2080b6a698dd8f54c40cacbceec5a1ef93b02c36fb3d6a8577835dbcd",
+   "provenance": null
+  },
+  "gemini-3.5-flash-lite/baseline.jsonl": {
+   "source": "artifacts/msb-v9/results-gemini_gemini-3.5-flash-lite-baseline-holdout.jsonl",
+   "sha256": "76180e34de76fb0e4c542cfde8bf20508bdf04c3515c6d34776541909d3681ce",
+   "provenance": null
+  },
+  "gemini-3.5-flash-lite/gateway.jsonl": {
+   "source": "artifacts/msb-v9/results-gemini_gemini-3.5-flash-lite-intentshield-holdout.jsonl",
+   "sha256": "e91348e5fbcbb5933ed72632d935b63a99fddec98989865ff5d3b60a130c81c2",
+   "provenance": null
+  }
+ }
+}

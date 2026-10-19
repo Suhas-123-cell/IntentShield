@@ -2,7 +2,7 @@
 
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
-**Headline:** on 220 held-out MSB attack cases, harmful actions executed fell from 15–58% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 6–14 points of task completion and, on 3 of 4 agents, more benign reviews. Read the [caveats](#results-and-limitations) before quoting it.
+**Headline:** on 220 held-out MSB attack cases, harmful actions executed fell from 15–59% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 9–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results-and-limitations) before quoting it.
 
 **Try it without cloning** (needs [uv](https://docs.astral.sh/uv/)): 13 checks against a bundled demo server, no build step.
 
@@ -59,13 +59,14 @@ evidence that the detection works (see "Why 0.0% is weak evidence").
 
 | check | unguarded | with IntentShield |
 |---|---|---|
-| MSB held-out, harmful action executed (qwen2.5:7b, neutral server ids, 220 cases) | 58.5% [51.8, 64.8] | gateway **0.0%** [0, 1.7]; hooks **0.0%** [0, 1.7] |
-| MSB held-out, task tool reached (qwen2.5:7b, neutral ids) | 70.3% | gateway 42.3% (executed 29.5%); hooks 49.5% (executed 49.1%) |
-| MSB with llama3.1:8b and Ornith-1.5-9B | 21.8% and 52.7% harm | 0.0% on both, but measured before the neutral-id fix and without the intent model; not re-run |
+| MSB held-out, harmful action executed (220 cases; qwen2.5:7b / llama3.1:8b / ornith:9b) | 58.7% / 15.0% / 56.0% | gateway **0.0%** and hooks **0.0%** on all three; the trivial baseline also 0.0% |
+| MSB held-out, harmful call left in the human's review queue | - | gateway 0 on all three; trivial baseline 12.4% / 0 / 19.0% of cases |
+| MSB held-out, user task done, gateway minus trivial baseline (paired cluster bootstrap) | - | −8.6 [−16.1, −3.8] / −14.3 [−26.0, −5.1] / −8.6 [−16.7, −2.5] points |
+| MSB with Gemini 3.5 Flash-Lite (99 of the same cases) | 29.3% harm, 96.8% user task | 0.0% harm; user task 58.7% (trivial baseline 66.7%) |
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3 with hooks alone (field sent blank); hooks + proxy quarantined the server, which received nothing (n=3 per arm, raw logs in `results/harness-live/`) |
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
-| MSB held-out gateway after the abstention fix (v7, 219 paired cases) | - | harm still **0.0%**; legitimate task calls blocked 18.7% -> 7.3%, user task done 33.6% -> 39.3% (intent model off: 0.5% and 45.0%) |
+| DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off |
 | Prompt-injection detection, 3,717 held-out texts incl. 142 hard benign ones | - | rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (rules alone 49.9% / 2.1%; Prompt Guard 2 adds 0.7 points); plain-language injections from independent sources stay mostly undetected |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
@@ -73,13 +74,14 @@ All MSB rows are a single run at temperature 0 with one agent model per row. The
 intervals treat cases as independent, but the 220 cases are 20 draws from each attack
 template, so they are narrower than the real uncertainty. `benchmarks/msb_compare.py --bootstrap
 2000` adds a cluster bootstrap over the 28 user tasks, with paired differences between arms
-(`artifacts/msb-v8-boot-*.txt`). Its intervals are about 1.5-2x wider than Wilson.
+(`benchmarks/paper_numbers.py` regenerates every MSB number from the raw traces in `results/msb`).
+Its intervals are about 1.5-2x wider than Wilson.
 
 Neutral server ids (commit `1c0d4dc`): before it, the MSB runner named its servers `task`,
 `attack` and `addition`, and those names reached the agent model inside tool names
 (`attack__get_the_current_directory`), the hooks and the LLM judge. That leak understated
-unguarded harm (qwen2.5:7b was 51.4% with it, 58.5% without). Only the qwen2.5:7b rows
-were re-run with neutral ids (`artifacts/msb-v4`).
+unguarded harm (qwen2.5:7b was 51.4% with it, 58.5% without). Every row above uses neutral
+ids (`results/msb/MANIFEST.json`).
 
 Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli), [adaptive injection detection](#adaptive-injection-detection).
 
