@@ -5,8 +5,9 @@ evaluated in dry-run against the user task before it can execute. AgentDojo has
 no human approver, so REVIEW is mapped by --review (deny = strict, allow = only
 the automatic checks guard the call).
 
-Run with the agentdojo venv (agentdojo + intentshield installed):
-    adj/bin/python benchmarks/agentdojo_run.py --suite banking --model qwen2.5:7b \
+Run with a venv that has agentdojo and intentshield (artifacts/data/agentdojo-venv has only agentdojo;
+add intentshield with `uv pip install --python artifacts/data/agentdojo-venv/bin/python -e .`):
+    artifacts/data/agentdojo-venv/bin/python benchmarks/agentdojo_run.py --suite banking --model qwen2.5:7b \
         --defense intentshield --review allow --user-tasks 5
 """
 from __future__ import annotations
