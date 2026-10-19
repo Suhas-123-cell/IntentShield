@@ -2,7 +2,7 @@
 
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
-**Headline:** on 220 held-out MSB attack cases with qwen2.5:7b, harmful actions executed fell from 58.5% unguarded to 0.0%, at the cost of the agent reaching its task tool less often (70.3% to 42.3% through the gateway). Read the [caveats](#results-and-limitations) before quoting it.
+**Headline:** on 220 held-out MSB attack cases, harmful actions executed fell from 15–58% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 6–14 points of task completion and, on 3 of 4 agents, more benign reviews. Read the [caveats](#results-and-limitations) before quoting it.
 
 ![IntentShield blocking an injected MCP call](docs/demo.gif)
 

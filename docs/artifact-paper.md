@@ -331,6 +331,12 @@ Plain-language injections from independent sources stay undetected by every usab
     touches 0). Its reviews are 71 `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` (arguments copied from a tool
     output) and 52 mutation approvals.
 
+### 5.8 Review load (✓, deduplicated per case, same arms as §5.1, §5.2, §5.7)
+- Calls held for a human per case, baseline vs gateway: qwen 1.15 vs 0.93, llama 0.57 vs 0.69,
+  ornith 1.48 vs 1.99, Gemini 0.71 vs 1.24. The gateway empties the queue of harmful calls but
+  enlarges it on 3 of 4 agents (reviews from arguments copied out of tool outputs). State the claim
+  as a trade-off, never as "a smaller queue".
+
 ## 6. The structural floor on AgentDojo (✓, `artifacts/agentdojo-floor/table-v1.txt`)
 
 - **Method:** replay published trajectories. A floor that holds mutations follows the logged run
