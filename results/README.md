@@ -12,7 +12,11 @@ verified on 2026-10-20. Write numbers from these files, not from older notes.
 ```
 
 The other directories are the outputs of the commands below, rerun on current code on 2026-10-19
-and identical to the earlier runs where one existed.
+and identical to the earlier runs where one existed. On 2026-10-21 the scripts stopped rounding rates and Wilson
+bounds to 4 places before display (`7bd8b2e`), which had shifted some figures by 0.1 point.
+`mcptox/report-replay-lenient.json` was regenerated and `injection/table.txt` rebuilt from its
+report; every count is unchanged. Corrected figures: MCPTox rules recall 96.3% (290/301), call
+layer benign review 46.7%, quarantine + provenance interval [0.8, 1.9].
 
 | Directory | What | Command |
 |---|---|---|
