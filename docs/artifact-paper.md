@@ -226,7 +226,7 @@ llama3.1:8b, 220 paired cases (`user_task` n=140):
 | none | 15.0% | 17.3% | 0 | 0 | 0 | 77.3% | 70.0% |
 | trivial baseline | 0.0% | 0.9%¹ | 0 | 0 | 0 | 43.6% | 36.4% |
 | gateway | 0.0% | 0.0% | 0 | 0 | 0 | 21.4% | 22.1% |
-| hooks | 0.0% | 9.6% | 0.9% | 0 | 8.6% | 50.9% | 57.1% |
+| hooks | 0.0% | 9.5% | 0.9% | 0 | 8.6% | 50.9% | 57.1% |
 
 ornith:9b, 216 paired cases (4 dropped for agent timeouts; `user_task` n=139):
 
@@ -344,7 +344,7 @@ Plain-language injections from independent sources stay undetected by every usab
   (mostly arguments copied out of tool outputs). State the claim as a trade-off, never as "a
   smaller queue".
 
-## 6. The structural floor on AgentDojo (✓, `artifacts/agentdojo-floor/table-v1.txt`)
+## 6. The structural floor on AgentDojo (✓, `results/agentdojo/table-v1.txt`)
 
 - **Method:** replay published trajectories. A floor that holds mutations follows the logged run
   until the reviewer rejects a call.
@@ -381,7 +381,8 @@ Plain-language injections from independent sources stay undetected by every usab
 ## 8. Limitations
 - **Agents:** small local models only (until §5.7). One run at temperature 0, 20 draws per
   template.
-- **MSB:** the runner's deviations (§4); the 10-step truncation (24% unguarded, 5% gateway).
+- **MSB:** the runner's deviations (§4); the 10-step truncation (qwen2.5:7b 24% unguarded, 6–14% guarded;
+  ornith:9b 16–26% in every arm; llama3.1:8b none).
 - **MCPTox:** tuning-set numbers for the description rules.
 - **Proxy:** drops resources and prompts instead of mediating them; elicitation and sampling are
   not exercised.
@@ -414,7 +415,7 @@ Plain-language injections from independent sources stay undetected by every usab
 1. ✓ MSB v8: §5.1 and §5.2 filled from paired `msb_compare.py` runs (2026-10-15).
 2. ✓ User-task cluster bootstrap for every MSB table, with paired differences (2026-10-16).
 3. ✓ §5.6: Prompt Guard 2 arm on MSB (free tier).
-4. ☐ §5.7: one stronger free-tier agent on about 100 cases.
+4. ✓ §5.7: one stronger free-tier agent on about 100 cases (Gemini 3.5 Flash-Lite, 99 cases, 2026-10-19).
 5. ✓ Hook and proxy latency re-measured (§3.6, 2026-10-16).
 6. ✓ Install table per harness (§3.6). Clean clone at `d7020be` (2026-10-16): `uv sync --extra dev
    --frozen` and the tests (253 passed, 1 skipped; HTTP e2e passed), `intentshield-mcp-verify` in-process
@@ -422,4 +423,4 @@ Plain-language injections from independent sources stay undetected by every usab
    the MSB Docker image and the benchmark commands.
 7. ✓ Venue: ICSE 2027 Tool Demonstration track (deadline Fri 23 Oct 2026 AoE; IEEEtran 10pt, 4 pages
    including references; single-anonymous; 3–5 min YouTube video). Cut version: `docs/icse27-demo/`
-   (`tectonic main.tex`), 3 pages. ☐ Video, ☐ §5.7 Gemini row if MSB v9 finishes in time.
+   (`tectonic main.tex`), 3 pages. ☐ Video, ✓ §5.7 Gemini paragraph.
