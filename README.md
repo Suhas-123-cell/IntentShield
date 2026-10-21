@@ -529,8 +529,8 @@ quarantine, under which the model would never have seen it.
 | defense | attack success [95% CI] | benign false block | benign sent to review |
 |---|---|---|---|
 | none | 100% | 0% | 0% |
-| quarantine + provenance (no intent grounding) | **1.3%** [0.8, 2.0] | **3.5%** [3.1, 4.1] | 0% |
-| call layer (policy + grounding, lenient reads) | 45.5% (+54.4% to human review) | 0.0% | 46.8% |
+| quarantine + provenance (no intent grounding) | **1.3%** [0.8, 1.9] | **3.5%** [3.1, 4.1] | 0% |
+| call layer (policy + grounding, lenient reads) | 45.5% (+54.4% to human review) | 0.0% | 46.7% |
 | call layer + provenance | 35.0% (+37.6% to review) | 0.0% | 46.7% |
 | full proxy (all layers, lenient reads) | 0.4% [0.2, 0.9] | 3.5% [3.1, 4.1] | 46.3% |
 
