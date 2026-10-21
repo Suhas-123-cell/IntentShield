@@ -278,7 +278,7 @@ no outcome column.
 - Full proxy: 0.4% attack success; 95.4% of poisoned-tool calls blocked; 3.5% benign false block;
   46.3% of benign calls go to review.
 - Rules vs judge on test-split servers:
-  - recall: rules 96.4%, judge 99.7%, either 100%;
+  - recall: rules 96.3%, judge 99.7%, either 100%;
   - clean false flag: 1.9%, 4.6%, 6.5%.
 
 ### 5.5 Output-injection detectors ✓ (`benchmarks/injection_eval.py`)

@@ -167,7 +167,7 @@ Trust" (2609.18217). **Responsible disclosure before publication.**
   poisoned-tool calls, 3.5% benign false block; full proxy 0.4% attack success. The scanner
   rules were developed on MCPTox, so these are tuning-set numbers. ✓
 - **Rules vs. LLM judge (MCPTox test-split servers, not held out for the rules):** rules
-  96.4% / judge 99.7% / either 100% recall on 301 poisoned; 1.9% / 4.6% / 6.5% false-flag on
+  96.3% / judge 99.7% / either 100% recall on 301 poisoned; 1.9% / 4.6% / 6.5% false-flag on
   108 clean. ✓ Judge = evidence-only, Groq/Gemini free tier.
 - **Latency/overhead** ☐ TODO: proxy round-trip and hook process cost (hook ≈36 ms measured).
 

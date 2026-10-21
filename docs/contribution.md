@@ -185,7 +185,7 @@ or tool paper, not a research claim on their own.
 
   | | Rules | Judge | Either |
   |---|---|---|---|
-  | Poisoned descriptions flagged (recall) | 96.4% | 99.7% | 100% |
+  | Poisoned descriptions flagged (recall) | 96.3% | 99.7% | 100% |
   | Clean descriptions falsely flagged | 1.9% | 4.6% | 6.5% |
 - **Tool routing** (BM25 over 45 MCPTox catalogs, 324 queries): the right tool ranks first
   in 80% of queries, in the top three in 90%, and in the top five in 92%.
