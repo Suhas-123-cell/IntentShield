@@ -33,11 +33,11 @@ withholds and scans tool descriptions, detects rug pulls, strips parameters that
 agent's own data, tracks values from tool outputs into later arguments, and holds state-changing
 calls for a human. On 220 held-out cases of MCP Security Bench with three local 7--9B agents, no guard
 that holds mutations, \tool's or a trivial baseline, lets a harmful call execute (15--59\%
-undefended). What \tool changes is what the reviewer sees: no harmful call reaches the review queue, where the
+undefended). What \tool's gateway changes is what the reviewer sees: no harmful call reaches the review queue, where the
 baseline puts one there in up to 19\% of cases. It pays 9--14 points of task completion relative to
 the baseline and, on all four agents, more reviews of benign calls. With a hosted agent (Gemini 3.5
 Flash-Lite), 23 of 29 undefended harms were self-disclosure through schema fields; with those fields
-stripped, the agent attempted none. A hook decision costs at most about 1\,ms on top of 34\,ms of process
+stripped, the agent attempted none of them. A hook decision costs at most about 1\,ms on top of 35\,ms of process
 start-up; the proxy adds 1.9\,ms per call. We report negative results alongside these.
 Tool, tests and benchmark scripts: \repo. Video: \textbf{TODO YouTube URL}.
 \end{abstract}
@@ -101,7 +101,7 @@ description is blocked. A result that carries instructions taints the session: t
 that the text is data, and later mutations need confirmation.
 
 \textbf{Placements.} \texttt{intentshield-hook <harness>} reads one hook event on stdin and replies
-in that harness's format (Table~\ref{tab:harness}); a hook that crashes denies the call.
+in that harness's format (Table~\ref{tab:harness}); an error while handling a pre-call event denies the call.
 \texttt{intentshield-mcp --transparent} wraps one stdio server and shows its own tools, filtered and
 stripped; a gateway mode exposes five guarded meta-tools with human approval over HTTP.
 
@@ -187,12 +187,12 @@ baseline, from a bootstrap over the 28 user tasks the cases share, is $-8.6$ [$-
 qwen, $-14.3$ [$-26.0$, $-5.1$] on llama and $-8.6$ [$-16.7$, $-2.5$] on ornith. Hooks keep more
 utility, clearly so only on llama ($+35.0$ [$+24.7$, $+45.5$] over the gateway). On qwen, 20 of 37
 harmful attempts under hooks were blocked outright; on llama, 19 of 21 were defused by sending the
-self-disclosure parameter blank. Adding Prompt Guard~2 to the gateway changed nothing measurable.
+self-disclosure parameter blank. Adding Prompt Guard~2 to the gateway changed nothing measurable (qwen only).
 
 \textbf{A stronger agent.} Undefended on 99 of the same cases, Gemini 3.5 Flash-Lite executed harm
 in 29.3\% of cases and completed 96.8\% of user tasks. 23 of its 29 harmful cases were
 self-disclosure: it filled a model-name field whenever a schema asked for one, but followed injected
-instructions in only 6 of 72 cases (9 per type, one run). Claude Haiku behaved the same way in the live demo. For capable
+instructions in only 6 of 72 cases (9 per type, one run). Claude Haiku behaved the same way in its three live demo runs. For capable
 agents in this sample, what a schema asks for mattered more than injected text.
 With either guard Gemini executed no harm. The baseline left 2 harmful calls for review and the
 gateway none, because with the model-name fields stripped Gemini never attempted one. User tasks
@@ -205,7 +205,7 @@ developed on MCPTox, so these are tuning-set numbers.
 
 \textbf{Output injection.} On 3,717 held-out rows including 142 hard benign ones, the rules detect
 49.9\% (2.1\% benign flagged) and rules plus the kNN detector 57.8\% (2.5\%). Plain-language
-injections from independent sources stay undetected by every usable detector.
+injections from independent sources are mostly missed: all usable detectors together catch at most 3.9\% of any such family.
 
 \textbf{Overhead.} On an Apple M5 (\texttt{benchmarks/latency.py}), a hook event costs 35\,ms at the
 median, of which 15\,ms is interpreter start-up and 20\,ms imports; the decision itself takes
@@ -215,8 +215,8 @@ session start-up. All experiments used local models on a laptop and free API tie
 \textbf{Structural floor on AgentDojo.} Because MSB cannot rank mutation-holding guards, we also
 replay AgentDojo's~\cite{agentdojo} published GPT-4o logs under the same holding policy, without
 running any model. With a perfect reviewer, attack success falls from 47.7\% to 3.5\%, and to 7.9\% if
-the reviewer wrongly approves 10\% of held calls; but 55.7\% of benign tasks then need a review. This
-is the currency in which autonomous defenses should be compared with human review~\cite{oversight}.
+the reviewer wrongly approves 10\% of held calls; but 55.7\% of benign tasks then need a review. We
+argue that review load is the cost against which autonomous defenses should be compared~\cite{oversight}.
 
 \textbf{What did not work.} A DeBERTa intent model, used as a per-prompt veto, blocked the task's own tool in up to 29\%
 of cases and added no measured safety; as advisory evidence it moved task completion by at most 3 points; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
