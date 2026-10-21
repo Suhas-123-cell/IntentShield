@@ -136,11 +136,11 @@ Highlight: Claude `updatedInput` + `ask`; Codex `deny` with a resend reason; Cur
 
 **Voice:**
 > We ran 220 held-out cases of MCP Security Bench on live servers with three local seven-to-nine-billion
-> parameter agents. Without a guard, fifteen to fifty-eight percent of cases executed harm. With
+> parameter agents. Without a guard, fifteen to fifty-nine percent of cases executed harm. With
 > IntentShield, none did. But a trivial baseline that just holds every state-changing call also reached
 > zero, so we don't claim better blocking. What IntentShield measurably adds is a shorter review queue: no
 > harmful calls left for a human, where the baseline left them in up to nineteen percent of cases. The
-> cost is six to fourteen points of task completion. A hook takes about thirty-five milliseconds, almost
+> cost is nine to fourteen points of task completion, and more harmless calls held for review. A hook takes about thirty-five milliseconds, almost
 > all of it Python start-up, and the proxy adds about two milliseconds per call.
 
 ## Scene 7: Close (4:00–4:15)
@@ -148,7 +148,7 @@ Highlight: Claude `updatedInput` + `ask`; Codex `deny` with a resend reason; Cur
 **Screen:** repo URL, `docker run --rm intentshield`, "Apache-2.0".
 
 **Voice:**
-> IntentShield is open source under Apache 2.0, with two hundred fifty tests, the benchmark scripts and a
+> IntentShield is open source under Apache 2.0, with two hundred fifty-four tests, the benchmark scripts and a
 > Docker image. The limitations are in the paper: small local agents, and no adaptive attacker yet.
 > Thanks for watching.
 
