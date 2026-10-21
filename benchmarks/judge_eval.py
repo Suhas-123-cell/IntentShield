@@ -58,7 +58,7 @@ def checked(judge: Judge, answer: str | None) -> bool:
 
 
 def rate(hits: int, n: int) -> dict[str, Any]:
-    return {"rate": round(hits / n, 4) if n else None, "n": n, "ci95": wilson(hits, n) if n else None}
+    return {"rate": hits / n if n else None, "n": n, "ci95": wilson(hits, n) if n else None}
 
 
 def judge_calls(judge: Judge, data: Path, models: list[str]) -> dict[str, Any]:

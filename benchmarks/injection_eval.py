@@ -135,7 +135,7 @@ def evaluate(rows: list[dict[str, Any]], found: dict[str, Detector]) -> dict[str
             for counter in (by_family[f"{row['label']}:{row['family']}"], by_label[row["label"]]):
                 counter["n"] += 1
                 counter["flagged"] += flagged
-        rate = lambda c: {"flagged": c["flagged"], "n": c["n"], "rate": round(c["flagged"] / c["n"], 4),
+        rate = lambda c: {"flagged": c["flagged"], "n": c["n"], "rate": c["flagged"] / c["n"],
                           "ci95": wilson(c["flagged"], c["n"])}
         report[name] = {"recall": rate(by_label["instruction"]) if by_label["instruction"]["n"] else None,
                         "benign_flagged": rate(by_label["data"]) if by_label["data"]["n"] else None,
