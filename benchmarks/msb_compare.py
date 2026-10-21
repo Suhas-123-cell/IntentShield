@@ -146,7 +146,7 @@ def cell(m: dict[str, Any] | None) -> str:
     if not m:
         return "-"
     lo, hi = m["ci95"]
-    return f"{m['k']}/{m['n']} {100 * m['rate']:.1f}% [{100 * lo:.1f},{100 * hi:.1f}]"
+    return f"{m['k']}/{m['n']} {100 * m['k'] / m['n']:.1f}% [{100 * lo:.1f},{100 * hi:.1f}]"
 
 
 def table(header: list[str], body: list[list[str]]) -> str:
@@ -183,7 +183,7 @@ def main(argv: list[str] | None = None) -> None:
         def boot(a, m):
             s = summary[a]["all"][m]
             lo, hi = s["ci95"] if s["k"] in (0, s["n"]) else ci[a][m]
-            return f"{100 * s['rate']:.1f}% [{100 * lo:.1f},{100 * hi:.1f}]" + ("w" if s["k"] in (0, s["n"]) else "")
+            return f"{100 * s['k'] / s['n']:.1f}% [{100 * lo:.1f},{100 * hi:.1f}]" + ("w" if s["k"] in (0, s["n"]) else "")
 
         print(f"\nCluster bootstrap by user task ({args.bootstrap} resamples; w = Wilson, rate 0 or 1)")
         print(table(["metric", *arms], [[m, *[boot(a, m) for a in arms]] for m in COLUMNS]))

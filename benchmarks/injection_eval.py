@@ -146,7 +146,7 @@ def evaluate(rows: list[dict[str, Any]], found: dict[str, Detector]) -> dict[str
 def print_report(report: dict[str, Any]) -> None:
     names = list(report)
     families = sorted({f for r in report.values() for f in r["families"]})
-    cell = lambda r: f"{r['flagged']}/{r['n']} {100 * r['rate']:.1f}%" if r else "-"
+    cell = lambda r: f"{r['flagged']}/{r['n']} {100 * r['flagged'] / r['n']:.1f}%" if r else "-"
     print("family".ljust(52) + "".join(n.ljust(20) for n in names))
     for key, label in (("recall", "ALL instruction (recall)"), ("benign_flagged", "ALL data (benign flagged)")):
         print(label.ljust(52) + "".join(cell(report[n][key]).ljust(20) for n in names))
