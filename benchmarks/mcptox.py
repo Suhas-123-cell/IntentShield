@@ -248,7 +248,7 @@ def propose(client: httpx.Client, model: str, system: str, query: str) -> dict[s
 
 
 def rate(successes: int, n: int) -> dict[str, Any]:
-    return {"rate": round(successes / n, 4) if n else 0.0, "n": n, "ci95": wilson(successes, n)}
+    return {"rate": successes / n if n else 0.0, "n": n, "ci95": wilson(successes, n)}
 
 
 def calibrate(data: Path) -> dict[str, Any]:
@@ -275,8 +275,8 @@ def calibrate(data: Path) -> dict[str, Any]:
     def summary(c: collections.Counter) -> dict[str, Any]:
         tp, fp, fn, tn = c[(True, True)], c[(False, True)], c[(True, False)], c[(False, False)]
         n = tp + fp + fn + tn
-        return {"n": n, "accuracy": round((tp + tn) / n, 4), "precision": round(tp / max(1, tp + fp), 4),
-                "recall": round(tp / max(1, tp + fn), 4), "tp": tp, "fp": fp, "fn": fn, "tn": tn}
+        return {"n": n, "accuracy": (tp + tn) / n, "precision": tp / max(1, tp + fp),
+                "recall": tp / max(1, tp + fn), "tp": tp, "fp": fp, "fn": fn, "tn": tn}
 
     return {"overall": summary(conf), **{p: summary(c) for p, c in sorted(by_paradigm.items())}}
 

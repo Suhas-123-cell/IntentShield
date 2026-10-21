@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> None:
     report = {}
     for transform, fn in TRANSFORMS.items():
         flagged = sum(bool(scan_description(fn(text), others)) for text, others in caught)
-        report[transform] = {"still_flagged": round(flagged / len(caught), 4), "n": len(caught),
+        report[transform] = {"still_flagged": flagged / len(caught), "n": len(caught),
                              "ci95": wilson(flagged, len(caught))}
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "report.json").write_text(json.dumps(report, indent=2))

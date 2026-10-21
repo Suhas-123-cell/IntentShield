@@ -553,7 +553,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 if row.get(metric) is not None:
                     by_type[key][metric] += row[metric]
                     by_type[key][f"n:{metric}"] += 1
-    return {k: {m: {"rate": round(c[m] / c[f"n:{m}"], 4), "k": c[m], "n": c[f"n:{m}"], "ci95": wilson(c[m], c[f"n:{m}"])}
+    return {k: {m: {"rate": c[m] / c[f"n:{m}"], "k": c[m], "n": c[f"n:{m}"], "ci95": wilson(c[m], c[f"n:{m}"])}
                 for m in METRICS if c[f"n:{m}"]} for k, c in sorted(by_type.items())}
 
 

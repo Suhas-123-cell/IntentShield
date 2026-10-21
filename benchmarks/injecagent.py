@@ -205,7 +205,7 @@ def sample_cases(data: Path, limit: int, seed: int, exclude_seed: int | None = N
 
 
 def rate(successes: int, n: int) -> dict[str, Any]:
-    return {"rate": round(successes / n, 4) if n else 0.0, "n": n, "ci95": wilson(successes, n)}
+    return {"rate": successes / n if n else 0.0, "n": n, "ci95": wilson(successes, n)}
 
 
 def output_layer(data: Path, cache_path: Path) -> dict[str, Any]:

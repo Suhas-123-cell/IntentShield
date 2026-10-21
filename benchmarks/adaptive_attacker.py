@@ -114,7 +114,7 @@ def summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     wins = [r for r in results if r["success_attempt"] is not None]
     half = results[n // 2:]
     late = sum(r["success_attempt"] is not None for r in half)
-    return {"seeds": n, "evaded": len(wins), "rate": round(len(wins) / max(n, 1), 4), "ci95": wilson(len(wins), n),
+    return {"seeds": n, "evaded": len(wins), "rate": len(wins) / max(n, 1), "ci95": wilson(len(wins), n),
             "evaded_at_try_0": sum(r["success_attempt"] == 0 for r in results),
             "second_half_evaded": f"{late}/{len(half)}",
             "valid_tries": sum(t["valid"] for r in results for t in r["tries"]),

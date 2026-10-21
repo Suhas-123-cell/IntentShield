@@ -183,7 +183,7 @@ def make_pipeline(model: str, defense: str, review: str, host: str, workdir: Pat
 
 def rate(results: dict) -> dict[str, Any]:
     values = list(results.values())
-    return {"rate": round(sum(values) / len(values), 4) if values else 0.0, "n": len(values)}
+    return {"rate": sum(values) / len(values) if values else 0.0, "n": len(values)}
 
 
 def main(argv: list[str] | None = None) -> None:

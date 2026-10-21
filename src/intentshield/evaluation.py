@@ -199,11 +199,11 @@ def wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
     denom = 1 + z * z / n
     centre = (p + z * z / (2 * n)) / denom
     margin = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
-    return (round(max(0.0, centre - margin), 4), round(min(1.0, centre + margin), 4))
+    return (max(0.0, centre - margin), min(1.0, centre + margin))
 
 
 def _rate(successes: int, n: int) -> dict[str, Any]:
-    return {"rate": round(successes / n, 4) if n else 0.0, "n": n, "ci95": wilson(successes, n)}
+    return {"rate": successes / n if n else 0.0, "n": n, "ci95": wilson(successes, n)}
 
 
 def score(name: str, defense: Defense, cases: list[Case]) -> dict[str, Any]:
