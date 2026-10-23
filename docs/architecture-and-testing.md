@@ -488,10 +488,11 @@ The trained model is `artifacts/intent-deberta-v3-small-v2` (Colab, `artifacts/c
 
 ```bash
 .venv/bin/python -m intentshield.intent_training \
-  --output artifacts/intent-deberta-v3-small \
-  --epochs 24 --learning-rate 5e-5
+  --output artifacts/intent-deberta-v3-small-v2 \
+  --epochs 30 --learning-rate 3e-5
 ```
 
+These are the v2 settings; the default 5 epochs collapsed to predicting `read` for everything.
 Review its qualification and evaluation report, then run real predictions directly:
 
 ```bash
@@ -525,7 +526,7 @@ If you want to reproduce training while preserving the existing checkpoint:
 ```bash
 .venv/bin/python -m intentshield.intent_training \
   --output artifacts/intent-deberta-v3-small-retest \
-  --epochs 24 --learning-rate 5e-5
+  --epochs 30 --learning-rate 3e-5
 ```
 
 Training downloads the base model when it is not cached and uses CPU unless CUDA is available; this trainer has no Apple MPS branch. A failed release gate still saves an artifact, but runtime refuses its qualification. Only switch `INTENTSHIELD_INTENT_MODEL_DIR` to the new artifact after reviewing the report, then restart and repeat real predictions and gateway tests.
