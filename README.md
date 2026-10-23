@@ -178,7 +178,8 @@ cp .env.example .env
 GEMINI_API_KEY=
 INTENTSHIELD_GEMINI_MODEL=gemini-3.8-flash
 INTENTSHIELD_MODEL_MAX_CONCURRENCY=2
-INTENTSHIELD_INTENT_MODEL_DIR=artifacts/intent-deberta-v3-small
+# Optional, off by default (see "Train the local intent classifier"):
+# INTENTSHIELD_INTENT_MODEL_DIR=artifacts/intent-deberta-v3-small-v2
 ```
 
 `GET /api/models` reports Gemini readiness and the configured model name without
@@ -212,10 +213,15 @@ template-group-disjoint dataset:
 ```bash
 uv pip install --python .venv/bin/python -r requirements-ml.txt
 .venv/bin/python -m intentshield.intent_training \
-  --output artifacts/intent-deberta-v3-small \
-  --epochs 24 \
-  --learning-rate 5e-5
+  --output artifacts/intent-deberta-v3-small-v2 \
+  --epochs 30 \
+  --learning-rate 3e-5
 ```
+
+These are the settings of the current artifact (2026-10-18). The default 5 epochs collapsed
+to predicting `read` for everything. Point `INTENTSHIELD_INTENT_MODEL_DIR` at the output to
+turn the model on; without it the gateway runs without it, which is how every MSB result
+above was measured.
 
 The trainer pins the resolved `microsoft/deberta-v3-small` revision, seeds the
 run, uses safetensors, and writes `intent_metadata.json`, `label_map.json`, and
@@ -277,8 +283,10 @@ injections, not the 100% its training report shows. Fixed, the runtime path matc
 On the injection evaluation with hard benign texts (below) it is still unusable: 46.5% of
 injections caught and 24.4% of benign texts flagged, including 100% of human-to-human requests
 and of reports quoting an attack, 78% of legitimate tool-usage guidance and 44% of agent-
-addressed hints. The DeBERTa intent model was trained with the same flag, so its training and
-run time agree, but it learned from fragmented tokens; retraining it is untested.
+addressed hints. The first DeBERTa intent model was trained with the same flag, so it learned
+from fragmented tokens. It was retrained with a clean tokenizer on 2026-10-18
+(`intent-deberta-v3-small-v2`); on MSB that did not help (see the MSB section: as a veto it
+still blocked the task tool often, and as advisory evidence it changes nothing measurable).
 
 ## Adaptive injection detection
 

@@ -147,6 +147,12 @@ What the cells mean:
 These stay valid whatever happens to the paper question. They are evidence for an artifact
 or tool paper, not a research claim on their own.
 
+> **Superseded 2026-10-20.** The MSB rows below are the 2026-10-12/13 qwen runs (v4/v5), and the
+> test counts are from that date. Current MSB numbers (v12 for qwen, v8 for llama and ornith, all
+> with the intent model off) are in `results/msb` and come from `benchmarks/paper_numbers.py`; see
+> `docs/artifact-paper.md` §5. Tests now: 253 pass, 1 skipped. The MCPTox, judge and routing rows
+> still hold.
+
 - **MSB held-out, live servers, neutral ids** (`benchmarks/msb.py`, qwen2.5:7b, single run,
   temperature 0, 220 cases, 20 draws per attack template, so the Wilson intervals are too
   narrow; `artifacts/msb-v4`):

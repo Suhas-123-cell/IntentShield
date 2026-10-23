@@ -402,7 +402,7 @@ Plain-language injections from independent sources stay undetected by every usab
 - **Benchmarks:** MSB, MCPTox, MCP-SafetyBench, AgentDojo.
 
 ## 10. Artifact
-- **Repository and licence** ☐.
+- **Repository and licence** ✓: github.com/Suhas-123-cell/IntentShield, Apache-2.0 (`b4569e8`).
 - **Reproduction:**
   - `uv sync --extra dev`, then the ML extras;
   - the MSB Docker image;
