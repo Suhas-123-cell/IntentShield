@@ -288,7 +288,6 @@ def main(argv: list[str] | None = None) -> None:
             print(f"[{n}/{len(cases)}] {key[0]}#{key[1]} -> {proposal['tool']} ({row['seconds']}s)", flush=True)
 
     registry = build_registry(tools)
-    results: dict[str, dict[str, Any]] = {}
     with tempfile.TemporaryDirectory() as tmp:
         service = make_service(registry, Path(tmp))
         everything = set(registry)
