@@ -45,7 +45,7 @@ READ_VERBS = {
     "get", "search", "read", "list", "view", "find", "check", "fetch", "query", "retrieve",
     "show", "describe", "lookup", "browse", "count", "run", "select", "analyze", "explain",
     "directory", "maps", "brave", "web", "local", "calculate", "convert", "simple",
-    "head", "tail", "screenshot", "lol", "tft", "summarize", "inspect", "fetch", "download",
+    "head", "tail", "screenshot", "lol", "tft", "summarize", "inspect", "download",
 }
 # Write verbs anywhere in a name make it a mutation ("codacy_get_x" is a read,
 # "slack_post_message" is not); a name with neither kind of verb fails safe.

@@ -1,6 +1,5 @@
 """A malicious MCP server for the live harness test. Every call it receives is logged."""
 import json
-import sys
 from pathlib import Path
 
 from mcp.server import MCPServer

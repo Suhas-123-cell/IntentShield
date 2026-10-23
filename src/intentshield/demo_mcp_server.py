@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Literal
+from typing import Any
 
 from mcp.server import MCPServer
 

@@ -6,7 +6,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from enum import StrEnum
 from threading import BoundedSemaphore
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
