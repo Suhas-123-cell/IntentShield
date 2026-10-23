@@ -1107,10 +1107,10 @@ and config paths:
 {
   "mcpServers": {
     "IntentShield": {
-      "command": "/Users/suhasdev/Documents/IntentShield/.venv/bin/intentshield-mcp",
+      "command": "/absolute/path/to/IntentShield/.venv/bin/intentshield-mcp",
       "args": [
         "--transport", "stdio",
-        "--config", "/Users/suhasdev/Documents/IntentShield/configs/mcp-proxy.demo.json"
+        "--config", "/absolute/path/to/IntentShield/configs/mcp-proxy.demo.json"
       ]
     }
   }
