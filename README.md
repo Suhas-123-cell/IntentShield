@@ -1249,6 +1249,24 @@ rather than the notes. `--review always` denies that call (Gemini CLI has no ask
 the description scan quarantined all three tools as in Claude Code, and Gemini CLI reported "MCP
 issues detected" and searched the empty workspace instead. Again n=3 per arm and one model.
 
+### Documented real-world incidents
+
+`benchmarks/real_incidents.py` reconstructs four published in-the-wild malicious-MCP incidents as
+harmless local catalogs and outputs (every address is a `.invalid` sink, every payload a benign
+marker) and pushes each through IntentShield's own detection code — the same functions the proxy
+runs at discovery and the hooks run per call. Sources and links are in
+`benchmarks/real_incidents/SOURCES.md`; the full output is `results/real-incidents/report.txt`.
+
+| incident | attack channel | what the guard did |
+|---|---|---|
+| WhatsApp tool poisoning (Invariant Labs, Apr 2025) | poisoned tool description | tool quarantined (`hidden_directive`, `cross_tool_directive`, `concealment`, `external_send`) |
+| GitHub prompt-injection heist (May 2025) | injected issue body (tool output) | output flagged (`instruction_override`); the follow-up PR call denied, its address traced to the tainted output |
+| split instruction (ShareLock pattern) | one directive split across two tools | both tools quarantined (`split_external_send`), though neither description alone trips a rule |
+| npm `postmark-mcp` BCC backdoor (Sept 2025) | server implementation, no agent-visible text | **structural scans miss it** (honestly: nothing malicious is visible to the agent); only a transparent-proxy destination policy sees the attacker recipient in the real outgoing call |
+
+The postmark row is the useful negative: a pure implementation backdoor is invisible to description,
+output and argument checks alike, and needs runtime egress monitoring on the proxy, not hooks.
+
 ## API
 
 - `GET /api/health`
