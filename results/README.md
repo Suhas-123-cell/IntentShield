@@ -25,6 +25,7 @@ layer benign review 46.7%, quarantine + provenance interval [0.8, 1.9].
 | `injection/` | output-injection detectors, 3,717 held-out rows | `benchmarks/injection_eval.py --exemplars artifacts/exemplars --prompt-guard --combine ...` |
 | `agentdojo/` | structural floor on AgentDojo's published GPT-4o logs | `benchmarks/agentdojo_floor.py replay` |
 | `harness-live/` | live Claude Code (Haiku) vs the malicious notes server, 3 prompts x 3 arms | `OUT=... benchmarks/harness_live/run.sh` |
+| `harness-live-gemini/` | the same check in Gemini CLI (gemini-3.1-flash-lite), with each agent's tool-call trace | `OUT=... benchmarks/harness_live/run_gemini.sh` |
 | `latency.json` (cited, 2026-10-16), `latency-rerun-2026-10-19.json` | hook and proxy overhead on an Apple M5; in the rerun, per-event and per-call figures agree within 0.1 ms and start-up differs by up to 18 ms (interpreter 17 vs 15 ms, proxy start-up overhead 257 vs 275 ms) | `benchmarks/latency.py` |
 | `adaptive-attacker.json` | adaptive attacker vs static and learning detectors | `benchmarks/adaptive_attacker.py` |
 
