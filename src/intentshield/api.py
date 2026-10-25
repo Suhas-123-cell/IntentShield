@@ -26,10 +26,14 @@ def create_app(
     model_gateway: ModelGateway | None = None,
     proxy_config: str | Path | None = None,
     control_token: str | None = None,
+    agent_token: str | None = None,
 ) -> FastAPI:
     load_dotenv()
     proxy_path = proxy_config or os.getenv("INTENTSHIELD_PROXY_CONFIG")
     approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN", "")).strip()
+    # Optional: when set, proposing calls and reading runs (which hold executed tool results)
+    # needs this token or the operator's.
+    run_token = (agent_token or os.getenv("INTENTSHIELD_AGENT_TOKEN", "")).strip()
     if proxy_path and not approval_token:
         raise ValueError(
             "INTENTSHIELD_CONTROL_TOKEN is required when the web MCP proxy is enabled"
@@ -68,12 +72,21 @@ def create_app(
         TrustedHostMiddleware,
         allowed_hosts=["127.0.0.1", "localhost", "testserver"],
     )
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        # The dashboard holds an approve button: it must not be framed by another site.
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        return response
+
     limiter = RateLimiter.from_env()
     if limiter is not None:
         @app.middleware("http")
         async def rate_limit(request: Request, call_next):
             client = request.client.host if request.client else "unknown"
-            if request.url.path != "/health" and not limiter.allow(client):
+            if request.url.path not in ("/health", "/api/health") and not limiter.allow(client):
                 return JSONResponse(
                     {"detail": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
                 )
@@ -102,13 +115,26 @@ def create_app(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+    def require_run_access(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> None:
+        if not run_token:
+            return
+        accepted = [f"Bearer {token}" for token in (run_token, approval_token) if token]
+        if authorization is None or not any(hmac.compare_digest(authorization, item) for item in accepted):
+            raise HTTPException(
+                401,
+                "A valid agent or operator token is required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     @app.get("/health")
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "mode": "mcp-proxy" if runtime else "offline"}
 
     @app.post("/api/runs", status_code=201)
-    async def create_run(request: RunCreateRequest):
+    async def create_run(request: RunCreateRequest, _authorized: None = Depends(require_run_access)):
         if bool(request.scenario) == bool(request.call):
             raise HTTPException(422, "Provide exactly one of scenario or call")
         if request.scenario:
@@ -134,7 +160,7 @@ def create_app(
         return models.statuses()
 
     @app.post("/api/model-runs", status_code=201)
-    async def create_model_run(request: ModelRunRequest):
+    async def create_model_run(request: ModelRunRequest, _authorized: None = Depends(require_run_access)):
         statuses = {item.provider: item for item in models.statuses()}
         selected = statuses[request.provider]
         if runtime is not None:
@@ -206,18 +232,21 @@ def create_app(
         }
 
     @app.get("/api/runs")
-    def list_runs(limit: int = Query(default=100, ge=1, le=500)):
+    def list_runs(
+        limit: int = Query(default=100, ge=1, le=500),
+        _authorized: None = Depends(require_run_access),
+    ):
         return service().storage.list_runs(limit)
 
     @app.get("/api/runs/{run_id}")
-    def get_run(run_id: str):
+    def get_run(run_id: str, _authorized: None = Depends(require_run_access)):
         run = service().storage.get_run(run_id)
         if not run:
             raise HTTPException(404, "Run not found")
         return {**run, "events": service().storage.list_events(run_id)}
 
     @app.get("/api/runs/{run_id}/events")
-    def get_events(run_id: str):
+    def get_events(run_id: str, _authorized: None = Depends(require_run_access)):
         if not service().storage.get_run(run_id):
             raise HTTPException(404, "Run not found")
         return service().storage.list_events(run_id)

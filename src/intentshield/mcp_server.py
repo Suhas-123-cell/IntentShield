@@ -612,7 +612,7 @@ def run_mcp_server(
             app.add_route("/control/rules/propose", propose_rules, methods=["POST"])
             app.add_route("/control/rules/{rule_id}", decide_rule, methods=["POST"])
 
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        uvicorn.run(app, host=host, port=port, log_level="info", proxy_headers=False)
     elif transport == "streamable-http":
         server.run(
             transport=transport,

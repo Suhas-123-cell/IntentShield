@@ -207,6 +207,7 @@
       ...config,
       headers: {
         "Content-Type": "application/json",
+        ...operatorHeaders(),
         ...(config.headers || {}),
       },
     });
