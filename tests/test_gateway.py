@@ -247,10 +247,11 @@ def test_uncertain_mutation_is_never_retried_automatically(service: IntentShield
     assert first_attempt.reason_codes == [ReasonCode.BLOCK_EXECUTION_IN_DOUBT]
     assert side_effects == ["sent"]
 
-    second_review = service.evaluate_and_execute(run_id, "ignored", call)
-    assert second_review.decision is Decision.REVIEW
-    second_attempt = service.decide_approval(second_review.approval_id, True)
+    # The same call is blocked at once: no human is asked to approve what can never run.
+    second_attempt = service.evaluate_and_execute(run_id, "ignored", call)
+    assert second_attempt.decision is Decision.BLOCK
     assert second_attempt.reason_codes == [ReasonCode.BLOCK_EXECUTION_IN_DOUBT]
+    assert second_attempt.approval_id is None
     assert side_effects == ["sent"]
 
     with service.storage.connect() as db:
@@ -417,3 +418,27 @@ def test_mutation_the_agents_cannot_match_goes_to_review_and_never_executes(
     assert service.evaluate_and_execute(run(service, intent), intent, swapped).decision is Decision.BLOCK
     negated = "Do not send alice@example.com anything about the launch"
     assert service.evaluate_and_execute(run(service, negated), negated, call).decision is Decision.BLOCK
+
+
+def test_approval_whose_reevaluation_blocks_cannot_be_resumed_later(service: IntentShieldService):
+    run_id = run(service, "Send Alice a status email")
+    call = service.scenario_call("review")
+    review = service.evaluate_and_execute(run_id, "ignored", call)
+    allowed = service.config.allowed_tools
+    service.config.allowed_tools = allowed - {"send_email"}
+    blocked = service.decide_approval(review.approval_id, True)
+    assert blocked.decision is Decision.BLOCK
+    assert service.storage.get_approval(review.approval_id)["status"] == "CONSUMED"
+
+    service.config.allowed_tools = allowed
+    resumed = service.evaluate_and_execute(
+        run_id, "ignored", call.model_copy(update={"approval_id": review.approval_id})
+    )
+    assert resumed.reason_codes == [ReasonCode.BLOCK_APPROVAL_CONSUMED]
+    assert service.email_tools.outbox == []
+
+
+def test_blank_intent_is_rejected_before_a_run_exists(service: IntentShieldService):
+    with pytest.raises(ValueError):
+        service.create_run(" \n\t")
+    assert service.storage.list_runs(10) == []

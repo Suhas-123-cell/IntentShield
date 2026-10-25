@@ -78,6 +78,8 @@ class IntentShieldService:
         return cls(Storage(database_path), PolicyConfig.from_file(config_path))
 
     def create_run(self, user_intent: str, scenario: str | None = None) -> str:
+        if not user_intent.strip():
+            raise ValueError("user_intent must not be blank")
         run_id = f"run-{uuid.uuid4().hex[:12]}"
         self.storage.create_run(run_id, user_intent, scenario)
         self.storage.add_event(run_id, "RUN_CREATED", {"user_intent": user_intent, "scenario": scenario})
@@ -282,6 +284,12 @@ class IntentShieldService:
                 return self._blocked(
                     run_id, call, ReasonCode.BLOCK_IDEMPOTENCY_IN_PROGRESS, signals, assessment
                 )
+            if existing == "IN_DOUBT":
+                # An approval could never run it: a human must reconcile the first outcome.
+                self._consume_denied_approval(call, fingerprint, approval_verified)
+                return self._blocked(
+                    run_id, call, ReasonCode.BLOCK_EXECUTION_IN_DOUBT, signals, assessment
+                )
 
         outcome = self.policy.evaluate(PolicyContext(
             run_id=run_id,
@@ -297,11 +305,12 @@ class IntentShieldService:
             ),
         ))
         if outcome.decision is Decision.BLOCK:
+            self._consume_denied_approval(call, fingerprint, approval_verified)
             return self._blocked(
                 run_id, call, outcome.reason_codes[0], signals, assessment
             )
         if outcome.decision is Decision.REVIEW:
-            approval_id = self._ensure_approval(run_id, call, fingerprint, call_index)
+            approval_id = self._ensure_approval(run_id, call, fingerprint, call_index, outcome.reason_codes)
             response = self._result(
                 run_id, call, signals, Decision.REVIEW, outcome.reason_codes,
                 arguments=outcome.parsed_arguments or call.arguments, approval_id=approval_id,
@@ -440,13 +449,15 @@ class IntentShieldService:
             "executed": response.executed,
         })
 
-    def _ensure_approval(self, run_id: str, call: ToolCall, fingerprint: str, call_index: int) -> str:
+    def _ensure_approval(self, run_id: str, call: ToolCall, fingerprint: str, call_index: int,
+                         reasons: list[ReasonCode] | None = None) -> str:
         approval_id = f"approval-{uuid.uuid4().hex[:12]}"
         expires = datetime.now(UTC) + timedelta(seconds=self.config.approval_ttl_seconds)
         self.storage.create_approval({
             "id": approval_id, "run_id": run_id, "tool_name": call.tool_name,
             "args_json": canonical_json(call.arguments), "call_fingerprint": fingerprint,
             "call_json": call.model_dump_json(), "call_index": call_index, "expires_at": expires.isoformat(),
+            "reasons": [reason.value for reason in reasons or []],
         })
         self.storage.add_event(run_id, "APPROVAL_REQUESTED", {
             "approval_id": approval_id, "expires_at": expires.isoformat()
