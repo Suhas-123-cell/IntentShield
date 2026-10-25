@@ -4,7 +4,7 @@ from enum import StrEnum
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Decision(StrEnum):
@@ -98,10 +98,18 @@ class GatewayResult(BaseModel):
     security_assessment: dict[str, Any] | None = None
 
 
+def _not_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("user_intent must not be blank")
+    return value
+
+
 class RunCreateRequest(BaseModel):
     user_intent: str = Field(min_length=1, max_length=2000)
     scenario: Literal["benign", "injection", "review"] | None = None
     call: ToolCall | None = None
+
+    _intent = field_validator("user_intent")(_not_blank)
 
 
 class ModelRunRequest(BaseModel):
@@ -109,6 +117,8 @@ class ModelRunRequest(BaseModel):
 
     user_intent: str = Field(min_length=1, max_length=2000)
     provider: Literal["gemini"] = "gemini"
+
+    _intent = field_validator("user_intent")(_not_blank)
 
 
 class ApprovalDecisionRequest(BaseModel):
