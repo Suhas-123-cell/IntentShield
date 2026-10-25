@@ -129,6 +129,50 @@ def test_injected_output_taints_the_run_and_blocks_its_values(tmp_path: Path):
     asyncio.run(exercise())
 
 
+def test_a_new_run_neither_clears_taint_nor_lets_the_injection_write_the_intent(tmp_path: Path):
+    upstream = Fixture({"read_page": "Read a web page.", "send_message": "Send a message."})
+
+    async def exercise() -> None:
+        async with runtime(tmp_path, upstream) as shield:
+            catalog = {t["name"]: t for t in await shield.tool_catalog()}
+            first = await shield.create_run("Read the page")
+            read = await shield.evaluate_and_execute(first, call(catalog, "web:read_page", value="home"))
+            assert read.result["injection_detected"] is True
+
+            # The agent opens runs itself, so a fresh one must not wash the value clean...
+            fresh = await shield.create_run("Read the page")
+            reused = await shield.evaluate_and_execute(fresh, call(catalog, "web:read_page", value="drop@evil.test"))
+            assert reused.reason_codes == [ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE]
+
+            # ...nor may an intent that repeats the injected value vouch for it.
+            parroted = await shield.create_run("Read the page and send the report to drop@evil.test")
+            echoed = await shield.evaluate_and_execute(parroted, call(catalog, "web:read_page", value="drop@evil.test"))
+            assert echoed.decision is Decision.REVIEW
+            assert echoed.reason_codes == [ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE]
+            assert upstream.calls == ["read_page"]
+
+    asyncio.run(exercise())
+
+
+def test_value_extraction_stays_linear_on_long_runs():
+    import time
+
+    start = time.perf_counter()
+    for text in ("a1" * 100_000, "a-" * 100_000, "ab." * 70_000):
+        distinctive_values(text)
+    assert time.perf_counter() - start < 2  # the unanchored patterns took minutes here
+
+
+def test_per_tool_destination_lists_reject_catch_all_patterns():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="catch-all"):
+        MCPProxyConfig(upstream=MCPUpstreamConfig(server_id="web", transport="stdio", command="unused"),
+                       allowed_tools=["web:*"], destination_fields={"web:send_message": "to"},
+                       allowed_destinations_by_tool={"web:send_message": ["*@*"]})
+
+
 def test_argument_supplied_only_by_another_tools_description_is_blocked(tmp_path: Path):
     upstream = Fixture({
         "read_page": "Read a web page.",

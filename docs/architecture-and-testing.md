@@ -144,6 +144,13 @@ The downstream client sees these five tools:
 4. `intentshield_get_run`: reads run state.
 5. `intentshield_get_approval`: reads approval/completion state.
 
+The agent, not the user, calls `intentshield_create_run`, so in gateway mode the intent is
+whatever the agent states. Injection taint is kept for the whole session, so a new run does
+not clear it. A run whose intent repeats a value or instruction from a flagged output sends
+every call to review. An injection the gateway never saw, such as one from a harness's
+built-in web fetch, can still shape the intent. The harness hooks take the intent from the
+user's own prompt instead.
+
 With the single demo proxy config, the protected catalog contains `demo:read_note`, `demo:append_note`, and `demo:execution_stats`. The demo's note state is in memory. No API key is needed.
 
 The operator config owns which tools are allowed and read-only, their grounding terms and any resource/destination scope. Upstream annotations cannot make a tool read-only. Unlisted read-only status means mutation. Qualified identities keep equal raw tool names on different servers separate. The demo config does not restrict `note_id` to only `welcome`; add explicit per-tool resource rules if that restriction is desired.

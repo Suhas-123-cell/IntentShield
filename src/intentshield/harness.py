@@ -27,6 +27,7 @@ from typing import Any
 from .mcp_inspect import (authority_values, distinctive_values, rank_tools, scan_output, self_disclosure_fields,
                           sourced_from)
 
+_TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 _READ = frozenset({
     "get", "list", "search", "read", "find", "fetch", "query", "retrieve", "show", "view", "describe",
     "lookup", "browse", "count", "check", "inspect", "summarize", "info", "status", "tree", "directory",
@@ -107,7 +108,10 @@ class HarnessGuard:
         tools: list[tuple[str, str]] = []
         for path in sorted(self.catalog.glob("*.json")) if self.catalog and self.catalog.is_dir() else ():
             try:
-                tools += [(str(t["name"]), str(t.get("description", ""))) for t in json.loads(path.read_text())]
+                # Upstream servers pick the names, and the hint goes into the model's context,
+                # so a name that reads as an instruction is dropped.
+                tools += [(str(t["name"]), str(t.get("description", ""))) for t in json.loads(path.read_text())
+                          if _TOOL_NAME.fullmatch(str(t["name"]))]
             except (OSError, ValueError, TypeError, KeyError):
                 continue  # a broken catalog only costs the hint
         ranked = rank_tools(text, tools, limit) if len(tools) > limit else []

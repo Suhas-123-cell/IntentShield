@@ -23,7 +23,7 @@ from .models import GatewayResult, ReasonCode, ToolCall
 from .policy import PolicyConfig
 from .service import IntentShieldService
 from .storage import Storage
-from .tools import MCPArguments, ToolSpec, stable_hash
+from .tools import MCPArguments, ToolSpec, catch_all_destination, stable_hash
 
 
 class MCPProxyConfig(BaseModel):
@@ -136,6 +136,8 @@ class MCPProxyConfig(BaseModel):
             raise ValueError("Per-tool allowed resource sets cannot be empty")
         if any(not values for values in self.allowed_destinations_by_tool.values()):
             raise ValueError("Per-tool allowed destination lists cannot be empty")
+        if any(catch_all_destination(p) for values in self.allowed_destinations_by_tool.values() for p in values):
+            raise ValueError("Per-tool allowed destination lists must not contain a catch-all pattern")
         if any(not values for values in self.grounding_terms_by_tool.values()):
             raise ValueError("Per-tool grounding term sets cannot be empty")
         return self
@@ -250,8 +252,13 @@ class MCPProxyRuntime:
         # the agent and always sent upstream empty.
         self._redacted: dict[str, set[str]] = {}
         self._visible_schemas: dict[str, dict[str, Any]] = {}
-        # run_id -> distinctive values from outputs that carried injection text.
-        self._tainted: dict[str, set[str]] = {}
+        # Distinctive values from outputs that carried injection text. Kept for the whole
+        # session, not per run: the agent opens runs itself, so a fresh run must not wash
+        # a value clean.
+        self._tainted: set[str] = set()
+        # Runs whose intent repeats a flagged output; the agent wrote that intent, not the user.
+        self._untrusted_intents: set[str] = set()
+        self._injection_seen = False
         # run_id -> recipients, URLs, accounts and paths seen in any tool output.
         self._observed: dict[str, set[str]] = {}
         self._classifier = (InjectionClassifier(config.injection_classifier_dir)
@@ -299,7 +306,7 @@ class MCPProxyRuntime:
         self._judge = Judge.from_spec(config.judge) if config.judge else None
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
-        self._suspect_values: dict[str, set[str]] = {}
+        self._suspect_values: set[str] = set()
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -491,7 +498,14 @@ class MCPProxyRuntime:
         return self.service
 
     async def create_run(self, user_intent: str) -> str:
-        return await asyncio.to_thread(self._service().create_run, user_intent)
+        run_id = await asyncio.to_thread(self._service().create_run, user_intent)
+        # The intent exempts what it names from detection and provenance. An intent that
+        # repeats a value or instruction from a flagged output is the injection speaking.
+        flagged = self._tainted | self._suspect_values
+        if distinctive_values(user_intent) & flagged or (self._injection_seen and scan_output(user_intent)):
+            self._untrusted_intents.add(run_id)
+            self._service().storage.add_event(run_id, "MCP_INTENT_FROM_OUTPUT", {})
+        return run_id
 
     async def tool_catalog(self, *, refresh: bool = True) -> list[dict[str, Any]]:
         if refresh:
@@ -542,20 +556,22 @@ class MCPProxyRuntime:
     def _rule_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
         if call.tool_name in self._quarantined:
             return ReasonCode.BLOCK_TOOL_QUARANTINED
+        if run_id in self._untrusted_intents:
+            return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         # Argument provenance: a distinctive value (email, URL, account, path, id)
         # the user never gave must not come from an injected output in this run
         # or from another tool's description.
         values = distinctive_values(call.arguments) - distinctive_values(user_intent)
         if not values:
             return self._suspect_tools.get(call.tool_name)
-        if values & self._tainted.get(run_id, set()):
+        if values & self._tainted:
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         if call.tool_name in self._suspect_tools:
             return self._suspect_tools[call.tool_name]
-        if values & self._suspect_values.get(run_id, set()):
+        if values & self._suspect_values:
             return ReasonCode.REVIEW_CLASSIFIER_FLAGGED
         # Detection is not the gate: a value the scanners missed still came from a tool.
         if self.config.review_output_sourced_arguments and sourced_from(
@@ -585,13 +601,15 @@ class MCPProxyRuntime:
         del outputs[:-32]
         if not findings:
             if detector:
-                self._suspect_values.setdefault(run_id, set()).update(distinctive_values(upstream))
+                self._injection_seen = True
+                self._suspect_values.update(distinctive_values(upstream))
                 self._service().storage.add_event(run_id, "MCP_OUTPUT_SUSPECTED",
                                                   {"tool_name": call.tool_name, "detector": detector})
                 return {**result, "injection_suspected": True, "injection_findings": ["semantic_instruction"]}
             return result
         values = distinctive_values(result.get("upstream", result))
-        self._tainted.setdefault(run_id, set()).update(values)
+        self._injection_seen = True
+        self._tainted.update(values)
         self._service().storage.add_event(run_id, "MCP_OUTPUT_INJECTION", {
             "tool_name": call.tool_name, "findings": findings, "tainted_values": len(values),
         })
