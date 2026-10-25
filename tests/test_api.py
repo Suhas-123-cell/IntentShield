@@ -137,3 +137,39 @@ def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
     assert unauthorized.status_code == 401
     assert authorized.status_code == 200
     assert authorized.json()["decision"] == "ALLOW"
+
+
+def test_approval_queue_shows_request_and_review_reasons(tmp_path: Path):
+    with TestClient(create_app(tmp_path / "queue.db")) as client:
+        client.post("/api/runs", json={"user_intent": "Email Alice", "scenario": "review"})
+        pending = client.get("/api/approvals", params={"status": "pending"}).json()
+        assert pending[0]["request"] == "Email Alice"
+        assert pending[0]["reasons"] == ["REVIEW_MUTATION_REQUIRES_APPROVAL"]
+
+
+def test_blank_intent_is_a_validation_error_not_a_stuck_run(tmp_path: Path):
+    with TestClient(create_app(tmp_path / "blank.db")) as client:
+        response = client.post("/api/runs", json={"user_intent": "  \n", "scenario": "benign"})
+        assert response.status_code == 422
+        assert client.get("/api/runs").json() == []
+
+
+def test_agent_token_guards_runs_when_configured(tmp_path: Path):
+    app = create_app(tmp_path / "agent.db", control_token="operator", agent_token="agent")
+    with TestClient(app) as client:
+        body = {"user_intent": "Read inbox", "scenario": "benign"}
+        assert client.post("/api/runs", json=body).status_code == 401
+        assert client.get("/api/runs").status_code == 401
+        created = client.post("/api/runs", json=body, headers={"Authorization": "Bearer agent"})
+        assert created.status_code == 201
+        run_id = created.json()["run_id"]
+        assert client.get(f"/api/runs/{run_id}", headers={"Authorization": "Bearer operator"}).status_code == 200
+        # The agent token never reaches the operator's approval queue.
+        assert client.get("/api/approvals", headers={"Authorization": "Bearer agent"}).status_code == 401
+
+
+def test_dashboard_cannot_be_framed(tmp_path: Path):
+    with TestClient(create_app(tmp_path / "frame.db")) as client:
+        headers = client.get("/").headers
+        assert headers["x-frame-options"] == "DENY"
+        assert "frame-ancestors 'none'" in headers["content-security-policy"]
