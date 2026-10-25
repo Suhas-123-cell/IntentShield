@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -11,7 +10,7 @@ from typing import Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ToolCall
-from .tools import ToolSpec, canonical_json
+from .tools import ToolSpec, canonical_json, destination_allowed
 
 
 class EvidenceReason(StrEnum):
@@ -366,9 +365,8 @@ class DeterministicGroundingAgent:
 
         if metadata.destination_field:
             destination = call.arguments.get(metadata.destination_field)
-            if not isinstance(destination, str) or not destination.strip() or not any(
-                fnmatch.fnmatchcase(destination, pattern)
-                for pattern in metadata.allowed_destinations
+            if not isinstance(destination, str) or not destination.strip() or not destination_allowed(
+                destination, metadata.allowed_destinations
             ):
                 reasons.append(EvidenceReason.DESTINATION_OUT_OF_SCOPE)
                 scope_score = 0.0
@@ -377,7 +375,7 @@ class DeterministicGroundingAgent:
                 destination_tokens = _tokens(destination.split("@", 1)[0])
                 # When the user names addresses, only those exact addresses ground;
                 # token overlap would accept alice.archive@ for alice@.
-                named = {a.lower() for a in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", user_intent)}
+                named = {a.lower() for a in re.findall(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+", user_intent)}
                 if destination.lower() in named if named else destination_tokens & intent_tokens:
                     reasons.append(EvidenceReason.DESTINATION_GROUNDED)
                     if (

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
+import re
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,6 +17,42 @@ def canonical_json(value: Any) -> str:
 
 def stable_hash(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
+
+
+_ONE_DESTINATION = re.compile(r"[^\s,;<>\"'\\]+")
+
+
+def destination_allowed(value: Any, patterns: Iterable[str]) -> bool:
+    """Whether ``value`` is a single destination that one of the glob ``patterns`` covers.
+    A bare glob's ``*`` also matches ``@ , / ?``, so ``a@evil.net,b@example.com`` would pass
+    ``*@example.com``: the value must be one address or URL, and a URL only matches a URL
+    pattern by scheme, host and path separately, so the host cannot hide in a path or query."""
+    if not isinstance(value, str) or not _ONE_DESTINATION.fullmatch(value) or value.count("@") > 1:
+        return False
+    url = urlsplit(value) if "://" in value else None
+    if url is not None and "@" in url.netloc:
+        return False
+    for pattern in patterns:
+        if ("://" in pattern) != (url is not None):
+            continue
+        if url is None:
+            if fnmatch.fnmatchcase(value, pattern):
+                return True
+            continue
+        allowed = urlsplit(pattern)
+        rest = value[len(f"{url.scheme}://{url.netloc}"):]
+        if (fnmatch.fnmatchcase(url.scheme.lower(), allowed.scheme.lower())
+                and fnmatch.fnmatchcase(url.netloc.lower(), allowed.netloc.lower())
+                and fnmatch.fnmatchcase(rest, pattern[len(f"{allowed.scheme}://{allowed.netloc}"):])):
+            return True
+    return False
+
+
+def catch_all_destination(pattern: str) -> bool:
+    """A pattern that admits arbitrary destinations (``*``, ``?*``, ``*@*``, ``https://*``)."""
+    return any(destination_allowed(probe, [pattern])
+               for probe in ("attacker@evil.invalid", "https://evil.invalid", "https://evil.invalid/x",
+                             "evil.invalid"))
 
 
 class ReadInboxArgs(BaseModel):

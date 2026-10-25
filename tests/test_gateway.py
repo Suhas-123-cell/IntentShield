@@ -374,9 +374,24 @@ def test_policy_config_rejects_typos_overlaps_and_catch_all_destinations():
         PolicyConfig(call_budjet=3)
     with pytest.raises(ValidationError, match="allowed and prohibited"):
         PolicyConfig(allowed_tools={"send_email"}, prohibited_tools={"send_email"})
-    with pytest.raises(ValidationError, match="catch-all"):
-        PolicyConfig(allowed_destinations=["*"])
+    for pattern in ("*", "?*", "*@*", "[!@]*", "https://*"):
+        with pytest.raises(ValidationError, match="catch-all"):
+            PolicyConfig(allowed_destinations=[pattern])
     PolicyConfig(allowed_destinations=["*@example.com"])
+
+
+def test_destination_patterns_match_one_whole_destination():
+    from intentshield.tools import destination_allowed
+
+    assert destination_allowed("bob@example.com", ["*@example.com"])
+    for smuggled in ("attacker@evil.net,bob@example.com", "a@evil.net b@example.com",
+                     "a@evil.net@example.com", "bob@example.com.evil.net"):
+        assert not destination_allowed(smuggled, ["*@example.com"]), smuggled
+    sites = ["https://*.example.com/*"]
+    assert destination_allowed("https://api.example.com/v1", sites)
+    for smuggled in ("https://evil.net/?.example.com/", "https://evil.net/#.example.com/",
+                     "https://api.example.com@evil.net/", "http://api.example.com/v1"):
+        assert not destination_allowed(smuggled, sites), smuggled
 
 
 def test_mutation_the_agents_cannot_match_goes_to_review_and_never_executes(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 import json
 from pathlib import Path
 from typing import Any
@@ -8,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .models import Decision, PolicyContext, ReasonCode
-from .tools import ToolSpec
+from .tools import ToolSpec, catch_all_destination, destination_allowed
 
 
 class PolicyConfig(BaseModel):
@@ -30,7 +29,7 @@ class PolicyConfig(BaseModel):
         overlap = self.allowed_tools & self.prohibited_tools
         if overlap:
             raise ValueError(f"tools both allowed and prohibited: {sorted(overlap)}")
-        if any(pattern.strip("*") == "" for pattern in self.allowed_destinations):
+        if any(catch_all_destination(pattern) for pattern in self.allowed_destinations):
             raise ValueError("allowed_destinations must not contain a catch-all pattern")
         return self
 
@@ -109,10 +108,7 @@ class PolicyEngine:
                 if spec.allowed_destinations_override is not None
                 else self.config.allowed_destinations
             )
-            if not isinstance(destination, str) or not any(
-                    fnmatch.fnmatchcase(destination, pattern)
-                    for pattern in allowed_destinations
-                ):
+            if not destination_allowed(destination, allowed_destinations):
                 return self._block(ReasonCode.BLOCK_DESTINATION_OUT_OF_SCOPE)
 
         # The agents send a mutation they could not match to the request to review

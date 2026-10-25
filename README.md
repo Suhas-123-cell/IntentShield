@@ -98,7 +98,7 @@ Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#gua
 - Guarded connections to multiple real upstream MCP servers over stdio or Streamable HTTP
 - Upstream JSON Schema validation, namespaced tool identities, and fail-closed catalog drift checks
 - MCP poisoning defense: description scanning with quarantine, cross-server shadowing detection, and rug-pull fingerprints over descriptions and annotations
-- Tool-output injection scanning (including user impersonation and task hijack) with run taint, and argument-provenance blocking of attacker-supplied values
+- Tool-output injection scanning (including user impersonation and task hijack) with session taint, and argument-provenance blocking of attacker-supplied values
 - Self-disclosure parameter redaction: parameters that ask for the agent's model, system prompt or conversation are hidden from the agent and never reach the server with a value
 - Harness hooks for Claude Code, Codex CLI, Cursor and Gemini CLI (`intentshield-hook`), bound to the user's real prompt
 - Transparent proxy mode (`intentshield-mcp --transparent`) for the MCP servers a harness launches

@@ -264,13 +264,15 @@ def scan_output(value: Any, trusted: str = "") -> list[str]:
     return _scan(text, _OUTPUT_RULES, trusted)
 
 
+# The lookbehinds start a match only where a run begins; without them findall retries
+# from every character of a long run and the scan goes quadratic.
 _VALUE_PATTERNS = (
-    re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),                    # email
+    re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),         # email
     re.compile(r"https?://[^\s\"'<>)]+", _I),                         # URL
     re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"),                  # IBAN
     re.compile(r"\b\d[\d\- ]{6,}\d\b"),                               # account / card / phone
     re.compile(r"(?:~|\.{1,2})?/[\w.\-]+(?:/[\w.\-]+)+"),             # path
-    re.compile(r"\b(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{8,}\b"),  # id/key
+    re.compile(r"(?<![A-Za-z0-9_\-])(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{8,}\b"),  # id/key
 )
 
 
