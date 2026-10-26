@@ -10,7 +10,8 @@ from typing import Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ToolCall
-from .tools import ToolSpec, canonical_json, destination_allowed
+from .mcp_inspect import argument_surface, normalized_intent
+from .tools import ToolSpec, destination_allowed
 
 
 class EvidenceReason(StrEnum):
@@ -273,8 +274,8 @@ class DeterministicDetectionAgent:
         # Arguments are the indirect-prompt-injection boundary. Text the user typed
         # verbatim is the user's own request ("forward this: ignore previous
         # instructions..."), so a match the intent already contains does not count.
-        content = f"{call.tool_name}\n{canonical_json(call.arguments)}"
-        intent = " ".join(user_intent.lower().split())
+        content = f"{call.tool_name}\n{argument_surface(call.arguments)}"
+        intent = normalized_intent(user_intent)
         matched = tuple(
             name for name, pattern in _INJECTION_RULES
             if any(" ".join(m.group(0).lower().split()) not in intent for m in pattern.finditer(content))
