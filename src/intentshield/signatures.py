@@ -63,17 +63,21 @@ def _now() -> str:
 
 _REPEATS = {_C.MAX_REPEAT, _C.MIN_REPEAT, getattr(_C, "POSSESSIVE_REPEAT", None)} - {None}
 _NARROW = {_C.CATEGORY_SPACE, _C.CATEGORY_DIGIT}  # cannot run into the letters of the words around them
+MAX_SCAN = 20_000  # characters of a text that rules read
+_WINDOW = 200  # a repeat bounded above this backtracks like an unbounded one on MAX_SCAN characters
 
 
 def _wide(body: list) -> bool:
-    """A repeated item that can swallow words: ``.``, ``\\w``, ``\\S``, a negated class."""
+    """A repeated item that can swallow words: ``.``, ``\\w``, ``\\S``, a negated class, a range
+    (``[a-z ]``) or any class with a letter in it."""
     if len(body) != 1:
         return True
     op, av = body[0]
     if op is _C.LITERAL:
         return False
     if op is _C.IN and not any(o is _C.NEGATE for o, _ in av):
-        return any(o is _C.CATEGORY and a not in _NARROW for o, a in av)
+        return any(o is _C.RANGE or (o is _C.CATEGORY and a not in _NARROW)
+                   or (o is _C.LITERAL and chr(a).isalnum()) for o, a in av)
     return True
 
 
@@ -113,6 +117,20 @@ def _delimited(body: list) -> bool:
     return True
 
 
+def _spaces(body: list) -> bool:
+    """A repeated item that can match a space, so its run is not confined to one word."""
+    if len(body) != 1:
+        return True
+    op, av = body[0]
+    if op is _C.LITERAL:
+        return chr(av).isspace()
+    if op is not _C.IN:
+        return True
+    space = any((o is _C.CATEGORY and a in (_C.CATEGORY_SPACE, _C.CATEGORY_NOT_WORD, _C.CATEGORY_NOT_DIGIT))
+                or (o is _C.LITERAL and chr(a).isspace()) or (o is _C.RANGE and a[0] <= 32 <= a[1]) for o, a in av)
+    return space != any(o is _C.NEGATE for o, _ in av)
+
+
 def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
     for op, av in items:
         if op in _REPEATS:
@@ -123,8 +141,9 @@ def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
                 if any(o is _C.BRANCH or (o is _C.SUBPATTERN and any(x is _C.BRANCH for x, _ in a[-1]))
                        for o, a in body):
                     return "repeated alternation"
-                if high == _C.MAXREPEAT and _wide(list(body)):
-                    wide[0] += 1
+                if _wide(list(body)):
+                    wide[0] += high > _WINDOW
+                    wide[1] *= min(high, MAX_SCAN) if _spaces(list(body)) else 1
                 if high <= 10 and _delimited(list(body)):
                     continue
             if problem := _backtracking(list(body), inside or high > 1, wide):
@@ -142,20 +161,46 @@ def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
     return None
 
 
+def _leading_wildcard(items: list) -> bool | None:
+    """Whether the first item ``search`` must match is a wildcard; optional items (``e?``) are
+    skipped, None when every item is optional."""
+    for op, av in items:
+        if op is _C.AT:
+            continue
+        if op is _C.SUBPATTERN:
+            found = _leading_wildcard(list(av[-1]))
+        elif op is _C.BRANCH:
+            results = [_leading_wildcard(list(branch)) for branch in av[1]]
+            found = True if any(results) else None if None in results else False
+        elif op in _REPEATS:
+            found = True if av[1] > 1 and _wide(list(av[2])) else _leading_wildcard(list(av[2]))
+            found = None if av[0] == 0 and not found else found
+        else:
+            found = False
+        if found is not None:
+            return found
+    return None
+
+
 def backtracking_problem(pattern: str) -> str | None:
     """Catastrophic or quadratic backtracking, read from the parsed pattern rather than its text: a
     repeat inside a repeat (unless a short bounded group splits one way only), a repeated
     alternation, more than one unbounded wildcard (``forward.*?to.*?subject`` takes seconds on two
-    thousand characters of its own words), or a leading wildcard, which ``search`` retries from
-    every position."""
+    thousand characters of its own words; a window wider than ``_WINDOW`` counts as unbounded),
+    windows that cross words and multiply past ``_WINDOW ** 2`` (three ``.{0,200}`` take seconds), or
+    a leading wildcard (optional items skipped), which ``search`` retries from every position.
+    One unbounded wildcard after a literal stays allowed: it is quadratic in the starts of that
+    literal times ``MAX_SCAN``, about 0.3 s for ``\\bignore\\b.*`` on 20k characters of ``ignore`` and
+    3 s at worst for a one-letter literal (``e.*`` on 20k ``e``)."""
     tree = list(_parser.parse(pattern, re.IGNORECASE))
-    wide = [0]
+    wide = [0, 1]
     if problem := _backtracking(tree, False, wide):
         return problem
-    first = next((item for item in tree if item[0] is not _C.AT), None)
-    if first and first[0] in _REPEATS and first[1][1] > 1 and _wide(list(first[1][2])):
+    if _leading_wildcard(tree):
         return "starts with a wildcard"
-    return f"{wide[0]} unbounded wildcards" if wide[0] > 1 else None
+    if wide[0] > 1:
+        return f"{wide[0]} unbounded wildcards"
+    return "wildcard windows multiply" if wide[1] > _WINDOW ** 2 else None
 
 
 def safety_problem(pattern: str) -> str | None:
@@ -184,7 +229,7 @@ def safety_problem(pattern: str) -> str | None:
 
 def _matcher(pattern: str) -> Callable[[str], bool]:
     compiled = re.compile(pattern, re.IGNORECASE)
-    return lambda text: bool(compiled.search(" ".join(readable(text[:20_000]).split())))
+    return lambda text: bool(compiled.search(" ".join(readable(text[:MAX_SCAN]).split())[:MAX_SCAN]))
 
 
 def gate(pattern: str, source: str, benign: list[str]) -> dict[str, Any]:

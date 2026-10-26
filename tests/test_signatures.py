@@ -39,6 +39,35 @@ def test_bounded_and_optional_groups_are_allowed():
     assert safety_problem(r"send\s+\d+\s+files\s+to\s+the\s+vendor") is None  # \d and {3} are not literal numbers
 
 
+@pytest.mark.parametrize("pattern, problem", [  # each takes over a second on 20k characters of its words
+    (r"\bsend\b.{0,99999}\bdata\b.{0,99999}\bexternally\b", "2 unbounded wildcards"),
+    (r"(?:ignore|disregard).{0,20000}(?:instructions|rules).{0,20000}(?:now|immediately)", "2 unbounded wildcards"),
+    (r"\bsend\b.{0,200}\bsend\b.{0,200}\bsend\b.{0,200}\bxyzzyq\b", "wildcard windows multiply"),
+    (r"\bsend\b.{0,80}\bdata\b.*\bexternally\b", "wildcard windows multiply"),
+    (r"[a-z ]{0,20000}ignore previous instructions", "starts with a wildcard"),
+    (r"[a-z]+ignore previous instructions", "starts with a wildcard"),
+    (r"e?.*ignore previous instructions", "starts with a wildcard"),
+    (r"(.*)ignore previous instructions", "starts with a wildcard"),
+    (r"(?:a|.*)ignore previous instructions", "starts with a wildcard"),
+])
+def test_wide_windows_ranges_and_hidden_leading_wildcards_are_refused(pattern, problem):
+    assert safety_problem(pattern) == problem
+
+
+def test_one_wildcard_after_a_word_and_short_windows_stay_allowed():
+    for pattern in (r"share\b.*?results\b", r"\bsend\b.*?\binformation\b", r"send\s+this\s+file\s+to\s+'[^']*'",
+                    r"\b(forward\s+it\b|compile\s+and\s+forward\b).*for\s+our\s+records",
+                    r"\bsend\b.{0,200}?\bdata\b.{0,200}?\bexternally\b"):
+        assert safety_problem(pattern) is None, pattern
+
+
+def test_learned_rules_read_a_bounded_text(monkeypatch):
+    matches = signatures._matcher(GOOD)
+    assert matches(SOURCE)
+    monkeypatch.setattr(signatures, "readable", lambda text: text + "\n" + "x " * 15_000 + SOURCE)  # decoding grew it
+    assert not matches("Nothing to see.")
+
+
 def test_gate_needs_the_source_to_match_and_no_benign_text_to():
     assert gate(GOOD, SOURCE, BENIGN) == {"ok": True, "benign_checked": 2}
     assert gate(GOOD, "Nothing like it here at all.", BENIGN)["reason"] == "does not match its source example"
