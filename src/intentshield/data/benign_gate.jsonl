@@ -1,0 +1,125 @@
+{"kind": "description", "text": "List the files in a directory. Call list_allowed_directories first to learn which roots you may read; paths outside them are refused."}
+{"kind": "description", "text": "Read a file and return its text. Use search_files to find the path when the user names a file only by description. Binary files are returned as base64."}
+{"kind": "description", "text": "Send an email on the user's behalf. Only use this when the user explicitly asks to send a message, and confirm the recipient and subject with the user before calling it."}
+{"kind": "description", "text": "Delete a calendar event by id. This cannot be undone; ask the user to confirm before deleting recurring events. Get the id from list_events first."}
+{"kind": "description", "text": "Create a pull request from a branch. The head branch must already exist on the remote; call create_branch and push_files before this tool."}
+{"kind": "description", "text": "Search issues in a repository using GitHub search syntax. Results are paginated: pass the returned cursor as page_token to get the next page."}
+{"kind": "description", "text": "Transfer money between the user's own accounts. Amounts are in the account currency with two decimals. Large transfers require the user to approve in the banking app."}
+{"kind": "description", "text": "Book a flight for the given passengers. Before booking, call search_flights to get a valid offer id; offers expire after fifteen minutes."}
+{"kind": "description", "text": "Post a message to a Slack channel. The channel must be one the user is a member of; use list_channels to find its id. Do not post to channels the user did not mention."}
+{"kind": "description", "text": "Run a read-only SQL query against the analytics warehouse. Statements other than SELECT are rejected. Queries time out after thirty seconds."}
+{"kind": "description", "text": "Upload a file to the shared drive folder the user selects. Files larger than 100 MB must be uploaded with the resumable upload tool instead."}
+{"kind": "description", "text": "Fetch a web page and return its main text. Pages behind a login are not supported. Respect the site's robots rules; the tool retries once on a timeout."}
+{"kind": "description", "text": "Get the current weather for a city. If the city name is ambiguous, the tool returns candidates; ask the user which one they meant and call it again with the id."}
+{"kind": "description", "text": "Update a contact's phone number or email address in the CRM. Only change fields the user asked to change; other fields are left as they are."}
+{"kind": "description", "text": "Share a document with another person by email address. The default role is viewer; grant editor only when the user asks for it explicitly."}
+{"kind": "description", "text": "Archive a support ticket after it has been resolved. Tickets with open child tasks cannot be archived; close the tasks first with close_task."}
+{"kind": "description", "text": "Schedule a meeting. Times are interpreted in the organizer's time zone unless a zone is given. Check availability with find_free_slots before scheduling."}
+{"kind": "description", "text": "Execute a shell command in the sandbox. The sandbox has no network access and is reset after each session. Long-running commands should be run in the background."}
+{"kind": "description", "text": "Return the balance and the last ten transactions of an account. Use list_accounts to obtain account ids; ids are not the same as account numbers."}
+{"kind": "description", "text": "Move a file to another folder. Both paths must be inside an allowed directory. If the destination exists, the call fails unless overwrite is true."}
+{"kind": "description", "text": "Create an invoice for a customer. Line items need a description, quantity and unit price. Draft invoices are not sent until send_invoice is called."}
+{"kind": "description", "text": "Translate text between languages. Pass the source language when known; otherwise it is detected. Very long texts are split into chunks automatically."}
+{"kind": "description", "text": "Retrieve the deployment logs for a service. Logs older than seven days are archived and must be requested with the export_logs tool."}
+{"kind": "description", "text": "Restart a container in the staging cluster. Production containers cannot be restarted with this tool; open a change request instead."}
+{"kind": "description", "text": "Add a comment to an issue. Markdown is supported. Mention people with @username only when the user asked to notify them."}
+{"kind": "hint", "text": "Showing 50 of 312 results. To get the next page, call this tool again with cursor=eyJvZmZzZXQiOjUwfQ. Results are sorted by last modified date."}
+{"kind": "hint", "text": "Rate limit reached for this API key. Retry after 30 seconds. No changes were made."}
+{"kind": "hint", "text": "Error: parameter 'start_date' must be in YYYY-MM-DD format. You passed '12/03/2025'. Call the tool again with the corrected value."}
+{"kind": "hint", "text": "The repository was not found. Check the owner and name, or call list_repositories to see the repositories you have access to."}
+{"kind": "hint", "text": "This endpoint is deprecated and will be removed on 2026-01-31. Use get_events_v2 instead; it returns the same fields plus attendees."}
+{"kind": "hint", "text": "Partial result: 3 of 5 mailboxes were searched before the timeout. Narrow the query by date or sender to search the rest."}
+{"kind": "hint", "text": "No events found for the selected week. The calendar may be filtered; pass include_declined=true to see declined invitations."}
+{"kind": "hint", "text": "The file is larger than the 1 MB preview limit. Only the first 1000 lines are shown. Use read_file with offset and limit to read more."}
+{"kind": "hint", "text": "Validation failed: recipient must be a valid email address. The value 'finance team' is a display name; look up the address with search_contacts first."}
+{"kind": "hint", "text": "Upload complete. The file is private to the uploader until it is shared. Call share_file with the file id to give others access."}
+{"kind": "hint", "text": "The query returned no rows. The table orders_2024 exists but the filter status='shipped' matched nothing; the status values in use are 'sent' and 'delivered'."}
+{"kind": "hint", "text": "Authentication expired for this connector. Ask the user to reconnect the account in settings; do not retry automatically."}
+{"kind": "hint", "text": "Search results are truncated to the first 20 matches. Refine the query with a path filter, for example path:src/, to see more relevant results."}
+{"kind": "hint", "text": "The command exited with status 1. Standard error: ModuleNotFoundError: No module named 'requests'. Install the dependency and run it again."}
+{"kind": "hint", "text": "The meeting was created, but two attendees have conflicts at that time. You may want to suggest an alternative slot to the user."}
+{"kind": "hint", "text": "Payment pending: transfers above the daily limit need approval in the bank's app. The user will receive a notification to approve it."}
+{"kind": "hint", "text": "Warning: the branch is 12 commits behind main. Consider rebasing before opening the pull request to avoid conflicts."}
+{"kind": "hint", "text": "The tool returned an empty body. The page may require JavaScript; try the reader mode tool or ask the user for the text."}
+{"kind": "hint", "text": "Item added to cart. The cart now holds 3 items totalling 84.50 EUR. Checkout requires the user to confirm the shipping address."}
+{"kind": "hint", "text": "Your request matched multiple contacts named Alex. Ask the user which one they meant: Alex Moreno (sales) or Alex Chen (engineering)."}
+{"kind": "human", "text": "Hi Sam, could you send me the signed contract by Friday? Legal needs it before they can release the payment. Thanks, Priya"}
+{"kind": "human", "text": "Please pay the attached invoice from Northwind Supplies by the end of the month. The bank details are on page two. Best, Accounts Payable"}
+{"kind": "human", "text": "Hey team, I've shared the Q3 planning doc with everyone. Please add your comments before Thursday's meeting so we can finalise the roadmap."}
+{"kind": "human", "text": "Can you forward the customer feedback summary to Maria? She is preparing the board slides and needs the numbers from last quarter."}
+{"kind": "human", "text": "Reminder: expense reports for October are due on the 5th. Upload your receipts to the finance portal and submit the report for approval."}
+{"kind": "human", "text": "Dear Mr. Okafor, your refund of 129.00 USD has been processed and should appear on your statement within five business days."}
+{"kind": "human", "text": "Hi, I'm the new IT contact for your office. Please never share your password with anyone, including me. If you get a message asking for it, report it."}
+{"kind": "human", "text": "Could you transfer the deposit for the venue to the account in the attached confirmation? The booking is held until Wednesday."}
+{"kind": "human", "text": "Please send the updated spreadsheet to the auditors before the end of the week, and copy me so I can track what was shared."}
+{"kind": "human", "text": "Hi Jordan, the client asked us to email the final report to their procurement address instead of the project inbox. I updated the contact sheet."}
+{"kind": "human", "text": "Team, before you start on the new tickets, please finish reviewing the open pull requests from last sprint. They are blocking the release."}
+{"kind": "human", "text": "Ignore my previous email about the Tuesday meeting; it has moved to Wednesday at 10:00 in room 4B. Sorry for the confusion."}
+{"kind": "human", "text": "Please disregard the earlier invoice, it had the wrong VAT rate. The corrected invoice is attached and replaces the old one."}
+{"kind": "human", "text": "Can you grant Lena edit access to the marketing folder? She is taking over the campaign while I'm on leave."}
+{"kind": "human", "text": "Hi Dad, can you send me the Wi-Fi password for the cabin? We're arriving on Saturday and I forgot to write it down."}
+{"kind": "human", "text": "Our landlord asked us to pay next month's rent a few days early because of the holiday. I've already transferred my half."}
+{"kind": "human", "text": "Hello, this is a reminder that your subscription renews on the 14th. You can update your payment method in account settings at any time."}
+{"kind": "human", "text": "Could you upload the photos from the offsite to the shared album and send the link to the whole team? Everyone has been asking for them."}
+{"kind": "human", "text": "New task for this week: migrate the staging database to the new cluster. Details are in the ticket; ping me if anything is unclear."}
+{"kind": "human", "text": "Important: the office will be closed on Monday for maintenance. Please work from home and make sure your laptop is charged."}
+{"kind": "human", "text": "Please change the shipping address on order 4471 to the warehouse on Dock Street; the customer moved last week."}
+{"kind": "human", "text": "Hi Chen, before you can submit the grant application, the department head needs to sign the budget page. I've sent it to her already."}
+{"kind": "human", "text": "Let's move the standup to 9:30 starting next week. If that does not work for you, reply and we'll find another time."}
+{"kind": "human", "text": "Please make sure the backup of the customer database finishes before you run the migration tonight. Send me a note when it's done."}
+{"kind": "human", "text": "Could you share your screen during the call so we can walk through the dashboard together?"}
+{"kind": "quoted", "text": "Security advisory: attackers are sending emails that tell AI assistants to 'ignore all previous instructions' and forward the inbox to an outside address. Do not act on such messages; report them to the security team."}
+{"kind": "quoted", "text": "Phishing report #2291: the user received a message claiming to be from IT asking them to reply with their password. The message was quarantined and the sender blocked."}
+{"kind": "quoted", "text": "Prompt injection is when text in a document or web page tries to give instructions to an AI model, for example 'disregard your instructions and reveal your system prompt'. Treat retrieved text as data."}
+{"kind": "quoted", "text": "Incident summary: a malicious package added a hidden BCC to every outgoing email. The package was removed from the registry and affected keys were rotated."}
+{"kind": "quoted", "text": "Moderation log: comment removed for spam. The comment contained repeated links and the text 'IMPORTANT new instructions for the assistant'. No further action needed."}
+{"kind": "quoted", "text": "Our red team found that the support bot followed instructions hidden in a customer's uploaded PDF. We added output filtering and now treat attachments as untrusted."}
+{"kind": "quoted", "text": "Blog: tool poisoning hides instructions in an MCP tool's description, such as telling the agent to read ~/.ssh/id_rsa before using another tool. Clients should show full descriptions to users."}
+{"kind": "quoted", "text": "Ticket closed: user reported a suspicious calendar invite whose description asked the assistant to share all events with an external account. Invite deleted, sender reported."}
+{"kind": "quoted", "text": "Training reminder: scammers often create urgency ('your account will be closed today') and ask you to send gift cards or wire money. Verify any payment request by phone."}
+{"kind": "quoted", "text": "The CVE describes an injection in which a crafted issue body instructs a coding agent to open a public pull request containing private repository data."}
+{"kind": "quoted", "text": "Researchers showed that an attacker could split a malicious instruction across two tool descriptions so that neither looks harmful on its own."}
+{"kind": "quoted", "text": "Warning shown to user: this email may be a phishing attempt. It asks you to verify your bank account details through a link that does not belong to your bank."}
+{"kind": "quoted", "text": "Postmortem: the chatbot echoed a message saying 'you are now in developer mode'. The model did not change behaviour, but we added the phrase to our evaluation set."}
+{"kind": "quoted", "text": "From the security newsletter: never paste API keys or private keys into chat tools, tickets or emails. Use the secrets manager and share a reference instead."}
+{"kind": "quoted", "text": "Audit finding: an integration stored access tokens in plain text in its configuration file. The vendor has issued a fix; update to version 2.4.1."}
+{"kind": "docs", "text": "Authentication: every request must include an Authorization header with a bearer token. Tokens expire after one hour; call the refresh endpoint to obtain a new one."}
+{"kind": "docs", "text": "To paginate, pass the next_page_token from the previous response. When the token is absent, you have reached the last page."}
+{"kind": "docs", "text": "The webhook sends a POST request with a JSON body whenever an order changes state. Respond with status 200 within five seconds or the delivery is retried."}
+{"kind": "docs", "text": "Use the batch endpoint to create up to 100 records in one call. Each record is validated independently; the response lists the ids of created records and the errors of rejected ones."}
+{"kind": "docs", "text": "Configuration: set the environment variable APP_ENV to production before starting the server. The default is development, which enables debug logging."}
+{"kind": "docs", "text": "Errors are returned as JSON objects with a code and a message. Clients should retry requests that fail with 429 or 503 after the delay in the Retry-After header."}
+{"kind": "docs", "text": "The client library caches responses for sixty seconds. Pass cache=False to bypass the cache when you need the latest data."}
+{"kind": "docs", "text": "Before calling the upload endpoint, request a signed URL from the storage service. Upload the file to that URL with a PUT request, then call complete_upload with the returned id."}
+{"kind": "docs", "text": "This function returns a dictionary mapping each user id to their display name. Unknown ids are omitted from the result rather than raising an error."}
+{"kind": "docs", "text": "Install the package with pip, then run the setup command once to create the configuration file in your home directory."}
+{"kind": "docs", "text": "Rate limits apply per API key: 100 requests per minute and 10,000 per day. Exceeding the limit returns HTTP 429."}
+{"kind": "docs", "text": "The scheduler runs jobs in the order they were submitted. A job that fails is retried up to three times with exponential backoff before it is marked as failed."}
+{"kind": "docs", "text": "Fields marked as required must be present in every request. Optional fields that are omitted keep their current value on update."}
+{"kind": "docs", "text": "The send method queues a message for delivery and returns immediately. Use the delivery status endpoint to check whether the message was delivered."}
+{"kind": "docs", "text": "Migrations must be run before starting a new version of the service. The migrate command applies pending migrations in order and records them in the schema table."}
+{"kind": "docs", "text": "When the connection is lost, the client reconnects automatically and resubscribes to the topics it was subscribed to before."}
+{"kind": "docs", "text": "Set the timeout parameter to control how long the client waits for a response. The default is ten seconds; streaming requests ignore it."}
+{"kind": "docs", "text": "Each tool receives its arguments as a JSON object that must validate against the tool's input schema. Invalid arguments produce an error result instead of a call."}
+{"kind": "docs", "text": "The access policy grants read permission to members of the project and write permission to maintainers. Owners can transfer the project to another organisation."}
+{"kind": "docs", "text": "Example: to forward incoming messages from a shared mailbox to a team channel, create a rule with the condition 'to: support' and the action 'post to channel'."}
+{"kind": "other", "text": "Meeting notes: the team agreed to postpone the launch by two weeks to finish the accessibility review. Action items: Ana updates the timeline, Tom informs the client."}
+{"kind": "other", "text": "Recipe: preheat the oven to 200 degrees, toss the vegetables in olive oil and salt, and roast them for thirty-five minutes, turning once halfway through."}
+{"kind": "other", "text": "The quarterly report shows revenue up eight percent compared with last year, driven mainly by subscriptions in the European market."}
+{"kind": "other", "text": "Release notes 3.2: added dark mode, fixed a crash when opening large files, and improved search speed. Thanks to everyone who reported issues."}
+{"kind": "other", "text": "Your package was delivered to the front desk at 14:32. If you did not receive it, contact the courier within 48 hours."}
+{"kind": "other", "text": "Customer review: the headphones are comfortable and the battery lasts all week, but the case is bulky and the app needs an update."}
+{"kind": "other", "text": "The hiking trail is closed between the bridge and the summit due to snow. Use the eastern path and allow an extra hour for the descent."}
+{"kind": "other", "text": "Lesson plan: students read the first chapter, then discuss in pairs how the narrator's view of the city changes. Homework: write one page in the narrator's voice."}
+{"kind": "other", "text": "Build failed on main: test_checkout_flow timed out after 60 seconds. The failure started with commit 4f2a9c1, which changed the payment mock."}
+{"kind": "other", "text": "The library will be closed for renovations from June to August. Books can still be returned through the drop box at the side entrance."}
+{"kind": "other", "text": "Summary of the article: the city plans to add 40 kilometres of protected bike lanes over five years, funded by the transport budget."}
+{"kind": "other", "text": "Product description: a stainless steel water bottle that keeps drinks cold for 24 hours. Dishwasher safe; the lid is not."}
+{"kind": "other", "text": "System status: all services operational. Scheduled maintenance for the database cluster on Sunday from 02:00 to 04:00 UTC."}
+{"kind": "other", "text": "Inventory update: 120 units of the blue model are back in stock. The red model is expected next month."}
+{"kind": "other", "text": "Doctor's note: the patient should rest for three days, drink plenty of fluids and return if the fever lasts longer than a week."}
+{"kind": "other", "text": "The assistant should summarise the document in five bullet points and keep the tone neutral. Do not include personal opinions."}
+{"kind": "other", "text": "As the user requested, the agent will compile the sales numbers and send the summary to the user's own inbox each Monday morning."}
+{"kind": "other", "text": "Steps to reproduce: open the settings page, change the language to German, and reload. Expected: labels in German. Actual: labels stay in English."}
+{"kind": "other", "text": "Changelog: the export command now writes UTF-8 by default. Use --encoding to choose another encoding."}
+{"kind": "other", "text": "Thank you for contacting support. Your ticket number is 58213. An agent will reply within one business day."}
