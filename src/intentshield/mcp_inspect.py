@@ -14,7 +14,7 @@ import re
 import unicodedata
 from collections import Counter
 from typing import Any, Iterable
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 _I = re.I
 # Rules for text that should describe a tool, not instruct the agent.
@@ -103,16 +103,25 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 
 # Cyrillic and Greek letters that render like Latin ones ("іgnоre"); NFKC keeps them.
+# Armenian, Latin-extended and small-capital look-alikes, and typographic apostrophes (a rule
+# reading "user's" must read "user’s" too).
 _CONFUSABLES = str.maketrans(
-    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ",
-    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX",
+    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ"
+    "օսոհցզɡɑɩıӏӀһʏᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡᴢ\u2018\u2019\u02bc\u2032\u00b4",
+    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX"
+    "ounhgqgaiiiihyabcdefghijklmnoprstuvwz" + "'" * 5,
 )
+# Default-ignorable code points outside category Cf, which a renderer shows as nothing: variation
+# selectors, the combining grapheme joiner, Hangul fillers, Mongolian selectors, tags.
+_IGNORABLE = re.compile("[\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u3164\ufe00-\ufe0f\uffa0"
+                        "\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]")
 
 
 def _normalize(text: str) -> str:
     """What an LLM reads, not what the bytes say: fold width variants, drop invisible
-    format characters (zero-width spaces, joiners, bidi marks), map look-alikes."""
-    text = unicodedata.normalize("NFKC", text)
+    characters (zero-width spaces, joiners, bidi marks, variation selectors), map look-alikes.
+    Only the rules read the result; the agent and the tool see the original."""
+    text = _IGNORABLE.sub("", unicodedata.normalize("NFKC", text))
     return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
 
 
@@ -346,7 +355,8 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
         return set()
     found = set()
     for name, spec in properties.items():
-        snake = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
+        # "systemPrompt", "system-prompt", "system.prompt" and "System Prompt" all ask the same.
+        snake = re.sub(r"[\s.\-]+", "_", re.sub(r"([a-z])([A-Z])", r"\1_\2", str(name)).strip())
         text = _normalize(" ".join(str(spec.get(k, "")) for k in ("title", "description"))) \
             if isinstance(spec, dict) else ""
         if _SELF_FIELD_NAME.match(snake) or _SELF_FIELD_TEXT.search(text):
@@ -398,6 +408,40 @@ def authority_values(value: Any) -> set[str]:
     (dates, amounts)."""
     return {item for item in distinctive_values(value, _VALUE_PATTERNS[:5])
             if not item.isdigit() or len(item) >= 9}
+
+
+def _url_root(value: str) -> tuple[str, str] | None:
+    if not value.startswith(("http://", "https://")):
+        return None
+    try:
+        parts = urlsplit(value)
+        host = (parts.hostname or "").rstrip(".")
+    except ValueError:
+        return None
+    return (host, parts.path.rstrip("/")) if host else None
+
+
+def traced_urls(values: set[str], tainted: Iterable[str]) -> dict[str, str]:
+    """URLs among ``values`` built on a tainted URL rather than equal to it: the exfiltration
+    step "call this address with the data appended". ``path`` when the URL is on the tainted
+    host under the tainted path (``https://x.test/u`` covers ``/u/notes`` and ``/u?d=notes``);
+    ``host`` when the tainted URL had no path, so any URL on that host is suspect but weaker
+    evidence. Never by host alone otherwise: an injected issue on a code host must not taint
+    the whole site."""
+    roots = {root for root in map(_url_root, tainted) if root}
+    found: dict[str, str] = {}
+    for value in values:
+        if not (root := _url_root(value)):
+            continue
+        for host, path in roots:
+            if root[0] != host:
+                continue
+            if path and (root[1] == path or root[1].startswith(path + "/")):
+                found[value] = "path"
+                break
+            if not path:
+                found.setdefault(value, "host")
+    return found
 
 
 def sourced_from(values: set[str], source: set[str], user_values: set[str]) -> set[str]:

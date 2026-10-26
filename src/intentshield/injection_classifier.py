@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from .intent_classifier import _load_transformers_model
+
+logger = logging.getLogger(__name__)
 
 LABELS = ("data", "instruction")
 METADATA = "injection_metadata.json"
@@ -31,6 +34,7 @@ class InjectionClassifier:
         self._loaded: tuple[Any, Any, Any] | None = None
         self.metadata: dict[str, Any] = {}
         self.reason: str | None = None
+        self.failures, self.last_error = 0, ""
         try:
             self.metadata = self._verified_metadata()
         except (OSError, ValueError, RuntimeError) as exc:
@@ -69,10 +73,18 @@ class InjectionClassifier:
             inputs = {k: v[:MAX_WINDOWS] for k, v in encoded.items() if k in ("input_ids", "attention_mask")}
             with torch.no_grad():
                 probabilities = torch.softmax(model(**inputs).logits, dim=-1)[:, 1]
-            return round(float(probabilities.max()), 6)
+            score = round(float(probabilities.max()), 6)
         except Exception as exc:  # model backends raise many library-specific errors
-            self.reason = f"injection classifier failed: {type(exc).__name__}"
+            # One failure abstains for this text only; a classifier that keeps failing is switched
+            # off and says so, instead of one error silencing it for the life of the process.
+            self.failures += 1
+            self.last_error = type(exc).__name__
+            if self.failures >= 5:
+                self.reason = f"injection classifier failed {self.failures} times in a row: {self.last_error}"
+                logger.warning("injection classifier disabled", extra={"error": self.last_error})
             return 0.0
+        self.failures = 0
+        return score
 
     def flags(self, text: str) -> bool:
         return self.score(text) >= float(self.metadata.get("threshold", 1.0))
