@@ -89,6 +89,7 @@ SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
 PER_CALL_INDICATORS, PER_CALL_FINGERPRINTS, MAX_BLOCKS = 20, 3, 10
 MAX_INDICATORS, MAX_FINGERPRINTS, MAX_REJECTED = 5000, 500, 500
 ESCALATE_INDICATORS, ESCALATE_RUNS, HOSTILE_RUNS, TTL_DAYS = 2, 2, 3, 30
+ANCHOR_WORDS, ANCHOR_CONTAINMENT = 4, 0.5
 VARIANT = "known_attack_variant"
 BENIGN_PATH = Path(__file__).with_name("data") / "benign_gate.jsonl"
 # Shared infrastructure: never learned as a domain, and URLs on it are not learned at all.
@@ -99,6 +100,16 @@ github.com githubusercontent.com github.io gitlab.com bitbucket.org google.com g
 microsoft.com office.com sharepoint.com dropbox.com box.com notion.so slack.com atlassian.net
 amazonaws.com cloudfront.net azurewebsites.net pastebin.com wikipedia.org stackoverflow.com
 pypi.org npmjs.com readthedocs.io example.com example.org example.net
+googleapis.com appspot.com web.app firebaseapp.com vercel.app netlify.app herokuapp.com pages.dev workers.dev
+onrender.com fly.dev glitch.me surge.sh blogspot.com wordpress.com medium.com substack.com ngrok.io
+ngrok-free.app trycloudflare.com azureedge.net windows.net digitaloceanspaces.com localhost
+""".split())
+_BARE_HOST = re.compile(r"(?<![\w@.-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?![\w-])")
+# Registries that sell names under them ("evil.co.uk"): never a domain indicator on their own.
+PUBLIC_SUFFIXES = frozenset("""
+co.uk org.uk ac.uk gov.uk me.uk com.au net.au org.au edu.au co.nz org.nz co.jp ne.jp or.jp co.kr
+co.in net.in org.in com.br com.cn net.cn org.cn com.mx com.ar com.tr co.za com.sg com.hk com.tw
+co.il co.id com.my com.ph com.vn com.pl com.ua co.th
 """.split())
 _RULES = dict(_DESCRIPTION_RULES + _OUTPUT_RULES)
 _STOP = frozenset("""
@@ -132,7 +143,8 @@ CREATE TABLE IF NOT EXISTS threat_allowlist (value TEXT PRIMARY KEY, added REAL 
 CREATE TABLE IF NOT EXISTS threat_benign (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, added REAL NOT NULL);
 """
 # Columns added after the first schema. Processes starting together may both try to add one.
-_ADDED = (("threat_indicators", "decided_at REAL"), ("threat_fingerprints", "decided_at REAL"))
+_ADDED = (("threat_indicators", "decided_at REAL"), ("threat_fingerprints", "decided_at REAL"),
+          ("threat_fingerprints", "anchor_json TEXT"))
 
 
 def _now_iso() -> str:
@@ -274,10 +286,10 @@ class ThreatMatch:
 
 @dataclass
 class _State:
-    exact: dict[str, dict[str, Any]] = field(default_factory=dict)
-    domains: dict[str, dict[str, Any]] = field(default_factory=dict)
     prints: dict[str, tuple[frozenset[int], str, float]] = field(default_factory=dict)
     index: dict[int, list[str]] = field(default_factory=dict)
+    anchors: dict[str, frozenset[int]] = field(default_factory=dict)  # injected-sentence shingles of a window
+    prints_loaded: bool = False
     allow: frozenset[str] = frozenset()
     benign_texts: tuple[str, ...] = ()  # the operator's; shingled only when something is learned
     benign_cache: tuple[frozenset[int], ...] | None = None
@@ -305,6 +317,8 @@ class ThreatMemory:
         self.containment, self.clock = containment, clock
         self.packs = packs  # a rule_packs.PackSet: more evidence, merged into the checks
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.path.exists():  # what attacks used, and the operator's decisions: the user's only
+            self.path.touch(mode=0o600)
         db = self._connect()
         try:
             try:
@@ -367,20 +381,33 @@ class ThreatMemory:
             return self._state
 
     def _load(self) -> _State:
+        """The small part of the cache; indicators are looked up by value and fingerprints load on the
+        first text check, so a hook process that answers one call does not read the whole memory."""
         state = _State()
-        live = "status='confirmed' OR (status='observed' AND last_seen>=?)"
-        since = (self.clock() - self.ttl,)
-        for row in self._reader.execute(f"SELECT * FROM threat_indicators WHERE {live}", since):
-            (state.exact if row["kind"] == "exact" else state.domains)[row["value"]] = dict(row)
-        for row in self._reader.execute(f"SELECT id, shingles_json, status, last_seen FROM threat_fingerprints "
-                                        f"WHERE {live}", since):
-            prints = frozenset(json.loads(row["shingles_json"]))
-            state.prints[row["id"]] = (prints, row["status"], row["last_seen"])
-            for item in prints:
-                state.index.setdefault(item, []).append(row["id"])
         state.allow = frozenset(r[0] for r in self._reader.execute("SELECT value FROM threat_allowlist"))
         state.benign_texts = tuple(r[0] for r in self._reader.execute("SELECT text FROM threat_benign"))
         return state
+
+    def _prints(self) -> _State:
+        state = self._cache()
+        with self._lock:
+            if state.prints_loaded:
+                return state
+            try:
+                rows = self._reader.execute(
+                    "SELECT id, shingles_json, status, last_seen, anchor_json FROM threat_fingerprints WHERE "
+                    "status='confirmed' OR (status='observed' AND last_seen>=?)", (self.clock() - self.ttl,)).fetchall()
+            except sqlite3.Error:
+                return state
+            for row in rows:
+                prints = frozenset(json.loads(row["shingles_json"]))
+                state.prints[row["id"]] = (prints, row["status"], row["last_seen"])
+                if row["anchor_json"]:
+                    state.anchors[row["id"]] = frozenset(json.loads(row["anchor_json"]))
+                for item in prints:
+                    state.index.setdefault(item, []).append(row["id"])
+            state.prints_loaded = True
+            return state
 
     def _live(self, status: str, last_seen: float) -> bool:
         return status == "confirmed" or (status == "observed" and last_seen >= self.clock() - self.ttl)
@@ -404,18 +431,32 @@ class ThreatMemory:
     def check_values(self, values: Any, trusted: Any = frozenset()) -> ThreatMatch | None:
         """The strongest indicator any of ``values`` hits, ignoring what the user typed and the allowlist."""
         state = self._cache()
+        # A domain the user names in prose ("anyone at acme-corp.com") is theirs as much as an address.
+        named = set(_BARE_HOST.findall(trusted.lower())) if isinstance(trusted, str) else set()
         trusted = self.values_of(trusted)
-        trusted_domains = {d for v in trusted if (d := domain_of(v))}
+        trusted_domains = {d for v in trusted if (d := domain_of(v))} | {h.removeprefix("www.") for h in named}
         checked = {v for v in self.values_of(values) - trusted if not allowed(v, state.allow)}
-        matches = []
+        wanted: dict[tuple[str, str], list[str]] = {}
         for value in checked:
-            rows = [state.exact.get(value)]
+            wanted.setdefault(("exact", value), []).append(value)
             host = domain_of(value)
             if host and not under(host, trusted_domains):
                 parts = host.split(".")
-                rows += [state.domains.get(".".join(parts[i:])) for i in range(len(parts) - 1)]
-            for row in rows:
-                if row and self._live(row["status"], row["last_seen"]):
+                for i in range(len(parts) - 1):
+                    wanted.setdefault(("domain", ".".join(parts[i:])), []).append(value)
+        rows: list[sqlite3.Row] = []
+        keys = sorted({value for _, value in wanted})
+        try:
+            for start in range(0, len(keys), 500):
+                chunk = keys[start:start + 500]
+                rows += self._read(f"SELECT * FROM threat_indicators WHERE value IN ({','.join('?' * len(chunk))})",
+                                   tuple(chunk))
+        except sqlite3.Error:  # locked or broken: the packs still answer
+            rows = []
+        matches = []
+        for row in rows:
+            for value in wanted.get((row["kind"], row["value"]), ()):
+                if self._live(row["status"], row["last_seen"]):
                     matches.append(ThreatMatch(row["id"], row["value"], value, row["kind"], row["status"],
                                                row["origin"], "block" if row["status"] == "confirmed" else "review"))
         if self.packs is not None and checked:
@@ -424,7 +465,7 @@ class ThreatMemory:
 
     def fingerprint_hits(self, text: Any, prints: frozenset[int] | None = None) -> list[tuple[str, float, str]]:
         """(fingerprint id, containment, status) of every live fingerprint ``text`` contains, best first."""
-        state = self._cache()
+        state = self._prints()
         if not state.prints:
             return []
         prints = text_shingles(text) if prints is None else prints
@@ -432,6 +473,9 @@ class ThreatMemory:
         hits = []
         for fid, n in counts.items():
             own, status, last_seen = state.prints[fid]
+            anchor = state.anchors.get(fid)
+            if anchor and len(anchor & prints) < ANCHOR_CONTAINMENT * len(anchor):
+                continue
             if n / len(own) >= self.containment and self._live(status, last_seen):
                 hits.append((fid, round(n / len(own), 3), status))
         return sorted(hits, key=lambda hit: -hit[1])
@@ -463,7 +507,8 @@ class ThreatMemory:
             return 0
 
     def hostile(self, source: Any) -> bool:
-        return self.reputation(source) >= self.hostile_runs
+        return self.reputation(source) >= self.hostile_runs and not (
+            isinstance(source, str) and source.lower() in self._cache().allow)
 
     # --- learning from rule-confirmed attacks --------------------------------------------------
 
@@ -485,7 +530,7 @@ class ThreatMemory:
             return {"learned": False, "reason": "the named rules do not fire on this text"}
         parts = sentences(norm)
         hit = sorted({i for i, (s, e) in enumerate(parts) for a, b in spans if a < e and b > s})
-        state = self._cache()
+        state = self._prints()
 
         # Indicators: the values of the injected region, closest to a match first.
         user = authority_values(_normalize(trusted)) if trusted else set()
@@ -517,7 +562,7 @@ class ThreatMemory:
         for a, b in spans:
             blanked[a:b] = " " * (b - a)
         blanked = "".join(blanked)
-        candidates, seen = [], set()
+        candidates, seen, matched = [], set(), set(hit)
         for block in blocks[:MAX_BLOCKS]:
             for source_text in (norm, blanked):
                 excerpt = " ".join(source_text[parts[j][0]:parts[j][1]].strip() for j in block)
@@ -525,10 +570,22 @@ class ThreatMemory:
                 prints = shingles(words)
                 if not prints or prints in seen:
                     continue
+                own = tokens(" ".join(source_text[parts[j][0]:parts[j][1]] for j in block if j in matched))
+                anchor = frozenset()
+                if source_text is norm:
+                    # The window must be matched with part of the injected sentence itself: a long
+                    # disclaimer after a short trigger would otherwise match every mail that carries it.
+                    anchor = shingles(own) & prints
+                elif content_words(own) < ANCHOR_WORDS and not _PLACEHOLDERS & set(words):
+                    # The payload after a bare trigger ("IGNORE PREVIOUS INSTRUCTIONS. <payload>") cannot
+                    # be anchored; it is learned only when it names a destination, as exfiltration does
+                    # and boilerplate (a disclaimer, a license header) does not.
+                    continue
                 seen.add(prints)
                 known = [fid for fid, (other, _, _) in state.prints.items()
                          if contained(other, prints) >= self.containment]
-                candidates.append((excerpt, words, prints, gate(words, state.benign, self.containment), known))
+                candidates.append((excerpt, words, prints, gate(words, state.benign, self.containment), known,
+                                   anchor))
 
         now = self.clock()
         summary: dict[str, Any] = {"learned": True, "rules": names, "indicators": [], "domains": [],
@@ -556,7 +613,8 @@ class ThreatMemory:
     def _escalate(self, db: sqlite3.Connection, summary: dict[str, Any], run_key: str, source: str, now: float,
                   user_domains: set[str], allow: frozenset[str]) -> None:
         for host in sorted({d for v in summary["indicators"] if (d := domain_of(v))}):
-            if under(host, PROTECTED) or under(host, user_domains) or allowed(host, allow):
+            if under(host, PROTECTED) or under(host, user_domains) or allowed(host, allow) \
+                    or host in PUBLIC_SUFFIXES or "." not in host:
                 continue
             n, runs = db.execute(
                 "SELECT COUNT(DISTINCT i.id), COUNT(DISTINCT s.run_key) FROM threat_indicators i JOIN "
@@ -573,7 +631,7 @@ class ThreatMemory:
         revoked = [frozenset(json.loads(r[0])) for r in
                    db.execute("SELECT shingles_json FROM threat_fingerprints WHERE status='revoked'")]
         learned = 0
-        for excerpt, words, prints, result, known in candidates:
+        for excerpt, words, prints, result, known, anchor in candidates:
             if result["ok"] and any(max(contained(r, prints), contained(prints, r)) >= self.containment
                                     for r in revoked):
                 result = {"ok": False, "reason": "the operator revoked a matching fingerprint"}
@@ -590,9 +648,9 @@ class ThreatMemory:
             fid = _id("fingerprint", json.dumps(sorted(prints)))
             inserted = db.execute(
                 "INSERT OR IGNORE INTO threat_fingerprints (id, shingles_json, excerpt, words, status, origin, "
-                "gate_json, source, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "gate_json, source, first_seen, last_seen, anchor_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (fid, json.dumps(sorted(prints)), masked(excerpt)[:2000], len(words), status, "learned",
-                 json.dumps(result), source, now, now)).rowcount
+                 json.dumps(result), source, now, now, json.dumps(sorted(anchor)) if anchor else None)).rowcount
             if result["ok"]:
                 learned += 1
                 if not inserted:
@@ -679,6 +737,7 @@ class ThreatMemory:
             raise ValueError("nothing to allow")
         with self._write() as db:
             db.execute("INSERT OR IGNORE INTO threat_allowlist VALUES (?,?)", (value, self.clock()))
+            db.execute("DELETE FROM threat_sources WHERE lower(source)=?", (value,))  # a server, too
             rows = db.execute("SELECT id, value, domain FROM threat_indicators WHERE status!='revoked'").fetchall()
             covered = [r["id"] for r in rows if r["value"] == value or
                        (is_domain(value) and under(r["domain"] or "", {value}))]

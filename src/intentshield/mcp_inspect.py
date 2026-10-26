@@ -421,14 +421,19 @@ def _url_root(value: str) -> tuple[str, str] | None:
     return (host, parts.path.rstrip("/")) if host else None
 
 
-def traced_urls(values: set[str], tainted: Iterable[str]) -> dict[str, str]:
+def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = ()) -> dict[str, str]:
     """URLs among ``values`` built on a tainted URL rather than equal to it: the exfiltration
     step "call this address with the data appended". ``path`` when the URL is on the tainted
     host under the tainted path (``https://x.test/u`` covers ``/u/notes`` and ``/u?d=notes``);
     ``host`` when the tainted URL had no path, so any URL on that host is suspect but weaker
     evidence. Never by host alone otherwise: an injected issue on a code host must not taint
-    the whole site."""
-    roots = {root for root in map(_url_root, tainted) if root}
+    the whole site. A tainted URL the user named, or one inside a site or directory they named,
+    traces nothing: an injected page that repeats the user's own address does not make it the
+    attacker's."""
+    user = set(user)
+    prefixes = tuple(item.rstrip("/") + "/" for item in user if "/" in item)
+    roots = {root for url in tainted if url not in user and not url.startswith(prefixes)
+             if (root := _url_root(url))}
     found: dict[str, str] = {}
     for value in values:
         if not (root := _url_root(value)):

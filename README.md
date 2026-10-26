@@ -413,7 +413,11 @@ rewordings: with the attacker's infrastructure reused, the memory raised the cat
 miss went from 0.00 to 0.67 after hot-installing the baseline pack. It flagged none of 1,753 benign
 paragraphs. Read these as an upper bound: the attacks and the pack are self-authored, the rewordings
 are mechanical rather than an LLM's, and a full rewrite leaves too little wording to recognize
-(`tests/test_adaptive_integration.py` shows both cases). The memory adds about 4-23 ms to each hook process.
+(`tests/test_adaptive_integration.py` shows both cases). The memory adds about 5-25 ms to each hook
+process when small, and about 20 ms before a call and 40 ms after a result at its caps (5,000 indicators,
+500 fingerprints). Poisoning is bounded rather than prevented: an attacker can get a colleague's address
+learned, at review level; boilerplate after an injection is not learned (fingerprints are anchored on the
+injected sentence, and a bare trigger's payload is learned only when it names a destination).
 
 ## Production settings
 
