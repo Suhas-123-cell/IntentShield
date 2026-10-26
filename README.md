@@ -373,7 +373,7 @@ each rule.
 
 | Variable | Purpose |
 |---|---|
-| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP). Unset leaves it open on loopback. |
+| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP) and, in the web API, on proposing calls and reading runs (the operator token works there too; needs `INTENTSHIELD_CONTROL_TOKEN`). Unset leaves them open on loopback. |
 | `INTENTSHIELD_CONTROL_TOKEN` | Bearer token for the human approval endpoint. |
 | `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and, in proxy mode over Streamable HTTP, `/mcp` (default 120, `0` disables). In memory, per process. |
 | `INTENTSHIELD_LOG_LEVEL` | JSON log level (default `INFO`). Decision lines carry run, tool, decision and reason codes, never arguments. |
@@ -1146,8 +1146,10 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   - optionally run the injection classifier on results the rules pass
     (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
     result hook, so it is off by default).
-  A hook that crashes denies the call. Built-in tools (shell, file edits) are left
-  to the harness.
+  A hook that crashes denies the call; for Claude Code the example config adds
+  `"onFailure": "block"` so a hook that is missing, times out or exits with another code
+  denies it too. MCP resource reads (`ReadMcpResourceTool`) are scanned like tool results.
+  Built-in tools (shell, file edits) are left to the harness.
 - **Transparent proxy** (`intentshield-mcp --transparent --config <file>`, stdio only)
   wraps each MCP server the harness launches. It shows the upstream's own tools, hides
   any whose description matches poisoning rules or that changed after connect (rug pull),
@@ -1162,7 +1164,7 @@ The example configs call `intentshield-hook` and `intentshield-mcp` by name, so 
 
 | harness | hook config (examples in `configs/harness/`) | rewrite arguments | ask the user |
 |---|---|---|---|
-| Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` | yes | yes |
+| Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` and the MCP resource tools | yes | yes |
 | Codex CLI | `~/.codex/config.toml`: same events | yes | no: asks become denials with a reason |
 | Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no: the agent is told to resend | yes |
 | Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no: denials with a reason |
