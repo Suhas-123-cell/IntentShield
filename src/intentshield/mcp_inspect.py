@@ -189,11 +189,8 @@ def leaf_text(value: Any) -> str:
 
 
 def _surface(value: Any) -> str:
-    """Scan text of any value: a string as is; a structure as its leaves and its JSON, so a rule
-    that matched the JSON layout before still does."""
-    if isinstance(value, str):
-        return value
-    return f"{leaf_text(value)}\n{json.dumps(value, ensure_ascii=False, default=str)}"
+    """Scan text of any value: a string as is; a structure as its leaves."""
+    return leaf_text(value)
 
 
 def argument_surface(value: Any) -> str:
@@ -216,8 +213,19 @@ def normalized_intent(text: str) -> str:
     return " ".join(_normalize(text).lower().split())
 
 
-def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "") -> list[str]:
+# A line break inside a sentence (not after . ! ? : ;): a model reads straight through it, but the
+# rules stop at line ends to stay within one sentence, so one word per line would hide an instruction.
+# Joining turns a line break into a space, which every rule reads as it read the break, so the joined
+# text matches all the original did. Outputs only: descriptions get the same from ``scan_server``,
+# and joining a schema title onto the next field there could quarantine a clean tool.
+_MID_SENTENCE_BREAK = re.compile(r"(?<![.!?:;])[ \t]*\n[ \t]*(?=\S)")
+
+
+def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "",
+          join_lines: bool = False) -> list[str]:
     text = readable(text)
+    if join_lines:
+        text = _MID_SENTENCE_BREAK.sub(" ", text)
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
     trusted = " ".join(_normalize(trusted).lower().split())
     return [name for name, pattern in rules
@@ -309,7 +317,7 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
 
 
 def scan_output(value: Any, trusted: str = "") -> list[str]:
-    return _scan(_surface(value), _OUTPUT_RULES, trusted)
+    return _scan(_surface(value), _OUTPUT_RULES, trusted, join_lines=True)
 
 
 # The lookbehinds start a match only where a run begins; without them findall retries
