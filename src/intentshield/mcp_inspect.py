@@ -75,7 +75,7 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"\s+(?:now\s+|immediately\s+|also\s+)?(?:send|forward|email|transfer|pay|delete|upload|share|grant|"
         r"post|write|call|invoke|execute|run|change|update|create|move)\b", _I)),
     ("new_task", re.compile(
-        r"\b(?:new|updated|additional|important)\s+(?:task|instructions?|directive)s?\s*[:\-]", _I)),
+        r"\b(?:new|updated|additional|important)\s+(?:task|instructions?|directive)s?[ \t]*[:\-]", _I)),
     ("exfiltration", re.compile(
         r"\b(?:send|forward|email|upload|post|transfer|leak|exfiltrate)\w*\b[^.\n]{0,80}?"
         r"\b(?:password|credential|secret|token|api\s*key|private\s+key|ssn|social\s+security|"
@@ -137,6 +137,8 @@ def _decoded(text: str) -> list[str]:
     up to three layers deep so the rules see them; the original text is scanned too."""
     found: list[str] = []
     layer = [text]
+    # Each layer can multiply the copies (URL and HTML escapes of each other); cap the total.
+    budget = len(text) + 65_536
     for _ in range(3):
         next_layer = []
         for item in layer:
@@ -158,6 +160,9 @@ def _decoded(text: str) -> list[str]:
         if not next_layer:
             break
         found += next_layer
+        budget -= sum(map(len, next_layer))
+        if budget <= 0:
+            break
         layer = next_layer
     return found
 
@@ -195,13 +200,16 @@ def _surface(value: Any) -> str:
 
 def argument_surface(value: Any) -> str:
     """One line of JSON with every key and string normalized as the rules read it (decoded,
-    NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed). The gateway's
-    argument rules match this instead of ``canonical_json``, which stays the hashing form."""
+    NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed), objects as
+    sorted key-value pairs. The gateway's argument rules match this instead of ``canonical_json``, which stays the hashing form."""
     def clean(item: Any) -> Any:
         if isinstance(item, str):
             return " ".join(readable(item).split())
         if isinstance(item, dict):
-            return {clean(str(key)): clean(child) for key, child in item.items()}
+            # Pairs, not a dict: keys equal only after normalization ("value" and "valu\u200be")
+            # must not overwrite each other and drop a value before the rules see it.
+            pairs = [[clean(str(key)), clean(child)] for key, child in item.items()]
+            return sorted(pairs, key=lambda pair: json.dumps(pair, sort_keys=True, ensure_ascii=False))
         if isinstance(item, (list, tuple)):
             return [clean(child) for child in item]
         return item
@@ -213,19 +221,11 @@ def normalized_intent(text: str) -> str:
     return " ".join(_normalize(text).lower().split())
 
 
-# A line break inside a sentence (not after . ! ? : ;): a model reads straight through it, but the
-# rules stop at line ends to stay within one sentence, so one word per line would hide an instruction.
-# Joining turns a line break into a space, which every rule reads as it read the break, so the joined
-# text matches all the original did. Outputs only: descriptions get the same from ``scan_server``,
-# and joining a schema title onto the next field there could quarantine a clean tool.
-_MID_SENTENCE_BREAK = re.compile(r"(?<![.!?:;])[ \t]*\n[ \t]*(?=\S)")
-
-
 def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "",
-          join_lines: bool = False) -> list[str]:
+          collapse: bool = False) -> list[str]:
     text = readable(text)
-    if join_lines:
-        text = _MID_SENTENCE_BREAK.sub(" ", text)
+    if collapse:
+        text = " ".join(text.split())
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
     trusted = " ".join(_normalize(trusted).lower().split())
     return [name for name, pattern in rules
@@ -317,7 +317,17 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
 
 
 def scan_output(value: Any, trusted: str = "") -> list[str]:
-    return _scan(_surface(value), _OUTPUT_RULES, trusted, join_lines=True)
+    return _scan(_surface(value), _OUTPUT_RULES, trusted)
+
+
+def scan_output_collapsed(value: Any, trusted: str = "") -> list[str]:
+    """The output rules on the text with every line break read as a space, for an output
+    ``scan_output`` passed. The rules stop at line ends to stay within one sentence, so one word per
+    line, or a list after a colon ("send me the following:\n- your password"), hides an instruction
+    from them. Weaker evidence: short UI or listing text ("Email\nPassword") reads as a sentence
+    here too, so a hit asks before a value from the output is used, like a learned detector's flag,
+    and never taints the session."""
+    return [f"collapsed_{name}" for name in _scan(_surface(value), _OUTPUT_RULES, trusted, collapse=True)]
 
 
 # The lookbehinds start a match only where a run begins; without them findall retries

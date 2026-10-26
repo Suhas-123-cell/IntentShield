@@ -173,3 +173,8 @@ def test_dashboard_cannot_be_framed(tmp_path: Path):
         headers = client.get("/").headers
         assert headers["x-frame-options"] == "DENY"
         assert "frame-ancestors 'none'" in headers["content-security-policy"]
+
+
+def test_agent_token_without_an_operator_token_is_refused(tmp_path: Path):
+    with pytest.raises(ValueError, match="CONTROL_TOKEN"):
+        create_app(tmp_path / "half.db", agent_token="agent")

@@ -38,6 +38,9 @@ def create_app(
         raise ValueError(
             "INTENTSHIELD_CONTROL_TOKEN is required when the web MCP proxy is enabled"
         )
+    if run_token and not approval_token:
+        # Without it the approval queue, which shows requests and results, would stay open.
+        raise ValueError("INTENTSHIELD_CONTROL_TOKEN is required when INTENTSHIELD_AGENT_TOKEN is set")
     runtime: MCPProxyRuntime | None = None
     local_service: IntentShieldService | None = None
     if proxy_path:
