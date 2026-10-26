@@ -92,6 +92,13 @@ class MCPProxyConfig(BaseModel):
     minimum_intent_alignment: float = Field(default=0.60, ge=0, le=1)
     # Ungrounded reads pass (evidence, not a veto); mutations and negated reads stay strict.
     lenient_reads: bool = False
+    # Adaptive threat memory (``threat_memory``): what rule-confirmed attacks used (addresses, wording,
+    # sources), kept across runs and processes and given back as evidence. On by default; the file
+    # defaults to ``threats.db`` next to ``database_path``. ``threat_packs_dir`` adds signed threat
+    # packs (``rule_packs``), verified with the INTENTSHIELD_PACK_* settings and hot-reloaded.
+    threat_memory: bool = True
+    threat_memory_path: str | None = None
+    threat_packs_dir: str | None = None
     approval_ttl_seconds: int = Field(default=600, ge=1)
     max_upstreams: int = Field(default=8, ge=1, le=64)
     max_total_tools: int = Field(default=2_000, ge=1, le=100_000)
@@ -324,6 +331,13 @@ class MCPProxyRuntime:
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
         self._suspect_values: set[str] = set()
+        self._memory: Any = None
+        if config.threat_memory:
+            from .rule_packs import PackSet
+            from .threat_memory import ThreatMemory
+            self._memory = ThreatMemory(
+                config.threat_memory_path or Path(config.database_path).with_name("threats.db"),
+                packs=PackSet(config.threat_packs_dir) if config.threat_packs_dir else None)
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -426,8 +440,12 @@ class MCPProxyRuntime:
             )
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
+            if findings and self._memory:
+                self._memory.record_attack(text, findings, source=tool.server_id, run_key=f"catalog:{qualified}")
             if not findings and qualified not in self._quarantined:
-                if self._semantic_flag(text, "description"):
+                if self._memory and self._memory.check_text(text, target="description"):
+                    self._suspect_tools[qualified] = ReasonCode.REVIEW_KNOWN_THREAT
+                elif self._semantic_flag(text, "description"):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_CLASSIFIER_FLAGGED
                 elif self._judge and self._judge.tool(qualified, text):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_JUDGE_FLAGGED
@@ -598,6 +616,9 @@ class MCPProxyRuntime:
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        if self._memory and (known := self._memory.check_values(values)):
+            # An address or wording a confirmed attack used before, in any run or process.
+            return ReasonCode.BLOCK_KNOWN_THREAT if known.level == "block" else ReasonCode.REVIEW_KNOWN_THREAT
         if call.tool_name in self._suspect_tools:
             return self._suspect_tools[call.tool_name]
         if values & self._suspect_values:
@@ -626,7 +647,10 @@ class MCPProxyRuntime:
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
         detector = None if findings else (
-            "line_split_rules" if scan_output_collapsed(upstream) else self._semantic_flag(text, "output"))
+            "line_split_rules" if scan_output_collapsed(upstream)
+            else "threat_memory" if self._memory and (self._memory.check_text(upstream)
+                                                      or self._memory.hostile(call.tool_name.partition(":")[0]))
+            else self._semantic_flag(text, "output"))
         if self._learner is not None:  # only learning links a reviewed call to the text it reused
             outputs = self._outputs.setdefault(run_id, [])
             outputs.append({"tool_name": call.tool_name, "text": text[:20_000],
@@ -645,6 +669,10 @@ class MCPProxyRuntime:
         values = distinctive_values(result.get("upstream", result))
         self._injection_seen = True
         self._tainted.update(values)
+        if self._memory:  # only rule-confirmed text teaches it, never its own or a detector's flags
+            run = self._service().storage.get_run(run_id) or {}
+            self._memory.record_attack(upstream, findings, source=call.tool_name.partition(":")[0], run_key=run_id,
+                                       trusted=run.get("user_intent", ""))
         self._service().storage.add_event(run_id, "MCP_OUTPUT_INJECTION", {
             "tool_name": call.tool_name, "findings": findings, "tainted_values": len(values),
         })
