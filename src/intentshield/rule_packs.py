@@ -53,7 +53,6 @@ import re
 import tempfile
 import threading
 import time
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -443,19 +442,25 @@ def install(source: str | Path | dict[str, Any], directory: str | Path, trust: T
     return {"installed": str(directory / f"{pack.name}.json"), **pack.summary()}
 
 
-class _HttpsOnly(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
-        if urlsplit(newurl).scheme != "https":
-            raise PackError(f"refused a redirect away from HTTPS: {newurl}")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+def _https_only() -> Any:
+    import urllib.request  # only ``pack update`` downloads; a hook process should not pay for it
+
+    class HttpsOnly(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+            if urlsplit(newurl).scheme != "https":
+                raise PackError(f"refused a redirect away from HTTPS: {newurl}")
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    return urllib.request, HttpsOnly
 
 
 def fetch(url: str, max_bytes: int = MAX_PACK_BYTES, timeout: float = 20) -> dict[str, Any]:
     """Download a pack (HTTPS only, at most ``max_bytes``) as parsed JSON; nothing is executed."""
     if urlsplit(url).scheme != "https":
         raise PackError("pack updates are fetched over HTTPS only")
-    opener = urllib.request.build_opener(_HttpsOnly)
-    request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "intentshield-threats"})
+    urllib_request, https_only = _https_only()
+    opener = urllib_request.build_opener(https_only)
+    request = urllib_request.Request(url, headers={"Accept": "application/json", "User-Agent": "intentshield-threats"})
     with opener.open(request, timeout=timeout) as response:
         data = response.read(max_bytes + 1)
     if len(data) > max_bytes:
