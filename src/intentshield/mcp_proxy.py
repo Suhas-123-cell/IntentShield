@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import itertools
 import json
 from pathlib import Path
 import re
@@ -16,7 +17,7 @@ from .injection_classifier import InjectionClassifier
 from .judge import Judge
 from .mcp_inspect import (
     authority_values, distinctive_values, scan_description, scan_output, scan_output_collapsed, scan_server,
-    self_disclosure_fields, sourced_from, tool_text,
+    schema_text, self_disclosure_fields, sourced_from, tool_text,
 )
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
@@ -189,29 +190,44 @@ _SCHEMA_ANNOTATIONS = {
 _SAFE_TOOL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
-def _public_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Remove untrusted annotation text while preserving validation structure."""
+# JSON Schema keywords that carry validation structure (2020-12, plus draft-07's dependencies,
+# additionalItems and definitions, and OpenAPI's nullable). Anything else an upstream server adds,
+# x-* keys and unknown keywords included, is free text the agent would read unscanned.
+_SCHEMA_KEYWORDS = frozenset({
+    "type", "enum", "const", "properties", "patternProperties", "additionalProperties", "required",
+    "items", "prefixItems", "additionalItems", "contains", "minContains", "maxContains", "minItems",
+    "maxItems", "uniqueItems", "minLength", "maxLength", "pattern", "format", "minimum", "maximum",
+    "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minProperties", "maxProperties",
+    "dependentRequired", "dependentSchemas", "dependencies", "propertyNames", "allOf", "anyOf", "oneOf",
+    "not", "if", "then", "else", "$ref", "$defs", "definitions", "$schema", "$id", "$anchor",
+    "$dynamicRef", "$dynamicAnchor", "unevaluatedItems", "unevaluatedProperties", "contentEncoding",
+    "contentMediaType", "contentSchema", "nullable",
+})
+
+
+def _public_schema(schema: dict[str, Any], annotations: bool = False) -> dict[str, Any]:
+    """Validation structure only: an allowlist, so text in a keyword nobody scans never reaches
+    the agent. ``annotations`` keeps the ones ``tool_text`` scanned (transparent mode shows them)."""
     result: dict[str, Any] = {}
     schema_maps = {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
-    schema_values = {
-        "items", "additionalProperties", "contains", "not", "if", "then", "else",
-        "propertyNames", "unevaluatedItems", "unevaluatedProperties",
-    }
-    schema_lists = {"allOf", "anyOf", "oneOf", "prefixItems"}
+    schema_lists = {"allOf", "anyOf", "oneOf", "prefixItems", "items"}
     for key, value in schema.items():
-        if key in _SCHEMA_ANNOTATIONS or key.startswith("x-"):
+        if key in _SCHEMA_ANNOTATIONS:
+            if annotations:
+                result[key] = value
+        elif key not in _SCHEMA_KEYWORDS:
             continue
-        if key in schema_maps and isinstance(value, dict):
+        elif key in schema_maps and isinstance(value, dict):
             result[key] = {
-                name: _public_schema(child) if isinstance(child, dict) else child
+                name: _public_schema(child, annotations) if isinstance(child, dict) else child
                 for name, child in value.items()
             }
-        elif key in schema_values and isinstance(value, dict):
-            result[key] = _public_schema(value)
         elif key in schema_lists and isinstance(value, list):
             result[key] = [
-                _public_schema(child) if isinstance(child, dict) else child for child in value
+                _public_schema(child, annotations) if isinstance(child, dict) else child for child in value
             ]
+        elif isinstance(value, dict) and key not in {"const", "enum"}:
+            result[key] = _public_schema(value, annotations)
         else:
             result[key] = value
     return result
@@ -259,8 +275,9 @@ class MCPProxyRuntime:
         # Runs whose intent repeats a flagged output; the agent wrote that intent, not the user.
         self._untrusted_intents: set[str] = set()
         self._injection_seen = False
-        # run_id -> recipients, URLs, accounts and paths seen in any tool output.
-        self._observed: dict[str, set[str]] = {}
+        # Recipients, URLs, accounts and paths seen in any tool output, kept for the session
+        # like ``_tainted`` (a fresh run must not wash them) and bounded, oldest first out.
+        self._observed: dict[str, None] = {}
         self._classifier = (InjectionClassifier(config.injection_classifier_dir)
                             if config.injection_classifier_dir else None)
         if self._classifier and not self._classifier.ready:
@@ -401,6 +418,8 @@ class MCPProxyRuntime:
             # Untrusted text: scanned for poisoning; a reference to another
             # server's tool name is shadowing.
             text = tool_text(tool.description, tool.input_schema, tool.title)
+            if extra := schema_text(tool.input_schema):
+                text = f"{text}\n{extra}"
             own = {other.name for other in tools if other.server_id == tool.server_id}
             findings = scan_description(
                 text, {other.name for other in tools if other.server_id != tool.server_id} - own
@@ -448,11 +467,7 @@ class MCPProxyRuntime:
                 if result.is_error:
                     message = result.error.message if result.error else "Upstream MCP tool failed"
                     raise MCPRemoteToolError(message)
-                normalized_result = result.model_dump(mode="json")
-                if len(result.content) > self.config.max_result_content_blocks:
-                    raise MCPRemoteToolError("Upstream MCP result exceeded the content-block limit")
-                if len(json.dumps(normalized_result, separators=(",", ":")).encode()) > self.config.max_result_bytes:
-                    raise MCPRemoteToolError("Upstream MCP result exceeded the byte limit")
+                normalized_result = self._bounded(result)
                 return {
                     "trust": "UNTRUSTED_MCP_OUTPUT",
                     "upstream": normalized_result,
@@ -491,6 +506,14 @@ class MCPProxyRuntime:
                     f"Allowed MCP tool requires grounding_terms_by_tool: {qualified}"
                 )
         return registry
+
+    def _bounded(self, result: MCPCallResult) -> dict[str, Any]:
+        normalized = result.model_dump(mode="json")
+        if len(result.content) > self.config.max_result_content_blocks:
+            raise MCPRemoteToolError("Upstream MCP result exceeded the content-block limit")
+        if len(json.dumps(normalized, separators=(",", ":")).encode()) > self.config.max_result_bytes:
+            raise MCPRemoteToolError("Upstream MCP result exceeded the byte limit")
+        return normalized
 
     def _service(self) -> IntentShieldService:
         if self.service is None:
@@ -575,7 +598,7 @@ class MCPProxyRuntime:
             return ReasonCode.REVIEW_CLASSIFIER_FLAGGED
         # Detection is not the gate: a value the scanners missed still came from a tool.
         if self.config.review_output_sourced_arguments and sourced_from(
-            authority_values(call.arguments), self._observed.get(run_id, set()),
+            authority_values(call.arguments), self._observed.keys(),
             distinctive_values(user_intent),
         ):
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
@@ -591,15 +614,20 @@ class MCPProxyRuntime:
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
         upstream = result.get("upstream", result)
-        self._observed.setdefault(run_id, set()).update(authority_values(upstream))
+        self._observed.update(dict.fromkeys(authority_values(upstream)))
+        for stale in list(itertools.islice(self._observed, max(0, len(self._observed) - 50_000))):
+            del self._observed[stale]
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
         detector = None if findings else (
             "line_split_rules" if scan_output_collapsed(upstream) else self._semantic_flag(text, "output"))
-        outputs = self._outputs.setdefault(run_id, [])
-        outputs.append({"tool_name": call.tool_name, "text": text, "values": distinctive_values(upstream),
-                        "flagged": bool(findings or detector)})
-        del outputs[:-32]
+        if self._learner is not None:  # only learning links a reviewed call to the text it reused
+            outputs = self._outputs.setdefault(run_id, [])
+            outputs.append({"tool_name": call.tool_name, "text": text[:20_000],
+                            "values": distinctive_values(upstream), "flagged": bool(findings or detector)})
+            del outputs[:-32]
+            for stale in list(itertools.islice(self._outputs, max(0, len(self._outputs) - 64))):
+                del self._outputs[stale]
         if not findings:
             if detector:
                 self._injection_seen = True
@@ -648,9 +676,18 @@ class MCPProxyRuntime:
         self-disclosure parameters removed from the schema."""
         await self._refresh_catalog()
         withheld = "Description withheld by IntentShield: it may try to instruct the agent."
-        return [(tool.model_copy(update={"description": withheld}) if tool.qualified_name in self._suspect_tools
-                 else tool, self._visible_schemas[tool.qualified_name]) for tool in self._tools
-                if tool.qualified_name not in self._quarantined and tool.qualified_name not in self._drifted_tools]
+        shown = []
+        for tool in self._tools:
+            name = tool.qualified_name
+            if name in self._quarantined or name in self._drifted_tools:
+                continue
+            visible = self._visible_schemas[name]
+            if name in self._suspect_tools:  # a flagged tool keeps no free text at all
+                shown.append((tool.model_copy(update={"description": withheld, "title": None}),
+                              _public_schema(visible)))
+            else:
+                shown.append((tool, _public_schema(visible, annotations=True)))
+        return shown
 
     def _blocked_reason(self, name: str) -> str | None:
         if name in self._quarantined:
@@ -677,6 +714,7 @@ class MCPProxyRuntime:
             raise MCPRemoteToolError(f"Unknown tool {name}")
         call = self._redact(ToolCall(tool_name=name, arguments=arguments, schema_hash="transparent"))
         result = await self.upstreams[tool.server_id].call_tool(tool.name, call.arguments)
+        self._bounded(result)
         shown = result.model_dump(mode="json", include={"content", "structured_content"})
         return result, scan_output(shown) or scan_output_collapsed(shown)
 
