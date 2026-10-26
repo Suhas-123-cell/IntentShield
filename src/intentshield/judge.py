@@ -94,6 +94,44 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
     return None, error
 
 
+def _elide(text: str, cap: int, tail: float = 0.5) -> str:
+    """``text`` within ``cap`` characters, head and tail kept: a cut at the end would drop what
+    follows the padding."""
+    if len(text) <= cap:
+        return text
+    head = int(cap * (1 - tail))
+    return f"{text[:head]} …[{len(text) - cap} characters omitted]… {text[len(text) - (cap - head):]}"
+
+
+def _shrink(value: Any, cap: int) -> Any:
+    if isinstance(value, str):
+        return _elide(value, cap)
+    if isinstance(value, dict):
+        return {key: _shrink(child, cap) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_shrink(child, cap) for child in value]
+    return value
+
+
+def _call_payload(intent: str, tool: str, arguments: dict[str, Any], budget: int = 8_000) -> str:
+    """Tool and arguments always in view, whole JSON: a long session's prompts or a long argument
+    once pushed the tool and its recipient past a plain cut. Arguments get half the budget (long
+    strings elided in the middle), the user's messages the rest, most recent first in importance."""
+    cap = 4_000
+    while True:
+        shown = _shrink(arguments, cap)
+        if len(json.dumps(shown, ensure_ascii=False)) <= budget // 2 or cap <= 64:
+            break
+        cap //= 2
+    room = max(500, budget - len(json.dumps({"tool": tool[:200], "arguments": shown}, ensure_ascii=False)) - 40)
+    while True:  # escapes (a newline is two characters in JSON) count against the budget too
+        payload = json.dumps({"tool": tool[:200], "arguments": shown,
+                              "user_messages": _elide(intent, room, tail=0.75)}, ensure_ascii=False)
+        if len(payload) <= budget or room <= 500:
+            return payload
+        room -= len(payload) - budget
+
+
 class Judge:
     # Answers shared by every judge in the process: a proxy is rebuilt per run, tools are not.
     _answers: dict[str, dict[str, Any]] = {}
@@ -146,16 +184,15 @@ class Judge:
 
     def call(self, intent: str, tool: str, arguments: dict[str, Any]) -> str | None:
         """Why the call does not serve the user's request, or None (it does, or no opinion)."""
-        user = json.dumps({"user_messages": intent, "tool": tool, "arguments": arguments}, ensure_ascii=False)
-        answer = self._ask(CALL_PROMPT, user[:8000])
+        answer = self._ask(CALL_PROMPT, _call_payload(intent, tool, arguments))
         if answer and answer.get("verdict") == "inconsistent":
             return str(answer.get("reason") or "the call is not part of the user's request")[:300]
         return None
 
     def tool(self, name: str, description: str) -> str | None:
         """Why the description tries to instruct the agent, or None."""
-        answer = self._ask(TOOL_PROMPT, json.dumps({"tool": name, "description": description},
-                                                   ensure_ascii=False)[:8000])
+        answer = self._ask(TOOL_PROMPT, json.dumps({"tool": name[:200], "description": _elide(description, 7_600)},
+                                                   ensure_ascii=False))
         if answer and answer.get("verdict") == "unsafe":
             return str(answer.get("reason") or "the description tries to instruct the agent")[:300]
         return None

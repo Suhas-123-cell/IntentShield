@@ -254,7 +254,7 @@ def _explicitly_negates(intent: str, actions: set[str]) -> bool:
     return bool(
         re.search(
             rf"\b(?:do\s+not|don't|never|must\s+not|stop)\b[^.!?]{{0,80}}\b(?:{alternatives})\w*\b",
-            intent,
+            re.sub("[\u2018\u2019\u02bc\uff07\u2032]", "'", intent),  # "Don’t" negates like "Don't"
             re.I,
         )
     )
