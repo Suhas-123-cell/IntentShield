@@ -432,8 +432,9 @@ def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = 
     attacker's."""
     user = set(user)
     prefixes = tuple(item.rstrip("/") + "/" for item in user if "/" in item)
+    user_hosts = {root[0] for item in user if (root := _url_root(item))}
     roots = {root for url in tainted if url not in user and not url.startswith(prefixes)
-             if (root := _url_root(url))}
+             if (root := _url_root(url)) and (root[1] or root[0] not in user_hosts)}
     found: dict[str, str] = {}
     for value in values:
         if not (root := _url_root(value)):

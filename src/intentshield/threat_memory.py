@@ -341,9 +341,10 @@ class ThreatMemory:
         self._state = _State()
 
     def _connect(self) -> sqlite3.Connection:
-        db = sqlite3.connect(self.path, timeout=10, isolation_level=None, check_same_thread=False)
+        # Short: a hook must not stall on optional evidence; a write that cannot get the lock is reported.
+        db = sqlite3.connect(self.path, timeout=2, isolation_level=None, check_same_thread=False)
         db.row_factory = sqlite3.Row
-        db.execute("PRAGMA busy_timeout=10000")
+        db.execute("PRAGMA busy_timeout=2000")
         return db
 
     @contextmanager

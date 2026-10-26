@@ -410,7 +410,7 @@ intentshield-threats pack export > learned.json             # share what one ins
 `benchmarks/adaptive_learning.py` (offline, deterministic) replays attack campaigns with mechanical
 rewordings: with the attacker's infrastructure reused, the memory raised the catch rate from 0.67 to
 1.00; with fresh addresses per attempt, from 0.67 to 0.93 (fingerprints alone); a family the rules
-miss went from 0.00 to 0.67 after hot-installing the baseline pack. It flagged none of 1,753 benign
+miss went from 0.00 to 0.67 after hot-installing the baseline pack. It flagged none of 1,756 benign
 paragraphs. Read these as an upper bound: the attacks and the pack are self-authored, the rewordings
 are mechanical rather than an LLM's, and a full rewrite leaves too little wording to recognize
 (`tests/test_adaptive_integration.py` shows both cases). The memory adds about 5-25 ms to each hook

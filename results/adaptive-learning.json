@@ -311,11 +311,11 @@
         "domains": 17,
         "fingerprints": {
           "observed": 61,
-          "rejected": 18
+          "rejected": 13
         },
         "allowlist": 0,
         "benign": {
-          "builtin": 125,
+          "builtin": 141,
           "operator": 0
         },
         "ttl_days": 30.0
@@ -542,11 +542,11 @@
         "domains": 0,
         "fingerprints": {
           "observed": 61,
-          "rejected": 18
+          "rejected": 13
         },
         "allowlist": 0,
         "benign": {
-          "builtin": 125,
+          "builtin": 141,
           "operator": 0
         },
         "ttl_days": 30.0
@@ -646,7 +646,7 @@
     }
   },
   "benign": {
-    "n": 1753,
+    "n": 1756,
     "sources": {
       "fastapi": 45,
       "starlette": 19,
@@ -656,12 +656,12 @@
       "jsonschema": 45,
       "uvicorn": 17,
       "anyio": 168,
-      "project_docs": 305
+      "project_docs": 308
     },
     "scan_output_flagged": {
       "rate": 0.005,
       "caught": 8,
-      "n": 1753,
+      "n": 1756,
       "ci95": [
         0.002,
         0.009
@@ -670,7 +670,7 @@
     "check_text_before_learning": {
       "rate": 0.0,
       "caught": 0,
-      "n": 1753,
+      "n": 1756,
       "ci95": [
         0.0,
         0.002
@@ -679,7 +679,7 @@
     "check_text_after_learning": {
       "rate": 0.0,
       "caught": 0,
-      "n": 1753,
+      "n": 1756,
       "ci95": [
         0.0,
         0.002
@@ -689,13 +689,13 @@
     "baseline_pack_flagged": {
       "rate": 0.0,
       "caught": 0,
-      "n": 1753,
+      "n": 1756,
       "ci95": [
         0.0,
         0.002
       ]
     },
-    "fingerprints_rejected_by_gate": 36,
+    "fingerprints_rejected_by_gate": 26,
     "examples_after_learning": [],
     "examples_pack": []
   },
