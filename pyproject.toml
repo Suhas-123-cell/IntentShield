@@ -43,3 +43,6 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/intentshield"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"configs/policy.json" = "intentshield/configs/policy.json"

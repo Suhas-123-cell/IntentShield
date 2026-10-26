@@ -11,7 +11,7 @@ from typing import Any, Callable
 from .detector import SecuritySignals, compute_security_signals
 from .intent_classifier import DebertaGroundingAdapter, DebertaIntentClassifier
 from .models import Decision, GatewayResult, PolicyContext, ReasonCode, ToolCall
-from .policy import PolicyConfig, PolicyEngine
+from .policy import PolicyConfig, PolicyEngine, default_policy_path
 from .security_agents import (
     DetectionEvidence,
     SecurityAnalysisSupervisor,
@@ -74,7 +74,7 @@ class IntentShieldService:
 
     @classmethod
     def default(cls, database_path: str | Path = "intentshield.db") -> "IntentShieldService":
-        config_path = Path(__file__).parents[2] / "configs" / "policy.json"
+        config_path = default_policy_path()
         return cls(Storage(database_path), PolicyConfig.from_file(config_path))
 
     def create_run(self, user_intent: str, scenario: str | None = None) -> str:
