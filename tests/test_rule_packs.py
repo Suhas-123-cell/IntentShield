@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -235,11 +236,11 @@ def test_update_is_https_only_and_size_capped(monkeypatch):
             assert request.full_url.startswith("https://")
             return Response()
 
-    monkeypatch.setattr(rule_packs.urllib.request, "build_opener", lambda *handlers: Opener())
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *handlers: Opener())
     with pytest.raises(PackError, match="larger"):
         rule_packs.fetch("https://packs.example/baseline.json", max_bytes=100)
     with pytest.raises(PackError, match="away from HTTPS"):
-        rule_packs._HttpsOnly().redirect_request(None, None, 302, "Found", {}, "http://evil.example/p.json")
+        rule_packs._https_only()[1]().redirect_request(None, None, 302, "Found", {}, "http://evil.example/p.json")
 
 
 def test_cli_verifies_signs_installs_and_lists(tmp_path, capsys, monkeypatch):

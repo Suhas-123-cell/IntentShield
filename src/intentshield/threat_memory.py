@@ -279,7 +279,14 @@ class _State:
     prints: dict[str, tuple[frozenset[int], str, float]] = field(default_factory=dict)
     index: dict[int, list[str]] = field(default_factory=dict)
     allow: frozenset[str] = frozenset()
-    benign: tuple[frozenset[int], ...] = ()
+    benign_texts: tuple[str, ...] = ()  # the operator's; shingled only when something is learned
+    benign_cache: tuple[frozenset[int], ...] | None = None
+
+    @property
+    def benign(self) -> tuple[frozenset[int], ...]:
+        if self.benign_cache is None:
+            self.benign_cache = benign_shingles() + tuple(map(text_shingles, self.benign_texts))
+        return self.benign_cache
 
 
 def strongest(matches: Iterable[ThreatMatch | None]) -> ThreatMatch | None:
@@ -317,7 +324,7 @@ class ThreatMemory:
         self._lock = threading.Lock()
         self._reader = self._connect()
         self._version: int | None = None
-        self._state = _State(benign=benign_shingles())
+        self._state = _State()
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=10, isolation_level=None, check_same_thread=False)
@@ -372,8 +379,7 @@ class ThreatMemory:
             for item in prints:
                 state.index.setdefault(item, []).append(row["id"])
         state.allow = frozenset(r[0] for r in self._reader.execute("SELECT value FROM threat_allowlist"))
-        state.benign = benign_shingles() + tuple(
-            text_shingles(r[0]) for r in self._reader.execute("SELECT text FROM threat_benign"))
+        state.benign_texts = tuple(r[0] for r in self._reader.execute("SELECT text FROM threat_benign"))
         return state
 
     def _live(self, status: str, last_seen: float) -> bool:
