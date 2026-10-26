@@ -33,7 +33,9 @@ def test_unsafe_or_trivial_patterns_are_refused(pattern, problem):
 
 def test_bounded_and_optional_groups_are_allowed():
     assert safety_problem(GOOD) is None
-    assert safety_problem(r"(\w+\s){3}customer\s+list") is None
+    assert safety_problem(r"send\s+(\w+\s){3}customer\s+list") is None
+    # Unanchored it starts with a wildcard that search() retries from every position: quadratic.
+    assert safety_problem(r"(\w+\s){3}customer\s+list") == "starts with a wildcard"
     assert safety_problem(r"send\s+\d+\s+files\s+to\s+the\s+vendor") is None  # \d and {3} are not literal numbers
 
 

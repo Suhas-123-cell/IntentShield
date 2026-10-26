@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from .mcp_inspect import (authority_values, distinctive_values, rank_tools, scan_output, scan_output_collapsed,
-                          self_disclosure_fields, sourced_from)
+                          self_disclosure_fields, sourced_from, traced_urls)
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 _READ = frozenset({
@@ -144,13 +144,16 @@ class HarnessGuard:
         injected = scan_output(arguments, trusted=intent)
         if injected:
             return Verdict("deny", f"Arguments carry injected instructions ({', '.join(injected)}).", findings=injected)
-        untrusted = (distinctive_values(arguments) - distinctive_values(intent)) & taint
+        values = distinctive_values(arguments) - distinctive_values(intent)
+        traced = traced_urls(values, taint)
+        untrusted = values & taint | {url for url, how in traced.items() if how == "path"}
         if untrusted:
             return Verdict("deny", "An argument value came from a tool output that contained injected "
                                    f"instructions, not from the user: {', '.join(sorted(untrusted)[:3])}.")
         observed = {row[0] for row in self.db.execute("SELECT value FROM observed WHERE session = ?", (session,))}
         # Observed holds authority values from every output, and every value from flagged ones.
-        sourced = sourced_from(distinctive_values(arguments), observed, distinctive_values(intent))
+        sourced = sourced_from(distinctive_values(arguments), observed, distinctive_values(intent)) | {
+            url for url, how in traced.items() if how == "host"}
         if sourced and self.review != "never":
             # The scanners may have missed the output it came from; the user decides.
             verdict.decision = "ask"

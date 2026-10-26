@@ -17,7 +17,7 @@ from .injection_classifier import InjectionClassifier
 from .judge import Judge
 from .mcp_inspect import (
     authority_values, distinctive_values, scan_description, scan_output, scan_output_collapsed, scan_server,
-    schema_text, self_disclosure_fields, sourced_from, tool_text,
+    schema_text, self_disclosure_fields, sourced_from, tool_text, traced_urls,
 )
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
@@ -589,6 +589,12 @@ class MCPProxyRuntime:
             return self._suspect_tools.get(call.tool_name)
         if values & self._tainted:
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        # A URL built on a tainted one: the injected address with the data appended.
+        traced = traced_urls(values, self._tainted)
+        if "path" in traced.values():
+            return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        if traced:
+            return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE

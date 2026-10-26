@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from re import _constants as _C, _parser
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -60,6 +61,103 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+_REPEATS = {_C.MAX_REPEAT, _C.MIN_REPEAT, getattr(_C, "POSSESSIVE_REPEAT", None)} - {None}
+_NARROW = {_C.CATEGORY_SPACE, _C.CATEGORY_DIGIT}  # cannot run into the letters of the words around them
+
+
+def _wide(body: list) -> bool:
+    """A repeated item that can swallow words: ``.``, ``\\w``, ``\\S``, a negated class."""
+    if len(body) != 1:
+        return True
+    op, av = body[0]
+    if op is _C.LITERAL:
+        return False
+    if op is _C.IN and not any(o is _C.NEGATE for o, _ in av):
+        return any(o is _C.CATEGORY and a not in _NARROW for o, a in av)
+    return True
+
+
+def _kinds(item: tuple) -> set[str] | None:
+    """Coarse character kinds of one item (word, space, punctuation); None when unknown."""
+    op, av = item
+    chars: list[Any] = [chr(av)] if op is _C.LITERAL else []
+    if op is _C.IN and not any(o is _C.NEGATE for o, _ in av):
+        for o, a in av:
+            if o is _C.LITERAL:
+                chars.append(chr(a))
+            elif o is _C.CATEGORY and a in (_C.CATEGORY_WORD, _C.CATEGORY_DIGIT):
+                chars.append("w")
+            elif o is _C.CATEGORY and a is _C.CATEGORY_SPACE:
+                chars.append(" ")
+            else:
+                return None
+    elif op is not _C.LITERAL:
+        return None
+    return {"w" if c == "w" or c.isalnum() or c == "_" else "s" if c.isspace() else "p" for c in chars}
+
+
+def _delimited(body: list) -> bool:
+    """Each repeat in a short bounded group is followed by an item it cannot match (``(\\w+\\s){3}``),
+    so the group splits one way only."""
+    if len(body) == 1 and body[0][0] is _C.SUBPATTERN:
+        body = list(body[0][1][-1])
+    for i, (op, av) in enumerate(body):
+        if op in _REPEATS and av[1] > 1:
+            if i + 1 >= len(body) or len(av[2]) != 1 or body[i + 1][0] in _REPEATS:
+                return False
+            mine, after = _kinds(av[2][0]), _kinds(body[i + 1])
+            if mine is None or after is None or mine & after:
+                return False
+        elif op in _REPEATS or op in (_C.SUBPATTERN, _C.BRANCH):
+            return False
+    return True
+
+
+def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
+    for op, av in items:
+        if op in _REPEATS:
+            low, high, body = av
+            if high > 1:
+                if inside:
+                    return "nested quantifier"
+                if any(o is _C.BRANCH or (o is _C.SUBPATTERN and any(x is _C.BRANCH for x, _ in a[-1]))
+                       for o, a in body):
+                    return "repeated alternation"
+                if high == _C.MAXREPEAT and _wide(list(body)):
+                    wide[0] += 1
+                if high <= 10 and _delimited(list(body)):
+                    continue
+            if problem := _backtracking(list(body), inside or high > 1, wide):
+                return problem
+        elif op is _C.SUBPATTERN:
+            if problem := _backtracking(list(av[-1]), inside, wide):
+                return problem
+        elif op is _C.BRANCH:
+            for branch in av[1]:
+                if problem := _backtracking(list(branch), inside, wide):
+                    return problem
+        elif op in (_C.ASSERT, _C.ASSERT_NOT, _C.GROUPREF, getattr(_C, "GROUPREF_EXISTS", None),
+                    getattr(_C, "ATOMIC_GROUP", None)):
+            return "lookaround or backreference"
+    return None
+
+
+def backtracking_problem(pattern: str) -> str | None:
+    """Catastrophic or quadratic backtracking, read from the parsed pattern rather than its text: a
+    repeat inside a repeat (unless a short bounded group splits one way only), a repeated
+    alternation, more than one unbounded wildcard (``forward.*?to.*?subject`` takes seconds on two
+    thousand characters of its own words), or a leading wildcard, which ``search`` retries from
+    every position."""
+    tree = list(_parser.parse(pattern, re.IGNORECASE))
+    wide = [0]
+    if problem := _backtracking(tree, False, wide):
+        return problem
+    first = next((item for item in tree if item[0] is not _C.AT), None)
+    if first and first[0] in _REPEATS and first[1][1] > 1 and _wide(list(first[1][2])):
+        return "starts with a wildcard"
+    return f"{wide[0]} unbounded wildcards" if wide[0] > 1 else None
+
+
 def safety_problem(pattern: str) -> str | None:
     """Why ``pattern`` may not be used, or None."""
     if not isinstance(pattern, str) or not pattern.strip():
@@ -74,6 +172,8 @@ def safety_problem(pattern: str) -> str | None:
         re.compile(pattern, re.IGNORECASE)
     except re.error as exc:
         return f"does not compile: {exc}"
+    if problem := backtracking_problem(pattern):
+        return problem
     if _SPECIFIC.search(pattern) or re.search(r"[0-9]", _NOT_LITERAL.sub("", pattern)):
         return "names an address, URL, domain or number"
     literal = sum(1 for token in _LITERAL.findall(pattern) if len(token) == 1)
