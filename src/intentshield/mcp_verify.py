@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -17,6 +18,7 @@ from typing import Any
 from dotenv import load_dotenv
 from jsonschema import Draft202012Validator
 from mcp import Client, StdioServerParameters
+from mcp.client.stdio import get_default_environment
 
 from .mcp_proxy import MCPProxyConfig
 from .mcp_upstream import _credential_shaped_name
@@ -564,7 +566,13 @@ async def verify_mcp(
     if verification_mode == "in_process_preflight":
         target: Any = create_proxy_mcp_server(config)
     elif verification_mode == "stdio_wire":
+        # The child starts with the SDK's few safe variables; pass on only the credentials the
+        # config names, never the whole environment.
+        names = {name for upstream in config.upstream_configs
+                 for name in (*upstream.env_from_env.values(), *upstream.headers_from_env.values())}
+        names |= {"GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} if config.judge or config.prompt_guard else set()
         target = StdioServerParameters(
+            env={**get_default_environment(), **{name: os.environ[name] for name in names if name in os.environ}},
             command=sys.executable,
             args=[
                 "-m",
