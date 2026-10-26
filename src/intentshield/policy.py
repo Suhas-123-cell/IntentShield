@@ -10,6 +10,12 @@ from .models import Decision, PolicyContext, ReasonCode
 from .tools import ToolSpec, catch_all_destination, destination_allowed
 
 
+def default_policy_path() -> Path:
+    """The bundled policy: inside the package when installed from a wheel, else the repo's configs/."""
+    packaged = Path(__file__).with_name("configs") / "policy.json"
+    return packaged if packaged.exists() else Path(__file__).parents[2] / "configs" / "policy.json"
+
+
 class PolicyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

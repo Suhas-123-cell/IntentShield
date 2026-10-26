@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .models import Decision, ToolCall
-from .policy import PolicyConfig
+from .policy import PolicyConfig, default_policy_path
 from .service import IntentShieldService
 from .storage import Storage
 from .tools import ToolSpec, build_registry, canonical_json
@@ -173,7 +173,7 @@ def make_schema_only(registry: dict[str, ToolSpec]) -> Defense:
 
 
 def make_intentshield(workdir: Path) -> tuple[Defense, IntentShieldService]:
-    config_path = Path(__file__).parents[2] / "configs" / "policy.json"
+    config_path = default_policy_path()
     service = IntentShieldService(Storage(workdir / "eval.db"), PolicyConfig.from_file(config_path))
 
     def defense(case: Case) -> Decision:
