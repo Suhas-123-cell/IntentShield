@@ -265,3 +265,56 @@ def test_cli_verifies_signs_installs_and_lists(tmp_path, capsys, monkeypatch):
     assert run("pack", "export")["format"] == rule_packs.FORMAT
     assert len(run("pack", "remove", "test")["removed"]) == 2
     assert not os.path.exists(tmp_path / "threat-packs" / "test.json")
+
+
+def test_a_hostile_file_is_reported_and_never_raises_out_of_load_or_refresh(tmp_path):
+    directory = tmp_path / "packs"
+    write(directory / "test.json", sign(pack(rules=[NEW_RULE]), KEY))
+    packs = PackSet(directory, TRUST, interval=0)
+    memory = ThreatMemory(tmp_path / "t.db", packs=packs)
+    odd = sign(pack(version=2), KEY)
+    odd["signature"]["value"] = "é" * 64  # hmac.compare_digest raises TypeError on a non-ASCII str
+    with pytest.raises(PackError, match="does not verify"):
+        verify(odd, TRUST)
+    write(directory / "odd.json", odd)
+    (directory / "deep.json").write_text("[" * 200_000)  # RecursionError in json.loads
+    assert memory.check_text(WIRE) == ["pack:quarterly_wire_redirect"]
+    assert memory.check_values({"a@b.invalid"}) is None
+    errors = packs.status()["errors"]
+    assert "RecursionError" in errors["deep.json"] and "does not verify" in errors["odd.json"]
+    assert PackSet(directory, TRUST).packs["test"].version == 1  # and on a fresh start
+
+
+def test_a_signature_by_an_unknown_key_is_refused_even_when_unverified_packs_are_allowed():
+    data = sign(pack(rules=[NEW_RULE]), b"someone else's key", key_id="other")
+    for trust in (TRUST, Trust(hmac_keys={"default": KEY}, allow_unverified=True), Trust(allow_unverified=True)):
+        with pytest.raises(PackError, match="unknown hmac key"):
+            verify(data, trust)
+    ed = {**pack(), "signature": {"alg": "ed25519", "key_id": "nobody", "value": "AAAA"}}
+    with pytest.raises(PackError, match="unknown ed25519 key"):
+        verify(ed, Trust(allow_unverified=True))
+    assert verify(data, Trust(pins=frozenset({digest(data)}))) == "pin"  # the operator pinned this exact body
+
+
+def test_an_unverified_pack_never_replaces_a_verified_one_or_reaches_the_good_copies(tmp_path):
+    directory = tmp_path / "packs"
+    data = baseline()
+    pinned = Trust(pins=frozenset({digest(data)}))
+    install(data, directory, pinned)
+    evil = pack(name="baseline", version=2)
+    for trust in (Trust(allow_unverified=True), Trust(pins=pinned.pins, allow_unverified=True)):
+        with pytest.raises(PackError, match="cannot replace the verified"):
+            install(evil, directory, trust)
+    assert rule_packs.read_pack(directory / "baseline.json") == data
+    write(directory / "baseline.json", evil)  # dropped in by hand while a loose process runs
+    loose = PackSet(directory, Trust(pins=pinned.pins, allow_unverified=True), interval=0)
+    assert loose.packs["baseline"].trusted and "cannot replace" in loose.status()["errors"]["baseline.json"]
+    assert PackSet(directory, pinned).packs["baseline"].version == data["version"]  # restart, normal trust
+    install(pack(), directory, Trust(allow_unverified=True))
+    PackSet(directory, Trust(allow_unverified=True))
+    assert (directory / "test.json").exists() and not (directory / ".good" / "test.json").exists()
+
+
+def test_pack_rules_read_a_bounded_text(tmp_path):
+    packs = PackSet(write(tmp_path / "packs" / "test.json", sign(pack(rules=[NEW_RULE]), KEY)).parent, TRUST)
+    assert packs.check_text(WIRE, frozenset()) and not packs.check_text("x " * 15_000 + WIRE, frozenset())
