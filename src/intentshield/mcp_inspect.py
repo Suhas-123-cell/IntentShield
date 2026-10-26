@@ -167,6 +167,55 @@ def readable(text: str) -> str:
     return _normalize("\n".join([text, *_decoded(text)]))
 
 
+def leaf_text(value: Any) -> str:
+    """The keys, strings and numbers of a structured value, one per line, in order: what a model
+    reads. JSON encoding is not that text: it turns a line break into a literal backslash-n (so
+    ``new\\ntask:`` loses its word boundary) and every non-ASCII character into an escape."""
+    if isinstance(value, str):
+        return value
+    parts: list[str] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, dict):
+            stack.extend(reversed([part for pair in item.items() for part in pair]))
+        elif isinstance(item, (list, tuple)):
+            stack.extend(reversed(item))
+        elif isinstance(item, (int, float)) and not isinstance(item, bool):
+            parts.append(str(item))
+    return "\n".join(parts)
+
+
+def _surface(value: Any) -> str:
+    """Scan text of any value: a string as is; a structure as its leaves and its JSON, so a rule
+    that matched the JSON layout before still does."""
+    if isinstance(value, str):
+        return value
+    return f"{leaf_text(value)}\n{json.dumps(value, ensure_ascii=False, default=str)}"
+
+
+def argument_surface(value: Any) -> str:
+    """One line of JSON with every key and string normalized as the rules read it (decoded,
+    NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed). The gateway's
+    argument rules match this instead of ``canonical_json``, which stays the hashing form."""
+    def clean(item: Any) -> Any:
+        if isinstance(item, str):
+            return " ".join(readable(item).split())
+        if isinstance(item, dict):
+            return {clean(str(key)): clean(child) for key, child in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [clean(child) for child in item]
+        return item
+    return json.dumps(clean(value), sort_keys=True, ensure_ascii=False, default=str)
+
+
+def normalized_intent(text: str) -> str:
+    """The user's request as the argument rules compare against it."""
+    return " ".join(_normalize(text).lower().split())
+
+
 def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "") -> list[str]:
     text = readable(text)
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
@@ -195,7 +244,7 @@ def tool_text(description: str | None, schema: dict[str, Any] | None = None,
                 elif key in {"description", "$comment"} and isinstance(value, str):
                     parts.append(value)
                 elif key in {"examples", "default", "enum"}:
-                    parts.append(json.dumps(value))
+                    parts.append(_surface(value))
                 elif key == "properties" and isinstance(value, dict):
                     for name, spec in value.items():
                         visit(spec, str(name))
@@ -260,8 +309,7 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
 
 
 def scan_output(value: Any, trusted: str = "") -> list[str]:
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    return _scan(text, _OUTPUT_RULES, trusted)
+    return _scan(_surface(value), _OUTPUT_RULES, trusted)
 
 
 # The lookbehinds start a match only where a run begins; without them findall retries
@@ -278,7 +326,7 @@ _VALUE_PATTERNS = (
 
 def distinctive_values(value: Any, patterns: tuple[re.Pattern[str], ...] = _VALUE_PATTERNS) -> set[str]:
     """Values specific enough that their source can be traced: emails, URLs, accounts, paths, ids."""
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    text = leaf_text(value)
     found: set[str] = set()
     for pattern in patterns:
         for match in pattern.findall(text):

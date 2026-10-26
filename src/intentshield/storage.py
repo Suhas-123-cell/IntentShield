@@ -92,6 +92,8 @@ class Storage:
                 db.execute("ALTER TABLE approvals ADD COLUMN call_index INTEGER NOT NULL DEFAULT 1")
             if "result_json" not in approval_columns:
                 db.execute("ALTER TABLE approvals ADD COLUMN result_json TEXT")
+            if "reasons_json" not in approval_columns:
+                db.execute("ALTER TABLE approvals ADD COLUMN reasons_json TEXT")
             reservation_columns = {
                 row[1] for row in db.execute("PRAGMA table_info(idempotency_reservations)").fetchall()
             }
@@ -174,10 +176,10 @@ class Storage:
         with self.connect() as db:
             db.execute(
                 """INSERT INTO approvals(id,run_id,tool_name,args_json,call_fingerprint,call_json,call_index,
-                   expires_at,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                   expires_at,status,created_at,reasons_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (approval["id"], approval["run_id"], approval["tool_name"], approval["args_json"],
                  approval["call_fingerprint"], approval["call_json"], approval["call_index"],
-                 approval["expires_at"], "PENDING", utc_now()),
+                 approval["expires_at"], "PENDING", utc_now(), json.dumps(approval.get("reasons", []))),
             )
 
     def get_approval(self, approval_id: str) -> dict[str, Any] | None:
@@ -205,12 +207,16 @@ class Storage:
         return json.loads(row["result_json"])
 
     def list_approvals(self, status: str | None = None) -> list[dict[str, Any]]:
+        # The operator decides with the user's request and the reasons for review in view.
+        query = ("SELECT approvals.*, runs.user_intent AS request FROM approvals "
+                 "JOIN runs ON runs.id = approvals.run_id")
         with self.connect() as db:
             if status:
-                rows = db.execute("SELECT * FROM approvals WHERE status=? ORDER BY created_at DESC", (status,)).fetchall()
+                rows = db.execute(f"{query} WHERE approvals.status=? ORDER BY approvals.created_at DESC",
+                                  (status,)).fetchall()
             else:
-                rows = db.execute("SELECT * FROM approvals ORDER BY created_at DESC").fetchall()
-        return [dict(row) for row in rows]
+                rows = db.execute(f"{query} ORDER BY approvals.created_at DESC").fetchall()
+        return [{**dict(row), "reasons": json.loads(row["reasons_json"] or "[]")} for row in rows]
 
     def decide_approval(self, approval_id: str, status: str) -> bool:
         with self.connect() as db:

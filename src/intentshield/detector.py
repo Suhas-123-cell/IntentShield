@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .models import ToolCall
-from .tools import canonical_json
+from .mcp_inspect import argument_surface
 
 
 class SecuritySignals(BaseModel):
@@ -19,7 +19,8 @@ _INJECTION_PATTERNS = (
     r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?",
     r"(?:system|developer)\s+(?:prompt|message|instructions?)",
     r"(?:reveal|steal|exfiltrat|leak|upload)\w*\s+(?:the\s+)?(?:secret|credential|token|password|data)",
-    r"(?:send|forward|email)\s+.*(?:attacker|evil|unauthori[sz]ed)",
+    # A bounded gap: ``.*`` here went quadratic on long arguments.
+    r"(?:send|forward|email)\b[^.!?]{0,120}\b(?:attacker|evil|unauthori[sz]ed)",
     r"\bexfiltrat(?:e|ion|ing)\b",
 )
 
@@ -82,7 +83,7 @@ def compute_security_signals(user_intent: str, call: ToolCall, *, mutation: bool
     This conservative heuristic is the offline MVP detector boundary. A local ML
     detector may replace its internals later, but callers cannot provide scores.
     """
-    content = f"{call.tool_name}\n{canonical_json(call.arguments)}".lower()
+    content = f"{call.tool_name}\n{argument_surface(call.arguments)}".lower()
     hits = sum(bool(re.search(pattern, content)) for pattern in _INJECTION_PATTERNS)
     injection = min(0.99, 0.05 + 0.47 * hits) if hits else 0.02
     alignment = _alignment(user_intent, call.tool_name, call.arguments)

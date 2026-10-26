@@ -7,6 +7,7 @@ FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY . .
-RUN uv sync --extra dev --frozen
+RUN uv sync --extra dev --frozen && useradd --create-home intentshield && chown -R intentshield /app
+USER intentshield
 ENV PATH="/app/.venv/bin:$PATH" INTENTSHIELD_INTENT_MODEL_DIR=/nonexistent
 CMD ["intentshield-mcp-verify", "--config", "configs/mcp-proxy.demo.json", "--stdio"]
