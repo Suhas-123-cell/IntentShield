@@ -27,14 +27,15 @@ has a digest the operator pinned (``sha256:<hex>``), or carries a ``signature`` 
 key the operator holds, or an Ed25519 signature for a public key the operator configured (only when
 the ``cryptography`` package is importable; otherwise such a pack is refused with that reason). A
 verified pack is trusted. Unverified packs are refused unless the operator opts in
-(``allow_unverified``), and then load as review-only; a signature that does not verify is refused
-always. Versions only move forward: a pack older than the one loaded (a validly signed replay), or the
+(``allow_unverified``), and then load as review-only and never replace a verified pack; a signature
+that does not verify, or names a key the operator does not hold, is refused always unless the digest is
+pinned. Versions only move forward: a pack older than the one loaded (a validly signed replay), or the
 same version with other content, is refused.
 
 Hot reload. ``PackSet.refresh`` stats the pack directory at most every ``interval`` seconds and reloads
 changed files. A file that fails to parse, verify or move forward is reported in ``status`` and the
-last good version stays loaded; a copy of every accepted pack is kept in ``.good/`` so a restart after
-tampering still starts from the last good pack. Deleting a file does not unload it until restart; the
+last good version stays loaded; a copy of every accepted verified pack is kept in ``.good/`` so a restart
+after tampering still starts from the last good pack. Deleting a file does not unload it until restart; the
 CLI's ``pack remove`` deletes the good copy too.
 
 ``pack update --url`` is opt-in, HTTPS only (redirects too), size-capped, and installs only what
@@ -53,7 +54,7 @@ import re
 import tempfile
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -121,40 +122,48 @@ class Trust:
         return cls(keys, public, frozenset(pins), **extra)
 
 
+def _signed_by(signature: Any, pack: dict[str, Any], trust: Trust) -> str:
+    """The key that made ``signature``; raises PackError for any signature that does not verify."""
+    if not isinstance(signature, dict) or not isinstance(signature.get("value"), str):
+        raise PackError("malformed signature")
+    alg, key_id, value = signature.get("alg"), str(signature.get("key_id", "default")), signature["value"]
+    bad = PackError("signature does not verify: the pack was changed or signed with another key")
+    if alg == "hmac-sha256":
+        if (key := trust.hmac_keys.get(key_id)) is None:
+            raise PackError(f"signed with unknown hmac key {key_id!r}")
+        expected = hmac.new(key, body(pack), hashlib.sha256).hexdigest().encode()
+        if not hmac.compare_digest(expected, value.lower().encode("utf-8", "replace")):
+            raise bad
+        return f"hmac:{key_id}"
+    if alg == "ed25519":
+        if (key := trust.ed25519_keys.get(key_id)) is None:
+            raise PackError(f"signed with unknown ed25519 key {key_id!r}")
+        if (ed25519 := _ed25519()) is None:
+            raise PackError("ed25519 signatures need the 'cryptography' package")
+        try:
+            ed25519.Ed25519PublicKey.from_public_bytes(key).verify(base64.b64decode(value, validate=True), body(pack))
+        except Exception as exc:  # InvalidSignature, bad key or encoding
+            raise bad from exc
+        return f"ed25519:{key_id}"
+    raise PackError(f"unknown signature algorithm {alg!r}")
+
+
 def verify(pack: dict[str, Any], trust: Trust) -> str | None:
     """How ``pack`` was verified (``pin``, ``hmac:<key id>``, ``ed25519:<key id>``), None for an
-    unverified pack the operator allowed; raises PackError otherwise."""
-    pinned = digest(pack)
-    signature = pack.get("signature")
-    if signature is not None:
-        if not isinstance(signature, dict):
-            raise PackError("malformed signature")
-        alg, key_id, value = signature.get("alg"), str(signature.get("key_id", "default")), signature.get("value")
-        if not isinstance(value, str):
-            raise PackError("malformed signature")
-        if alg == "hmac-sha256":
-            key = trust.hmac_keys.get(key_id)
-            if key is not None:
-                if not hmac.compare_digest(hmac.new(key, body(pack), hashlib.sha256).hexdigest(), value.lower()):
-                    raise PackError("signature does not verify: the pack was changed or signed with another key")
-                return f"hmac:{key_id}"
-        elif alg == "ed25519":
-            ed25519, key = _ed25519(), trust.ed25519_keys.get(key_id)
-            if key is not None and ed25519 is not None:
-                try:
-                    ed25519.Ed25519PublicKey.from_public_bytes(key).verify(base64.b64decode(value), body(pack))
-                except Exception as exc:  # InvalidSignature, bad key or encoding
-                    raise PackError("signature does not verify: the pack was changed or signed with another key") from exc
-                return f"ed25519:{key_id}"
-            if key is not None and pinned not in trust.pins:
-                raise PackError("ed25519 signatures need the 'cryptography' package")
-        else:
-            raise PackError(f"unknown signature algorithm {alg!r}")
-    if pinned in trust.pins:
+    unsigned pack the operator allowed; raises PackError otherwise. A signature that does not verify
+    (an unknown key included) is refused even under ``allow_unverified``, unless the digest is pinned."""
+    pinned = digest(pack) in trust.pins
+    if pack.get("signature") is not None:
+        try:
+            return _signed_by(pack["signature"], pack, trust)
+        except PackError:
+            if not pinned:
+                raise
+    if pinned:
         return "pin"
     if trust.allow_unverified:
         return None
-    raise PackError(f"unverified pack ({pinned}): pin its digest or sign it with a key the operator holds")
+    raise PackError(f"unverified pack ({digest(pack)}): pin its digest or sign it with a key the operator holds")
 
 
 @dataclass
@@ -333,13 +342,17 @@ class PackSet:
         try:
             raw = read_pack(path)
             pack = load(raw, self.trust)
-        except (OSError, ValueError, PackError) as exc:
+        except Exception as exc:  # also RecursionError from deep JSON: one bad file never stops the others
             if not quiet:
                 self.errors[path.name] = f"{type(exc).__name__}: {exc}; the last good version stays loaded"
             return False
         current = self.packs.get(pack.name)
         if current and current.digest == pack.digest:
             self.errors.pop(path.name, None)
+            return False
+        if current and current.trusted and not pack.trusted:
+            if not quiet:
+                self.errors[path.name] = f"an unverified pack cannot replace verified {pack.name}; refused"
             return False
         if current and pack.version <= current.version:
             if not quiet:
@@ -348,7 +361,7 @@ class PackSet:
             return False
         self.packs[pack.name] = pack
         self.errors.pop(path.name, None)
-        if not quiet:
+        if not quiet and pack.trusted:
             try:
                 _write_atomic(self.directory / ".good" / f"{pack.name}.json", raw)
             except OSError:
@@ -395,7 +408,7 @@ class PackSet:
                    containment: float = 0.6) -> list[dict[str, Any]]:
         """Pack rules and fingerprints that already ``readable`` text matches."""
         self.refresh()
-        collapsed = " ".join(norm.split())
+        collapsed = " ".join(norm.split())[:MAX_TEXT]  # as learned rules: matching time stays bounded
         found = [{"name": f"pack:{rule_id}", "pack": pack, "level": level}
                  for pack, rule_id, rule_target, level, pattern in self._rules
                  if rule_target == target and pattern.search(collapsed)]
@@ -422,7 +435,7 @@ def installed(directory: Path, name: str, trust: Trust) -> LoadedPack | None:
     for path in (directory / f"{name}.json", directory / ".good" / f"{name}.json"):
         try:
             pack = load(read_pack(path), trust)
-        except (OSError, ValueError, PackError):
+        except Exception:
             continue
         if best is None or pack.version > best.version:
             best = pack
@@ -437,8 +450,13 @@ def install(source: str | Path | dict[str, Any], directory: str | Path, trust: T
     current = installed(directory, pack.name, trust)
     if current is not None and pack.version <= current.version and pack.digest != current.digest:
         raise PackError(f"version {pack.version} does not move past installed version {current.version}")
+    good = directory / ".good" / f"{pack.name}.json"
+    # A good copy is a pack some process verified, maybe with keys or pins this command lacks.
+    if not pack.trusted and (good.exists() or installed(directory, pack.name, replace(trust, allow_unverified=False))):
+        raise PackError(f"an unverified pack cannot replace the verified pack {pack.name}; 'pack remove' it first")
     _write_atomic(directory / f"{pack.name}.json", raw)
-    _write_atomic(directory / ".good" / f"{pack.name}.json", raw)
+    if pack.trusted:  # the restart fallback holds verified packs only
+        _write_atomic(good, raw)
     return {"installed": str(directory / f"{pack.name}.json"), **pack.summary()}
 
 
