@@ -266,6 +266,44 @@ def tool_text(description: str | None, schema: dict[str, Any] | None = None,
     return "\n".join(p for p in parts if p)
 
 
+# Schema keywords whose values are structure, not text a model reads as prose.
+_STRUCTURAL = frozenset({"$ref", "$dynamicRef", "$schema", "$id", "$anchor", "$dynamicAnchor", "$vocabulary",
+                         "type", "format", "pattern", "contentEncoding", "contentMediaType", "required",
+                         "dependentRequired"})
+_READ_BY_TOOL_TEXT = frozenset({"title", "description", "$comment", "examples", "default", "enum"})
+_SCHEMA_MAPS = frozenset({"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"})
+
+
+def schema_text(schema: dict[str, Any] | None) -> str:
+    """Agent-visible schema text ``tool_text`` does not read: ``const``, ``x-*`` and unknown
+    keywords, and property names of four or more words ("ignore_previous_instructions_and_...").
+    Shorter names stay out: ``private_key`` or ``change_url_to`` name a field, not an instruction.
+    Kept apart from ``tool_text`` so ``scan_server`` joins only titles and descriptions."""
+    parts: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in _SCHEMA_MAPS and isinstance(value, dict):
+                    for name, child in value.items():
+                        words = re.sub(r"([a-z])([A-Z])", r"\1 \2", str(name)).replace("_", " ").replace("-", " ")
+                        if key == "properties" and len(words.split()) >= 4:
+                            parts.append(words)
+                        visit(child)
+                elif key in _STRUCTURAL or key in _READ_BY_TOOL_TEXT:
+                    continue
+                elif isinstance(value, (dict, list)) and not (key == "const" or str(key).startswith("x-")):
+                    visit(value)
+                else:
+                    parts.append(leaf_text(value))
+        elif isinstance(node, list):
+            for item in node:
+                visit(item)
+
+    visit(schema or {})
+    return "\n".join(part for part in parts if part)
+
+
 def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
     """Poisoning rule names for one tool's text; ``shadowing`` if it names another tool."""
     findings = _scan(text, _DESCRIPTION_RULES)
