@@ -369,13 +369,65 @@ numbers, and each seed now has its own canary (`95ef2c1`; the first run is in
 `\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
 each rule.
 
+## Adaptive threat memory and threat packs
+
+New attacks should not need a new release. Two mechanisms adapt a running install, both evidence
+only: they can send a call to review or, when the operator says so, block it; they never allow
+anything and never relax a built-in rule.
+
+- **Threat memory** (`threat_memory.py`, on by default). When the deterministic rules confirm an
+  injection, the memory keeps what the attack used: the addresses, URLs, accounts and paths it named,
+  their domain once an attacker rotates local parts across runs, word fingerprints of the injected
+  sentences (also with the trigger phrases blanked, so rewording exactly what the rules look for does
+  not hide the payload), and how often each server produced attacks. One SQLite file is shared by every
+  proxy and hook process, so what one session caught, the next session knows. Only rule-confirmed text
+  teaches it, never its own matches; values the user typed are never learned or held against them;
+  fingerprints that a benign gate corpus would contain are rejected; learned entries expire after 30
+  days. What it learned on its own only asks (`REVIEW_KNOWN_THREAT`, a hook "ask"); an entry the operator
+  confirms, or one from an imported feed or a trusted pack, blocks (`BLOCK_KNOWN_THREAT`). The file
+  defaults to `threats.db` next to the proxy or hook database (`threat_memory_path` in the proxy config,
+  `--threats` or `INTENTSHIELD_THREAT_DB` for hooks); turn it off with `threat_memory: false` or
+  `--no-threat-memory` / `INTENTSHIELD_THREAT_MEMORY=0`.
+- **Threat packs** (`rule_packs.py`). New detection rules, indicators and fingerprints shipped as a
+  JSON file. A running proxy or hook picks up a new or changed pack within seconds, without a restart.
+  A pack loads only if it verifies against a digest you pinned (`INTENTSHIELD_PACK_PINS`), your HMAC key
+  (`INTENTSHIELD_PACK_HMAC_KEY`) or a pinned Ed25519 key (`INTENTSHIELD_PACK_ED25519_KEYS`, needs
+  `cryptography`). Every rule must pass the same backtracking and breadth checks as learned rules and
+  must not match the benign gate corpus. A tampered or older pack is refused and the last good one stays
+  loaded. Point the proxy's `threat_packs_dir` or the hook's `--packs` / `INTENTSHIELD_THREAT_PACKS` at
+  a directory; `configs/threat-packs/baseline.json` is an example built from the replayed incidents.
+
+```bash
+intentshield-threats stats                                  # what the memory holds
+intentshield-threats confirm <id>                           # make a learned indicator block
+intentshield-threats allow partner.example                  # never flag this value or domain
+intentshield-threats import configs/threat-feed.example.json
+intentshield-threats pack --allow-unverified verify configs/threat-packs/baseline.json  # shows its digest
+intentshield-threats pack --dir ~/.intentshield/packs --pin sha256:<digest> install configs/threat-packs/baseline.json
+intentshield-threats pack export > learned.json             # share what one install learned
+```
+
+`benchmarks/adaptive_learning.py` (offline, deterministic) replays attack campaigns with mechanical
+rewordings: with the attacker's infrastructure reused, the memory raised the catch rate from 0.67 to
+1.00; with fresh addresses per attempt, from 0.67 to 0.93 (fingerprints alone); a family the rules
+miss went from 0.00 to 0.67 after hot-installing the baseline pack. It flagged none of 1,756 benign
+paragraphs. Read these as an upper bound: the attacks and the pack are self-authored, the rewordings
+are mechanical rather than an LLM's, and a full rewrite leaves too little wording to recognize
+(`tests/test_adaptive_integration.py` shows both cases). The memory adds about 5-25 ms to each hook
+process when small, and about 20 ms before a call and 40 ms after a result at its caps (5,000 indicators,
+500 fingerprints). Poisoning is bounded rather than prevented: an attacker can get a colleague's address
+learned, at review level; boilerplate after an injection is not learned (fingerprints are anchored on the
+injected sentence, and a bare trigger's payload is learned only when it names a destination).
+
 ## Production settings
 
 | Variable | Purpose |
 |---|---|
-| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP). Unset leaves it open on loopback. |
+| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP) and, in the web API, on proposing calls and reading runs (the operator token works there too; needs `INTENTSHIELD_CONTROL_TOKEN`). Unset leaves them open on loopback. |
 | `INTENTSHIELD_CONTROL_TOKEN` | Bearer token for the human approval endpoint. |
 | `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and, in proxy mode over Streamable HTTP, `/mcp` (default 120, `0` disables). In memory, per process. |
+| `INTENTSHIELD_THREAT_DB`, `INTENTSHIELD_THREAT_MEMORY`, `INTENTSHIELD_THREAT_PACKS` | Hook threat memory file, on/off switch (default on) and threat pack directory. |
+| `INTENTSHIELD_PACK_PINS`, `INTENTSHIELD_PACK_HMAC_KEY`, `INTENTSHIELD_PACK_ED25519_KEYS` | What a threat pack must verify against to load (see above). |
 | `INTENTSHIELD_LOG_LEVEL` | JSON log level (default `INFO`). Decision lines carry run, tool, decision and reason codes, never arguments. |
 
 `configs/policy.json` is validated strictly: unknown keys, a tool both allowed and prohibited, and catch-all destination patterns are rejected at startup.
@@ -1146,8 +1198,10 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   - optionally run the injection classifier on results the rules pass
     (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
     result hook, so it is off by default).
-  A hook that crashes denies the call. Built-in tools (shell, file edits) are left
-  to the harness.
+  A hook that crashes denies the call; for Claude Code the example config adds
+  `"onFailure": "block"` so a hook that is missing, times out or exits with another code
+  denies it too. MCP resource reads (`ReadMcpResourceTool`) are scanned like tool results.
+  Built-in tools (shell, file edits) are left to the harness.
 - **Transparent proxy** (`intentshield-mcp --transparent --config <file>`, stdio only)
   wraps each MCP server the harness launches. It shows the upstream's own tools, hides
   any whose description matches poisoning rules or that changed after connect (rug pull),
@@ -1162,7 +1216,7 @@ The example configs call `intentshield-hook` and `intentshield-mcp` by name, so 
 
 | harness | hook config (examples in `configs/harness/`) | rewrite arguments | ask the user |
 |---|---|---|---|
-| Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` | yes | yes |
+| Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` and the MCP resource tools | yes | yes |
 | Codex CLI | `~/.codex/config.toml`: same events | yes | no: asks become denials with a reason |
 | Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no: the agent is told to resend | yes |
 | Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no: denials with a reason |

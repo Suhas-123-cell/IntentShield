@@ -31,7 +31,7 @@ class RateLimiter:
         self._buckets.move_to_end(key)
         # Evict the least recently seen clients that are not throttled: dropping a throttled
         # bucket would hand that client a fresh burst, so a flood of new keys cannot reset one.
-        for _ in range(len(self._buckets)):
+        for _ in range(min(len(self._buckets), 64)):  # bounded: a request never pays for the whole map
             if len(self._buckets) <= self.max_clients:
                 break
             oldest, (left, seen) = next(iter(self._buckets.items()))

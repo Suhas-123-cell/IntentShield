@@ -442,3 +442,14 @@ def test_blank_intent_is_rejected_before_a_run_exists(service: IntentShieldServi
     with pytest.raises(ValueError):
         service.create_run(" \n\t")
     assert service.storage.list_runs(10) == []
+
+
+def test_concurrent_starts_on_an_old_database_do_not_race_the_migration(tmp_path: Path):
+    path = tmp_path / "old.db"
+    Storage(path)
+    with Storage(path).connect() as db:
+        db.execute("ALTER TABLE approvals DROP COLUMN reasons_json")
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda _: Storage(path), range(16)))
+    with Storage(path).connect() as db:
+        assert "reasons_json" in {row[1] for row in db.execute("PRAGMA table_info(approvals)")}

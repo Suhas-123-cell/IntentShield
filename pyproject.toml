@@ -36,6 +36,7 @@ intentshield-demo-mcp = "intentshield.demo_mcp_server:main"
 intentshield-mcp-verify = "intentshield.mcp_verify:main"
 intentshield-hook = "intentshield.harness:main"
 intentshield-eval = "intentshield.evaluation:main"
+intentshield-threats = "intentshield.threat_memory:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -43,3 +44,6 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/intentshield"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"configs/policy.json" = "intentshield/configs/policy.json"

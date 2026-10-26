@@ -44,6 +44,9 @@ class ReasonCode(StrEnum):
     BLOCK_SECURITY_AGENTS = "BLOCK_SECURITY_AGENTS"
     BLOCK_TOOL_QUARANTINED = "BLOCK_TOOL_QUARANTINED"
     BLOCK_UNTRUSTED_ARGUMENT_SOURCE = "BLOCK_UNTRUSTED_ARGUMENT_SOURCE"
+    # An indicator the threat memory holds (``threat_memory``): learned ones ask, confirmed ones block.
+    REVIEW_KNOWN_THREAT = "REVIEW_KNOWN_THREAT"
+    BLOCK_KNOWN_THREAT = "BLOCK_KNOWN_THREAT"
 
 
 class ToolCall(BaseModel):

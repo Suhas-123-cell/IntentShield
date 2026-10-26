@@ -14,7 +14,7 @@ import re
 import unicodedata
 from collections import Counter
 from typing import Any, Iterable
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 _I = re.I
 # Rules for text that should describe a tool, not instruct the agent.
@@ -75,7 +75,7 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"\s+(?:now\s+|immediately\s+|also\s+)?(?:send|forward|email|transfer|pay|delete|upload|share|grant|"
         r"post|write|call|invoke|execute|run|change|update|create|move)\b", _I)),
     ("new_task", re.compile(
-        r"\b(?:new|updated|additional|important)\s+(?:task|instructions?|directive)s?\s*[:\-]", _I)),
+        r"\b(?:new|updated|additional|important)\s+(?:task|instructions?|directive)s?[ \t]*[:\-]", _I)),
     ("exfiltration", re.compile(
         r"\b(?:send|forward|email|upload|post|transfer|leak|exfiltrate)\w*\b[^.\n]{0,80}?"
         r"\b(?:password|credential|secret|token|api\s*key|private\s+key|ssn|social\s+security|"
@@ -103,16 +103,25 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 
 # Cyrillic and Greek letters that render like Latin ones ("іgnоre"); NFKC keeps them.
+# Armenian, Latin-extended and small-capital look-alikes, and typographic apostrophes (a rule
+# reading "user's" must read "user’s" too).
 _CONFUSABLES = str.maketrans(
-    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ",
-    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX",
+    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ"
+    "օսոհցզɡɑɩıӏӀһʏᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡᴢ\u2018\u2019\u02bc\u2032\u00b4",
+    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX"
+    "ounhgqgaiiiihyabcdefghijklmnoprstuvwz" + "'" * 5,
 )
+# Default-ignorable code points outside category Cf, which a renderer shows as nothing: variation
+# selectors, the combining grapheme joiner, Hangul fillers, Mongolian selectors, tags.
+_IGNORABLE = re.compile("[\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u3164\ufe00-\ufe0f\uffa0"
+                        "\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]")
 
 
 def _normalize(text: str) -> str:
     """What an LLM reads, not what the bytes say: fold width variants, drop invisible
-    format characters (zero-width spaces, joiners, bidi marks), map look-alikes."""
-    text = unicodedata.normalize("NFKC", text)
+    characters (zero-width spaces, joiners, bidi marks, variation selectors), map look-alikes.
+    Only the rules read the result; the agent and the tool see the original."""
+    text = _IGNORABLE.sub("", unicodedata.normalize("NFKC", text))
     return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
 
 
@@ -137,6 +146,8 @@ def _decoded(text: str) -> list[str]:
     up to three layers deep so the rules see them; the original text is scanned too."""
     found: list[str] = []
     layer = [text]
+    # Each layer can multiply the copies (URL and HTML escapes of each other); cap the total.
+    budget = len(text) + 65_536
     for _ in range(3):
         next_layer = []
         for item in layer:
@@ -158,6 +169,9 @@ def _decoded(text: str) -> list[str]:
         if not next_layer:
             break
         found += next_layer
+        budget -= sum(map(len, next_layer))
+        if budget <= 0:
+            break
         layer = next_layer
     return found
 
@@ -189,22 +203,22 @@ def leaf_text(value: Any) -> str:
 
 
 def _surface(value: Any) -> str:
-    """Scan text of any value: a string as is; a structure as its leaves and its JSON, so a rule
-    that matched the JSON layout before still does."""
-    if isinstance(value, str):
-        return value
-    return f"{leaf_text(value)}\n{json.dumps(value, ensure_ascii=False, default=str)}"
+    """Scan text of any value: a string as is; a structure as its leaves."""
+    return leaf_text(value)
 
 
 def argument_surface(value: Any) -> str:
     """One line of JSON with every key and string normalized as the rules read it (decoded,
-    NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed). The gateway's
-    argument rules match this instead of ``canonical_json``, which stays the hashing form."""
+    NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed), objects as
+    sorted key-value pairs. The gateway's argument rules match this instead of ``canonical_json``, which stays the hashing form."""
     def clean(item: Any) -> Any:
         if isinstance(item, str):
             return " ".join(readable(item).split())
         if isinstance(item, dict):
-            return {clean(str(key)): clean(child) for key, child in item.items()}
+            # Pairs, not a dict: keys equal only after normalization ("value" and "valu\u200be")
+            # must not overwrite each other and drop a value before the rules see it.
+            pairs = [[clean(str(key)), clean(child)] for key, child in item.items()]
+            return sorted(pairs, key=lambda pair: json.dumps(pair, sort_keys=True, ensure_ascii=False))
         if isinstance(item, (list, tuple)):
             return [clean(child) for child in item]
         return item
@@ -216,8 +230,11 @@ def normalized_intent(text: str) -> str:
     return " ".join(_normalize(text).lower().split())
 
 
-def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "") -> list[str]:
+def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "",
+          collapse: bool = False) -> list[str]:
     text = readable(text)
+    if collapse:
+        text = " ".join(text.split())
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
     trusted = " ".join(_normalize(trusted).lower().split())
     return [name for name, pattern in rules
@@ -256,6 +273,44 @@ def tool_text(description: str | None, schema: dict[str, Any] | None = None,
 
     visit(schema or {})
     return "\n".join(p for p in parts if p)
+
+
+# Schema keywords whose values are structure, not text a model reads as prose.
+_STRUCTURAL = frozenset({"$ref", "$dynamicRef", "$schema", "$id", "$anchor", "$dynamicAnchor", "$vocabulary",
+                         "type", "format", "pattern", "contentEncoding", "contentMediaType", "required",
+                         "dependentRequired"})
+_READ_BY_TOOL_TEXT = frozenset({"title", "description", "$comment", "examples", "default", "enum"})
+_SCHEMA_MAPS = frozenset({"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"})
+
+
+def schema_text(schema: dict[str, Any] | None) -> str:
+    """Agent-visible schema text ``tool_text`` does not read: ``const``, ``x-*`` and unknown
+    keywords, and property names of four or more words ("ignore_previous_instructions_and_...").
+    Shorter names stay out: ``private_key`` or ``change_url_to`` name a field, not an instruction.
+    Kept apart from ``tool_text`` so ``scan_server`` joins only titles and descriptions."""
+    parts: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in _SCHEMA_MAPS and isinstance(value, dict):
+                    for name, child in value.items():
+                        words = re.sub(r"([a-z])([A-Z])", r"\1 \2", str(name)).replace("_", " ").replace("-", " ")
+                        if key == "properties" and len(words.split()) >= 4:
+                            parts.append(words)
+                        visit(child)
+                elif key in _STRUCTURAL or key in _READ_BY_TOOL_TEXT:
+                    continue
+                elif isinstance(value, (dict, list)) and not (key == "const" or str(key).startswith("x-")):
+                    visit(value)
+                else:
+                    parts.append(leaf_text(value))
+        elif isinstance(node, list):
+            for item in node:
+                visit(item)
+
+    visit(schema or {})
+    return "\n".join(part for part in parts if part)
 
 
 def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
@@ -300,7 +355,8 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
         return set()
     found = set()
     for name, spec in properties.items():
-        snake = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
+        # "systemPrompt", "system-prompt", "system.prompt" and "System Prompt" all ask the same.
+        snake = re.sub(r"[\s.\-]+", "_", re.sub(r"([a-z])([A-Z])", r"\1_\2", str(name)).strip())
         text = _normalize(" ".join(str(spec.get(k, "")) for k in ("title", "description"))) \
             if isinstance(spec, dict) else ""
         if _SELF_FIELD_NAME.match(snake) or _SELF_FIELD_TEXT.search(text):
@@ -310,6 +366,16 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
 
 def scan_output(value: Any, trusted: str = "") -> list[str]:
     return _scan(_surface(value), _OUTPUT_RULES, trusted)
+
+
+def scan_output_collapsed(value: Any, trusted: str = "") -> list[str]:
+    """The output rules on the text with every line break read as a space, for an output
+    ``scan_output`` passed. The rules stop at line ends to stay within one sentence, so one word per
+    line, or a list after a colon ("send me the following:\n- your password"), hides an instruction
+    from them. Weaker evidence: short UI or listing text ("Email\nPassword") reads as a sentence
+    here too, so a hit asks before a value from the output is used, like a learned detector's flag,
+    and never taints the session."""
+    return [f"collapsed_{name}" for name in _scan(_surface(value), _OUTPUT_RULES, trusted, collapse=True)]
 
 
 # The lookbehinds start a match only where a run begins; without them findall retries
@@ -342,6 +408,46 @@ def authority_values(value: Any) -> set[str]:
     (dates, amounts)."""
     return {item for item in distinctive_values(value, _VALUE_PATTERNS[:5])
             if not item.isdigit() or len(item) >= 9}
+
+
+def _url_root(value: str) -> tuple[str, str] | None:
+    if not value.startswith(("http://", "https://")):
+        return None
+    try:
+        parts = urlsplit(value)
+        host = (parts.hostname or "").rstrip(".")
+    except ValueError:
+        return None
+    return (host, parts.path.rstrip("/")) if host else None
+
+
+def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = ()) -> dict[str, str]:
+    """URLs among ``values`` built on a tainted URL rather than equal to it: the exfiltration
+    step "call this address with the data appended". ``path`` when the URL is on the tainted
+    host under the tainted path (``https://x.test/u`` covers ``/u/notes`` and ``/u?d=notes``);
+    ``host`` when the tainted URL had no path, so any URL on that host is suspect but weaker
+    evidence. Never by host alone otherwise: an injected issue on a code host must not taint
+    the whole site. A tainted URL the user named, or one inside a site or directory they named,
+    traces nothing: an injected page that repeats the user's own address does not make it the
+    attacker's."""
+    user = set(user)
+    prefixes = tuple(item.rstrip("/") + "/" for item in user if "/" in item)
+    user_hosts = {root[0] for item in user if (root := _url_root(item))}
+    roots = {root for url in tainted if url not in user and not url.startswith(prefixes)
+             if (root := _url_root(url)) and (root[1] or root[0] not in user_hosts)}
+    found: dict[str, str] = {}
+    for value in values:
+        if not (root := _url_root(value)):
+            continue
+        for host, path in roots:
+            if root[0] != host:
+                continue
+            if path and (root[1] == path or root[1].startswith(path + "/")):
+                found[value] = "path"
+                break
+            if not path:
+                found.setdefault(value, "host")
+    return found
 
 
 def sourced_from(values: set[str], source: set[str], user_values: set[str]) -> set[str]:

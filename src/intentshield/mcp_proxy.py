@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import itertools
 import json
+import logging
 from pathlib import Path
 import re
 from typing import Any, Callable
@@ -15,8 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .injection_classifier import InjectionClassifier
 from .judge import Judge
 from .mcp_inspect import (
-    authority_values, distinctive_values, scan_description, scan_output, scan_server,
-    self_disclosure_fields, sourced_from, tool_text,
+    authority_values, distinctive_values, scan_description, scan_output, scan_output_collapsed, scan_server,
+    schema_text, self_disclosure_fields, sourced_from, tool_text, traced_urls,
 )
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
@@ -24,6 +26,8 @@ from .policy import PolicyConfig
 from .service import IntentShieldService
 from .storage import Storage
 from .tools import MCPArguments, ToolSpec, catch_all_destination, stable_hash
+
+logger = logging.getLogger(__name__)
 
 
 class MCPProxyConfig(BaseModel):
@@ -91,6 +95,13 @@ class MCPProxyConfig(BaseModel):
     minimum_intent_alignment: float = Field(default=0.60, ge=0, le=1)
     # Ungrounded reads pass (evidence, not a veto); mutations and negated reads stay strict.
     lenient_reads: bool = False
+    # Adaptive threat memory (``threat_memory``): what rule-confirmed attacks used (addresses, wording,
+    # sources), kept across runs and processes and given back as evidence. On by default; the file
+    # defaults to ``threats.db`` next to ``database_path``. ``threat_packs_dir`` adds signed threat
+    # packs (``rule_packs``), verified with the INTENTSHIELD_PACK_* settings and hot-reloaded.
+    threat_memory: bool = True
+    threat_memory_path: str | None = None
+    threat_packs_dir: str | None = None
     approval_ttl_seconds: int = Field(default=600, ge=1)
     max_upstreams: int = Field(default=8, ge=1, le=64)
     max_total_tools: int = Field(default=2_000, ge=1, le=100_000)
@@ -189,29 +200,44 @@ _SCHEMA_ANNOTATIONS = {
 _SAFE_TOOL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
-def _public_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Remove untrusted annotation text while preserving validation structure."""
+# JSON Schema keywords that carry validation structure (2020-12, plus draft-07's dependencies,
+# additionalItems and definitions, and OpenAPI's nullable). Anything else an upstream server adds,
+# x-* keys and unknown keywords included, is free text the agent would read unscanned.
+_SCHEMA_KEYWORDS = frozenset({
+    "type", "enum", "const", "properties", "patternProperties", "additionalProperties", "required",
+    "items", "prefixItems", "additionalItems", "contains", "minContains", "maxContains", "minItems",
+    "maxItems", "uniqueItems", "minLength", "maxLength", "pattern", "format", "minimum", "maximum",
+    "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minProperties", "maxProperties",
+    "dependentRequired", "dependentSchemas", "dependencies", "propertyNames", "allOf", "anyOf", "oneOf",
+    "not", "if", "then", "else", "$ref", "$defs", "definitions", "$schema", "$id", "$anchor",
+    "$dynamicRef", "$dynamicAnchor", "unevaluatedItems", "unevaluatedProperties", "contentEncoding",
+    "contentMediaType", "contentSchema", "nullable",
+})
+
+
+def _public_schema(schema: dict[str, Any], annotations: bool = False) -> dict[str, Any]:
+    """Validation structure only: an allowlist, so text in a keyword nobody scans never reaches
+    the agent. ``annotations`` keeps the ones ``tool_text`` scanned (transparent mode shows them)."""
     result: dict[str, Any] = {}
     schema_maps = {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
-    schema_values = {
-        "items", "additionalProperties", "contains", "not", "if", "then", "else",
-        "propertyNames", "unevaluatedItems", "unevaluatedProperties",
-    }
-    schema_lists = {"allOf", "anyOf", "oneOf", "prefixItems"}
+    schema_lists = {"allOf", "anyOf", "oneOf", "prefixItems", "items"}
     for key, value in schema.items():
-        if key in _SCHEMA_ANNOTATIONS or key.startswith("x-"):
+        if key in _SCHEMA_ANNOTATIONS:
+            if annotations:
+                result[key] = value
+        elif key not in _SCHEMA_KEYWORDS:
             continue
-        if key in schema_maps and isinstance(value, dict):
+        elif key in schema_maps and isinstance(value, dict):
             result[key] = {
-                name: _public_schema(child) if isinstance(child, dict) else child
+                name: _public_schema(child, annotations) if isinstance(child, dict) else child
                 for name, child in value.items()
             }
-        elif key in schema_values and isinstance(value, dict):
-            result[key] = _public_schema(value)
         elif key in schema_lists and isinstance(value, list):
             result[key] = [
-                _public_schema(child) if isinstance(child, dict) else child for child in value
+                _public_schema(child, annotations) if isinstance(child, dict) else child for child in value
             ]
+        elif isinstance(value, dict) and key not in {"const", "enum"}:
+            result[key] = _public_schema(value, annotations)
         else:
             result[key] = value
     return result
@@ -259,8 +285,9 @@ class MCPProxyRuntime:
         # Runs whose intent repeats a flagged output; the agent wrote that intent, not the user.
         self._untrusted_intents: set[str] = set()
         self._injection_seen = False
-        # run_id -> recipients, URLs, accounts and paths seen in any tool output.
-        self._observed: dict[str, set[str]] = {}
+        # Recipients, URLs, accounts and paths seen in any tool output, kept for the session
+        # like ``_tainted`` (a fresh run must not wash them) and bounded, oldest first out.
+        self._observed: dict[str, None] = {}
         self._classifier = (InjectionClassifier(config.injection_classifier_dir)
                             if config.injection_classifier_dir else None)
         if self._classifier and not self._classifier.ready:
@@ -307,6 +334,16 @@ class MCPProxyRuntime:
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
         self._suspect_values: set[str] = set()
+        self._memory: Any = None
+        if config.threat_memory:
+            from .rule_packs import PackSet
+            from .threat_memory import ThreatMemory
+            try:
+                self._memory = ThreatMemory(
+                    config.threat_memory_path or Path(config.database_path).with_name("threats.db"),
+                    packs=PackSet(config.threat_packs_dir) if config.threat_packs_dir else None)
+            except Exception as exc:  # a corrupt file costs the memory, not the proxy
+                logger.warning("threat memory disabled", extra={"error": f"{type(exc).__name__}: {exc}"})
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -401,14 +438,21 @@ class MCPProxyRuntime:
             # Untrusted text: scanned for poisoning; a reference to another
             # server's tool name is shadowing.
             text = tool_text(tool.description, tool.input_schema, tool.title)
+            if extra := schema_text(tool.input_schema):
+                text = f"{text}\n{extra}"
             own = {other.name for other in tools if other.server_id == tool.server_id}
             findings = scan_description(
                 text, {other.name for other in tools if other.server_id != tool.server_id} - own
             )
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
+            if findings:  # one listing is one "run": several poisoned tools must not count as many
+                self._remember("record_attack", text, findings, source=tool.server_id,
+                               run_key=f"catalog:{tool.server_id}")
             if not findings and qualified not in self._quarantined:
-                if self._semantic_flag(text, "description"):
+                if self._remember("check_text", text, target="description"):
+                    self._suspect_tools[qualified] = ReasonCode.REVIEW_KNOWN_THREAT
+                elif self._semantic_flag(text, "description"):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_CLASSIFIER_FLAGGED
                 elif self._judge and self._judge.tool(qualified, text):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_JUDGE_FLAGGED
@@ -448,11 +492,7 @@ class MCPProxyRuntime:
                 if result.is_error:
                     message = result.error.message if result.error else "Upstream MCP tool failed"
                     raise MCPRemoteToolError(message)
-                normalized_result = result.model_dump(mode="json")
-                if len(result.content) > self.config.max_result_content_blocks:
-                    raise MCPRemoteToolError("Upstream MCP result exceeded the content-block limit")
-                if len(json.dumps(normalized_result, separators=(",", ":")).encode()) > self.config.max_result_bytes:
-                    raise MCPRemoteToolError("Upstream MCP result exceeded the byte limit")
+                normalized_result = self._bounded(result)
                 return {
                     "trust": "UNTRUSTED_MCP_OUTPUT",
                     "upstream": normalized_result,
@@ -491,6 +531,14 @@ class MCPProxyRuntime:
                     f"Allowed MCP tool requires grounding_terms_by_tool: {qualified}"
                 )
         return registry
+
+    def _bounded(self, result: MCPCallResult) -> dict[str, Any]:
+        normalized = result.model_dump(mode="json")
+        if len(result.content) > self.config.max_result_content_blocks:
+            raise MCPRemoteToolError("Upstream MCP result exceeded the content-block limit")
+        if len(json.dumps(normalized, separators=(",", ":")).encode()) > self.config.max_result_bytes:
+            raise MCPRemoteToolError("Upstream MCP result exceeded the byte limit")
+        return normalized
 
     def _service(self) -> IntentShieldService:
         if self.service is None:
@@ -561,25 +609,61 @@ class MCPProxyRuntime:
         # Argument provenance: a distinctive value (email, URL, account, path, id)
         # the user never gave must not come from an injected output in this run
         # or from another tool's description.
+        known = self._known_threat(user_intent, call)
         values = distinctive_values(call.arguments) - distinctive_values(user_intent)
         if not values:
-            return self._suspect_tools.get(call.tool_name)
+            return self._known_reason(known) or self._suspect_tools.get(call.tool_name)
         if values & self._tainted:
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        # A URL built on a tainted one: the injected address with the data appended.
+        traced = traced_urls(values, self._tainted, distinctive_values(user_intent))
+        if "path" in traced.values():
+            return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        if traced:
+            return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         for name, described in self._description_values.items():
             if name != call.tool_name and values & described:
                 return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
+        if known:  # an address a rule-confirmed attack used before, in any run or process, or a pack rule
+            return self._known_reason(known)
         if call.tool_name in self._suspect_tools:
             return self._suspect_tools[call.tool_name]
         if values & self._suspect_values:
             return ReasonCode.REVIEW_CLASSIFIER_FLAGGED
         # Detection is not the gate: a value the scanners missed still came from a tool.
         if self.config.review_output_sourced_arguments and sourced_from(
-            authority_values(call.arguments), self._observed.get(run_id, set()),
+            authority_values(call.arguments), self._observed.keys(),
             distinctive_values(user_intent),
         ):
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         return None
+
+    def _known_threat(self, user_intent: str, call: ToolCall) -> str | None:
+        """``block`` or ``review`` when the threat memory knows a value of the call (the user's own
+        values exempt) or a pack rule for arguments matches it; None otherwise or when it fails."""
+        if self._memory is None:
+            return None
+        try:
+            values = distinctive_values(call.arguments) - distinctive_values(user_intent)
+            known = self._memory.check_values(values, trusted=user_intent)
+            levels = [known.level] if known else []
+            levels += [hit["level"] for hit in self._memory.text_matches(call.arguments, target="argument")]
+        except Exception as exc:  # the memory adds evidence; its failure must not stop the gateway
+            logger.warning("threat memory check failed", extra={"error": type(exc).__name__})
+            return None
+        return "block" if "block" in levels else "review" if levels else None
+
+    @staticmethod
+    def _known_reason(level: str | None) -> ReasonCode | None:
+        return {"block": ReasonCode.BLOCK_KNOWN_THREAT, "review": ReasonCode.REVIEW_KNOWN_THREAT}.get(level or "")
+
+    def _remember(self, method: str, *args: Any, **kwargs: Any) -> Any:
+        """A threat-memory call that logs and gives up instead of raising."""
+        try:
+            return getattr(self._memory, method)(*args, **kwargs) if self._memory else None
+        except Exception as exc:
+            logger.warning("threat memory failed", extra={"method": method, "error": type(exc).__name__})
+            return None
 
     def _semantic_flag(self, text: str, kind: str) -> str | None:
         """The first learned detector that flags ``text`` (a ``description`` or an ``output``), or None.
@@ -591,14 +675,27 @@ class MCPProxyRuntime:
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
         upstream = result.get("upstream", result)
-        self._observed.setdefault(run_id, set()).update(authority_values(upstream))
+        self._observed.update(dict.fromkeys(authority_values(upstream)))
+        for stale in list(itertools.islice(self._observed, max(0, len(self._observed) - 50_000))):
+            del self._observed[stale]
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
-        detector = None if findings else self._semantic_flag(text, "output")
-        outputs = self._outputs.setdefault(run_id, [])
-        outputs.append({"tool_name": call.tool_name, "text": text, "values": distinctive_values(upstream),
-                        "flagged": bool(findings or detector)})
-        del outputs[:-32]
+        known = [] if findings else self._remember("text_matches", upstream) or []
+        if any(hit["level"] == "block" for hit in known):
+            # A rule from a pack the operator trusts at block level counts like a built-in rule hit
+            # (taints the output's values), but teaches the memory nothing.
+            findings = [hit["name"] for hit in known]
+        detector = None if findings else (
+            "line_split_rules" if scan_output_collapsed(upstream)
+            else "threat_memory" if known or self._remember("hostile", call.tool_name.partition(":")[0])
+            else self._semantic_flag(text, "output"))
+        if self._learner is not None:  # only learning links a reviewed call to the text it reused
+            outputs = self._outputs.setdefault(run_id, [])
+            outputs.append({"tool_name": call.tool_name, "text": text[:20_000],
+                            "values": distinctive_values(upstream), "flagged": bool(findings or detector)})
+            del outputs[:-32]
+            for stale in list(itertools.islice(self._outputs, max(0, len(self._outputs) - 64))):
+                del self._outputs[stale]
         if not findings:
             if detector:
                 self._injection_seen = True
@@ -610,6 +707,10 @@ class MCPProxyRuntime:
         values = distinctive_values(result.get("upstream", result))
         self._injection_seen = True
         self._tainted.update(values)
+        if self._memory and not known:  # only rule-confirmed text teaches it, never a pack's or its own
+            run = self._service().storage.get_run(run_id) or {}
+            self._remember("record_attack", upstream, findings, source=call.tool_name.partition(":")[0],
+                           run_key=run_id, trusted=run.get("user_intent", ""))
         self._service().storage.add_event(run_id, "MCP_OUTPUT_INJECTION", {
             "tool_name": call.tool_name, "findings": findings, "tainted_values": len(values),
         })
@@ -647,9 +748,18 @@ class MCPProxyRuntime:
         self-disclosure parameters removed from the schema."""
         await self._refresh_catalog()
         withheld = "Description withheld by IntentShield: it may try to instruct the agent."
-        return [(tool.model_copy(update={"description": withheld}) if tool.qualified_name in self._suspect_tools
-                 else tool, self._visible_schemas[tool.qualified_name]) for tool in self._tools
-                if tool.qualified_name not in self._quarantined and tool.qualified_name not in self._drifted_tools]
+        shown = []
+        for tool in self._tools:
+            name = tool.qualified_name
+            if name in self._quarantined or name in self._drifted_tools:
+                continue
+            visible = self._visible_schemas[name]
+            if name in self._suspect_tools:  # a flagged tool keeps no free text at all
+                shown.append((tool.model_copy(update={"description": withheld, "title": None}),
+                              _public_schema(visible)))
+            else:
+                shown.append((tool, _public_schema(visible, annotations=True)))
+        return shown
 
     def _blocked_reason(self, name: str) -> str | None:
         if name in self._quarantined:
@@ -676,7 +786,9 @@ class MCPProxyRuntime:
             raise MCPRemoteToolError(f"Unknown tool {name}")
         call = self._redact(ToolCall(tool_name=name, arguments=arguments, schema_hash="transparent"))
         result = await self.upstreams[tool.server_id].call_tool(tool.name, call.arguments)
-        return result, scan_output(result.model_dump(mode="json", include={"content", "structured_content"}))
+        self._bounded(result)
+        shown = result.model_dump(mode="json", include={"content", "structured_content"})
+        return result, scan_output(shown) or scan_output_collapsed(shown)
 
     async def evaluate_only(self, run_id: str, call: ToolCall) -> GatewayResult:
         """Evaluate a proposed call without execution or approval persistence."""
