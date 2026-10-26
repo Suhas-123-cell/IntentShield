@@ -53,6 +53,9 @@ class MCPUpstreamConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_transport_fields(self) -> "MCPUpstreamConfig":
+        if "__" in self.server_id:
+            # Transparent mode exposes "<server_id>__<tool>", which must name exactly one tool.
+            raise ValueError("server_id must not contain '__'")
         if self.transport == "stdio":
             if not self.command:
                 raise ValueError("stdio transport requires command")
@@ -463,7 +466,15 @@ class MCPUpstream:
                             f"Tool {_attribute(tool, 'name', default='<unknown>')!r} has no object input schema",
                             details={"server_id": self.config.server_id},
                         )
-                    schema_bytes = len(json.dumps(input_schema, separators=(",", ":")).encode())
+                    # The whole tool, not only its input schema: a description or output schema
+                    # is scanned and re-listed too.
+                    schema_bytes = len(json.dumps({
+                        "input_schema": input_schema,
+                        **{key: _attribute(tool, *names) for key, names in (
+                            ("title", ("title",)), ("description", ("description",)),
+                            ("output_schema", ("output_schema", "outputSchema")),
+                            ("annotations", ("annotations",)), ("meta", ("meta", "_meta")))},
+                    }, separators=(",", ":"), default=str).encode())
                     if schema_bytes > self.config.max_tool_schema_bytes:
                         raise MCPUpstreamError(
                             "MCP_CATALOG_LIMIT_EXCEEDED",
