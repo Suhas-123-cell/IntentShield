@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .injection_classifier import InjectionClassifier
 from .judge import Judge
 from .mcp_inspect import (
-    authority_values, distinctive_values, scan_description, scan_output, scan_server,
+    authority_values, distinctive_values, scan_description, scan_output, scan_output_collapsed, scan_server,
     self_disclosure_fields, sourced_from, tool_text,
 )
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
@@ -594,7 +594,8 @@ class MCPProxyRuntime:
         self._observed.setdefault(run_id, set()).update(authority_values(upstream))
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
-        detector = None if findings else self._semantic_flag(text, "output")
+        detector = None if findings else (
+            "line_split_rules" if scan_output_collapsed(upstream) else self._semantic_flag(text, "output"))
         outputs = self._outputs.setdefault(run_id, [])
         outputs.append({"tool_name": call.tool_name, "text": text, "values": distinctive_values(upstream),
                         "flagged": bool(findings or detector)})
@@ -676,7 +677,8 @@ class MCPProxyRuntime:
             raise MCPRemoteToolError(f"Unknown tool {name}")
         call = self._redact(ToolCall(tool_name=name, arguments=arguments, schema_hash="transparent"))
         result = await self.upstreams[tool.server_id].call_tool(tool.name, call.arguments)
-        return result, scan_output(result.model_dump(mode="json", include={"content", "structured_content"}))
+        shown = result.model_dump(mode="json", include={"content", "structured_content"})
+        return result, scan_output(shown) or scan_output_collapsed(shown)
 
     async def evaluate_only(self, run_id: str, call: ToolCall) -> GatewayResult:
         """Evaluate a proposed call without execution or approval persistence."""
