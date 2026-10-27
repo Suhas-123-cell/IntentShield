@@ -1,0 +1,93 @@
+{
+  "hook": {
+    "process": {
+      "pre_read": {
+        "n": 20,
+        "p50": 41.07,
+        "p95": 48.93,
+        "mean": 41.71
+      },
+      "post_small": {
+        "n": 20,
+        "p50": 41.52,
+        "p95": 46.55,
+        "mean": 41.83
+      },
+      "post_4kb": {
+        "n": 20,
+        "p50": 43.99,
+        "p95": 52.43,
+        "mean": 44.83
+      },
+      "post_injected": {
+        "n": 20,
+        "p50": 46.86,
+        "p95": 58.38,
+        "mean": 47.44
+      },
+      "pre_write": {
+        "n": 20,
+        "p50": 41.75,
+        "p95": 56.83,
+        "mean": 43.06
+      }
+    },
+    "in_process": {
+      "pre_read": {
+        "n": 200,
+        "p50": 0.02,
+        "p95": 0.03,
+        "mean": 0.02
+      },
+      "post_small": {
+        "n": 200,
+        "p50": 0.03,
+        "p95": 0.04,
+        "mean": 0.03
+      },
+      "post_4kb": {
+        "n": 200,
+        "p50": 1.94,
+        "p95": 2.06,
+        "mean": 1.96
+      },
+      "post_injected": {
+        "n": 200,
+        "p50": 0.1,
+        "p95": 0.14,
+        "mean": 0.1
+      },
+      "pre_write": {
+        "n": 200,
+        "p50": 0.03,
+        "p95": 0.05,
+        "mean": 0.04
+      }
+    },
+    "bare_python_ms": 15.28
+  },
+  "proxy": {
+    "direct": {
+      "tool": "read_note",
+      "startup_ms": 255.0,
+      "call": {
+        "n": 50,
+        "p50": 0.65,
+        "p95": 1.61,
+        "mean": 0.77
+      }
+    },
+    "transparent_proxy": {
+      "tool": "read_note",
+      "startup_ms": 590.4,
+      "call": {
+        "n": 50,
+        "p50": 2.55,
+        "p95": 2.77,
+        "mean": 2.58
+      }
+    }
+  },
+  "python": "3.14.8",
+  "intent_model_dir": "/nonexistent"
+}
