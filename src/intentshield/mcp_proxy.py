@@ -52,7 +52,8 @@ class MCPProxyConfig(BaseModel):
     # as unavailable and every call to them is blocked.
     quarantine_poisoned_tools: bool = True
     # A recipient, URL, account or path whose only source is a tool output sends the
-    # call to review, whether or not the scanners flagged that output.
+    # call to review, whether or not the scanners flagged that output. A side-effecting
+    # call always does; this setting decides it for reads.
     review_output_sourced_arguments: bool = True
     # Optional local classifier (``intentshield.injection_training``) run on descriptions
     # and outputs the rules pass. A hit withholds the description or flags the output
@@ -491,6 +492,7 @@ class MCPProxyRuntime:
                 )
                 if result.is_error:
                     message = result.error.message if result.error else "Upstream MCP tool failed"
+                    self._observe_error(message)
                     raise MCPRemoteToolError(message)
                 normalized_result = self._bounded(result)
                 return {
@@ -631,7 +633,8 @@ class MCPProxyRuntime:
         if values & self._suspect_values:
             return ReasonCode.REVIEW_CLASSIFIER_FLAGGED
         # Detection is not the gate: a value the scanners missed still came from a tool.
-        if self.config.review_output_sourced_arguments and sourced_from(
+        reads_too = self.config.review_output_sourced_arguments
+        if (reads_too or not self.config.is_read_only(call.tool_name)) and sourced_from(
             authority_values(call.arguments), self._observed.keys(),
             distinctive_values(user_intent),
         ):
@@ -672,6 +675,14 @@ class MCPProxyRuntime:
             if flags(text, kind):
                 return name
         return None
+
+    def _observe_error(self, message: str) -> None:
+        """An upstream's error text reaches the agent as an output does, so its values are tracked
+        the same way and a rule hit taints them."""
+        self._observed.update(dict.fromkeys(authority_values(message)))
+        if scan_output(message):
+            self._injection_seen = True
+            self._tainted.update(distinctive_values(message))
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
         upstream = result.get("upstream", result)

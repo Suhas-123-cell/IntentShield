@@ -1,0 +1,703 @@
+{
+  "seeds": 20,
+  "variants_per_seed": 11,
+  "thresholds": {
+    "containment": 0.6,
+    "min_words": 8,
+    "escalate": [
+      2,
+      2
+    ]
+  },
+  "dev_sweep": {
+    "0.3": {
+      "recovered_of_static_misses": {
+        "rate": 0.917,
+        "caught": 11,
+        "n": 12,
+        "ci95": [
+          0.646,
+          0.985
+        ]
+      },
+      "benign_flagged": 0,
+      "benign_n": 888
+    },
+    "0.4": {
+      "recovered_of_static_misses": {
+        "rate": 0.917,
+        "caught": 11,
+        "n": 12,
+        "ci95": [
+          0.646,
+          0.985
+        ]
+      },
+      "benign_flagged": 0,
+      "benign_n": 888
+    },
+    "0.5": {
+      "recovered_of_static_misses": {
+        "rate": 1.0,
+        "caught": 12,
+        "n": 12,
+        "ci95": [
+          0.757,
+          1.0
+        ]
+      },
+      "benign_flagged": 0,
+      "benign_n": 888
+    },
+    "0.6": {
+      "recovered_of_static_misses": {
+        "rate": 0.917,
+        "caught": 11,
+        "n": 12,
+        "ci95": [
+          0.646,
+          0.985
+        ]
+      },
+      "benign_flagged": 0,
+      "benign_n": 888
+    },
+    "0.7": {
+      "recovered_of_static_misses": {
+        "rate": 0.333,
+        "caught": 4,
+        "n": 12,
+        "ci95": [
+          0.138,
+          0.609
+        ]
+      },
+      "benign_flagged": 0,
+      "benign_n": 888
+    },
+    "0.8": {
+      "recovered_of_static_misses": {
+        "rate": 0.333,
+        "caught": 4,
+        "n": 12,
+        "ci95": [
+          0.138,
+          0.609
+        ]
+      },
+      "benign_flagged": 0,
+      "benign_n": 888
+    }
+  },
+  "arms": {
+    "A_infra_reused": {
+      "dev": {
+        "static": {
+          "rate": 0.782,
+          "caught": 43,
+          "n": 55,
+          "ci95": [
+            0.656,
+            0.871
+          ]
+        },
+        "adaptive": {
+          "rate": 1.0,
+          "caught": 55,
+          "n": 55,
+          "ci95": [
+            0.935,
+            1.0
+          ]
+        },
+        "recovered_of_static_misses": {
+          "rate": 1.0,
+          "caught": 12,
+          "n": 12,
+          "ci95": [
+            0.757,
+            1.0
+          ]
+        },
+        "by_evidence_on_static_misses": {
+          "fingerprint_or_pack": {
+            "rate": 0.917,
+            "caught": 11,
+            "n": 12,
+            "ci95": [
+              0.646,
+              0.985
+            ]
+          },
+          "indicator": {
+            "rate": 1.0,
+            "caught": 12,
+            "n": 12,
+            "ci95": [
+              0.757,
+              1.0
+            ]
+          }
+        },
+        "by_transform": {
+          "original": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "homoglyph": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "zero_width": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          },
+          "synonyms": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "filler": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "reorder": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "wrap": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase+synonyms": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase+zero_width+wrap": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase+filler+reorder": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          }
+        }
+      },
+      "test": {
+        "static": {
+          "rate": 0.674,
+          "caught": 89,
+          "n": 132,
+          "ci95": [
+            0.59,
+            0.748
+          ]
+        },
+        "adaptive": {
+          "rate": 1.0,
+          "caught": 132,
+          "n": 132,
+          "ci95": [
+            0.972,
+            1.0
+          ]
+        },
+        "recovered_of_static_misses": {
+          "rate": 1.0,
+          "caught": 43,
+          "n": 43,
+          "ci95": [
+            0.918,
+            1.0
+          ]
+        },
+        "by_evidence_on_static_misses": {
+          "fingerprint_or_pack": {
+            "rate": 0.791,
+            "caught": 34,
+            "n": 43,
+            "ci95": [
+              0.648,
+              0.886
+            ]
+          },
+          "indicator": {
+            "rate": 1.0,
+            "caught": 43,
+            "n": 43,
+            "ci95": [
+              0.918,
+              1.0
+            ]
+          }
+        },
+        "by_transform": {
+          "original": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "homoglyph": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "zero_width": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "paraphrase": {
+            "static": 3,
+            "adaptive": 12,
+            "n": 12
+          },
+          "synonyms": {
+            "static": 10,
+            "adaptive": 12,
+            "n": 12
+          },
+          "filler": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "reorder": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "wrap": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "paraphrase+synonyms": {
+            "static": 0,
+            "adaptive": 12,
+            "n": 12
+          },
+          "paraphrase+zero_width+wrap": {
+            "static": 1,
+            "adaptive": 12,
+            "n": 12
+          },
+          "paraphrase+filler+reorder": {
+            "static": 3,
+            "adaptive": 12,
+            "n": 12
+          }
+        }
+      },
+      "innocent_wrap_addresses_matched": 0,
+      "memory": {
+        "indicators": {
+          "observed": 150
+        },
+        "domains": 17,
+        "fingerprints": {
+          "observed": 61,
+          "rejected": 13
+        },
+        "allowlist": 0,
+        "benign": {
+          "builtin": 141,
+          "operator": 0
+        },
+        "ttl_days": 30.0
+      }
+    },
+    "B_fresh_infra": {
+      "dev": {
+        "static": {
+          "rate": 0.782,
+          "caught": 43,
+          "n": 55,
+          "ci95": [
+            0.656,
+            0.871
+          ]
+        },
+        "adaptive": {
+          "rate": 0.982,
+          "caught": 54,
+          "n": 55,
+          "ci95": [
+            0.904,
+            0.997
+          ]
+        },
+        "recovered_of_static_misses": {
+          "rate": 0.917,
+          "caught": 11,
+          "n": 12,
+          "ci95": [
+            0.646,
+            0.985
+          ]
+        },
+        "by_evidence_on_static_misses": {
+          "fingerprint_or_pack": {
+            "rate": 0.917,
+            "caught": 11,
+            "n": 12,
+            "ci95": [
+              0.646,
+              0.985
+            ]
+          },
+          "indicator": {
+            "rate": 0.0,
+            "caught": 0,
+            "n": 12,
+            "ci95": [
+              0.0,
+              0.243
+            ]
+          }
+        },
+        "by_transform": {
+          "original": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "homoglyph": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "zero_width": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          },
+          "synonyms": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "filler": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "reorder": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "wrap": {
+            "static": 5,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase+synonyms": {
+            "static": 2,
+            "adaptive": 4,
+            "n": 5
+          },
+          "paraphrase+zero_width+wrap": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          },
+          "paraphrase+filler+reorder": {
+            "static": 2,
+            "adaptive": 5,
+            "n": 5
+          }
+        }
+      },
+      "test": {
+        "static": {
+          "rate": 0.674,
+          "caught": 89,
+          "n": 132,
+          "ci95": [
+            0.59,
+            0.748
+          ]
+        },
+        "adaptive": {
+          "rate": 0.932,
+          "caught": 123,
+          "n": 132,
+          "ci95": [
+            0.875,
+            0.964
+          ]
+        },
+        "recovered_of_static_misses": {
+          "rate": 0.791,
+          "caught": 34,
+          "n": 43,
+          "ci95": [
+            0.648,
+            0.886
+          ]
+        },
+        "by_evidence_on_static_misses": {
+          "fingerprint_or_pack": {
+            "rate": 0.791,
+            "caught": 34,
+            "n": 43,
+            "ci95": [
+              0.648,
+              0.886
+            ]
+          },
+          "indicator": {
+            "rate": 0.0,
+            "caught": 0,
+            "n": 43,
+            "ci95": [
+              0.0,
+              0.082
+            ]
+          }
+        },
+        "by_transform": {
+          "original": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "homoglyph": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "zero_width": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "paraphrase": {
+            "static": 3,
+            "adaptive": 10,
+            "n": 12
+          },
+          "synonyms": {
+            "static": 10,
+            "adaptive": 12,
+            "n": 12
+          },
+          "filler": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "reorder": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "wrap": {
+            "static": 12,
+            "adaptive": 12,
+            "n": 12
+          },
+          "paraphrase+synonyms": {
+            "static": 0,
+            "adaptive": 9,
+            "n": 12
+          },
+          "paraphrase+zero_width+wrap": {
+            "static": 1,
+            "adaptive": 10,
+            "n": 12
+          },
+          "paraphrase+filler+reorder": {
+            "static": 3,
+            "adaptive": 10,
+            "n": 12
+          }
+        }
+      },
+      "innocent_wrap_addresses_matched": 0,
+      "memory": {
+        "indicators": {
+          "observed": 133
+        },
+        "domains": 0,
+        "fingerprints": {
+          "observed": 61,
+          "rejected": 13
+        },
+        "allowlist": 0,
+        "benign": {
+          "builtin": 141,
+          "operator": 0
+        },
+        "ttl_days": 30.0
+      }
+    },
+    "C_new_family": {
+      "static": {
+        "rate": 0.0,
+        "caught": 0,
+        "n": 33,
+        "ci95": [
+          0.0,
+          0.104
+        ]
+      },
+      "adaptive_before_pack": {
+        "rate": 0.0,
+        "caught": 0,
+        "n": 33,
+        "ci95": [
+          0.0,
+          0.104
+        ]
+      },
+      "adaptive_after_pack": {
+        "rate": 0.667,
+        "caught": 22,
+        "n": 33,
+        "ci95": [
+          0.496,
+          0.802
+        ]
+      },
+      "by_transform_after_pack": {
+        "original": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "homoglyph": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "zero_width": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "paraphrase": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "synonyms": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "filler": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "reorder": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "wrap": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "paraphrase+synonyms": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "paraphrase+zero_width+wrap": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        },
+        "paraphrase+filler+reorder": {
+          "static": 0,
+          "adaptive": 2,
+          "n": 3
+        }
+      },
+      "pack": {
+        "digest": "sha256:244a7bed5cb3040b8e460119ef18cf7f5720a5ac4393a35e9de1d1ec35803b89",
+        "loaded": [
+          "baseline"
+        ]
+      }
+    }
+  },
+  "benign": {
+    "n": 1789,
+    "sources": {
+      "fastapi": 45,
+      "starlette": 19,
+      "pydantic": 545,
+      "httpx": 68,
+      "mcp": 541,
+      "jsonschema": 45,
+      "uvicorn": 17,
+      "anyio": 168,
+      "project_docs": 341
+    },
+    "scan_output_flagged": {
+      "rate": 0.006,
+      "caught": 11,
+      "n": 1789,
+      "ci95": [
+        0.003,
+        0.011
+      ]
+    },
+    "check_text_before_learning": {
+      "rate": 0.0,
+      "caught": 0,
+      "n": 1789,
+      "ci95": [
+        0.0,
+        0.002
+      ]
+    },
+    "check_text_after_learning": {
+      "rate": 0.0,
+      "caught": 0,
+      "n": 1789,
+      "ci95": [
+        0.0,
+        0.002
+      ]
+    },
+    "check_text_after_learning_not_flagged_by_rules": 0,
+    "baseline_pack_flagged": {
+      "rate": 0.0,
+      "caught": 0,
+      "n": 1789,
+      "ci95": [
+        0.0,
+        0.002
+      ]
+    },
+    "fingerprints_rejected_by_gate": 26,
+    "examples_after_learning": [],
+    "examples_pack": []
+  },
+  "threshold_choice": "containment stays at the module default 0.6: on the dev split 0.5 recovers one more variant than 0.6 and 0.3-0.6 flag no dev benign paragraph, too little evidence to move a default the test split never influenced"
+}
