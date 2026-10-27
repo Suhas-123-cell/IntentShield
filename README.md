@@ -536,11 +536,11 @@ The proxy guards all three places an MCP attack enters (related work and next st
   the run or from another tool's description: the right action with an
   attacker-chosen recipient, account or path. Detection is not the gate: a
   recipient, URL, account or path whose only source is *any* tool output in the
-  run (flagged or not) sends the call to review with
-  `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`, read or write. Paths and URLs inside a
-  directory or site the user named count as the user's. Turn this off with
-  `review_output_sourced_arguments: false`; benign retrieve-then-act flows ("pay
-  the account in this invoice") then run without asking.
+  run (flagged or not, an upstream's error text included) sends the call to review
+  with `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`. An IBAN printed in groups of four and
+  sent compact is one value. Paths and URLs inside a directory or site the user
+  named count as the user's. A side-effecting call always gets this review;
+  `review_output_sourced_arguments: false` turns it off for reads only.
 - **Self-disclosure parameters.** A schema parameter that asks for the agent's
   model, system prompt or conversation (`llm_model_name`, `system_prompt`, ...) is
   removed from the schema the agent sees. Any value the agent sends for it is dropped;
@@ -1191,7 +1191,8 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   - scan every MCP result; an injected one taints the session and the model is told
     it is data, not a request (`--outputs block` replaces the result instead);
   - ask before any MCP call carrying a recipient, URL, account or path that came
-    only from a tool output, flagged or not (unless `--review never`);
+    only from a tool output, flagged or not (unless `--review never`;
+    `--allow-sourced-reads` or `INTENTSHIELD_HOOK_SOURCED_READS=allow` stops asking for reads only);
   - ask before state-changing MCP calls once the session is tainted
     (`--review always|tainted|never`, or `INTENTSHIELD_HOOK_REVIEW`; `--outputs` reads
     `INTENTSHIELD_HOOK_OUTPUTS`);

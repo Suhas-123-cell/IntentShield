@@ -144,6 +144,15 @@ Status after items 3 and 4 (2026-10-11): the split row is flagged by the server-
 and the polite-output and false-error outputs, are caught by the trained classifier, but at a
 20% benign false-flag rate, so it is not usable yet (see the item 4 note below).
 
+Status 2026-10-27: the paragraph below described the code before item 1 below; since then every
+output's recipients, URLs, accounts and paths are tracked by source, and a rule hit only escalates
+review to block. Two holes in that tracking were closed on 2026-10-27: an IBAN printed in groups of four
+and sent compact did not match, and an upstream's error text was never recorded. A replay test of the
+schema-valid lie (`tests/test_provenance.py`) reaches review in the proxy and the hook with no rule
+firing. Provenance cannot cover an injection that names no value: 374 of the 493 InjecAgent direct-harm
+base injections the rules miss ("unlock the door", "grant guest_amy01 access") carry none
+(`results/improve/phase1/injecagent_attacker_values.txt`).
+
 The structural reason it matters: run taint, and therefore `BLOCK_UNTRUSTED_ARGUMENT_SOURCE`,
 only starts when `scan_output` flags an output. An attack the rules miss never taints the run,
 so the attacker's IBAN or address passes provenance. PACT and ToolFence avoid this by treating

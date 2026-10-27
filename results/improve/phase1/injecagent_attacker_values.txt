@@ -1,0 +1,2 @@
+dh_base {'rows': 510, 'rules_missed': 493, 'missed_attacker_value_traceable': 119, 'missed_no_attacker_value': 374}
+ds_base {'rows': 544, 'rules_missed': 544, 'missed_attacker_value_traceable': 544, 'missed_no_attacker_value': 0}

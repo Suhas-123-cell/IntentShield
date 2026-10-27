@@ -387,16 +387,21 @@ _VALUE_PATTERNS = (
     re.compile(r"\b\d[\d\- ]{6,}\d\b"),                               # account / card / phone
     re.compile(r"(?:~|\.{1,2})?/[\w.\-]+(?:/[\w.\-]+)+"),             # path
     re.compile(r"(?<![A-Za-z0-9_\-])(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{8,}\b"),  # id/key
+    # IBAN as printed, in groups of four ("DE89 3704 0044 ..."); the agent may send it compact.
+    # Last, so the threat memory's masks keep their indices.
+    re.compile(r"\b[A-Z]{2}\d{2}(?: [A-Z0-9]{4}){2,7}(?: \d{1,4})?\b"),
 )
+_AUTHORITY_PATTERNS = (*_VALUE_PATTERNS[:5], _VALUE_PATTERNS[6])
 
 
 def distinctive_values(value: Any, patterns: tuple[re.Pattern[str], ...] = _VALUE_PATTERNS) -> set[str]:
-    """Values specific enough that their source can be traced: emails, URLs, accounts, paths, ids."""
+    """Values specific enough that their source can be traced: emails, URLs, accounts, paths, ids.
+    Spaces inside a number or IBAN are dropped, so its printed and compact forms are one value."""
     text = leaf_text(value)
     found: set[str] = set()
     for pattern in patterns:
         for match in pattern.findall(text):
-            item = re.sub(r"[\s\-]", "", match) if match[:1].isdigit() else match
+            item = re.sub(r"[\s\-]" if match[:1].isdigit() else r"\s", "", match)
             found.add(item.strip(".,;:").lower())
     return {item for item in found if len(item) >= 6}
 
@@ -406,7 +411,7 @@ def authority_values(value: Any) -> set[str]:
     emails, URLs, accounts and paths. Generic ids are left out (picking an id from a
     search result is how agents normally work), and so are numbers under nine digits
     (dates, amounts)."""
-    return {item for item in distinctive_values(value, _VALUE_PATTERNS[:5])
+    return {item for item in distinctive_values(value, _AUTHORITY_PATTERNS)
             if not item.isdigit() or len(item) >= 9}
 
 

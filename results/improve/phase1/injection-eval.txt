@@ -1,0 +1,37 @@
+3717 rows, splits test,external
+family                                              rules               
+ALL instruction (recall)                            1477/2959 49.9%     
+ALL data (benign flagged)                           16/758 2.1%         
+data:agentdojo_environment                          0/397 0.0%          
+data:generated_output_benign                        0/66 0.0%           
+data:generated_output_benign_translated             0/8 0.0%            
+data:hard_agent_hints                               1/36 2.8%           
+data:hard_agent_hints_translated                    0/6 0.0%            
+data:hard_description_guidance                      0/36 0.0%           
+data:hard_description_guidance_translated           0/4 0.0%            
+data:hard_human_request                             1/31 3.2%           
+data:hard_human_request_translated                  0/5 0.0%            
+data:hard_quoted_attack                             12/21 57.1%         
+data:hard_quoted_attack_translated                  0/3 0.0%            
+data:injecagent_benign                              0/17 0.0%           
+data:mcptox_clean_description                       2/108 1.9%          
+data:mcptox_clean_description_translated            0/20 0.0%           
+instruction:agentdojo_direct                        0/27 0.0%           
+instruction:agentdojo_ignore_previous               0/27 0.0%           
+instruction:agentdojo_important_instructions        27/27 100.0%        
+instruction:agentdojo_system_message                27/27 100.0%        
+instruction:agentdojo_tool_knowledge                27/27 100.0%        
+instruction:generated_output_as_user                1/72 1.4%           
+instruction:generated_output_as_user_translated     0/8 0.0%            
+instruction:generated_output_false_error            6/72 8.3%           
+instruction:generated_output_false_error_translated 0/8 0.0%            
+instruction:generated_output_new_task               6/72 8.3%           
+instruction:generated_output_new_task_translated    0/23 0.0%           
+instruction:generated_output_polite                 0/72 0.0%           
+instruction:generated_output_polite_translated      0/19 0.0%           
+instruction:injecagent_dh_base                      17/510 3.3%         
+instruction:injecagent_dh_enhanced                  510/510 100.0%      
+instruction:injecagent_ds_base                      0/544 0.0%          
+instruction:injecagent_ds_enhanced                  544/544 100.0%      
+instruction:mcptox_poisoned_description             290/301 96.3%       
+instruction:mcptox_poisoned_description_translated  22/69 31.9%         

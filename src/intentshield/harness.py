@@ -64,8 +64,11 @@ class HarnessGuard:
     def __init__(self, path: str | Path, review: str = "tainted", outputs: str = "warn",
                  classifier: str | None = None, catalog: str | Path | None = None,
                  judge: str | None = None, threats: str | Path | None = None,
-                 packs: str | Path | None = None) -> None:
+                 packs: str | Path | None = None, review_output_sourced_arguments: bool = True) -> None:
         self.review, self.outputs = review, outputs
+        # As the proxy's setting: a value from a tool output always asks on a side-effecting
+        # call; this decides it for reads.
+        self.sourced_reads = review_output_sourced_arguments
         # Adaptive threat memory shared by every session and process: addresses and wording that
         # rule-confirmed attacks used before. Evidence only, like the rest.
         self.memory = None
@@ -177,7 +180,7 @@ class HarnessGuard:
         # Observed holds authority values from every output, and every value from flagged ones.
         sourced = sourced_from(distinctive_values(arguments), observed, distinctive_values(intent)) | {
             url for url, how in traced.items() if how == "host"}
-        if sourced and self.review != "never":
+        if sourced and self.review != "never" and (self.sourced_reads or is_mutation(tool)):
             # The scanners may have missed the output it came from; the user decides.
             verdict.decision = "ask"
             verdict.reason = ("An argument value came from a tool output, not from the user: "
@@ -411,6 +414,9 @@ def main(argv: list[str] | None = None) -> None:
                         help="do not remember attacks across sessions")
     parser.add_argument("--packs", default=os.getenv("INTENTSHIELD_THREAT_PACKS") or None,
                         help="directory of signed threat packs, verified with the INTENTSHIELD_PACK_* settings")
+    parser.add_argument("--allow-sourced-reads", action="store_true",
+                        default=os.getenv("INTENTSHIELD_HOOK_SOURCED_READS", "review").lower() == "allow",
+                        help="do not ask before a read whose argument came from a tool output (writes still ask)")
     parser.add_argument("--judge", default=os.getenv("INTENTSHIELD_HOOK_JUDGE") or None,
                         help="LLM judge for calls the rules allow: groq or gemini[:model] (needs its API key)")
     args = parser.parse_args(argv)
@@ -425,7 +431,8 @@ def main(argv: list[str] | None = None) -> None:
     try:
         threats = None if args.no_threat_memory else args.threats or str(Path(args.db).with_name("threats.db"))
         reply = handle(args.harness, event, HarnessGuard(args.db, args.review, args.outputs, args.classifier, args.catalog,
-                                                         args.judge, threats, args.packs))
+                                                         args.judge, threats, args.packs,
+                                                         not args.allow_sourced_reads))
     except Exception as exc:  # fail closed on calls, open on everything else
         name = event.get("hook_event_name")
         print(f"IntentShield hook failed: {exc}", file=sys.stderr)
