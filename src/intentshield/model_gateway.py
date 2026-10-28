@@ -7,11 +7,11 @@ call into a tool name and arguments for the deterministic gateway to evaluate.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 import json
 import os
 import re
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -20,7 +20,6 @@ from urllib.request import Request, urlopen
 from pydantic import BaseModel, ConfigDict
 
 from .tools import ToolSpec
-
 
 ModelProvider = Literal["gemini"]
 _MAX_RESPONSE_BYTES = 2_000_000

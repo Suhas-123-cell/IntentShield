@@ -25,7 +25,8 @@ Who may teach it, and what:
   * fingerprints: hashed word 3-grams of each matched sentence and the one after it (trigger plus
     payload), and of the same window with the rule matches blanked (the payload alone, which survives
     a rewording of exactly the phrases the rules look for), read as the rules read (``readable``) with
-    emails, URLs, paths and ids masked and stop words dropped. A fingerprint with fewer than ``MIN_WORDS`` content words, or that a text of the
+    emails, URLs, paths and ids masked and stop words dropped. A fingerprint with fewer than
+    ``MIN_WORDS`` content words, or that a text of the
     benign gate corpus (``data/benign_gate.jsonl`` plus the operator's ``add_benign``) would contain, is
     stored as ``rejected`` with its gate result, for audit, and never matches.
   * reputation: the distinct runs in which a source (``server`` or ``server:tool``) produced attacks.
@@ -85,8 +86,16 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 from urllib.parse import urlsplit
 
-from .mcp_inspect import (_DESCRIPTION_RULES, _OUTPUT_RULES, _VALUE_PATTERNS, _normalize, authority_values,
-                          leaf_text, readable, sourced_from)
+from .mcp_inspect import (
+    _DESCRIPTION_RULES,
+    _OUTPUT_RULES,
+    _VALUE_PATTERNS,
+    _normalize,
+    authority_values,
+    leaf_text,
+    readable,
+    sourced_from,
+)
 
 MAX_TEXT = 20_000  # as learning.MAX_TEXT (not imported: learning needs numpy)
 SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
@@ -848,8 +857,10 @@ class ThreatMemory:
         return row
 
     def items(self) -> dict[str, Any]:
-        return {"indicators": [self._public(r) for r in self._read("SELECT * FROM threat_indicators ORDER BY last_seen DESC")],
-                "fingerprints": [self._public(r) for r in self._read("SELECT * FROM threat_fingerprints ORDER BY last_seen DESC")],
+        indicators = self._read("SELECT * FROM threat_indicators ORDER BY last_seen DESC")
+        fingerprints = self._read("SELECT * FROM threat_fingerprints ORDER BY last_seen DESC")
+        return {"indicators": [self._public(r) for r in indicators],
+                "fingerprints": [self._public(r) for r in fingerprints],
                 "allowlist": [r[0] for r in self._read("SELECT value FROM threat_allowlist ORDER BY value")]}
 
     def export(self) -> dict[str, Any]:

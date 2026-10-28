@@ -34,6 +34,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import msb  # noqa: E402
+
 from intentshield.evaluation import wilson  # noqa: E402
 from intentshield.harness import HarnessGuard, handle  # noqa: E402
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError  # noqa: E402

@@ -83,7 +83,8 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     # A tool result speaking as the user ("message from me ... to you", "I am the user").
     ("user_impersonation", re.compile(
         r"\b(?:message|note|request)\s+from\s+(?:me|the\s+user|your\s+user)\b[^.\n]{0,60}?\bto\s+you\b|"
-        r"\bI\s+am\s+(?:the|your)\s+user\b(?=\s*(?:[.,!;:]|$|and\b))|\bnew\s+user\s+(?:query|request|message|instructions?)\b", _I)),
+        r"\bI\s+am\s+(?:the|your)\s+user\b(?=\s*(?:[.,!;:]|$|and\b))|"
+        r"\bnew\s+user\s+(?:query|request|message|instructions?)\b", _I)),
     # A tool result rearranging the agent's task ("before you can solve the task", "the previous
     # task has been completed").
     ("task_hijack", re.compile(
@@ -210,7 +211,8 @@ def _surface(value: Any) -> str:
 def argument_surface(value: Any) -> str:
     """One line of JSON with every key and string normalized as the rules read it (decoded,
     NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed), objects as
-    sorted key-value pairs. The gateway's argument rules match this instead of ``canonical_json``, which stays the hashing form."""
+    sorted key-value pairs. The gateway's argument rules match this instead of ``canonical_json``,
+    which stays the hashing form."""
     def clean(item: Any) -> Any:
         if isinstance(item, str):
             return " ".join(readable(item).split())

@@ -3,20 +3,19 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from pathlib import Path
 import signal
 import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from mcp import Client
 import pytest
+from mcp import Client
 
 from intentshield.mcp_verify import verify_mcp
-
 
 pytestmark = pytest.mark.skipif(
     os.getenv("INTENTSHIELD_RUN_HTTP_E2E") != "1",

@@ -7,7 +7,6 @@ from typing import Any
 
 from mcp.server import MCPServer
 
-
 server = MCPServer(
     "IntentShield Demo Upstream",
     instructions="A deterministic local MCP fixture. It never contacts external services.",

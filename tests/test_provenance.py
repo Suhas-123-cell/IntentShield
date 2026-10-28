@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from test_mcp_guardrail import Fixture, call, runtime
 
 from intentshield.harness import HarnessGuard, handle
 from intentshield.mcp_inspect import authority_values, distinctive_values, scan_output
@@ -14,8 +15,6 @@ from intentshield.mcp_proxy import MCPRemoteToolError
 from intentshield.mcp_upstream import MCPCallResult, MCPErrorInfo
 from intentshield.models import Decision, ReasonCode
 from intentshield.threat_memory import ThreatMemory
-
-from test_mcp_guardrail import Fixture, call, runtime
 
 # docs/related-work.md, "schema-valid lie" (TrustShift semantic corruption): a normal-looking record
 # whose IBAN is the attacker's, printed in groups of four as invoices print it. No instruction at all.

@@ -7,14 +7,13 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from test_exemplars import BagOfWords
+from test_mcp_guardrail import Fixture, call, runtime
 
 from intentshield import exemplars
 from intentshield.exemplars import ExemplarIndex
 from intentshield.learning import Learner, LearningStore, Regression, linked_excerpt
 from intentshield.models import Decision
-
-from test_exemplars import BagOfWords
-from test_mcp_guardrail import Fixture, call, runtime
 
 BENIGN = ["The quarterly report lists revenue costs and the outlook for next year",
           "Your order shipped today and arrives on Friday at the front desk",

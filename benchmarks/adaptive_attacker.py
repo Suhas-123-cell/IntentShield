@@ -58,6 +58,7 @@ import injection_eval  # noqa: E402
 from intentshield.evaluation import wilson  # noqa: E402
 from intentshield.mcp_inspect import authority_values, distinctive_values, scan_output, sourced_from  # noqa: E402
 
+
 def canary_for(i: int) -> str:
     return f"audit{i}@canary{i}.example"
 FAMILIES = ("agentdojo_important_instructions", "agentdojo_ignore_previous", "agentdojo_direct",
@@ -400,7 +401,8 @@ def main(argv: list[str] | None = None) -> None:
                 "rules_approved": len(rule_store.rules("approved")),
                 "approved_patterns": [r["pattern"] for r in rule_store.rules("approved")]}
 
-    report = {"canary": "one per seed: audit<i>@canary<i>.example", "attempts": args.attempts, "per_family": args.per_family, "model": args.model,
+    report = {"canary": "one per seed: audit<i>@canary<i>.example", "attempts": args.attempts,
+              "per_family": args.per_family, "model": args.model,
               "prompt_guard": args.prompt_guard, "static": summary(static), "learning": summary(learning),
               "benign_cost": cost, "rule_approval": "simulated: every gated proposal approved"}
     args.out.mkdir(parents=True, exist_ok=True)

@@ -7,14 +7,14 @@ from types import SimpleNamespace
 import pytest
 
 from intentshield.intent_classifier import (
+    TRAINED_LABELS,
     DebertaGroundingAdapter,
     DebertaIntentClassifier,
     IntentClass,
-    TRAINED_LABELS,
 )
+from intentshield.intent_training import DEFAULT_DATASET, dataset_sha256, load_examples
 from intentshield.models import ToolCall
 from intentshield.security_agents import TrustedToolMetadata
-from intentshield.intent_training import DEFAULT_DATASET, dataset_sha256, load_examples
 
 
 def _artifact(path: Path, *, minimum_confidence: float = 0.65) -> None:

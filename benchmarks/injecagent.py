@@ -9,8 +9,8 @@ judges that same proposal offline, so defenses are compared on identical output.
 from __future__ import annotations
 
 import argparse
-import collections
 import ast
+import collections
 import json
 import random
 import re

@@ -4,11 +4,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-from mcp import Client
 import pytest
+from mcp import Client
 
-from intentshield.mcp_proxy import MCPProxyConfig
-from intentshield.mcp_proxy import MCPProxyRuntime
+from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime
 from intentshield.mcp_server import create_proxy_mcp_server
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstreamConfig
 from intentshield.models import ReasonCode, ToolCall

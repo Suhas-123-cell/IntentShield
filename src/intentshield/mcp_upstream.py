@@ -7,17 +7,16 @@ when MCP adds fields while still using the official SDK for the wire protocol.
 
 from __future__ import annotations
 
-from contextlib import AsyncExitStack
-from dataclasses import asdict, dataclass, is_dataclass
-from enum import Enum
 import json
 import os
 import re
+from contextlib import AsyncExitStack
+from dataclasses import asdict, dataclass, is_dataclass
+from enum import Enum
 from typing import Any, Callable, Literal, Mapping
 from urllib.parse import parse_qsl, urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
 
 _CREDENTIAL_NAME_PARTS = {
     "auth", "authorization", "bearer", "cookie", "credential", "credentials",
