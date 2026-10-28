@@ -56,7 +56,7 @@ def test_install_keeps_other_hooks_and_is_idempotent_and_reversible(tmp_path: Pa
     settings = json.loads(path.read_text())
     assert settings["permissions"] == {"allow": ["Bash(ls)"]}
     assert settings["hooks"]["PreToolUse"][0]["hooks"] == [theirs]
-    ours = [g for g in settings["hooks"]["PreToolUse"] if install._ours(g)]
+    ours = [g for g in settings["hooks"]["PreToolUse"] if any(install._ours(h) for h in g["hooks"])]
     assert len(ours) == 1
     assert ours[0]["hooks"][0]["command"] == "intentshield-hook claude --review always"
     assert ours[0]["hooks"][0]["onFailure"] == "block"

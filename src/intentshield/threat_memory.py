@@ -174,7 +174,15 @@ def as_text(value: Any) -> str:
         value = value if isinstance(value, str) else leaf_text(value)
     except (TypeError, ValueError, RecursionError):
         value = ""
-    return value[:MAX_TEXT]
+    return window(value)
+
+
+def window(text: str) -> str:
+    """The head and the tail of a long text: padding before a payload must not hide it."""
+    if len(text) <= MAX_TEXT:
+        return text
+    half = MAX_TEXT // 2
+    return text[:half] + "\n" + text[-half:]
 
 
 def canonical(value: Any) -> str:
@@ -439,7 +447,7 @@ class ThreatMemory:
             items = [as_text(items)] if items else []
         found: set[str] = set()
         for item in items:
-            found |= authority_values(item[:MAX_TEXT])
+            found |= authority_values(window(item))
             if (value := canonical(item)) and " " not in value:
                 found.add(value)
         return found

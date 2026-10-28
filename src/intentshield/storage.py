@@ -16,6 +16,8 @@ class Storage:
     def __init__(self, path: str | Path = "intentshield.db") -> None:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        if not Path(self.path).exists():  # holds executed results and approval arguments: the user's only
+            Path(self.path).touch(mode=0o600)
         self.initialize()
 
     @contextmanager

@@ -123,7 +123,7 @@ Every MSB number here is regenerated from the raw traces in `results/msb` by
 All of these only ever escalate.
 
 ### 3.6 Engineering
-- Tests: 453 pass, 1 skipped; 454 with the HTTP end-to-end test ✓ (2026-10-28; 253/254 on 2026-10-20).
+- Tests: 470 pass, 1 skipped; 471 with the HTTP end-to-end test ✓ (2026-10-28; 253/254 on 2026-10-20).
 - Overhead (`benchmarks/latency.py`, `artifacts/latency.json`, demo MCP server, intent model off,
   2026-10-16) ✓:
   - **hook:** 35 ms per event at the median, p95 under 37 ms, on read, write, small, 4 KB and
