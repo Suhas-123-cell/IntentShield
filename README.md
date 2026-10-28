@@ -74,6 +74,35 @@ answers allow / ask / deny, which the harness maps to the same three outcomes. D
 evidence; no model output can authorize a call. The full diagram and component table are in
 [docs/architecture-and-testing.md](docs/architecture-and-testing.md).
 
+## Contribution
+
+For a report or a viva, this is what the repository supports as a contribution, in order of
+strength, each with where the evidence is and what it does not show.
+
+1. **Self-disclosure parameter stripping, measured.** A malicious MCP server can learn the agent's
+   model, system prompt or conversation by adding a parameter that asks for it; capable agents fill
+   it in because the schema asked. IntentShield removes such parameters from the schema before the
+   agent sees the tool. No other open-source guard does this. Measured on every tool schema the four
+   MSB agents actually saw (159 schemas, 756 cases): 54 parameters stripped, all on attack-role
+   servers, 0 of 194 on the 86 clean tools; undefended harm went through such a parameter in 23 of
+   29 Gemini cases and 33 of 33 llama cases. Evidence: `results/self-disclosure.md`,
+   `benchmarks/self_disclosure_eval.py`. Limit: one benchmark's catalogs, and a renamed parameter
+   with a neutral description would pass the rule.
+2. **One guard behind four harnesses and a protocol proxy, with the measured split of what each
+   placement sees.** Hooks see the user's real prompt and every call and result; the proxy sees
+   descriptions and schemas; neither sees everything. Evidence: `docs/coverage-study.md`, the live
+   Claude Code and Gemini CLI runs in `results/harness-live*`. This is engineering, not a research
+   claim; the mechanisms have prior art (`docs/contribution.md` §2).
+3. **The harm funnel with a trivial structural baseline.** On MSB, a guard with no detection at all
+   (withhold descriptions, strip self-disclosure fields, hold every mutation) executes 0% harm, the
+   same as every detector-based guard, so the benchmark's headline metric cannot rank guards; what
+   detectors add is what reaches the reviewer's queue. Evidence: the MSB tables below and
+   `benchmarks/paper_numbers.py`. Limit: it did not transfer to AgentDojo (`docs/contribution.md` §9.5).
+
+What is not a contribution: the regex rules, provenance, quarantine and rug-pull detection (prior
+art), the learned detectors (negative or null results, documented), and any "best performing"
+claim (see the comparison below). The full honest version is `docs/contribution.md` §10.
+
 ## Results and limitations
 
 
@@ -649,9 +678,10 @@ The proxy guards all three places an MCP attack enters (related work and next st
     for approval.
 
   See [Teach the detector](#teach-the-detector-operator-labels-and-induced-rules).
-- **LLM call judge (optional).** `"judge": "groq"`, `"gemini"` or `"ollama"` (keys from
-  `GROQ_API_KEY` / `GEMINI_API_KEY`, free tiers work; `ollama` is a local model, no key, no quota,
-  `OLLAMA_HOST` to point elsewhere, default `qwen2.5:7b`) runs a second-stage check on
+- **LLM call judge (optional).** `"judge": "ollama"` (the default provider: a local
+  `qwen2.5:7b` through Ollama, no key, no quota, `OLLAMA_HOST` to point elsewhere; run
+  `ollama pull qwen2.5:7b` once), or `"groq"` / `"gemini"` (keys from `GROQ_API_KEY` /
+  `GEMINI_API_KEY`, free tiers work) runs a second-stage check on
   descriptions the rules pass and on each read-only call, asking whether the call
   serves the user's request. It sees only the user's prompt and the call's name and
   arguments, never tool outputs, so injected text reaches it only through arguments.
@@ -1342,7 +1372,8 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
     `INTENTSHIELD_HOOK_OUTPUTS`);
   - optionally run the injection classifier on results the rules pass
     (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
-    result hook, so it is off by default), or the LLM judge (`--judge groq|gemini|ollama`);
+    result hook, so it is off by default), or the LLM judge (`--judge` alone means the local
+    `ollama:qwen2.5:7b`; `--judge groq` or `gemini[:model]` for a hosted one);
   - refuse to start on an unknown `--review` or `--outputs` value, from the command line or the
     environment, instead of silently skipping every review branch.
   A hook that crashes denies the call; for Claude Code the example config adds
