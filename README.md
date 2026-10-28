@@ -383,7 +383,9 @@ anything and never relax a built-in rule.
   proxy and hook process, so what one session caught, the next session knows. Only rule-confirmed text
   teaches it, never its own matches; values the user typed are never learned or held against them;
   fingerprints that a benign gate corpus would contain are rejected; learned entries expire after 30
-  days. What it learned on its own only asks (`REVIEW_KNOWN_THREAT`, a hook "ask"); an entry the operator
+  days. A server with attacks in 3 distinct runs within 7 days is hostile: its outputs are read as possibly
+  injected (weak evidence, never on a call's arguments) until the operator approves a call to it or
+  allowlists it. What it learned on its own only asks (`REVIEW_KNOWN_THREAT`, a hook "ask"); an entry the operator
   confirms, or one from an imported feed or a trusted pack, blocks (`BLOCK_KNOWN_THREAT`). The file
   defaults to `threats.db` next to the proxy or hook database (`threat_memory_path` in the proxy config,
   `--threats` or `INTENTSHIELD_THREAT_DB` for hooks); turn it off with `threat_memory: false` or
@@ -538,7 +540,8 @@ The proxy guards all three places an MCP attack enters (related work and next st
   recipient, URL, account or path whose only source is *any* tool output in the
   run (flagged or not, an upstream's error text included) sends the call to review
   with `REVIEW_UNTRUSTED_ARGUMENT_SOURCE`. An IBAN printed in groups of four and
-  sent compact is one value. Paths and URLs inside a directory or site the user
+  sent compact is one value. Dates, numbers under nine digits and plain words
+  ("read/write") are not values. Paths and URLs inside a directory or site the user
   named count as the user's. A side-effecting call always gets this review;
   `review_output_sourced_arguments: false` turns it off for reads only.
 - **Self-disclosure parameters.** A schema parameter that asks for the agent's
