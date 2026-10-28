@@ -32,6 +32,11 @@ def pct(k: int, n: int) -> str:
     return f"{100 * k / n:.1f}" if n else "-"
 
 
+def kn(m: dict[str, Any]) -> str:
+    """k/n and the rate, formatted from the counts at print time (never pre-rounded)."""
+    return f"{m['k']}/{m['n']} {pct(m['k'], m['n'])}%"
+
+
 def reviews(row: dict[str, Any], benign_only: dict[str, dict[str, Any]] | None = None) -> int:
     """Calls held for a human; with the case grid, only those that are not harmful."""
     return sum(s.get("decision") == "REVIEW" and not (
@@ -58,7 +63,9 @@ def check_manifest(root: Path) -> list[str]:
     return problems
 
 
-def model_report(model_dir: Path, grid: list[dict[str, Any]], reps: int) -> None:
+def model_report(model_dir: Path, grid: list[dict[str, Any]], reps: int) -> dict[str, Any]:
+    """Prints the model's tables; returns its headline cells: paired n of the main arms, each main
+    arm's msb.summarize counts, and the gateway minus baseline user_task difference (a fraction)."""
     by_id = {c["id"]: c for c in grid}
     arms = {}
     for arm in (*MAIN_ARMS, *EXTRA_ARMS):
@@ -89,6 +96,14 @@ def model_report(model_dir: Path, grid: list[dict[str, Any]], reps: int) -> None
                   f"| {pct(k['harm_reached_review'], n)} ({k['harm_reached_review']}) | {k['harm_blocked']} "
                   f"| {k['harm_rewritten']} | {pct(k['task_tool_blocked'], n)} | {pct(sum(u), len(u))} ({sum(u)}/{len(u)}) "
                   f"| {sum(reviews(r) for r in rows) / n:.2f} | {sum(reviews(r, by_id) for r in rows) / n:.2f} |")
+        # The same arms as k/n: harm executed with its Wilson bounds (the only interval a rate of 0 has),
+        # and the two columns the README takes from msb_compare.py.
+        print("\n| arm | harm executed k/n [95% Wilson] | task tool executed k/n | truncated k/n |")
+        print("|---|---|---|---|")
+        for a, rows in paired.items():
+            s = msb.summarize(rows)["all"]
+            print(f"| {a} | {msb_compare.cell(s['harm_executed'])} | {kn(s['task_tool_executed'])} "
+                  f"| {kn(s['truncated'])} |")
         if reps:
             for first in ("baseline", "gateway"):
                 order = {first: paired[first], **{a: r for a, r in paired.items() if a != first}}
@@ -107,9 +122,27 @@ def model_report(model_dir: Path, grid: list[dict[str, Any]], reps: int) -> None
         followed = sum(r["harm_executed"] and not self_disclosure(r) for r in injected)
         print(f"\nundefended: {len(harmed)} harmful cases, {sd} self-disclosure; followed injected text in "
               f"{followed} of {len(injected)} injected-text cases")
+    summary = {a: msb.summarize(rows)["all"] for a, rows in paired.items()}
+    diff = (summary["gateway"]["user_task"]["rate"] - summary["baseline"]["user_task"]["rate"]
+            if {"baseline", "gateway"} <= set(summary) else None)
+    return {"paired_n": len(main_ids), "arms": summary, "user_task_gateway_minus_baseline": diff}
 
 
-def main(argv: list[str] | None = None) -> None:
+def headline(models: dict[str, dict[str, Any]]) -> list[str]:
+    """The strings the README quotes: paired n per model and the gateway minus baseline user_task
+    range across the agents (points, from the unrounded differences)."""
+    diffs = {m: h["user_task_gateway_minus_baseline"] for m, h in models.items()
+             if h["user_task_gateway_minus_baseline"] is not None}
+    lines = ["paired cases per model (main arms): " + ", ".join(f"{m} {h['paired_n']}" for m, h in models.items())]
+    if diffs:
+        sizes = [abs(100 * d) for d in diffs.values()]
+        lines.append("user_task, gateway minus baseline, points: "
+                     + ", ".join(f"{m} {100 * d:+.1f}" for m, d in diffs.items())
+                     + f"; range {min(sizes):.0f}\u2013{max(sizes):.0f} points across {len(diffs)} agents")
+    return lines
+
+
+def main(argv: list[str] | None = None) -> dict[str, dict[str, Any]]:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--results", type=Path, default=Path("results/msb"))
     parser.add_argument("--data", type=Path, default=Path("artifacts/data/MSB"))
@@ -118,10 +151,13 @@ def main(argv: list[str] | None = None) -> None:
     problems = check_manifest(args.results)
     print("manifest:", "ok" if not problems else "; ".join(problems))
     grid = msb.cases(args.data)
-    for model_dir in sorted(p for p in args.results.iterdir() if p.is_dir()):
-        model_report(model_dir, grid, args.bootstrap)
+    models = {model_dir.name: model_report(model_dir, grid, args.bootstrap)
+              for model_dir in sorted(p for p in args.results.iterdir() if p.is_dir())}
+    print("\n## headline")
+    print("\n".join(headline(models)))
     if problems:
         raise SystemExit(1)
+    return models
 
 
 if __name__ == "__main__":
