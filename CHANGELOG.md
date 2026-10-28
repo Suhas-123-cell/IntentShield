@@ -2,6 +2,8 @@
 
 ## 0.2.1 (unreleased)
 
+- PyPI distribution name is `intentshield-mcp`; the plain name belongs to an unrelated project.
+
 Fixes from a five-reviewer pass (security, silent failures, Python quality, over-engineering,
 competitor gap analysis), each with a regression test in `tests/test_review_fixes.py`:
 

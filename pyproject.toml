@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "intentshield"
+name = "intentshield-mcp"
 version = "0.2.1"
 description = "Offline-first guardrail for MCP tool calls: hooks for Claude Code, Codex CLI, Cursor and Gemini CLI, plus a transparent MCP proxy"
 readme = "README.md"
