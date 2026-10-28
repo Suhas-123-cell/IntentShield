@@ -90,6 +90,7 @@ evidence that the detection works (see "Why 0.0% is weak evidence").
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off |
+| Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful cases | 54 parameters stripped, all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`) |
 | Prompt-injection detection, 3,717 held-out texts incl. 142 hard benign ones | - | rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (rules alone 49.9% / 2.1%; Prompt Guard 2 adds 0.7 points); plain-language injections from independent sources stay mostly undetected |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
@@ -107,6 +108,34 @@ unguarded harm (qwen2.5:7b was 51.4% with it, 58.5% without in the 2026-10-12 re
 ids (`results/msb/MANIFEST.json`).
 
 Details, protocol and limits: [MSB](#msb-live-mcp-servers), [harness guard](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli), [adaptive injection detection](#adaptive-injection-detection).
+
+### Where it stands among open-source MCP guards
+
+Checked 2026-10-29 against the free, open-source guards we could find. "n.p." means the project
+publishes no detection numbers.
+
+| guard | licence | descriptions | outputs | argument provenance | rug pull | harness hooks | proxy | runs without a key | published numbers |
+|---|---|---|---|---|---|---|---|---|---|
+| IntentShield | Apache-2.0 | rules + quarantine | rules + taint | yes | yes | Claude Code, Codex, Cursor, Gemini CLI | yes | yes | MSB, MCPTox, InjecAgent, AgentDojo, false-flag rates |
+| [Snyk Agent Scan](https://github.com/snyk/agent-scan) (ex-Invariant mcp-scan) | Apache-2.0 | yes, via Snyk's API | - | - | pinning | discovery only | - | no | n.p. |
+| [Cisco mcp-scanner](https://github.com/cisco-ai-defense/mcp-scanner) | Apache-2.0 | YARA + LLM | - | - | - | - | - | YARA only | n.p. |
+| [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) | MIT | scan mode | secret/PII masking | - | - | - | yes | masking only | n.p. |
+| [LlamaFirewall / Prompt Guard 2](https://github.com/meta-llama/PurpleLlama/tree/main/LlamaFirewall) | PurpleLlama | text scanner | local model | - | - | community recipe | - | PG2 yes | AgentDojo: 1.75% ASR with AlignmentCheck (GPT-4o) |
+| [mcp-guardian](https://github.com/eqtylab/mcp-guardian) | Apache-2.0 | - | log | - | - | - | approval per call | yes | n.p. |
+| [ToolHive](https://github.com/stacklok/toolhive), [Docker MCP Gateway](https://github.com/docker/mcp-gateway) | Apache-2.0 / MIT | filtering | - | - | - | - | containers, secrets | yes | n.p. |
+| [Progent](https://github.com/sunblaze-ucb/progent), [CaMeL](https://arxiv.org/abs/2503.18813) | MIT / research | - | capabilities | policy or data flow | - | - | - | needs an LLM | AgentDojo near 0% ASR on frontier models |
+
+What that table supports: IntentShield is the most broadly scoped keyless open-source MCP guard,
+and the only MCP-specific one that publishes benchmark results and false-positive rates. What it
+does not support: "best performing". The MCP-specific guards publish nothing to compare against,
+and on the one shared benchmark where defenses do publish (AgentDojo), IntentShield's row is a 7B
+agent at 15.6% residual attack success against LlamaFirewall's 1.75% and Progent's near 0% on
+GPT-4o-class models. Closing that gap needs a frontier-model AgentDojo run, which is paid.
+
+What the other guards have that IntentShield lacks: sandboxed server execution (ToolHive, Docker),
+secret and PII masking in results (Lasso, Docker), signed provenance of server packages (ToolHive),
+and a trace-level alignment check (LlamaFirewall). Only the self-disclosure stripping, the
+four-harness hook integration and the hooks-plus-proxy split have no counterpart.
 
 ## What is implemented
 
@@ -594,14 +623,26 @@ The proxy guards all three places an MCP attack enters (related work and next st
     for approval.
 
   See [Teach the detector](#teach-the-detector-operator-labels-and-induced-rules).
-- **LLM call judge (optional).** `"judge": "groq"` or `"gemini"` (key from
-  `GROQ_API_KEY` / `GEMINI_API_KEY`, free tiers work) runs a second-stage check on
+- **LLM call judge (optional).** `"judge": "groq"`, `"gemini"` or `"ollama"` (keys from
+  `GROQ_API_KEY` / `GEMINI_API_KEY`, free tiers work; `ollama` is a local model, no key, no quota,
+  `OLLAMA_HOST` to point elsewhere, default `qwen2.5:7b`) runs a second-stage check on
   descriptions the rules pass and on each read-only call, asking whether the call
   serves the user's request. It sees only the user's prompt and the call's name and
   arguments, never tool outputs, so injected text reaches it only through arguments.
   Like the classifier it is evidence: it can send a call to `REVIEW_JUDGE_FLAGGED` or
   withhold a tool, never authorize. The hooks take the same `--judge`
   (`INTENTSHIELD_HOOK_JUDGE`). See `src/intentshield/judge.py`.
+
+  Is Groq's `gpt-oss-120b` enough for a heavy Claude Code user? No, not on the free tier. One
+  judge request is about 240 prompt tokens plus 120 to 2,000 payload tokens, and the free tier
+  allows 30 requests and 8,000 tokens a minute and 1,000 requests a day per organisation. An
+  agentic session that makes 20 MCP reads a minute hits the per-minute limit inside the first
+  minute and the daily one within a day. In a hook, the judge now makes one short attempt
+  (10 s, one retry) and then reports itself unavailable, both on stderr and in the note the
+  model sees; it never holds the harness for minutes of back-off. Heavy users should run
+  `--judge ollama` (local, unlimited, a second or two of latency on a 7B model) or Groq's
+  paid developer tier. Either way the judge is evidence only: an unavailable judge means the
+  rules alone decided, which is also what the default configuration does.
 
 ### MCPTox results (tool poisoning, 11 models)
 
@@ -829,6 +870,38 @@ written from the MSB failures during tuning, so the rules were fitted to the sam
 There is no stored artifact for this table (it came from one-off `scan_output` runs, not a
 saved report). Plain polite requests (InjecAgent base) still need a semantic detector, and
 the benign set is small.
+
+### Self-disclosure parameter stripping: the one mechanism with no counterpart
+
+A malicious server does not need injected text to learn which model is calling it: it adds a
+parameter named `llm_model_name` (or `system_prompt`, `conversation_history`) to an ordinary
+tool, and a capable agent fills it in because the schema asked. MSB's out-of-scope-parameter and
+tool-transfer attacks are this channel. IntentShield removes such parameters from the schema the
+agent sees (`mcp_inspect.self_disclosure_fields`: by name in any spelling, or by a description
+that asks for "the model calling this tool"), drops any value sent for them, and sends an empty
+string where the upstream schema requires the field. No other guard in the comparison table above
+does this.
+
+`benchmarks/self_disclosure_eval.py` measures the rule on every tool schema the four MSB agents
+were actually shown, across the recorded undefended runs, with the server's role known from the
+case grid (`results/self-disclosure.md`, `results/self-disclosure.json`):
+
+| server role | tools | parameters | stripped |
+|---|---|---|---|
+| task | 72 | 169 | 0 |
+| filesystem | 14 | 25 | 0 |
+| attack | 74 | 171 | 36 |
+| addition (MSB's second attack server) | 18 | 51 | 18 |
+
+Every one of the 54 stripped parameters is on an attack-role server, and every one is a model-name
+field; none of the 194 parameters on the 86 clean tools was touched. On the same traces, harm
+executed through a stripped parameter in 23 of Gemini 3.5 Flash-Lite's 29 harmful cases, 33 of 33
+for llama3.1:8b, 48 of 129 for qwen2.5:7b and 51 of 122 for ornith:9b. With the parameters
+stripped, Gemini attempted none of them (§5.7 of `docs/artifact-paper.md`), and Claude Haiku's
+live leak (3 of 3 runs) arrived as an empty field. Limits: one benchmark's catalogs (13 clean
+servers plus MSB's attack servers), and a rule that can be beaten by a parameter whose name and
+description avoid every pattern; the rule is a floor, and the trivial baseline shows the same
+stripping is what removes most of the leak.
 
 ### Output layer on InjecAgent
 
@@ -1224,7 +1297,9 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
     `INTENTSHIELD_HOOK_OUTPUTS`);
   - optionally run the injection classifier on results the rules pass
     (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
-    result hook, so it is off by default).
+    result hook, so it is off by default), or the LLM judge (`--judge groq|gemini|ollama`);
+  - refuse to start on an unknown `--review` or `--outputs` value, from the command line or the
+    environment, instead of silently skipping every review branch.
   A hook that crashes denies the call; for Claude Code the example config adds
   `"onFailure": "block"` so a hook that is missing, times out or exits with another code
   denies it too. MCP resource reads (`ReadMcpResourceTool`) are scanned like tool results.
@@ -1296,8 +1371,9 @@ connected: the 45 catalogs together are about 75k characters, roughly 19k tokens
 every request. A malicious server can still word its descriptions to be ranked first; the
 300-character cap limits keyword stuffing, it does not stop it.
 
-Cost: a hook is a short-lived process, about 35 ms per MCP call on an M5 (mostly
-Python start-up); the checks themselves take at most about 1 ms (`benchmarks/latency.py`). The adapters follow
+Cost: a hook is a short-lived process, about 42 ms per MCP call on an M5 (mostly Python start-up;
+35 ms before the threat memory was on by default); the checks themselves take 0.02 to 2 ms, the
+upper end on a 4 KB result (`benchmarks/latency.py`, rerun 2026-10-29). The adapters follow
 each harness's documented hook format and are tested on those event shapes
 (`tests/test_harness.py`). Claude Code and Gemini CLI have been run live (below); Cursor and Codex
 have not.

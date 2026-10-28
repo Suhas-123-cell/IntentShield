@@ -199,7 +199,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `453 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+For this revision, expect `470 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -210,7 +210,7 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 454 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 28 October 2026 453 passed and 1 skipped without HTTP enabled (440 before the installer tests of that day); on 21 October 2026 253 passed and 1 skipped; on 13 October 2026 all 248 then collected passed with HTTP enabled, also in a clean CI-like environment (earlier that day, 188 then collected); on 12 October 2026 all 146 then collected passed; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+There are 471 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 29 October 2026 470 passed and 1 skipped (453 on 28 October) without HTTP enabled (440 before the installer tests of that day); on 21 October 2026 253 passed and 1 skipped; on 13 October 2026 all 248 then collected passed with HTTP enabled, also in a clean CI-like environment (earlier that day, 188 then collected); on 12 October 2026 all 146 then collected passed; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
 
 The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
@@ -578,7 +578,7 @@ Results and their caveats are in the README, and the raw outputs the papers cite
 
 **16. Completion checklist and practical limits**
 
-For a thorough test of the current implementation, collect these results: all 454 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
+For a thorough test of the current implementation, collect these results: all 471 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 
