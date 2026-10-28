@@ -225,3 +225,35 @@ def test_old_sessions_are_pruned_from_the_hook_database(tmp_path: Path):
     with sqlite3.connect(db) as conn:
         assert [r[0] for r in conn.execute("SELECT id FROM sessions")] == ["new"]
         assert conn.execute("SELECT count(*) FROM observed").fetchone()[0] == 0
+
+
+def test_install_with_a_hosted_judge_asks_for_the_key_once_and_the_hook_reads_it(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    asked = []
+    path = install.install("claude", "user", hook="intentshield-hook", home=home, judge="groq",
+                           ask=lambda prompt: asked.append(prompt) or "gsk_test_key")
+    assert asked and "never printed" in asked[0]
+    env = home / ".intentshield" / ".env"
+    assert env.read_text() == "GROQ_API_KEY=gsk_test_key\n" and (env.stat().st_mode & 0o777) == 0o600
+    command = json.loads(path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert command == "intentshield-hook claude --judge groq"
+    # A second install does not ask again; ollama never asks.
+    install.install("claude", "user", hook="intentshield-hook", home=home, judge="groq", ask=lambda p: 1 / 0)
+    install.install("gemini", "user", hook="intentshield-hook", home=home, judge="ollama", ask=lambda p: 1 / 0)
+    # The hook loads the stored key with no dotenv dependency.
+    monkeypatch.setattr(harness, "ENV_FILE", env)
+    harness.load_env_file(env)
+    import os
+    assert os.environ["GROQ_API_KEY"] == "gsk_test_key"
+
+
+def test_a_judge_without_a_key_degrades_to_rules_and_says_so(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setattr(harness, "ENV_FILE", tmp_path / "missing.env")
+    g = HarnessGuard(tmp_path / "h.db", judge="groq")
+    assert g.judge is None and "GROQ_API_KEY" in g.judge_missing
+    assert "intentshield install <harness> --judge groq" in capsys.readouterr().err
+    handle("claude", claude("UserPromptSubmit", prompt="list notes"), g)
+    reply = handle("claude", claude("PreToolUse", tool_name="mcp__notes__list_notes", tool_input={}), g)
+    assert "no API key" in reply["hookSpecificOutput"]["additionalContext"]
