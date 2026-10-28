@@ -1,6 +1,6 @@
 **IntentShield: current architecture and detailed testing guide**
 
-This guide describes the application on 21 October 2026 (after commit `ca1af83`). Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
+This guide describes the modules, not a snapshot; test counts: run pytest. Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
 
 **1. What the application currently does**
 
@@ -175,7 +175,7 @@ Atomic SQLite reservations allow one executor for a mutation key. Changed finger
 
 **7. Persistence and limits to understand during testing**
 
-SQLite stores runs, ordered events, approvals/results and idempotency reservations. Default web database is `intentshield.db`; the single demo proxy uses `intentshield-mcp.db`. `database_path` in a proxy config controls its database; `--db` does not override a provided proxy config.
+SQLite stores runs, ordered events, approvals/results and idempotency reservations. The dashboard and the built-in gateway default their database to `~/.intentshield/gateway.db` (`INTENTSHIELD_DB` overrides it); the committed demo proxy config names `intentshield-mcp.db` in the working directory. `database_path` in a proxy config controls its database; `--db` does not override a provided proxy config.
 
 The simulated inbox/outbox and demo notes reset when their process restarts. SQLite audit/approval/idempotency records persist. A persisted approval is not proof that the upstream data stayed identical across restarts.
 
@@ -199,7 +199,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
   .venv/bin/pytest -q
 ```
 
-For this revision, expect `474 passed, 1 skipped`. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
+Expect every test to pass with one skipped (test counts: run pytest; this guide describes the modules, not a snapshot). `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. The skipped test is the opt-in real HTTP process test. Run it, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= \
@@ -210,7 +210,7 @@ INTENTSHIELD_RUN_HTTP_E2E=1 \
   .venv/bin/pytest -vv --durations=10
 ```
 
-There are 475 collected tests at this revision. They should all pass when real localhost socket binding is allowed. On 29 October 2026 474 passed and 1 skipped (453 on 28 October) without HTTP enabled (440 before the installer tests of that day); on 21 October 2026 253 passed and 1 skipped; on 13 October 2026 all 248 then collected passed with HTTP enabled, also in a clean CI-like environment (earlier that day, 188 then collected); on 12 October 2026 all 146 then collected passed; on 10 October 2026 all 131 then collected passed, the three verifier configs in step 10 returned `PASS`, and the manual MCP walkthrough passed against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of those results.
+All collected tests should pass when real localhost socket binding is allowed; the three verifier configs in step 10 return `PASS`, and the manual MCP walkthrough passes against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of the test suite.
 
 The `uv sync` above needs network access. It recreates `.venv` when the interpreter changes and removes packages the lock file does not list, including the optional DeBERTa packages from step 13.
 
@@ -558,7 +558,7 @@ Example configs are in `configs/harness/`; they call `intentshield-hook` by name
 
 `intentshield-mcp --transparent --config <file>` serves one or more upstreams over stdio under their own tool names (`server__tool` when there are several). `configs/harness/transparent-filesystem.json` wraps the reference filesystem server. It needs no `allowed_tools`: the intent-bound call policy runs in the hooks. Quarantined and drifted tools are hidden, self-disclosure parameters are removed, and an injected result gets an `[IntentShield]` warning block in front of it. With `tool_routing` it lists only `intentshield_find_tools` (plus `pinned_tools`) and unlocks the tools each search ranks highest, sending `tools/list_changed`; with `tool_catalog_dir` it writes its visible tool names and descriptions there for the prompt hook, which adds a line naming the best matches for each prompt (`rank_tools` in `mcp_inspect.py`, keyword BM25).
 
-`benchmarks/harness_live/run.sh [model]` runs headless Claude Code against a malicious MCP server that logs every call (`benchmarks/harness_live/calls.jsonl`), unguarded and guarded. It uses your Claude login and model quota. Cost per hook call is about 35 ms on an M5, almost all Python start-up and imports; the decision itself is at most about 1 ms (`benchmarks/latency.py`, which also times the transparent proxy: +1.9 ms per call).
+`benchmarks/harness_live/run.sh [model]` runs headless Claude Code against a malicious MCP server that logs every call (`benchmarks/harness_live/calls.jsonl`), unguarded and guarded. It uses your Claude login and model quota. Cost: hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`), on an M5, almost all Python start-up and imports; the decision itself is 0.02 to 2 ms (`benchmarks/latency.py`, which also times the transparent proxy: +1.9 ms per call).
 
 **15. Offline evaluation and benchmarks**
 
@@ -608,4 +608,4 @@ Rules can miss paraphrased/encoded injections and plain-language requests, and c
 | `metrics.executions` stays zero after a read | That metric counts persisted mutation completions; inspect execution fields/events for reads. |
 | Scripted card fails in proxy web mode | Use an explicit tool call or Live Model; scripted API scenarios are unavailable there. |
 
-The supplied walkthrough is maintained in `scripts/mcp_walkthrough.py`. The recorded test counts describe the inspected application revision; later changes may add tests.
+The supplied walkthrough is maintained in `scripts/mcp_walkthrough.py`.
