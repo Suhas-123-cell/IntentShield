@@ -159,15 +159,17 @@ The proxy guards all three places an MCP attack enters (related work and next st
   | `ollama:qwen2.5:7b`, local | 99.0% (298/301) | 100% (69/69) | 3.7% (4/108) | 6/36 | about 1.0 s on an M5, no key, no quota |
   | `ollama:llama3.1:8b`, local | 100% (301/301) | 100% (69/69) | 19.4% (21/108) | 23/36 | about 1.2 s; unusable, it flags most guidance |
   | Gemini 3.5 Flash-Lite | 99.7% (300/301) | not measured | 4.6% (5/108) | not measured | network, 500 requests a day free |
-  | Groq `gpt-oss-120b` | not re-measured on this split | | | | 30 requests and 8k tokens a minute free |
+  | Groq `gpt-oss-120b` (default) | 99.7% (300/301) | 98.6% (68/69) | 2.8% (3/108) | 11/36 | about 2.8 s a call under the free tier's limits (544 calls in 26 min, 0 errors); 1,000 calls a day |
 
-  Recommendation: `--judge ollama` with `qwen2.5:7b` (the default) for anyone who can run a 7B
-  model locally. It matches the hosted judges on recall, catches the translated poisoned
-  descriptions the rules miss, and its cost is local latency, which matters at catalog time (once
-  per server) far less than per call. Its weakness is the same as every judge's: it flags 1 in 6
-  legitimate descriptions that give the agent usage guidance, so keep it as evidence (a flagged
-  description is withheld for review, never silently dropped). A hosted judge buys 0.7 points of
-  recall for a quota and a network dependency.
+  Recommendation: the default, `--judge groq` (`openai/gpt-oss-120b` on Groq's free tier). It has the
+  best recall and the fewest clean false flags, needs no local hardware, and `intentshield install
+  <harness> --judge groq` asks for the key once and stores it in `~/.intentshield/.env`. Its costs:
+  the free tier's 30 requests and 8,000 tokens a minute (a busy session is throttled; the hook then
+  reports the judge unavailable and the rules decide), and it flags about 1 in 3 legitimate
+  descriptions that give the agent usage guidance, which is why every judge is evidence only: a
+  flagged description is withheld for review, never silently dropped. `--judge ollama` with
+  `qwen2.5:7b` is the offline alternative at nearly the same recall and half the guidance false
+  flags, for anyone who can run a 7B model. Do not use `llama3.1:8b` as a judge.
 
   Is Groq's `gpt-oss-120b` enough for a heavy Claude Code user? No, not on the free tier. One
   judge request is about 240 prompt tokens plus 120 to 2,000 payload tokens, and the free tier
