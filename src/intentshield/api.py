@@ -19,6 +19,8 @@ from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, 
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
 
+DEFAULT_DB = Path.home() / ".intentshield" / "gateway.db"  # not the working directory
+
 
 def create_app(
     database_path: str | Path | None = None,
@@ -27,7 +29,7 @@ def create_app(
     control_token: str | None = None,
     agent_token: str | None = None,
 ) -> FastAPI:
-    load_dotenv()
+    load_dotenv(usecwd=True)  # the .env of the directory the operator runs in, not the package's
     proxy_path = proxy_config or os.getenv("INTENTSHIELD_PROXY_CONFIG")
     approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN", "")).strip()
     # Optional: when set, proposing calls and reading runs (which hold executed tool results)
@@ -49,7 +51,7 @@ def create_app(
         runtime = MCPProxyRuntime(config)
     else:
         local_service = IntentShieldService.default(
-            database_path or os.getenv("INTENTSHIELD_DB", "intentshield.db")
+            database_path or os.getenv("INTENTSHIELD_DB") or DEFAULT_DB
         )
     models = model_gateway or ModelGateway()
     try:
@@ -305,5 +307,3 @@ def create_app(
 
     return app
 
-
-app = create_app()

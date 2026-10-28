@@ -8,6 +8,7 @@ import itertools
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -308,6 +309,10 @@ class MCPProxyRuntime:
         # Recipients, URLs, accounts and paths seen in any tool output, kept for the session
         # like ``_tainted`` (a fresh run must not wash them) and bounded, oldest first out.
         self._observed: dict[str, None] = {}
+        # The session sets above are read and written from the event loop (``create_run``,
+        # ``_refresh_catalog``) and from ``asyncio.to_thread`` workers (``_rule_check``,
+        # ``_inspect_result``); one lock keeps every update whole.
+        self._lock = threading.RLock()
         from .injection_classifier import InjectionClassifier  # torch only when configured
         self._classifier = (InjectionClassifier(config.injection_classifier_dir)
                             if config.injection_classifier_dir else None)
@@ -351,7 +356,8 @@ class MCPProxyRuntime:
             raise ValueError("learning_regression needs exemplar_index_dir")
         # run_id -> recent tool outputs, so a reviewed call can be linked to the text it reused.
         self._outputs: dict[str, list[dict[str, Any]]] = {}
-        self._judge = Judge.from_spec(config.judge) if config.judge else None
+        # A proxy call holds the agent: one short try, then no opinion, never minutes of back-off.
+        self._judge = Judge.from_spec(config.judge, timeout=15, retries=1) if config.judge else None
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
         self._suspect_values: set[str] = set()
@@ -414,9 +420,15 @@ class MCPProxyRuntime:
             )
 
     async def close(self) -> None:
-        self.service = None
+        service, self.service = self.service, None
         self._loop = None
-        await self._close_upstreams()
+        try:
+            await self._close_upstreams()
+        finally:
+            if service is not None:
+                service.security_supervisor.close()
+            if self._memory is not None:
+                self._remember("close")
 
     async def _close_upstreams(self) -> None:
         # MCP transport context managers are task-affine. Close them in the
@@ -518,13 +530,18 @@ class MCPProxyRuntime:
                 if self._loop is None:
                     raise RuntimeError("MCP proxy is not connected")
                 upstream = self.upstreams[current.server_id]
+                timeout = upstream.config.read_timeout_seconds
                 future = asyncio.run_coroutine_threadsafe(
-                    upstream.call_tool(current.name, parsed.model_dump(mode="json")),
+                    asyncio.wait_for(upstream.call_tool(current.name, parsed.model_dump(mode="json")), timeout),
                     self._loop,
                 )
-                result: MCPCallResult = future.result(
-                    timeout=upstream.config.read_timeout_seconds
-                )
+                try:
+                    # ``wait_for`` cancels the upstream call on the loop; the grace period only covers
+                    # the hop back to this thread, so a hung tool never leaves a task behind.
+                    result: MCPCallResult = future.result(timeout=timeout + 5)
+                except TimeoutError:
+                    future.cancel()
+                    raise
                 if result.is_error:
                     message = result.error.message if result.error else "Upstream MCP tool failed"
                     self._observe_error(message)
@@ -586,15 +603,16 @@ class MCPProxyRuntime:
         run_id = await asyncio.to_thread(self._service().create_run, user_intent)
         # The intent exempts what it names from detection and provenance. An intent that
         # repeats a value or instruction from a flagged output is the injection speaking.
-        flagged = self._tainted | self._suspect_values
-        named = distinctive_values(user_intent)
-        if named & flagged or (self._injection_seen and scan_output(user_intent)):
-            self._untrusted_intents.add(run_id)
-            self._service().storage.add_event(run_id, "MCP_INTENT_FROM_OUTPUT", {})
-        elif not self.config.trusted_intent and (learned := named & self._observed.keys()):
-            self._intent_from_outputs[run_id] = learned
-            self._service().storage.add_event(run_id, "MCP_INTENT_NAMES_OBSERVED_VALUES",
-                                              {"values": sorted(learned)[:20]})
+        with self._lock:
+            flagged = self._tainted | self._suspect_values
+            named = distinctive_values(user_intent)
+            if named & flagged or (self._injection_seen and scan_output(user_intent)):
+                self._untrusted_intents.add(run_id)
+                self._service().storage.add_event(run_id, "MCP_INTENT_FROM_OUTPUT", {})
+            elif not self.config.trusted_intent and (learned := named & self._observed.keys()):
+                self._intent_from_outputs[run_id] = learned
+                self._service().storage.add_event(run_id, "MCP_INTENT_NAMES_OBSERVED_VALUES",
+                                                  {"values": sorted(learned)[:20]})
         return run_id
 
     async def tool_catalog(self, *, refresh: bool = True) -> list[dict[str, Any]]:
@@ -622,8 +640,9 @@ class MCPProxyRuntime:
             name for name in set(current) | set(self._bound_fingerprints)
             if current.get(name) != self._bound_fingerprints.get(name)
         }
-        newly_drifted = changed - self._drifted_tools
-        self._drifted_tools.update(changed)
+        with self._lock:
+            newly_drifted = changed - self._drifted_tools
+            self._drifted_tools.update(changed)
         if newly_drifted:
             self._service().storage.add_event(
                 self._ensure_system_run(),
@@ -644,6 +663,10 @@ class MCPProxyRuntime:
         return verdict
 
     def _rule_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
+        with self._lock:
+            return self._rule_check_locked(run_id, user_intent, call)
+
+    def _rule_check_locked(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
         if call.tool_name in self._quarantined:
             return ReasonCode.BLOCK_TOOL_QUARANTINED
         if run_id in self._untrusted_intents:
@@ -719,12 +742,17 @@ class MCPProxyRuntime:
     def _observe_error(self, message: str) -> None:
         """An upstream's error text reaches the agent as an output does, so its values are tracked
         the same way and a rule hit taints them."""
-        self._observed.update(dict.fromkeys(authority_values(message)))
-        if scan_output(message):
-            self._injection_seen = True
-            self._tainted.update(distinctive_values(message))
+        with self._lock:
+            self._observed.update(dict.fromkeys(authority_values(message)))
+            if scan_output(message):
+                self._injection_seen = True
+                self._tainted.update(distinctive_values(message))
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            return self._inspect_result_locked(run_id, call, result)
+
+    def _inspect_result_locked(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
         upstream = result.get("upstream", result)
         for value in authority_values(upstream):  # a re-seen value moves to the end, so eviction never drops a fresh one
             self._observed.pop(value, None)

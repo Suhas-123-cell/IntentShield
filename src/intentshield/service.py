@@ -323,7 +323,8 @@ class IntentShieldService:
         reservation = "NONE"
         replay_result: dict[str, Any] | None = None
         if spec.mutation:
-            assert call.idempotency_key and call.approval_id
+            if not (call.idempotency_key and call.approval_id):  # the policy engine guarantees both
+                raise RuntimeError("mutation reached execution without an approval and idempotency key")
             reservation, replay_result = self.storage.reserve_idempotency(call.idempotency_key, fingerprint, run_id)
             if reservation == "CONFLICT":
                 self._consume_denied_approval(call, fingerprint, approval_verified)
@@ -488,7 +489,8 @@ class IntentShieldService:
             raise ValueError("Approval has already been decided")
         call = ToolCall.model_validate_json(approval["call_json"]).model_copy(update={"approval_id": approval_id})
         run = self.storage.get_run(approval["run_id"])
-        assert run is not None
+        if run is None:
+            raise RuntimeError(f"approval {approval_id} names a run that does not exist")
         if not approve:
             signals, assessment = self._security_assessment(run["user_intent"], call)
             result = self._blocked(

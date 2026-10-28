@@ -119,7 +119,7 @@ def test_streamable_http_refuses_unauthenticated_remote_binding():
         run_mcp_server(transport="streamable-http", host="0.0.0.0")
 
 
-def test_agent_token_guards_mcp_endpoint_but_not_control_route(monkeypatch):
+def test_agent_token_guards_mcp_endpoint_but_not_control_route(monkeypatch, demo_proxy_config):
     import uvicorn
     from starlette.testclient import TestClient
 
@@ -127,7 +127,7 @@ def test_agent_token_guards_mcp_endpoint_but_not_control_route(monkeypatch):
     monkeypatch.setattr(uvicorn, "run", lambda app, **_: captured.setdefault("app", app))
     run_mcp_server(
         transport="streamable-http",
-        proxy_config="configs/mcp-proxy.demo.json",
+        proxy_config=str(demo_proxy_config),
         control_token="control-secret",
         agent_token="agent-secret",
     )
