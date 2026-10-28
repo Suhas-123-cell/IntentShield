@@ -510,7 +510,7 @@ def run_mcp_server(
                 if request.url.path.startswith("/control/"):
                     return await call_next(request)
                 supplied = request.headers.get("authorization", "")
-                if not hmac.compare_digest(supplied, f"Bearer {agent_token}"):
+                if not hmac.compare_digest(supplied.encode(), f"Bearer {agent_token}".encode()):
                     return JSONResponse({"error": "unauthorized"}, status_code=401)
                 return await call_next(request)
 
@@ -531,7 +531,8 @@ def run_mcp_server(
 
         if control_token:
             def authorized(request: Request) -> bool:
-                return hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {control_token}")
+                return hmac.compare_digest(request.headers.get("authorization", "").encode(),
+                                           f"Bearer {control_token}".encode())
 
             async def decide_approval(request: Request) -> JSONResponse:
                 if not authorized(request):

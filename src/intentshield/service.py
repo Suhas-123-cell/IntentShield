@@ -379,7 +379,14 @@ class IntentShieldService:
                 )
             raise
         if self.result_inspector:
-            result = self.result_inspector(run_id, call, result)
+            try:
+                result = self.result_inspector(run_id, call, result)
+            except Exception as exc:  # the call already ran: audit it, and treat its output as suspect
+                self.storage.add_event(run_id, "RESULT_INSPECTION_FAILED", {
+                    "tool_name": call.tool_name, "error": f"{type(exc).__name__}: {exc}"[:500]})
+                if isinstance(result, dict):
+                    result = {**result, "injection_detected": True,
+                              "findings": [*result.get("findings", []), "inspection_failed"]}
         if spec.mutation and call.idempotency_key:
             if not self.storage.complete_idempotency(call.idempotency_key, fingerprint, result):
                 raise RuntimeError("Lost idempotency reservation before completion")

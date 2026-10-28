@@ -695,7 +695,9 @@ class MCPProxyRuntime:
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
         upstream = result.get("upstream", result)
-        self._observed.update(dict.fromkeys(authority_values(upstream)))
+        for value in authority_values(upstream):  # a re-seen value moves to the end, so eviction never drops a fresh one
+            self._observed.pop(value, None)
+            self._observed[value] = None
         for stale in list(itertools.islice(self._observed, max(0, len(self._observed) - 50_000))):
             del self._observed[stale]
         findings = scan_output(upstream)
