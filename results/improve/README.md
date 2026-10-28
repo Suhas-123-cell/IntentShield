@@ -45,7 +45,8 @@ Phase 2 = the code at `phase2/COMMIT` (parent `2d24327`). Same scripts, same rec
 The provenance drop is all timestamps (`phase2/provenance_diff.py`): 93 injected outputs (92 InjecAgent dh, 1 AgentDojo)
 and 3 benign ones were covered only by a date and hour that the old pattern read as one 10-digit account number
 ("2022-02-23 18:…" → 2022022318). No call that obeys those injections reuses that value; the attacker values InjecAgent
-names stay traceable as before (last row but one). The live false stop the change targets (`benign_send`, memory arm)
+names stay traceable as before (last row but one). The 1-point recall bar does not apply to this drop: the 93 rows were false coverage
+from the timestamp bug, not detections lost (accepted at review). The live false stop the change targets (`benign_send`, memory arm)
 was the same misreading of the note's date, 2026-10-01 → 20261001. The memory arm's agreement with live falls to 96.7%
 because that one call, denied live, is now allowed. Adaptive learning and real incidents are unchanged (`phase2/`; the
 benign paragraph count is 1790, not 1789, because the threat memory docstring gained one).
