@@ -35,7 +35,7 @@ executed, plus calls defused by rewriting), task utility and reviewer load, and 
 On MSB every guard that holds mutations, including the trivial baseline, executes no harm on all
 three agents (15–59% undefended). The gateway's measurable contribution is the reviewer's queue:
 it leaves no harmful call for review, where the baseline leaves one in up to 19% of cases. It pays
-9–14 points of task completion relative to the baseline and holds more benign calls for review on
+8–14 points of task completion relative to the baseline and holds more benign calls for review on
 all four agents. A Prompt Guard 2 detector adds no measurable effect. On AgentDojo's published logs, the same structural floor needs a human on 56% of tasks
 and leaks 7.9% at a 10% reviewer error rate, which shows what autonomous defenses buy.
 

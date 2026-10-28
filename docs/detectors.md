@@ -18,7 +18,7 @@ uv pip install --python .venv/bin/python -r requirements-ml.txt
 These are the settings of the current artifact (2026-10-18). The default 5 epochs collapsed
 to predicting `read` for everything. Point `INTENTSHIELD_INTENT_MODEL_DIR` at the output to
 turn the model on; without it the gateway runs without it, which is how every MSB result
-above was measured.
+in [benchmarks.md](benchmarks.md) was measured.
 
 The trainer pins the resolved `microsoft/deberta-v3-small` revision, seeds the
 run, uses safetensors, and writes `intent_metadata.json`, `label_map.json`, and
@@ -82,8 +82,8 @@ injections caught and 24.4% of benign texts flagged, including 100% of human-to-
 and of reports quoting an attack, 78% of legitimate tool-usage guidance and 44% of agent-
 addressed hints. The first DeBERTa intent model was trained with the same flag, so it learned
 from fragmented tokens. It was retrained with a clean tokenizer on 2026-10-18
-(`intent-deberta-v3-small-v2`); on MSB that did not help (see the MSB section: as a veto it
-still blocked the task tool often, and as advisory evidence it changes nothing measurable).
+(`intent-deberta-v3-small-v2`); on MSB that did not help (see the MSB section of [benchmarks.md](benchmarks.md): as a veto it
+still blocked the task tool often, and as advisory evidence it changes nothing measurable (the v11 traces record no intent evidence and no provenance, so it is not confirmed that the model was active in that arm; treat as unconfirmed)).
 
 ## Adaptive injection detection
 
@@ -124,6 +124,8 @@ injections caught and the share of benign texts flagged:
 | rules + Prompt Guard + exemplars on outputs | 58.5% | 2.9% | 15/142 |
 | any of the four | 70.6% | 25.9% | 118/142 |
 
+The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked; on the remaining independent families the rules catch 2.1% (30/1,454) and rules+exemplars 18.1% (263/1,454).
+
 These come from `artifacts/injection-eval/report.json`, and the per-row verdicts are in `rows.jsonl`.
 The output-only rows were computed from those verdicts. Each detector covers different ground:
 
@@ -154,6 +156,11 @@ gates is approved.
 | static | 16/42, 38% [25, 53] | 5 | 7/21 | 33/758 |
 | learning | 13/42, 31% [19, 46] | 3 | 5/21 | 28/758 |
 
+With Gemini 3.5 Flash-Lite as the rewriting attacker (`results/adaptive-gemini.json`, same 42 seeds, 5
+attempts each, threat memory on in the second arm) the rules + exemplars were evaded on 42/42 seeds
+in both arms, and the threat memory did not help; argument provenance, which does not depend on
+detecting the text, held every canary call for review (canary_unreviewed 0/42 in both arms).
+
 Learning helped a little, and the difference is not significant: 3 seeds, with overlapping
 intervals. Two seeds were caught on the first attempt because of what the defense had learned
 from earlier, different seeds. Learning did not help on InjecAgent's base attacks (5/6 evaded in
@@ -166,3 +173,42 @@ numbers, and each seed now has its own canary (`95ef2c1`; the first run is in
 `\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
 each rule.
 
+## Teach the detector (operator labels and induced rules)
+
+With `exemplar_index_dir` and `learning_regression` set in the proxy config, the
+operator can teach the exemplar detector (`src/intentshield/learning.py`). Only the
+operator labels; tool output is what gets labelled, never who labels. A decision may
+carry a label: `injection` with a rejection, `benign` with an approval. The proxy
+learns the outputs whose values the reviewed call reused (for `injection`, any flagged
+output of the run when none was reused), and an approval never teaches a flagged output
+as benign:
+
+```bash
+curl -X POST -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" -H "content-type: application/json" \
+  -d '{"decision":"reject","learn":"injection"}' http://127.0.0.1:8001/control/approvals/APPROVAL_ID
+# label a text directly, and see what was learned and why
+curl -X POST ... -d '{"text":"...","label":"injection"}' http://127.0.0.1:8001/control/learning/examples
+curl -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" http://127.0.0.1:8001/control/learning
+```
+
+Every example passes a regression gate before it goes live: an injection example is
+refused if any benign text of the regression set (the `validation` rows of the
+`learning_regression` files) becomes flagged, a benign one if any regression injection
+stops being flagged. Refused examples stay listed with their gate result. Learned
+examples persist in the proxy database and are replayed at start. Learning changes only
+the exemplar detector: rules, quarantine and the review of mutations are untouched.
+
+With `signature_model` set (a local Ollama model), the operator can ask for rules for a
+learned injection. Proposals must compile, avoid nested quantifiers, lookarounds and
+backreferences, carry at least 12 literal letters, match their source and match no
+non-test benign text; the ones that pass wait as `pending` until approved:
+
+```bash
+curl -X POST ... -d '{"example_id":"EXAMPLE_ID"}' http://127.0.0.1:8001/control/rules/propose
+curl -X POST ... -d '{"decision":"approve"}' http://127.0.0.1:8001/control/rules/RULE_ID
+curl -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" http://127.0.0.1:8001/control/rules
+```
+
+Learned examples, approved rules, Prompt Guard 2 (`prompt_guard`) and the local
+classifier are all evidence: a hit withholds a description or sends calls that reuse an
+output's values to review; none of them allows anything.
