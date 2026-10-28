@@ -385,34 +385,44 @@ _VALUE_PATTERNS = (
     re.compile(r"https?://[^\s\"'<>)]+", _I),                         # URL
     re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"),                  # IBAN
     re.compile(r"\b\d[\d\- ]{6,}\d\b"),                               # account / card / phone
-    re.compile(r"(?:~|\.{1,2})?/[\w.\-]+(?:/[\w.\-]+)+"),             # path
+    re.compile(r"(?<![\w.\-~/])(?:~|[\w.\-]+)?/[\w.\-]+(?:/[\w.\-]+)+"),  # path, absolute or relative
     re.compile(r"(?<![A-Za-z0-9_\-])(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{8,}\b"),  # id/key
     # IBAN as printed, in groups of four ("DE89 3704 0044 ..."); the agent may send it compact.
     # Last, so the threat memory's masks keep their indices.
     re.compile(r"\b[A-Z]{2}\d{2}(?: [A-Z0-9]{4}){2,7}(?: \d{1,4})?\b"),
 )
 _AUTHORITY_PATTERNS = (*_VALUE_PATTERNS[:5], _VALUE_PATTERNS[6])
+# YYYY-MM-DD, DD/MM/YYYY (or MM/DD/YYYY) and YYYYMMDD, not inside a longer number or path.
+_DATE = re.compile(r"(?<![\d/\-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|"
+                   r"(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(?![\d/\-])")
+_PLAIN_WORDS = re.compile(r"[a-z]+(?:/[a-z]+)+")  # "read/write/execute": words, not a relative path
+
+
+def _ordinary(item: str) -> bool:
+    """Dates, numbers under nine digits (amounts, short counts) and plain words: any text has them,
+    so one in an argument says nothing about where it came from."""
+    return (item.isdigit() and len(item) < 9) or bool(_DATE.fullmatch(item) or _PLAIN_WORDS.fullmatch(item))
 
 
 def distinctive_values(value: Any, patterns: tuple[re.Pattern[str], ...] = _VALUE_PATTERNS) -> set[str]:
     """Values specific enough that their source can be traced: emails, URLs, accounts, paths, ids.
-    Spaces inside a number or IBAN are dropped, so its printed and compact forms are one value."""
+    Spaces inside a number or IBAN are dropped, so its printed and compact forms are one value.
+    Dates are taken out before numbers are read, so "2026-10-01 10:00" is not the number 2026100110."""
     text = leaf_text(value)
+    undated = _DATE.sub(" ", text)
     found: set[str] = set()
     for pattern in patterns:
-        for match in pattern.findall(text):
+        for match in pattern.findall(undated if pattern is _VALUE_PATTERNS[3] else text):
             item = re.sub(r"[\s\-]" if match[:1].isdigit() else r"\s", "", match)
             found.add(item.strip(".,;:").lower())
-    return {item for item in found if len(item) >= 6}
+    return {item for item in found if len(item) >= 6 and not _ordinary(item)}
 
 
 def authority_values(value: Any) -> set[str]:
     """Distinctive values that decide where data or money goes or what gets touched:
     emails, URLs, accounts and paths. Generic ids are left out (picking an id from a
-    search result is how agents normally work), and so are numbers under nine digits
-    (dates, amounts)."""
-    return {item for item in distinctive_values(value, _AUTHORITY_PATTERNS)
-            if not item.isdigit() or len(item) >= 9}
+    search result is how agents normally work)."""
+    return distinctive_values(value, _AUTHORITY_PATTERNS)
 
 
 def _url_root(value: str) -> tuple[str, str] | None:
