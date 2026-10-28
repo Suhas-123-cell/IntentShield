@@ -61,9 +61,23 @@ from urllib.parse import urlsplit
 
 from .mcp_inspect import readable
 from .signatures import safety_problem
-from .threat_memory import (MAX_TEXT, MAX_WORDS, PROTECTED, ThreatMatch, ThreatMemory, benign_corpus,
-                            benign_shingles, canonical, domain_of, gate, is_domain, shingles,
-                            text_shingles, tokens, under)
+from .threat_memory import (
+    MAX_TEXT,
+    MAX_WORDS,
+    PROTECTED,
+    ThreatMatch,
+    ThreatMemory,
+    benign_corpus,
+    benign_shingles,
+    canonical,
+    domain_of,
+    gate,
+    is_domain,
+    shingles,
+    text_shingles,
+    tokens,
+    under,
+)
 
 FORMAT = "intentshield-threat-pack/1"
 MAX_PACK_BYTES = 2_000_000

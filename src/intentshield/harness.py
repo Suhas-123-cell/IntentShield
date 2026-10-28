@@ -24,8 +24,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .mcp_inspect import (authority_values, distinctive_values, rank_tools, scan_output, scan_output_collapsed,
-                          self_disclosure_fields, sourced_from, traced_urls)
+from .mcp_inspect import (
+    authority_values,
+    distinctive_values,
+    rank_tools,
+    scan_output,
+    scan_output_collapsed,
+    self_disclosure_fields,
+    sourced_from,
+    traced_urls,
+)
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 _READ = frozenset({

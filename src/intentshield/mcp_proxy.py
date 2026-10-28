@@ -7,8 +7,8 @@ import fnmatch
 import itertools
 import json
 import logging
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any, Callable
 
 from jsonschema import Draft202012Validator
@@ -17,8 +17,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .injection_classifier import InjectionClassifier
 from .judge import Judge
 from .mcp_inspect import (
-    authority_values, distinctive_values, scan_description, scan_output, scan_output_collapsed, scan_server,
-    schema_text, self_disclosure_fields, sourced_from, tool_text, traced_urls,
+    authority_values,
+    distinctive_values,
+    scan_description,
+    scan_output,
+    scan_output_collapsed,
+    scan_server,
+    schema_text,
+    self_disclosure_fields,
+    sourced_from,
+    tool_text,
+    traced_urls,
 )
 from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall

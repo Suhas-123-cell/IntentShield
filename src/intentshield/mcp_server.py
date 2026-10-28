@@ -18,10 +18,10 @@ without the dependency installed produces an actionable error.
 from __future__ import annotations
 
 import argparse
-from contextlib import asynccontextmanager
 import hmac
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, Protocol
 

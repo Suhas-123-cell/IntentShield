@@ -90,7 +90,8 @@ def run_claude(out: Path, mode: str, model: str, name: str, prompt: str) -> str:
     result = subprocess.run(
         ["claude", "-p", prompt, "--model", model, "--setting-sources", "project", "--strict-mcp-config",
          "--mcp-config", str(out / "mcp.json"), "--settings", str(out / "settings.json"), "--output-format", "json",
-         "--allowedTools", "mcp__probe__lookup", "mcp__probe__lookup_v", "mcp__probe__subscribe", "ListMcpResourcesTool", "ReadMcpResourceTool"],
+         "--allowedTools", "mcp__probe__lookup", "mcp__probe__lookup_v", "mcp__probe__subscribe", "ListMcpResourcesTool",
+         "ReadMcpResourceTool"],
         cwd=project, capture_output=True, text=True, timeout=600)
     (out / f"answer-{name}.json").write_text(result.stdout or result.stderr)
     try:

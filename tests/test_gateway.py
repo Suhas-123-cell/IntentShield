@@ -7,10 +7,8 @@ from threading import Event
 import pytest
 from pydantic import ValidationError
 
-from intentshield.models import Decision, ReasonCode, ToolCall
-from intentshield.models import PolicyContext
-from intentshield.policy import PolicyConfig
-from intentshield.policy import PolicyEngine
+from intentshield.models import Decision, PolicyContext, ReasonCode, ToolCall
+from intentshield.policy import PolicyConfig, PolicyEngine
 from intentshield.service import IntentShieldService
 from intentshield.storage import Storage
 from intentshield.tools import SimulatedEmailTools, build_registry
@@ -359,7 +357,8 @@ def test_existing_database_schema_is_migrated(tmp_path: Path):
     path = tmp_path / "legacy.db"
     with sqlite3.connect(path) as db:
         db.execute(
-            "CREATE TABLE runs (id TEXT PRIMARY KEY,user_intent TEXT NOT NULL,scenario TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL,completed_at TEXT)"
+            "CREATE TABLE runs (id TEXT PRIMARY KEY,user_intent TEXT NOT NULL,scenario TEXT,status TEXT NOT NULL,"
+            "created_at TEXT NOT NULL,completed_at TEXT)"
         )
     migrated = Storage(path)
     with migrated.connect() as db:

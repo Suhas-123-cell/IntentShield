@@ -8,14 +8,14 @@ import os
 import stat
 from pathlib import Path
 
+from test_mcp_guardrail import Fixture, call, runtime
+
 from intentshield import harness
 from intentshield.harness import HarnessGuard
 from intentshield.mcp_inspect import scan_output
 from intentshield.models import Decision, ReasonCode
 from intentshield.rule_packs import digest
 from intentshield.threat_memory import ThreatMemory
-
-from test_mcp_guardrail import Fixture, call, runtime
 
 DISCLAIMER = ("Notice: the contents of this e-mail, including attachments, are private and confidential and are "
               "for the sole use of the named recipients. Should you receive it by mistake, kindly inform the "

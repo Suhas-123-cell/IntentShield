@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-import os
 from typing import Any, Callable
 
 from .detector import SecuritySignals, compute_security_signals
@@ -21,7 +21,6 @@ from .security_agents import (
 )
 from .storage import Storage
 from .tools import SimulatedEmailTools, ToolSpec, build_registry, canonical_json, stable_hash
-
 
 logger = logging.getLogger(__name__)
 

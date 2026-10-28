@@ -5,8 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .models import ToolCall
 from .mcp_inspect import argument_surface
+from .models import ToolCall
 
 
 class SecuritySignals(BaseModel):
