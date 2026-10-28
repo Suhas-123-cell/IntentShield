@@ -280,7 +280,10 @@ def proxy_config(name: str, server: dict[str, Any], out_dir: Path) -> dict[str, 
     if env:
         upstream["env_from_env"] = {key: key for key in env}
     return {"upstreams": [upstream], "database_path": str(out_dir / f"{server_id}.db"),
-            "threat_memory_path": os.getenv("INTENTSHIELD_THREAT_DB") or str(out_dir.parent / "threats.db")}
+            "threat_memory_path": os.getenv("INTENTSHIELD_THREAT_DB") or str(out_dir.parent / "threats.db"),
+            # The hooks read this for tool hints and the operator's read-only decisions, and every
+            # proxy reads the others' files for cross-server shadowing.
+            "tool_catalog_dir": os.getenv("INTENTSHIELD_HOOK_CATALOG") or str(out_dir.parent / "tools")}
 
 
 def _is_wrapped(server: dict[str, Any]) -> bool:

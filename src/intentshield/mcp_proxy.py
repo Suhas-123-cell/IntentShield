@@ -14,7 +14,6 @@ from typing import Any, Callable
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .injection_classifier import InjectionClassifier
 from .judge import Judge
 from .mcp_inspect import (
     authority_values,
@@ -64,6 +63,12 @@ class MCPProxyConfig(BaseModel):
     # call to review, whether or not the scanners flagged that output. A side-effecting
     # call always does; this setting decides it for reads.
     review_output_sourced_arguments: bool = True
+    # Whether a run's ``user_intent`` comes from a channel the agent cannot write to (an operator, a
+    # harness hook, a benchmark runner). The gateway's ``intentshield_create_run`` is agent-callable,
+    # so by default a value the intent names that a tool output had already shown is not the user's
+    # word and earns no exemption from the provenance review. Set true only when something other
+    # than the monitored agent writes the intent.
+    trusted_intent: bool = False
     # Optional local classifier (``intentshield.injection_training``) run on descriptions
     # and outputs the rules pass. A hit withholds the description or flags the output
     # and sends affected calls to review; it never allows anything.
@@ -294,10 +299,16 @@ class MCPProxyRuntime:
         self._tainted: set[str] = set()
         # Runs whose intent repeats a flagged output; the agent wrote that intent, not the user.
         self._untrusted_intents: set[str] = set()
+        # Values an agent-written intent names that the proxy had already seen in a tool output when
+        # the run was created: the agent could only have learned them from a tool, so they do not
+        # earn the exemption the user's own words get. A hook's intent is the user's; a gateway's
+        # intent is written by the monitored agent.
+        self._intent_from_outputs: dict[str, set[str]] = {}
         self._injection_seen = False
         # Recipients, URLs, accounts and paths seen in any tool output, kept for the session
         # like ``_tainted`` (a fresh run must not wash them) and bounded, oldest first out.
         self._observed: dict[str, None] = {}
+        from .injection_classifier import InjectionClassifier  # torch only when configured
         self._classifier = (InjectionClassifier(config.injection_classifier_dir)
                             if config.injection_classifier_dir else None)
         if self._classifier and not self._classifier.ready:
@@ -434,6 +445,22 @@ class MCPProxyRuntime:
             raise ValueError("Combined MCP catalog exceeds max_total_schema_bytes")
         return tools
 
+    def _catalog_names(self) -> set[str]:
+        """Tool names the other proxies on this machine wrote to ``tool_catalog_dir``: with one proxy
+        per wrapped server, a description naming another server's tool is still shadowing."""
+        if not self.config.tool_catalog_dir:
+            return set()
+        own = "-".join(sorted(u.server_id for u in self.config.upstream_configs))
+        names: set[str] = set()
+        for path in Path(self.config.tool_catalog_dir).expanduser().glob("*.json"):
+            if path.stem == own:
+                continue
+            try:
+                names |= {str(t["name"]).rpartition("__")[2] for t in json.loads(path.read_text())}
+            except (OSError, ValueError, TypeError, KeyError):
+                continue
+        return names
+
     def _build_registry(self, tools: list[MCPTool]) -> dict[str, ToolSpec]:
         registry: dict[str, ToolSpec] = {}
         self._quarantined, self._description_values, self._redacted = {}, {}, {}
@@ -451,9 +478,8 @@ class MCPProxyRuntime:
             if extra := schema_text(tool.input_schema):
                 text = f"{text}\n{extra}"
             own = {other.name for other in tools if other.server_id == tool.server_id}
-            findings = scan_description(
-                text, {other.name for other in tools if other.server_id != tool.server_id} - own
-            )
+            foreign = {other.name for other in tools if other.server_id != tool.server_id} | self._catalog_names()
+            findings = scan_description(text, foreign - own)
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
             if findings:  # one listing is one "run": several poisoned tools must not count as many
@@ -561,9 +587,14 @@ class MCPProxyRuntime:
         # The intent exempts what it names from detection and provenance. An intent that
         # repeats a value or instruction from a flagged output is the injection speaking.
         flagged = self._tainted | self._suspect_values
-        if distinctive_values(user_intent) & flagged or (self._injection_seen and scan_output(user_intent)):
+        named = distinctive_values(user_intent)
+        if named & flagged or (self._injection_seen and scan_output(user_intent)):
             self._untrusted_intents.add(run_id)
             self._service().storage.add_event(run_id, "MCP_INTENT_FROM_OUTPUT", {})
+        elif not self.config.trusted_intent and (learned := named & self._observed.keys()):
+            self._intent_from_outputs[run_id] = learned
+            self._service().storage.add_event(run_id, "MCP_INTENT_NAMES_OBSERVED_VALUES",
+                                              {"values": sorted(learned)[:20]})
         return run_id
 
     async def tool_catalog(self, *, refresh: bool = True) -> list[dict[str, Any]]:
@@ -621,13 +652,14 @@ class MCPProxyRuntime:
         # the user never gave must not come from an injected output in this run
         # or from another tool's description.
         known = self._known_threat(user_intent, call)
-        values = distinctive_values(call.arguments) - distinctive_values(user_intent)
+        users_own = distinctive_values(user_intent) - self._intent_from_outputs.get(run_id, set())
+        values = distinctive_values(call.arguments) - users_own
         if not values:
             return self._known_reason(known) or self._suspect_tools.get(call.tool_name)
         if values & self._tainted:
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         # A URL built on a tainted one: the injected address with the data appended.
-        traced = traced_urls(values, self._tainted, distinctive_values(user_intent))
+        traced = traced_urls(values, self._tainted, users_own)
         if "path" in traced.values():
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         if traced:
@@ -644,8 +676,7 @@ class MCPProxyRuntime:
         # Detection is not the gate: a value the scanners missed still came from a tool.
         reads_too = self.config.review_output_sourced_arguments
         if (reads_too or not self.config.is_read_only(call.tool_name)) and sourced_from(
-            authority_values(call.arguments), self._observed.keys(),
-            distinctive_values(user_intent),
+            authority_values(call.arguments), self._observed.keys(), users_own,
         ):
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         return None

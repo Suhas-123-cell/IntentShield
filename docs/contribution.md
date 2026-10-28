@@ -285,6 +285,18 @@ Honest ceiling for item 1: a workshop or short paper, or the centrepiece of the 
 rule is a pattern match that a renamed parameter with a neutral description would pass; the
 measurement says it is precise on real catalogs, not that it is complete.
 
+## 11. Architecture verdict and target layout (2026-10-29)
+
+An architecture reviewer, given the five code reviews, judged the hook path sound and the gateway's
+agent-written intent the one wrong thing (fixed: `trusted_intent`, default off). Target layout it
+proposed, to do in this order with tests green at each step: move `wilson` to `benchmarks/stats.py`;
+characterization tests that feed one fixture to `HarnessGuard.call` and the proxy's `_rule_check`,
+then one shared `callguard.py`; split `mcp_proxy.py` into `mcp/{catalog,gateway,server,control}`
+with one auth and rate-limit helper used by the MCP server and the dashboard; move the research
+modules (intent and injection training, `evaluation.py`) under `benchmarks/`; make the dashboard
+and the detectors optional extras so `fastapi` is not a dependency of the hook. About 7k shipped
+lines instead of 11k. Not started.
+
 ## 9. Route 3: an evaluation-methodology paper (audited 2026-10-14)
 
 **The idea.** On MSB, executed harm cannot tell guards apart. Every guard arm that holds

