@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Same code; the README's judge results now carry their recommendation, which the 0.2.2
+  description lacked after the results restructure.
+
 ## 0.2.2
 
 - Same code as 0.2.1; the package description carries the final judge results (Groq
