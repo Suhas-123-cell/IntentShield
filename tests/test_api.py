@@ -69,10 +69,10 @@ def test_api_rejects_client_forged_security_scores(tmp_path: Path):
 
 
 def test_web_proxy_refuses_to_start_without_control_token(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch, demo_proxy_config: Path,
 ):
     monkeypatch.delenv("INTENTSHIELD_CONTROL_TOKEN", raising=False)
-    config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
+    config = demo_proxy_config
 
     with pytest.raises(ValueError, match="CONTROL_TOKEN"):
         create_app(
@@ -82,8 +82,8 @@ def test_web_proxy_refuses_to_start_without_control_token(
         )
 
 
-def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
-    config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
+def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path, demo_proxy_config: Path):
+    config = demo_proxy_config
     with TestClient(
         create_app(
             database_path=tmp_path / "web-proxy.db",

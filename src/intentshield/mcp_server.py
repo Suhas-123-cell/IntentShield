@@ -21,6 +21,7 @@ import argparse
 import hmac
 import json
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -30,6 +31,7 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from .logs import configure_logging
+from .mcp_upstream import MCPUpstreamError
 from .models import GatewayResult, ToolCall
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
@@ -364,6 +366,7 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
 
     from .mcp_inspect import rank_tools
     from .mcp_proxy import MCPProxyRuntime, MCPRemoteToolError
+    from .mcp_upstream import MCPUpstreamError
 
     runtime = runtime or MCPProxyRuntime(config)
     single = len(config.upstream_configs) == 1
@@ -432,6 +435,9 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
             result, findings = await runtime.forward(names[params.name], dict(params.arguments or {}))
         except MCPRemoteToolError as exc:
             return types.CallToolResult(content=[types.TextContent(type="text", text=str(exc))], is_error=True)
+        except MCPUpstreamError as exc:  # the upstream died or broke protocol: one bounded line, no traceback
+            return types.CallToolResult(content=[types.TextContent(
+                type="text", text=f"Upstream MCP server failed ({exc.code}): {exc.message[:500]}")], is_error=True)
         content = list(result.content)
         if findings:
             content.insert(0, {"type": "text", "text": (
@@ -635,10 +641,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--transport", choices=("stdio", "streamable-http"), default="stdio"
     )
-    parser.add_argument("--db", default=os.getenv("INTENTSHIELD_DB", "intentshield.db"))
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8001)
-    parser.add_argument("--path", default="/mcp")
+    parser.add_argument("--db", default=os.getenv("INTENTSHIELD_DB") or str(Path.home() / ".intentshield" / "gateway.db"),
+                        help="SQLite audit database of the built-in demo gateway (default ~/.intentshield/gateway.db; "
+                             "a --config names its own)")
+    parser.add_argument("--host", default="127.0.0.1", help="bind address for streamable-http (loopback only "
+                                                              "unless a token is set)")
+    parser.add_argument("--port", type=int, default=8001, help="port for streamable-http")
+    parser.add_argument("--path", default="/mcp", help="URL path of the streamable-http endpoint")
     parser.add_argument(
         "--config",
         help="JSON config for a guarded real upstream MCP server",
@@ -654,17 +663,30 @@ def main(argv: list[str] | None = None) -> None:
         help="expose the upstream's own tools (catalog layer only) for harnesses guarded by intentshield-hook",
     )
     args = parser.parse_args(argv)
-    run_mcp_server(
-        transport=args.transport,
-        database_path=args.db,
-        host=args.host,
-        port=args.port,
-        streamable_http_path=args.path,
-        proxy_config=args.config,
-        control_token=os.getenv(args.control_token_env) if args.config else None,
-        agent_token=os.getenv("INTENTSHIELD_AGENT_TOKEN") if args.config else None,
-        transparent=args.transparent,
-    )
+    try:
+        run_mcp_server(
+            transport=args.transport,
+            database_path=args.db,
+            host=args.host,
+            port=args.port,
+            streamable_http_path=args.path,
+            proxy_config=args.config,
+            control_token=os.getenv(args.control_token_env) if args.config else None,
+            agent_token=os.getenv("INTENTSHIELD_AGENT_TOKEN") if args.config else None,
+            transparent=args.transparent,
+        )
+    except* (FileNotFoundError, ValueError, MCPUpstreamError) as group:
+        # A missing config, a bad config or an upstream that cannot start: one line each on
+        # stderr, not the anyio exception-group traceback the transport would otherwise print.
+        for exc in _leaves(group):
+            print(f"intentshield-mcp: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _leaves(group: BaseException) -> list[BaseException]:
+    if isinstance(group, BaseExceptionGroup):
+        return [leaf for member in group.exceptions for leaf in _leaves(member)]
+    return [group]
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised by real MCP clients

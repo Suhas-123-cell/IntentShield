@@ -454,14 +454,21 @@ class SecurityAnalysisSupervisor:
         )
         self._slots = BoundedSemaphore(2)
 
+    def close(self) -> None:
+        """Stop the worker threads; a pending analysis is abandoned, never waited for."""
+        self._executor.shutdown(wait=False, cancel_futures=True)
+
     def _submit(
         self,
         agent: AnalysisAgent,
         user_intent: str,
         call: ToolCall,
         metadata: TrustedToolMetadata,
+        deadline: float,
     ) -> Future[DetectionEvidence | GroundingEvidence] | None:
-        if not self._slots.acquire(blocking=False):
+        # Concurrent calls queue for a slot within the same deadline instead of being scored as a
+        # timeout at once: a busy gateway must not block benign calls at random.
+        if not self._slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
             return None
 
         def run() -> DetectionEvidence | GroundingEvidence:
@@ -485,16 +492,17 @@ class SecurityAnalysisSupervisor:
         if not user_intent.strip():
             raise ValueError("user_intent must not be blank")
 
+        deadline = time.monotonic() + self.config.timeout_ms / 1000
         futures: dict[str, Future[DetectionEvidence | GroundingEvidence] | None] = {
             "detection": self._submit(
-                self.detection_agent, user_intent, call, metadata
+                self.detection_agent, user_intent, call, metadata, deadline
             ),
             "grounding": self._submit(
-                self.grounding_agent, user_intent, call, metadata
+                self.grounding_agent, user_intent, call, metadata, deadline
             ),
         }
         active = {future for future in futures.values() if future is not None}
-        done, pending = wait(active, timeout=self.config.timeout_ms / 1000)
+        done, pending = wait(active, timeout=max(0.0, deadline - time.monotonic()))
         for future in pending:
             future.cancel()
 

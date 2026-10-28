@@ -142,6 +142,9 @@ def _call_payload(intent: str, tool: str, arguments: dict[str, Any], budget: int
         room -= len(payload) - budget
 
 
+_ANSWER_CACHE_SIZE = 5_000
+
+
 class Judge:
     # Answers shared by every judge in the process: a proxy is rebuilt per run, tools are not.
     _answers: dict[str, dict[str, Any]] = {}
@@ -194,6 +197,9 @@ class Judge:
             self.errors += 1
             return None
         self._answers[key] = answer
+        # Bounded: a long-lived proxy must not grow the shared cache without limit.
+        while len(self._answers) > _ANSWER_CACHE_SIZE:
+            del self._answers[next(iter(self._answers))]
         if self.cache_path:
             with self.cache_path.open("a") as handle:
                 handle.write(json.dumps({"key": key, "answer": answer}) + "\n")

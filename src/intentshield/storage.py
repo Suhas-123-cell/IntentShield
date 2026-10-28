@@ -22,9 +22,12 @@ class Storage:
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        db = sqlite3.connect(self.path)
+        # The gateway opens a connection per call from several threads: WAL lets readers and the
+        # writer overlap, and the busy timeout turns a brief lock into a wait, not an error.
+        db = sqlite3.connect(self.path, timeout=5)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys = ON")
+        db.execute("PRAGMA journal_mode = WAL")
         try:
             yield db
             db.commit()
