@@ -145,7 +145,7 @@ def test_cli_dispatches_and_reports_errors(tmp_path: Path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as exit_:
         cli.main(["wrap", str(tmp_path / "missing.json")])
     assert exit_.value.code == 1
-    assert "no 'mcpServers'" in capsys.readouterr().err
+    assert "does not exist" in capsys.readouterr().err
 
 
 def test_executable_is_found_beside_an_unresolved_interpreter_symlink(tmp_path: Path, monkeypatch):
@@ -163,3 +163,95 @@ def test_executable_is_found_beside_an_unresolved_interpreter_symlink(tmp_path: 
     assert install.executable("intentshield-hook") == str(venv / "intentshield-hook")
     monkeypatch.setattr(install.shutil, "which", lambda name: None)
     assert install.executable("intentshield-mcp") == "intentshield-mcp"
+
+
+_THEIRS = {
+    "claude": {"permissions": {"allow": ["Bash(ls)"]},
+               "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "my-linter"}]}]}},
+    "cursor": {"version": 1, "hooks": {"beforeShellExecution": [{"command": "their-hook"}]}},
+    "gemini": {"theme": "dark", "hooks": {"BeforeTool": [{"matcher": "run_shell_command",
+                                                          "hooks": [{"type": "command", "command": "their-hook"}]}]}},
+}
+
+
+@pytest.mark.parametrize("scope", ["user", "project"])
+@pytest.mark.parametrize("harness", ["claude", "cursor", "gemini"])
+def test_install_then_uninstall_restores_every_json_settings_file_byte_for_byte(tmp_path: Path, harness: str,
+                                                                               scope: str):
+    home, cwd = tmp_path / "home", tmp_path / "repo"
+    path = install.settings_path(harness, scope, home, cwd)
+    path.parent.mkdir(parents=True)
+    before = json.dumps(_THEIRS[harness], indent=2) + "\n"
+    path.write_text(before)
+    install.install(harness, scope, hook="intentshield-hook", home=home, cwd=cwd)
+    assert "intentshield-hook" in path.read_text()
+    install.uninstall(harness, scope, home=home, cwd=cwd)
+    assert path.read_text() == before
+
+
+def test_codex_install_then_uninstall_restores_the_file(tmp_path: Path):
+    home = tmp_path / "home"
+    path = home / ".codex" / "config.toml"
+    path.parent.mkdir(parents=True)
+    before = 'model = "o3"\n\n[mcp_servers.demo]\ncommand = "demo"\n'
+    path.write_text(before)
+    install.install("codex", "user", hook="intentshield-hook", home=home)
+    assert "intentshield-hook" in path.read_text()
+    install.uninstall("codex", "user", home=home)
+    assert path.read_text() == before
+
+
+def test_hook_command_quotes_and_validates_its_arguments():
+    assert install.hook_command("claude", "/opt/is/bin/intentshield-hook", review="always",
+                                judge="groq:openai/gpt-oss-20b") == \
+        "/opt/is/bin/intentshield-hook claude --review always --judge groq:openai/gpt-oss-20b"
+    with pytest.raises(ValueError, match="judge"):
+        install.hook_command("claude", judge="groq:$(touch /tmp/pwned)")
+    with pytest.raises(ValueError, match="review"):
+        install.hook_command("claude", review="sometimes")
+
+
+def test_install_writes_through_a_settings_symlink(tmp_path: Path):
+    home = tmp_path / "home"
+    target = tmp_path / "dotfiles" / "settings.json"
+    target.parent.mkdir(parents=True)
+    target.write_text("{}\n")
+    link = home / ".claude" / "settings.json"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(target)
+    install.install("claude", "user", hook="intentshield-hook", home=home)
+    assert link.is_symlink() and "intentshield-hook" in target.read_text()
+
+
+def test_a_wrapped_server_with_an_env_block_answers_tool_calls(tmp_path: Path, monkeypatch):
+    """`wrap` turns a literal env block into env_from_env; the proxy must still forward the
+    variable and the calls (an operator-reported failure mode)."""
+    import asyncio
+    import sys
+
+    from mcp import Client
+
+    from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime
+    from intentshield.mcp_server import create_transparent_mcp_server
+
+    home = tmp_path / "home"
+    mcp_json = tmp_path / ".mcp.json"
+    mcp_json.write_text(json.dumps({"mcpServers": {"demo": {
+        "command": sys.executable, "args": ["-m", "intentshield.demo_mcp_server"],
+        "env": {"DEMO_TOKEN": "secret-value-123"}}}}))
+    install.wrap(mcp_json, out_dir=home / ".intentshield" / "proxies")
+    generated = json.loads(mcp_json.read_text())["mcpServers"]["demo"]
+    assert generated["env"] == {"DEMO_TOKEN": "secret-value-123"}  # the client still owns the secret
+    config = MCPProxyConfig.from_file(generated["args"][generated["args"].index("--config") + 1])
+    assert config.upstreams[0].env_from_env == {"DEMO_TOKEN": "DEMO_TOKEN"}
+    monkeypatch.setenv("DEMO_TOKEN", "secret-value-123")
+    shield = MCPProxyRuntime(config)
+    server = create_transparent_mcp_server(config, runtime=shield)
+
+    async def exercise() -> None:
+        async with Client(server, mode="legacy") as client:
+            assert "read_note" in {t.name for t in (await client.list_tools()).tools}
+            result = await client.call_tool("read_note", {"note_id": "welcome"})
+            assert not result.is_error and "IntentShield demo note" in result.content[0].text
+
+    asyncio.run(exercise())
