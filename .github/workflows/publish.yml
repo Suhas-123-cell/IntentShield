@@ -1,9 +1,9 @@
 name: publish
 
 # Builds the wheel and sdist on every push and PR (so a broken package fails CI), and publishes
-# to PyPI on a version tag (v0.2.0, ...) through PyPI trusted publishing: add this repository,
-# workflow "publish.yml" and environment "pypi" as a trusted publisher of the project on
-# pypi.org; no token is stored anywhere.
+# to PyPI on a version tag (v0.2.1, ...) through PyPI trusted publishing: add this repository,
+# workflow "publish.yml" and environment "pypi" as a trusted publisher of the project
+# intentshield-mcp on pypi.org; no token is stored anywhere.
 
 on:
   push:
