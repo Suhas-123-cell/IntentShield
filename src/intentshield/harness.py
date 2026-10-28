@@ -110,6 +110,9 @@ class HarnessGuard:
         # Recipients, URLs, accounts and paths seen in any tool output of the session.
         self.db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
                         "PRIMARY KEY (session, value))")
+        # Calls the hook asked the user about; one that then runs is one the user approved.
+        self.db.execute("CREATE TABLE IF NOT EXISTS asked (session TEXT NOT NULL, use_id TEXT NOT NULL, "
+                        "PRIMARY KEY (session, use_id))")
 
     def _load(self, session: str) -> tuple[str, set[str]]:
         row = self.db.execute("SELECT intent, taint FROM sessions WHERE id = ?", (session,)).fetchone()
@@ -198,6 +201,15 @@ class HarnessGuard:
                 verdict.decision = "ask"
                 verdict.reason = f"IntentShield's judge: {objection} Confirm this call."
         return verdict
+
+    def asked(self, session: str, use_id: str) -> None:
+        self.db.execute("INSERT OR IGNORE INTO asked VALUES (?, ?)", (session, use_id))
+
+    def ran(self, session: str, use_id: str, tool: str) -> None:
+        """A call ran. If the hook had asked about it, the user approved a call to that server, so its
+        past attacks no longer make it hostile."""
+        if self.db.execute("DELETE FROM asked WHERE session = ? AND use_id = ?", (session, use_id)).rowcount:
+            self._memory("clear_source", tool.partition(":")[0])
 
     def _memory(self, method: str, *args: Any, **kwargs: Any) -> Any:
         """A threat-memory call that reports and gives up instead of raising: it only adds evidence."""
@@ -318,6 +330,8 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
                 v.reason = v.context + (" Confirm this call." if harness == "claude"
                                         else " Call the tool again with those fields empty.")
             decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
+            if decision == "ask" and event.get("tool_use_id"):
+                guard.asked(session, str(event["tool_use_id"]))
             out: dict[str, Any] = {"hookEventName": "PreToolUse"}
             if not (decision == "allow" and harness == "claude"):
                 # Claude Code applies updatedInput without a decision and keeps its own permission
@@ -329,6 +343,8 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
                 out["additionalContext"] = v.context
             return {"hookSpecificOutput": out}
         if name == "PostToolUse":
+            if event.get("tool_use_id"):
+                guard.ran(session, str(event["tool_use_id"]), tool)
             v = guard.result(session, tool, event.get("tool_response", event.get("tool_output")))
             if not v.findings:
                 return None

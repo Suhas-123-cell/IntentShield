@@ -819,7 +819,10 @@ class MCPProxyRuntime:
             # A human approved the previously displayed operation, not a
             # replacement schema supplied later by the upstream server.
             return await asyncio.to_thread(service.decide_approval, approval_id, False)
-        return await asyncio.to_thread(service.decide_approval, approval_id, approve)
+        result = await asyncio.to_thread(service.decide_approval, approval_id, approve)
+        if approve:  # the operator vouched for this server: its past attacks no longer make it hostile
+            await asyncio.to_thread(self._remember, "clear_source", approval["tool_name"].partition(":")[0])
+        return result
 
     async def decide_and_learn(self, approval_id: str, approve: bool,
                                learn: str | None) -> tuple[GatewayResult, list[dict[str, Any]]]:
