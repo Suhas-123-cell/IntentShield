@@ -36,6 +36,7 @@ from .mcp_inspect import (
 )
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
+SESSION_TTL = 7 * 86_400  # seconds a session's prompts and taint are kept
 _READ = frozenset({
     "get", "list", "search", "read", "find", "fetch", "query", "retrieve", "show", "view", "describe",
     "lookup", "browse", "count", "check", "inspect", "summarize", "info", "status", "tree", "directory",
@@ -126,6 +127,30 @@ class HarnessGuard:
         # Calls the hook asked the user about; one that then runs is one the user approved.
         self.db.execute("CREATE TABLE IF NOT EXISTS asked (session TEXT NOT NULL, use_id TEXT NOT NULL, "
                         "PRIMARY KEY (session, use_id))")
+        # Prompts are the user's words: keep them only while a session can still be live.
+        self.db.execute("DELETE FROM sessions WHERE updated < ?", (time.time() - SESSION_TTL,))
+        self.db.execute("DELETE FROM observed WHERE session NOT IN (SELECT id FROM sessions)")
+        self.db.execute("DELETE FROM asked WHERE session NOT IN (SELECT id FROM sessions)")
+        self._read_only: dict[str, bool] | None = None
+
+    def mutates(self, tool: str) -> bool:
+        """Whether a call may change state: the operator's ``read_only_tools`` decision, as the
+        transparent proxy wrote it to the catalog, else the name heuristic (a server picks its own
+        names, so the catalog wins whenever a proxy guards the server)."""
+        if self._read_only is None:
+            self._read_only = {}
+            for path in sorted(self.catalog.glob("*.json")) if self.catalog and self.catalog.is_dir() else ():
+                try:
+                    for t in json.loads(path.read_text()):
+                        if "read_only" in t:
+                            self._read_only[str(t["name"])] = bool(t["read_only"])
+                except (OSError, ValueError, TypeError, KeyError):
+                    continue
+        name = tool.partition(":")[2] or tool
+        known = self._read_only.get(name)
+        if known is None:
+            known = self._read_only.get(f"{tool.partition(':')[0]}__{name}")
+        return is_mutation(tool) if known is None else not known
 
     def _load(self, session: str) -> tuple[str, set[str]]:
         row = self.db.execute("SELECT intent, taint FROM sessions WHERE id = ?", (session,)).fetchone()
@@ -196,12 +221,12 @@ class HarnessGuard:
         # Observed holds authority values from every output, and every value from flagged ones.
         sourced = sourced_from(distinctive_values(arguments), observed, distinctive_values(intent)) | {
             url for url, how in traced.items() if how == "host"}
-        if sourced and self.review != "never" and (self.sourced_reads or is_mutation(tool)):
+        if sourced and self.review != "never" and (self.sourced_reads or self.mutates(tool)):
             # The scanners may have missed the output it came from; the user decides.
             verdict.decision = "ask"
             verdict.reason = ("An argument value came from a tool output, not from the user: "
                               f"{', '.join(sorted(sourced)[:3])}. Confirm this call.")
-        elif is_mutation(tool) and (self.review == "always" or (
+        elif self.mutates(tool) and (self.review == "always" or (
                 self.review == "tainted" and (taint or self._flagged(session)))):
             verdict.decision = "ask"
             verdict.reason = ("A tool output in this session tried to instruct the agent; confirm this call."
@@ -347,7 +372,7 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
             v = guard.call(session, tool, _as_dict(event.get("tool_input")))
             if v.decision == "allow" and v.arguments is None and not v.context:
                 return None  # no opinion: the harness's own permission flow decides
-            if v.decision == "allow" and is_mutation(tool):
+            if v.decision == "allow" and guard.mutates(tool):
                 # A rewrite must not turn "no opinion" into an explicit allow for a state change.
                 v.decision = "ask"
                 v.reason = v.context + (" Confirm this call." if harness == "claude"

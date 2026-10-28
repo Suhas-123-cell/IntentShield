@@ -29,6 +29,14 @@ competitor gap analysis), each with a regression test in `tests/test_review_fixe
   rules and fingerprints.
 - New: `benchmarks/self_disclosure_eval.py` and `results/self-disclosure.{md,json}`, the
   precision and harm-share measurement of self-disclosure parameter stripping.
+- Architecture review fixes: an agent-written gateway intent no longer exempts values the proxy
+  had already seen in a tool output (`trusted_intent` restores the old behaviour for trusted
+  channels); the hook takes the operator's read-only decision from the proxy catalog; wrapped
+  proxies read each other's catalogs for cross-server shadowing; hook sessions are pruned after
+  7 days; the classifier import is lazy; two unused storage helpers are gone.
+- Judge: measured a local `ollama:qwen2.5:7b` judge on the held-out descriptions (99.0% recall,
+  3.7% clean flagged, about 1 s a call) and recommend it over the hosted free tiers
+  (`results/judge/`).
 
 ## 0.2.0
 

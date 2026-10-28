@@ -132,6 +132,32 @@ and on the one shared benchmark where defenses do publish (AgentDojo), IntentShi
 agent at 15.6% residual attack success against LlamaFirewall's 1.75% and Progent's near 0% on
 GPT-4o-class models. Closing that gap needs a frontier-model AgentDojo run, which is paid.
 
+### Architecture verdict (2026-10-29)
+
+An independent architecture review after the five code reviews. The hook-plus-proxy split holds:
+each side sees what the other cannot (the hook the user's real prompt and the whole session, the
+proxy descriptions and schemas before the model does). Three structural findings were fixed the
+same day and are tested in `tests/test_review_fixes.py`:
+
+- **The gateway took its trust anchor from the agent it monitors.** `intentshield_create_run` is
+  agent-callable, and the intent it carries exempted values from provenance. Now a value the
+  intent names that a tool output had already shown earns no exemption unless the operator sets
+  `trusted_intent` (for a runner or hook that writes intents). The user-typed prompt in hook mode
+  was never affected.
+- **The hook decided read-versus-write from a tool name the server chose.** The transparent proxy
+  now writes the operator's `read_only_tools` decision into the catalog it shares with the hooks,
+  and the hook uses it; the name heuristic applies only to servers no proxy guards.
+- **`wrap` lost cross-server shadowing** (one proxy per server). Each proxy now reads the other
+  proxies' catalog files for the shadowing check.
+
+Also fixed: the hook database kept every prompt forever (now pruned after 7 days), and PyTorch was
+imported at the top of the proxy module. Known and documented, not fixed: gateway taint lives in
+process memory (a restart clears it), the stdio gateway has no approval channel (use Streamable
+HTTP or the hooks), and the dashboard, the simulated mailbox, the synthetic evaluation harness and
+the negative-result classifiers still ship in the core package. The reviewer's target layout
+(`callguard` shared by hook and proxy, one control plane, detectors and dashboard as extras, about
+7k lines instead of 11k) is in `docs/contribution.md` §11 as the next refactor.
+
 What the other guards have that IntentShield lacks: sandboxed server execution (ToolHive, Docker),
 secret and PII masking in results (Lasso, Docker), signed provenance of server packages (ToolHive),
 and a trace-level alignment check (LlamaFirewall). Only the self-disclosure stripping, the
@@ -632,6 +658,24 @@ The proxy guards all three places an MCP attack enters (related work and next st
   Like the classifier it is evidence: it can send a call to `REVIEW_JUDGE_FLAGGED` or
   withhold a tool, never authorize. The hooks take the same `--judge`
   (`INTENTSHIELD_HOOK_JUDGE`). See `src/intentshield/judge.py`.
+
+  **Which judge to use.** Measured on the same 3,717 held-out texts as the detector table
+  (`results/judge/`, descriptions only, since the judge reads only descriptions and calls):
+
+  | judge | poisoned descriptions caught | translated poisoned caught | clean flagged | legitimate usage guidance flagged | cost per call |
+  |---|---|---|---|---|---|
+  | rules alone | 96.3% (290/301) | 31.9% (22/69) | 1.9% (2/108) | 0/36 | 0 |
+  | `ollama:qwen2.5:7b`, local | 99.0% (298/301) | 100% (69/69) | 3.7% (4/108) | 6/36 | about 1.0 s on an M5, no key, no quota |
+  | Gemini 3.5 Flash-Lite | 99.7% (300/301) | not measured | 4.6% (5/108) | not measured | network, 500 requests a day free |
+  | Groq `gpt-oss-120b` | not re-measured on this split | | | | 30 requests and 8k tokens a minute free |
+
+  Recommendation: `--judge ollama` with `qwen2.5:7b` (the default) for anyone who can run a 7B
+  model locally. It matches the hosted judges on recall, catches the translated poisoned
+  descriptions the rules miss, and its cost is local latency, which matters at catalog time (once
+  per server) far less than per call. Its weakness is the same as every judge's: it flags 1 in 6
+  legitimate descriptions that give the agent usage guidance, so keep it as evidence (a flagged
+  description is withheld for review, never silently dropped). A hosted judge buys 0.7 points of
+  recall for a quota and a network dependency.
 
   Is Groq's `gpt-oss-120b` enough for a heavy Claude Code user? No, not on the free tier. One
   judge request is about 240 prompt tokens plus 120 to 2,000 payload tokens, and the free tier
