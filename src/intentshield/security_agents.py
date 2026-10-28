@@ -9,8 +9,8 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models import ToolCall
 from .mcp_inspect import argument_surface, normalized_intent
+from .models import ToolCall
 from .tools import ToolSpec, destination_allowed
 
 

@@ -21,7 +21,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from .models import ToolCall
 from .security_agents import IntentClassifierResult, TrustedToolMetadata
 
-
 ARTIFACT_SCHEMA_VERSION = 1
 DEFAULT_ARTIFACT_DIR = Path("artifacts/intent-deberta-v3-small")
 TRAINED_LABELS = ("read", "mutation", "no_action")

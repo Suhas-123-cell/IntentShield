@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import hmac
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi import Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .model_gateway import ModelGateway, ModelProviderError
 from .mcp_proxy import MCPProxyConfig, MCPProxyRuntime
+from .model_gateway import ModelGateway, ModelProviderError
 from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, ToolCall
 from .ratelimit import RateLimiter
 from .service import IntentShieldService

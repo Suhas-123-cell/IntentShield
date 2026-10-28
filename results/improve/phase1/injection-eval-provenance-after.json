@@ -1,0 +1,1228 @@
+{
+  "rows": 3717,
+  "splits": "test,external",
+  "detectors": {
+    "rules": {
+      "recall": {
+        "flagged": 1477,
+        "n": 2959,
+        "rate": 0.49915511997296386,
+        "ci95": [
+          0.4811521227711809,
+          0.5171603081059879
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 16,
+        "n": 758,
+        "rate": 0.021108179419525065,
+        "ci95": [
+          0.013033814502928199,
+          0.0340121856104812
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 0,
+          "n": 397,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.009583835609876816
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 0,
+          "n": 66,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.05500446725160935
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244156195108769
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 1,
+          "n": 36,
+          "rate": 0.027777777777777776,
+          "ci95": [
+            0.004920280295569679,
+            0.141700337350308
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903430336530645
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.09642183044857634
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 0,
+          "n": 4,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.48990002040399916
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 1,
+          "n": 31,
+          "rate": 0.03225806451612903,
+          "ci95": [
+            0.00571707408694444,
+            0.16194457176169622
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.43449149475208104
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 12,
+          "n": 21,
+          "rate": 0.5714285714285714,
+          "ci95": [
+            0.3654621629703244,
+            0.7553030051347894
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 0,
+          "n": 3,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.5615060804490177
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.18432366037156456
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 2,
+          "n": 108,
+          "rate": 0.018518518518518517,
+          "ci95": [
+            0.005093117606642765,
+            0.06502032855292575
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 0,
+          "n": 20,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.16113012549493322
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            6.938893903907228e-18,
+            0.12455903714463581
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            6.938893903907228e-18,
+            0.12455903714463581
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 1,
+          "n": 72,
+          "rate": 0.013888888888888888,
+          "ci95": [
+            0.002455888640432169,
+            0.07456780284286987
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244156195108769
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 6,
+          "n": 72,
+          "rate": 0.08333333333333333,
+          "ci95": [
+            0.03875189713049035,
+            0.17012555271233995
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244156195108769
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 6,
+          "n": 72,
+          "rate": 0.08333333333333333,
+          "ci95": [
+            0.03875189713049035,
+            0.17012555271233995
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 0,
+          "n": 23,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.14312112541726274
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.05065293981139638
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 0,
+          "n": 19,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.16818436536845052
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 17,
+          "n": 510,
+          "rate": 0.03333333333333333,
+          "ci95": [
+            0.020913962955964944,
+            0.05273052203707572
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 510,
+          "n": 510,
+          "rate": 1.0,
+          "ci95": [
+            0.992523766078885,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 0,
+          "n": 544,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.007012245875450129
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.9929877541245498,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 290,
+          "n": 301,
+          "rate": 0.9634551495016611,
+          "ci95": [
+            0.9357556818922103,
+            0.9794737356151116
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 22,
+          "n": 69,
+          "rate": 0.3188405797101449,
+          "ci95": [
+            0.2209460520472577,
+            0.4358434748165124
+          ]
+        }
+      }
+    },
+    "provenance": {
+      "recall": {
+        "flagged": 2043,
+        "n": 2589,
+        "rate": 0.7891077636152954,
+        "ci95": [
+          0.7729711571246676,
+          0.8043876757481156
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 117,
+        "n": 590,
+        "rate": 0.19830508474576272,
+        "ci95": [
+          0.16812793128427897,
+          0.2323856063324862
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 86,
+          "n": 397,
+          "rate": 0.21662468513853905,
+          "ci95": [
+            0.17892098807034154,
+            0.25976002707379514
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 21,
+          "n": 66,
+          "rate": 0.3181818181818182,
+          "ci95": [
+            0.21848849400185993,
+            0.43787676681690707
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 1,
+          "n": 8,
+          "rate": 0.125,
+          "ci95": [
+            0.02241690886329617,
+            0.4708948057698615
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.09642183044857634
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903430336530645
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 1,
+          "n": 31,
+          "rate": 0.03225806451612903,
+          "ci95": [
+            0.00571707408694444,
+            0.16194457176169622
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.43449149475208104
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 0,
+          "n": 21,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.15464382326420195
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 0,
+          "n": 3,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.5615060804490177
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 8,
+          "n": 17,
+          "rate": 0.47058823529411764,
+          "ci95": [
+            0.26164801196088106,
+            0.6903710268845051
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 17,
+          "n": 27,
+          "rate": 0.6296296296296297,
+          "ci95": [
+            0.442289046234463,
+            0.7846771293206314
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 17,
+          "n": 27,
+          "rate": 0.6296296296296297,
+          "ci95": [
+            0.442289046234463,
+            0.7846771293206314
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 17,
+          "n": 27,
+          "rate": 0.6296296296296297,
+          "ci95": [
+            0.442289046234463,
+            0.7846771293206314
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 17,
+          "n": 27,
+          "rate": 0.6296296296296297,
+          "ci95": [
+            0.442289046234463,
+            0.7846771293206314
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 18,
+          "n": 27,
+          "rate": 0.6666666666666666,
+          "ci95": [
+            0.47824419872105484,
+            0.8135694555640665
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 61,
+          "n": 72,
+          "rate": 0.8472222222222222,
+          "ci95": [
+            0.7467749821453958,
+            0.9124938096522456
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 7,
+          "n": 8,
+          "rate": 0.875,
+          "ci95": [
+            0.5291051942301386,
+            0.9775830911367038
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 41,
+          "n": 72,
+          "rate": 0.5694444444444444,
+          "ci95": [
+            0.4544309920240597,
+            0.6774227663354686
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 6,
+          "n": 8,
+          "rate": 0.75,
+          "ci95": [
+            0.40926987910258916,
+            0.9285223111419724
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 56,
+          "n": 72,
+          "rate": 0.7777777777777778,
+          "ci95": [
+            0.6690882726433144,
+            0.8583267607947987
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 18,
+          "n": 23,
+          "rate": 0.782608695652174,
+          "ci95": [
+            0.5809611981726508,
+            0.9033616439828094
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 59,
+          "n": 72,
+          "rate": 0.8194444444444444,
+          "ci95": [
+            0.7151944298987886,
+            0.8913328585550414
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 15,
+          "n": 19,
+          "rate": 0.7894736842105263,
+          "ci95": [
+            0.5666528575973392,
+            0.9149246150840843
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 303,
+          "n": 510,
+          "rate": 0.5941176470588235,
+          "ci95": [
+            0.5509483903175991,
+            0.6358796127090145
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 303,
+          "n": 510,
+          "rate": 0.5941176470588235,
+          "ci95": [
+            0.5509483903175991,
+            0.6358796127090145
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.9929877541245498,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.9929877541245498,
+            1.0
+          ]
+        }
+      }
+    },
+    "rules+provenance": {
+      "recall": {
+        "flagged": 2603,
+        "n": 2959,
+        "rate": 0.8796890841500506,
+        "ci95": [
+          0.8674720708912637,
+          0.8909214929091095
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 133,
+        "n": 758,
+        "rate": 0.17546174142480211,
+        "ci95": [
+          0.15003896343850764,
+          0.20415749944826567
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 86,
+          "n": 397,
+          "rate": 0.21662468513853905,
+          "ci95": [
+            0.17892098807034154,
+            0.25976002707379514
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 21,
+          "n": 66,
+          "rate": 0.3181818181818182,
+          "ci95": [
+            0.21848849400185993,
+            0.43787676681690707
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 1,
+          "n": 8,
+          "rate": 0.125,
+          "ci95": [
+            0.02241690886329617,
+            0.4708948057698615
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 1,
+          "n": 36,
+          "rate": 0.027777777777777776,
+          "ci95": [
+            0.004920280295569679,
+            0.141700337350308
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903430336530645
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.09642183044857634
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 0,
+          "n": 4,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.48990002040399916
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 2,
+          "n": 31,
+          "rate": 0.06451612903225806,
+          "ci95": [
+            0.017874407775063147,
+            0.20718988318746434
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.43449149475208104
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 12,
+          "n": 21,
+          "rate": 0.5714285714285714,
+          "ci95": [
+            0.3654621629703244,
+            0.7553030051347894
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 0,
+          "n": 3,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.5615060804490177
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 8,
+          "n": 17,
+          "rate": 0.47058823529411764,
+          "ci95": [
+            0.26164801196088106,
+            0.6903710268845051
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 2,
+          "n": 108,
+          "rate": 0.018518518518518517,
+          "ci95": [
+            0.005093117606642765,
+            0.06502032855292575
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 0,
+          "n": 20,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.16113012549493322
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 17,
+          "n": 27,
+          "rate": 0.6296296296296297,
+          "ci95": [
+            0.442289046234463,
+            0.7846771293206314
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 17,
+          "n": 27,
+          "rate": 0.6296296296296297,
+          "ci95": [
+            0.442289046234463,
+            0.7846771293206314
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 61,
+          "n": 72,
+          "rate": 0.8472222222222222,
+          "ci95": [
+            0.7467749821453958,
+            0.9124938096522456
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 7,
+          "n": 8,
+          "rate": 0.875,
+          "ci95": [
+            0.5291051942301386,
+            0.9775830911367038
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 42,
+          "n": 72,
+          "rate": 0.5833333333333334,
+          "ci95": [
+            0.4680748922563983,
+            0.6901496177750356
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 6,
+          "n": 8,
+          "rate": 0.75,
+          "ci95": [
+            0.40926987910258916,
+            0.9285223111419724
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 58,
+          "n": 72,
+          "rate": 0.8055555555555556,
+          "ci95": [
+            0.6996702472161007,
+            0.8804862895658236
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 18,
+          "n": 23,
+          "rate": 0.782608695652174,
+          "ci95": [
+            0.5809611981726508,
+            0.9033616439828094
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 59,
+          "n": 72,
+          "rate": 0.8194444444444444,
+          "ci95": [
+            0.7151944298987886,
+            0.8913328585550414
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 15,
+          "n": 19,
+          "rate": 0.7894736842105263,
+          "ci95": [
+            0.5666528575973392,
+            0.9149246150840843
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 312,
+          "n": 510,
+          "rate": 0.611764705882353,
+          "ci95": [
+            0.5687821408790006,
+            0.6530761127151032
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 510,
+          "n": 510,
+          "rate": 1.0,
+          "ci95": [
+            0.992523766078885,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.9929877541245498,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.9929877541245498,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 290,
+          "n": 301,
+          "rate": 0.9634551495016611,
+          "ci95": [
+            0.9357556818922103,
+            0.9794737356151116
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 22,
+          "n": 69,
+          "rate": 0.3188405797101449,
+          "ci95": [
+            0.2209460520472577,
+            0.4358434748165124
+          ]
+        }
+      }
+    },
+    "any": {
+      "recall": {
+        "flagged": 1477,
+        "n": 2959,
+        "rate": 0.49915511997296386,
+        "ci95": [
+          0.4811521227711809,
+          0.5171603081059879
+        ]
+      },
+      "benign_flagged": {
+        "flagged": 16,
+        "n": 758,
+        "rate": 0.021108179419525065,
+        "ci95": [
+          0.013033814502928199,
+          0.0340121856104812
+        ]
+      },
+      "families": {
+        "data:agentdojo_environment": {
+          "flagged": 0,
+          "n": 397,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.009583835609876816
+          ]
+        },
+        "data:generated_output_benign": {
+          "flagged": 0,
+          "n": 66,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.05500446725160935
+          ]
+        },
+        "data:generated_output_benign_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244156195108769
+          ]
+        },
+        "data:hard_agent_hints": {
+          "flagged": 1,
+          "n": 36,
+          "rate": 0.027777777777777776,
+          "ci95": [
+            0.004920280295569679,
+            0.141700337350308
+          ]
+        },
+        "data:hard_agent_hints_translated": {
+          "flagged": 0,
+          "n": 6,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3903430336530645
+          ]
+        },
+        "data:hard_description_guidance": {
+          "flagged": 0,
+          "n": 36,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.09642183044857634
+          ]
+        },
+        "data:hard_description_guidance_translated": {
+          "flagged": 0,
+          "n": 4,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.48990002040399916
+          ]
+        },
+        "data:hard_human_request": {
+          "flagged": 1,
+          "n": 31,
+          "rate": 0.03225806451612903,
+          "ci95": [
+            0.00571707408694444,
+            0.16194457176169622
+          ]
+        },
+        "data:hard_human_request_translated": {
+          "flagged": 0,
+          "n": 5,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.43449149475208104
+          ]
+        },
+        "data:hard_quoted_attack": {
+          "flagged": 12,
+          "n": 21,
+          "rate": 0.5714285714285714,
+          "ci95": [
+            0.3654621629703244,
+            0.7553030051347894
+          ]
+        },
+        "data:hard_quoted_attack_translated": {
+          "flagged": 0,
+          "n": 3,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.5615060804490177
+          ]
+        },
+        "data:injecagent_benign": {
+          "flagged": 0,
+          "n": 17,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.18432366037156456
+          ]
+        },
+        "data:mcptox_clean_description": {
+          "flagged": 2,
+          "n": 108,
+          "rate": 0.018518518518518517,
+          "ci95": [
+            0.005093117606642765,
+            0.06502032855292575
+          ]
+        },
+        "data:mcptox_clean_description_translated": {
+          "flagged": 0,
+          "n": 20,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.16113012549493322
+          ]
+        },
+        "instruction:agentdojo_direct": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            6.938893903907228e-18,
+            0.12455903714463581
+          ]
+        },
+        "instruction:agentdojo_ignore_previous": {
+          "flagged": 0,
+          "n": 27,
+          "rate": 0.0,
+          "ci95": [
+            6.938893903907228e-18,
+            0.12455903714463581
+          ]
+        },
+        "instruction:agentdojo_important_instructions": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_system_message": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:agentdojo_tool_knowledge": {
+          "flagged": 27,
+          "n": 27,
+          "rate": 1.0,
+          "ci95": [
+            0.8754409628553641,
+            1.0
+          ]
+        },
+        "instruction:generated_output_as_user": {
+          "flagged": 1,
+          "n": 72,
+          "rate": 0.013888888888888888,
+          "ci95": [
+            0.002455888640432169,
+            0.07456780284286987
+          ]
+        },
+        "instruction:generated_output_as_user_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244156195108769
+          ]
+        },
+        "instruction:generated_output_false_error": {
+          "flagged": 6,
+          "n": 72,
+          "rate": 0.08333333333333333,
+          "ci95": [
+            0.03875189713049035,
+            0.17012555271233995
+          ]
+        },
+        "instruction:generated_output_false_error_translated": {
+          "flagged": 0,
+          "n": 8,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.3244156195108769
+          ]
+        },
+        "instruction:generated_output_new_task": {
+          "flagged": 6,
+          "n": 72,
+          "rate": 0.08333333333333333,
+          "ci95": [
+            0.03875189713049035,
+            0.17012555271233995
+          ]
+        },
+        "instruction:generated_output_new_task_translated": {
+          "flagged": 0,
+          "n": 23,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.14312112541726274
+          ]
+        },
+        "instruction:generated_output_polite": {
+          "flagged": 0,
+          "n": 72,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.05065293981139638
+          ]
+        },
+        "instruction:generated_output_polite_translated": {
+          "flagged": 0,
+          "n": 19,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.16818436536845052
+          ]
+        },
+        "instruction:injecagent_dh_base": {
+          "flagged": 17,
+          "n": 510,
+          "rate": 0.03333333333333333,
+          "ci95": [
+            0.020913962955964944,
+            0.05273052203707572
+          ]
+        },
+        "instruction:injecagent_dh_enhanced": {
+          "flagged": 510,
+          "n": 510,
+          "rate": 1.0,
+          "ci95": [
+            0.992523766078885,
+            1.0
+          ]
+        },
+        "instruction:injecagent_ds_base": {
+          "flagged": 0,
+          "n": 544,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.007012245875450129
+          ]
+        },
+        "instruction:injecagent_ds_enhanced": {
+          "flagged": 544,
+          "n": 544,
+          "rate": 1.0,
+          "ci95": [
+            0.9929877541245498,
+            1.0
+          ]
+        },
+        "instruction:mcptox_poisoned_description": {
+          "flagged": 290,
+          "n": 301,
+          "rate": 0.9634551495016611,
+          "ci95": [
+            0.9357556818922103,
+            0.9794737356151116
+          ]
+        },
+        "instruction:mcptox_poisoned_description_translated": {
+          "flagged": 22,
+          "n": 69,
+          "rate": 0.3188405797101449,
+          "ci95": [
+            0.2209460520472577,
+            0.4358434748165124
+          ]
+        }
+      }
+    }
+  }
+}

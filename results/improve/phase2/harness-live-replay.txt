@@ -1,0 +1,5 @@
+| arm | benign runs | benign calls stopped | benign reviews/run | attack runs | attack calls stopped | agreement with live | unrecorded |
+|---|---|---|---|---|---|---|---|
+| hooks | 5 | 0/8 | 0.00 | 20 | 0/22 | 100.0% | 0 |
+| guarded | 5 | 0/8 | 0.00 | 20 | 0/22 | 100.0% | 0 |
+| memory | 5 | 0/8 | 0.00 | 20 | 0/22 | 96.7% | 1 |

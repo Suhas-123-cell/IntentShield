@@ -1,0 +1,10 @@
+(2.1s)
+arm (test split)            static                      adaptive                    
+A_infra_reused              0.67 [0.59, 0.75] n=132     1.00 [0.97, 1.00] n=132     
+B_fresh_infra               0.67 [0.59, 0.75] n=132     0.93 [0.88, 0.96] n=132     
+C_new_family, no pack       0.00 [0.00, 0.10] n=33      0.00 [0.00, 0.10] n=33      
+C_new_family, after pack    0.00 [0.00, 0.10] n=33      0.67 [0.50, 0.80] n=33      
+
+benign paragraphs: 1789  rules flag 0.01 [0.00, 0.01] n=1789; check_text after learning 0.00 [0.00, 0.00] n=1789; baseline pack 0.00 [0.00, 0.00] n=1789; fingerprints rejected by the gate: 26
+dev sweep (containment: recovered static misses / benign flagged): {'0.3': (0.917, 0), '0.4': (0.917, 0), '0.5': (1.0, 0), '0.6': (0.917, 0), '0.7': (0.333, 0), '0.8': (0.333, 0)}
+wrote results/improve/baseline/adaptive-learning.json

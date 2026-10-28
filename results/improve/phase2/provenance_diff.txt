@@ -1,0 +1,6 @@
+lost data generated_output_benign 1
+lost data injecagent_benign 2
+lost instruction agentdojo_tool_knowledge 1
+lost instruction injecagent_dh_base 46
+lost instruction injecagent_dh_enhanced 46
+lost values by kind: {('timestamp (date + hour read as one number)', 'data'): 3, ('timestamp (date + hour read as one number)', 'instruction'): 94}

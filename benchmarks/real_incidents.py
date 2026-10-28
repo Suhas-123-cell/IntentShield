@@ -26,8 +26,12 @@ from pathlib import Path
 
 from intentshield.harness import HarnessGuard
 from intentshield.mcp_inspect import (
-    authority_values, scan_description, scan_output, scan_server,
-    self_disclosure_fields, tool_text,
+    authority_values,
+    scan_description,
+    scan_output,
+    scan_server,
+    self_disclosure_fields,
+    tool_text,
 )
 
 ATTACKER_EMAIL = "exfil@attacker.invalid"

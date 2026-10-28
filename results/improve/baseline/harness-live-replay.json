@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "attack_runs": 20,
+    "attack_calls": 22,
+    "attack_stopped": 0,
+    "calls": 30,
+    "agree": 30,
+    "unrecorded": 0,
+    "benign_runs": 5,
+    "benign_calls": 8,
+    "benign_stopped": 0,
+    "benign_reviews_per_run": 0.0,
+    "agreement_with_live": 1.0
+  },
+  "guarded": {
+    "attack_runs": 20,
+    "attack_calls": 22,
+    "attack_stopped": 0,
+    "calls": 30,
+    "agree": 30,
+    "unrecorded": 0,
+    "benign_runs": 5,
+    "benign_calls": 8,
+    "benign_stopped": 0,
+    "benign_reviews_per_run": 0.0,
+    "agreement_with_live": 1.0
+  },
+  "memory": {
+    "attack_runs": 20,
+    "attack_calls": 22,
+    "attack_stopped": 0,
+    "calls": 30,
+    "agree": 30,
+    "unrecorded": 0,
+    "benign_runs": 5,
+    "benign_calls": 8,
+    "benign_stopped": 1,
+    "benign_reviews_per_run": 0.2,
+    "agreement_with_live": 1.0
+  }
+}

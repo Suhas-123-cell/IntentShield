@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import json
 import re
-from re import _constants as _C, _parser
 import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from re import _constants as _C
+from re import _parser
 from typing import Any, Callable, Iterator
 
 from .mcp_inspect import readable

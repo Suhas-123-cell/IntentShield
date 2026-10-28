@@ -17,7 +17,6 @@ from typing import Any
 
 from .intent_classifier import ARTIFACT_SCHEMA_VERSION, TRAINED_LABELS
 
-
 DEFAULT_BASE_MODEL = "microsoft/deberta-v3-small"
 DEFAULT_DATASET = Path(__file__).with_name("data") / "intent_training.jsonl"
 

@@ -8,14 +8,13 @@ import urllib.error
 from pathlib import Path
 
 import pytest
+from test_mcp_guardrail import Fixture, call, runtime
 
 from intentshield import judge as judge_module
 from intentshield import mcp_proxy
 from intentshield.harness import HarnessGuard, handle
 from intentshield.judge import Judge
 from intentshield.models import Decision, ReasonCode
-
-from test_mcp_guardrail import Fixture, call, runtime
 
 
 class Stub:
@@ -80,7 +79,8 @@ def test_proxy_judge_withholds_tools_and_reviews_reads_only(tmp_path: Path, monk
             odd = await shield.evaluate_and_execute(run_id, call(catalog, "web:read_page", value="vendor"))
             assert odd.decision is Decision.REVIEW and odd.reason_codes == [ReasonCode.REVIEW_JUDGE_FLAGGED]
             # A mutation already waits on a human; the judge is not asked.
-            sent = await shield.evaluate_and_execute(run_id, call(catalog, "web:send_message", to="vendor@example.com", body="report"))
+            sent = await shield.evaluate_and_execute(
+                run_id, call(catalog, "web:send_message", to="vendor@example.com", body="report"))
             assert sent.decision is Decision.REVIEW and ReasonCode.REVIEW_JUDGE_FLAGGED not in sent.reason_codes
             assert [tool for tool, _ in Stub.calls] == ["web:read_page", "web:read_page"]
             assert upstream.calls == ["read_page"]

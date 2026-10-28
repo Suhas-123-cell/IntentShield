@@ -8,8 +8,8 @@ from pydantic import ValidationError
 
 from intentshield.models import ToolCall
 from intentshield.security_agents import (
-    DeterministicDetectionAgent,
     DetectionEvidence,
+    DeterministicDetectionAgent,
     EvidenceReason,
     EvidenceStatus,
     GroundingEvidence,

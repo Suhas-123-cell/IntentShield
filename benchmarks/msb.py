@@ -40,8 +40,8 @@ from dotenv import load_dotenv
 from intentshield.evaluation import wilson
 from intentshield.harness import HarnessGuard, handle
 from intentshield.judge import PROVIDERS, Judge, post_chat_message
-from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError, _public_schema
 from intentshield.mcp_inspect import self_disclosure_fields
+from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError, _public_schema
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from intentshield.models import ToolCall
 from intentshield.security_agents import _WRITE_ACTIONS

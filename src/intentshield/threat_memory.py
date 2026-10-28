@@ -25,10 +25,15 @@ Who may teach it, and what:
   * fingerprints: hashed word 3-grams of each matched sentence and the one after it (trigger plus
     payload), and of the same window with the rule matches blanked (the payload alone, which survives
     a rewording of exactly the phrases the rules look for), read as the rules read (``readable``) with
-    emails, URLs, paths and ids masked and stop words dropped. A fingerprint with fewer than ``MIN_WORDS`` content words, or that a text of the
+    emails, URLs, paths and ids masked and stop words dropped. A fingerprint with fewer than
+    ``MIN_WORDS`` content words, or that a text of the
     benign gate corpus (``data/benign_gate.jsonl`` plus the operator's ``add_benign``) would contain, is
     stored as ``rejected`` with its gate result, for audit, and never matches.
   * reputation: the distinct runs in which a source (``server`` or ``server:tool``) produced attacks.
+    A source is ``hostile`` with ``HOSTILE_RUNS`` such runs in the last ``HOSTILE_DAYS`` days. That is
+    weak evidence on its outputs only (they are read as possibly injected), never on a call's
+    arguments, and the operator clears it by approving a call to that server (``clear_source``) or
+    allowlisting it.
 
   Everything learned is ``observed``: it expires ``ttl_days`` after it was last seen and is evicted
   oldest first beyond the global caps. Per call at most ``PER_CALL_INDICATORS`` indicators and
@@ -81,14 +86,22 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 from urllib.parse import urlsplit
 
-from .mcp_inspect import (_DESCRIPTION_RULES, _OUTPUT_RULES, _VALUE_PATTERNS, _normalize, authority_values,
-                          leaf_text, readable, sourced_from)
+from .mcp_inspect import (
+    _DESCRIPTION_RULES,
+    _OUTPUT_RULES,
+    _VALUE_PATTERNS,
+    _normalize,
+    authority_values,
+    leaf_text,
+    readable,
+    sourced_from,
+)
 
 MAX_TEXT = 20_000  # as learning.MAX_TEXT (not imported: learning needs numpy)
 SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
 PER_CALL_INDICATORS, PER_CALL_FINGERPRINTS, MAX_BLOCKS = 20, 3, 10
 MAX_INDICATORS, MAX_FINGERPRINTS, MAX_REJECTED = 5000, 500, 500
-ESCALATE_INDICATORS, ESCALATE_RUNS, HOSTILE_RUNS, TTL_DAYS = 2, 2, 3, 30
+ESCALATE_INDICATORS, ESCALATE_RUNS, HOSTILE_RUNS, HOSTILE_DAYS, TTL_DAYS = 2, 2, 3, 7, 30
 ANCHOR_WORDS, ANCHOR_CONTAINMENT = 4, 0.5
 VARIANT = "known_attack_variant"
 BENIGN_PATH = Path(__file__).with_name("data") / "benign_gate.jsonl"
@@ -312,8 +325,10 @@ def allowed(value: str, allow: frozenset[str] | set[str]) -> bool:
 
 class ThreatMemory:
     def __init__(self, path: str | Path, *, ttl_days: float = TTL_DAYS, hostile_runs: int = HOSTILE_RUNS,
-                 containment: float = CONTAINMENT, clock: Callable[[], float] = time.time, packs: Any = None) -> None:
+                 hostile_days: float = HOSTILE_DAYS, containment: float = CONTAINMENT,
+                 clock: Callable[[], float] = time.time, packs: Any = None) -> None:
         self.path, self.ttl, self.hostile_runs = Path(path), ttl_days * 86400, hostile_runs
+        self.hostile_window = min(hostile_days * 86400, self.ttl)
         self.containment, self.clock = containment, clock
         self.packs = packs  # a rule_packs.PackSet: more evidence, merged into the checks
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -503,7 +518,7 @@ class ThreatMemory:
             return 0
         try:
             return self._read("SELECT COUNT(DISTINCT run_key) FROM threat_sources WHERE source=? AND seen>=?",
-                              (source[:200], self.clock() - self.ttl))[0][0]
+                              (source[:200], self.clock() - self.hostile_window))[0][0]
         except sqlite3.Error:
             return 0
 
@@ -738,13 +753,23 @@ class ThreatMemory:
             raise ValueError("nothing to allow")
         with self._write() as db:
             db.execute("INSERT OR IGNORE INTO threat_allowlist VALUES (?,?)", (value, self.clock()))
-            db.execute("DELETE FROM threat_sources WHERE lower(source)=?", (value,))  # a server, too
+            self._clear_source(db, value)  # a server, too
             rows = db.execute("SELECT id, value, domain FROM threat_indicators WHERE status!='revoked'").fetchall()
             covered = [r["id"] for r in rows if r["value"] == value or
                        (is_domain(value) and under(r["domain"] or "", {value}))]
             db.executemany("UPDATE threat_indicators SET status='revoked', decided_at=? WHERE id=?",
                            [(self.clock(), i) for i in covered])
         return {"allowed": value, "revoked": covered}
+
+    def clear_source(self, server: str) -> None:
+        """The operator approved a call to ``server``: forget the attacks it and its tools produced."""
+        with self._write() as db:
+            self._clear_source(db, canonical(server))
+
+    @staticmethod
+    def _clear_source(db: sqlite3.Connection, server: str) -> None:
+        db.execute("DELETE FROM threat_sources WHERE lower(source)=? OR substr(lower(source), 1, ?)=?",
+                   (server, len(server) + 1, f"{server}:"))
 
     def import_feed(self, feed: str | Path | dict[str, Any], *, origin: str = "feed") -> dict[str, Any]:
         """Import IOCs (and fingerprint texts) with their provenance as ``confirmed``. Rows marked
@@ -832,8 +857,10 @@ class ThreatMemory:
         return row
 
     def items(self) -> dict[str, Any]:
-        return {"indicators": [self._public(r) for r in self._read("SELECT * FROM threat_indicators ORDER BY last_seen DESC")],
-                "fingerprints": [self._public(r) for r in self._read("SELECT * FROM threat_fingerprints ORDER BY last_seen DESC")],
+        indicators = self._read("SELECT * FROM threat_indicators ORDER BY last_seen DESC")
+        fingerprints = self._read("SELECT * FROM threat_fingerprints ORDER BY last_seen DESC")
+        return {"indicators": [self._public(r) for r in indicators],
+                "fingerprints": [self._public(r) for r in fingerprints],
                 "allowlist": [r[0] for r in self._read("SELECT value FROM threat_allowlist ORDER BY value")]}
 
     def export(self) -> dict[str, Any]:
@@ -856,7 +883,7 @@ class ThreatMemory:
         def counts(table: str) -> dict[str, int]:
             return {r[0]: r[1] for r in self._read(f"SELECT status, COUNT(*) FROM {table} GROUP BY status")}
         sources = self._read("SELECT source, COUNT(DISTINCT run_key) AS runs FROM threat_sources WHERE seen>=? "
-                             "GROUP BY source ORDER BY runs DESC LIMIT 20", (self.clock() - self.ttl,))
+                             "GROUP BY source ORDER BY runs DESC LIMIT 20", (self.clock() - self.hostile_window,))
         result = {"indicators": counts("threat_indicators"),
                   "domains": self._read("SELECT COUNT(*) FROM threat_indicators WHERE kind='domain' "
                                         "AND status!='revoked'")[0][0],
@@ -865,7 +892,7 @@ class ThreatMemory:
                   "benign": {"builtin": len(benign_corpus()),
                              "operator": self._read("SELECT COUNT(*) FROM threat_benign")[0][0]},
                   "sources": [{"source": r[0], "runs": r[1], "hostile": r[1] >= self.hostile_runs} for r in sources],
-                  "ttl_days": self.ttl / 86400}
+                  "ttl_days": self.ttl / 86400, "hostile_days": self.hostile_window / 86400}
         if self.packs is not None:
             result["packs"] = self.packs.status()
         return result
