@@ -183,7 +183,7 @@ Plain-language injections from independent sources stay mostly undetected by eve
 | `ollama:qwen2.5:7b`, local | 99.0% (298/301) | 100% (69/69) | 3.7% (4/108) | 6/36 | about 1.0 s on an M5, no key, no quota |
 | `ollama:llama3.1:8b`, local | 100% (301/301) | 100% (69/69) | 19.4% (21/108) | 23/36 | about 1.2 s; unusable, it flags most guidance |
 | Gemini 3.5 Flash-Lite | 99.7% (300/301) | not measured | 4.6% (5/108) | not measured | network, 500 requests a day free |
-| Groq `gpt-oss-120b` | not re-measured on this split | | | | 30 requests and 8k tokens a minute free |
+| Groq `gpt-oss-120b` (default) | 99.7% (300/301) | 98.6% (68/69) | 2.8% (3/108) | 11/36 | about 2.8 s a call under the free tier's limits (544 calls in 26 min, 0 errors); 1,000 calls a day |
 
 ### Self-disclosure parameter stripping (159 distinct schemas the four agents saw)
 
