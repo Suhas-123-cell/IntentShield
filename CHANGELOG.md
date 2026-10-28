@@ -35,8 +35,9 @@ competitor gap analysis), each with a regression test in `tests/test_review_fixe
   proxies read each other's catalogs for cross-server shadowing; hook sessions are pruned after
   7 days; the classifier import is lazy; two unused storage helpers are gone.
 - Judge: measured a local `ollama:qwen2.5:7b` judge on the held-out descriptions (99.0% recall,
-  3.7% clean flagged, about 1 s a call) and recommend it over the hosted free tiers
-  (`results/judge/`).
+  3.7% clean flagged, about 1 s a call) and made it the default provider; `--judge` alone selects
+  it, `groq` and `gemini` stay available. `llama3.1:8b` was measured and is unusable (19.4% clean
+  flagged) (`results/judge/`).
 
 ## 0.2.0
 

@@ -146,7 +146,7 @@ class Judge:
     # Answers shared by every judge in the process: a proxy is rebuilt per run, tools are not.
     _answers: dict[str, dict[str, Any]] = {}
 
-    def __init__(self, provider: str = "groq", model: str | None = None, api_key: str | None = None,
+    def __init__(self, provider: str = "ollama", model: str | None = None, api_key: str | None = None,
                  cache: str | Path | None = None, timeout: float = 30, retries: int = 4) -> None:
         if provider not in PROVIDERS:
             raise ValueError(f"judge provider must be one of {sorted(PROVIDERS)}")
@@ -169,8 +169,11 @@ class Judge:
 
     @classmethod
     def from_spec(cls, spec: str, **kwargs: Any) -> "Judge":
-        """``groq``, ``gemini`` or ``ollama``, optionally with a model: ``ollama:llama3.1:8b``."""
+        """``ollama`` (the default, local qwen2.5:7b), ``groq`` or ``gemini``, optionally with a
+        model: ``ollama:llama3.1:8b``, ``groq:openai/gpt-oss-120b``. ``on`` or ``default`` means ollama."""
         provider, _, model = spec.partition(":")
+        if provider in ("on", "default", "true", "1"):
+            provider = "ollama"
         return cls(provider, model or None, **kwargs)
 
     def _ask(self, system: str, user: str) -> dict[str, Any] | None:

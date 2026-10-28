@@ -481,8 +481,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--allow-sourced-reads", action="store_true",
                         default=os.getenv("INTENTSHIELD_HOOK_SOURCED_READS", "review").lower() == "allow",
                         help="do not ask before a read whose argument came from a tool output (writes still ask)")
-    parser.add_argument("--judge", default=os.getenv("INTENTSHIELD_HOOK_JUDGE") or None,
-                        help="LLM judge for calls the rules allow: groq or gemini[:model] (needs its API key)")
+    parser.add_argument("--judge", nargs="?", const="ollama", default=os.getenv("INTENTSHIELD_HOOK_JUDGE") or None,
+                        help="LLM judge for calls the rules allow: ollama[:model] (default qwen2.5:7b, local, needs "
+                             "`ollama pull qwen2.5:7b`), or groq / gemini[:model] (needs that API key)")
     args = parser.parse_args(argv)
     # argparse does not check ``choices`` against a default taken from the environment, and an
     # unknown mode would skip every review branch; a typo must fail closed instead.
