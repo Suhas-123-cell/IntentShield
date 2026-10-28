@@ -36,10 +36,11 @@ competitor gap analysis), each with a regression test in `tests/test_review_fixe
   channels); the hook takes the operator's read-only decision from the proxy catalog; wrapped
   proxies read each other's catalogs for cross-server shadowing; hook sessions are pruned after
   7 days; the classifier import is lazy; two unused storage helpers are gone.
-- Judge: measured a local `ollama:qwen2.5:7b` judge on the held-out descriptions (99.0% recall,
-  3.7% clean flagged, about 1 s a call) and made it the default provider; `--judge` alone selects
-  it, `groq` and `gemini` stay available. `llama3.1:8b` was measured and is unusable (19.4% clean
-  flagged) (`results/judge/`).
+- Judge: measured on the held-out descriptions Groq `gpt-oss-120b` (99.7% recall, 2.8% clean flagged,
+  the default), local `ollama:qwen2.5:7b` (99.0%, 3.7%, offline alternative) and `llama3.1:8b`
+  (unusable, 19.4% clean flagged); `results/judge/`. `intentshield install <harness> --judge` stores
+  the Groq key once in `~/.intentshield/.env`, and a hook with a judge but no key says so and lets
+  the rules decide.
 
 ## 0.2.0
 
