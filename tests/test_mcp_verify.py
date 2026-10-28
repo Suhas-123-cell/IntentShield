@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from intentshield.mcp_verify import main, verify_mcp
 
@@ -193,3 +193,17 @@ def test_stdio_wire_mode_launches_real_downstream_subprocess(tmp_path: Path) -> 
 
     assert report["status"] == "PASS"
     assert report["artifacts"]["verification_mode"] == "stdio_wire"
+
+
+def test_demo_flag_needs_no_config_file_or_path(tmp_path: Path, monkeypatch, capsys):
+    """``--demo`` writes a config that launches the bundled server with this interpreter."""
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda prefix="": str(tmp_path))
+    monkeypatch.setenv("PATH", "")
+    assert main(["--demo"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "PASS" and len(report["checks"]) == 13
+    written = json.loads((tmp_path / "mcp-proxy.demo.json").read_text())
+    assert written["upstreams"][0]["command"] == sys.executable
+    assert written["database_path"] == str(tmp_path / "intentshield-demo.db")
