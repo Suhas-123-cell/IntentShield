@@ -185,6 +185,15 @@ Plain-language injections from independent sources stay mostly undetected by eve
 | Gemini 3.5 Flash-Lite | 99.7% (300/301) | not measured | 4.6% (5/108) | not measured | network, 500 requests a day free |
 | Groq `gpt-oss-120b` (default) | 99.7% (300/301) | 98.6% (68/69) | 2.8% (3/108) | 11/36 | about 2.8 s a call under the free tier's limits (544 calls in 26 min, 0 errors); 1,000 calls a day |
 
+Recommendation: the default, `--judge groq` (`openai/gpt-oss-120b` on Groq's free tier): the best
+recall and the fewest clean false flags, no local hardware, and `intentshield install <harness> --judge groq`
+asks for the key once and stores it in `~/.intentshield/.env`. Its costs are the free tier's 30 requests
+and 8,000 tokens a minute (a throttled hook reports the judge unavailable and the rules decide) and about
+1 in 3 legitimate usage-guidance descriptions flagged, which is why every judge is evidence only: a flagged
+description is withheld for review, never silently dropped. `--judge ollama` with `qwen2.5:7b` is the
+offline alternative at nearly the same recall and half the guidance false flags. Do not use `llama3.1:8b`
+as a judge. Details: [docs/benchmarks.md](docs/benchmarks.md).
+
 ### Self-disclosure parameter stripping (159 distinct schemas the four agents saw)
 
 | server role | tools | parameters | stripped |
