@@ -382,7 +382,7 @@ def scan_output_collapsed(value: Any, trusted: str = "") -> list[str]:
 # from every character of a long run and the scan goes quadratic.
 _VALUE_PATTERNS = (
     re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),         # email
-    re.compile(r"https?://[^\s\"'<>)]+", _I),                         # URL
+    re.compile(r"(?<![\w+.\-])[a-z][a-z0-9+.\-]*://[^\s\"'<>)]+", _I),  # URL: https, ftp, s3, ...
     re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"),                  # IBAN
     re.compile(r"\b\d[\d\- ]{6,}\d\b"),                               # account / card / phone
     re.compile(r"(?<![\w.\-~/])(?:~|[\w.\-]+)?/[\w.\-]+(?:/[\w.\-]+)+"),  # path, absolute or relative
