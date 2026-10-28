@@ -666,6 +666,7 @@ The proxy guards all three places an MCP attack enters (related work and next st
   |---|---|---|---|---|---|
   | rules alone | 96.3% (290/301) | 31.9% (22/69) | 1.9% (2/108) | 0/36 | 0 |
   | `ollama:qwen2.5:7b`, local | 99.0% (298/301) | 100% (69/69) | 3.7% (4/108) | 6/36 | about 1.0 s on an M5, no key, no quota |
+  | `ollama:llama3.1:8b`, local | 100% (301/301) | 100% (69/69) | 19.4% (21/108) | 23/36 | about 1.2 s; unusable, it flags most guidance |
   | Gemini 3.5 Flash-Lite | 99.7% (300/301) | not measured | 4.6% (5/108) | not measured | network, 500 requests a day free |
   | Groq `gpt-oss-120b` | not re-measured on this split | | | | 30 requests and 8k tokens a minute free |
 
