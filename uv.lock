@@ -319,7 +319,7 @@ wheels = [
 ]
 
 [[package]]
-name = "intentshield"
+name = "intentshield-mcp"
 version = "0.2.1"
 source = { editable = "." }
 dependencies = [
