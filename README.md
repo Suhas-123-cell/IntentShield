@@ -10,12 +10,16 @@ IntentShield is a Python package (3.12+). It installs the guard (`intentshield-h
 and the `intentshield` command that wires the guard into a harness.
 
 ```sh
-pip install intentshield          # or: uv tool install intentshield, pipx install intentshield
+pip install intentshield-mcp      # or: uv tool install intentshield-mcp, pipx install intentshield-mcp
 intentshield-mcp-verify --demo --stdio   # 13 checks against a bundled demo server; ends with "status":"PASS"
 ```
 
-Until the 0.2.0 release is on PyPI, install from the repository instead:
-`pip install git+https://github.com/Suhas-123-cell/IntentShield` (or `uvx --from git+https://github.com/Suhas-123-cell/IntentShield intentshield-mcp-verify --demo --stdio` to try it with nothing installed).
+The PyPI distribution is `intentshield-mcp` (the plain name belongs to an unrelated project,
+[intentshield by Mattijs Moens](https://pypi.org/project/intentshield/), which verifies an agent's
+intent before execution and is not an MCP guard); the Python package and the commands are still
+`intentshield`. From the repository: `pip install git+https://github.com/Suhas-123-cell/IntentShield`,
+or `uvx --from git+https://github.com/Suhas-123-cell/IntentShield intentshield-mcp-verify --demo --stdio`
+to try it with nothing installed.
 
 Then put it in front of a harness. Both commands are idempotent and reversible (`uninstall`, `unwrap`):
 
