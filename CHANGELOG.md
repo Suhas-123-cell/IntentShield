@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.2.1 (unreleased)
+## 0.2.2
+
+- Same code as 0.2.1; the package description carries the final judge results (Groq
+  `gpt-oss-120b` measured) and recommendation, which 0.2.1 was built before.
+
+## 0.2.1
 
 - PyPI distribution name is `intentshield-mcp`; the plain name belongs to an unrelated project.
 
