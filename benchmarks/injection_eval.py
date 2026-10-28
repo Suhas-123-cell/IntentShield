@@ -34,7 +34,7 @@ from typing import Any, Callable
 from dotenv import load_dotenv
 
 from intentshield.evaluation import wilson
-from intentshield.mcp_inspect import scan_description, scan_output
+from intentshield.mcp_inspect import authority_values, scan_description, scan_output
 
 Detector = Callable[[str, str], "bool | None"]
 INJECAGENT_SETTINGS = ("dh_base", "dh_enhanced", "ds_base", "ds_enhanced")
@@ -79,8 +79,17 @@ def rules(text: str, kind: str) -> bool:
     return bool(scan_description(text) if kind == "description" else scan_output(text))
 
 
+def provenance(text: str, kind: str) -> bool | None:
+    """Not a detector: whether an output names a recipient, URL, account or path, so a call that
+    obeys it and reuses that value reaches review by source (mcp_inspect.authority_values). On a
+    benign row it is the review a call reusing the value would cost."""
+    return bool(authority_values(text)) if kind == "output" else None
+
+
 def detectors(args: argparse.Namespace) -> dict[str, Detector]:
     found: dict[str, Detector] = {"rules": rules}
+    if args.provenance:
+        found["provenance"] = provenance
     if args.classifier:
         from intentshield.injection_classifier import InjectionClassifier
         classifier = InjectionClassifier(args.classifier)
@@ -110,7 +119,7 @@ def detectors(args: argparse.Namespace) -> dict[str, Detector]:
             sys.exit(f"--combine {combo}: unknown detector among {sorted(found)}")
         found[combo] = any_of({part: found[part] for part in parts})
     if len(found) > 1:
-        found["any"] = any_of({k: v for k, v in found.items() if "+" not in k})
+        found["any"] = any_of({k: v for k, v in found.items() if "+" not in k and k != "provenance"})
     return found
 
 
@@ -170,6 +179,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--hard", type=Path, default=Path("artifacts/injection/hard_negatives.jsonl"))
     parser.add_argument("--combine", default=None,
                         help="extra any-of columns, e.g. rules+exemplars,rules+prompt_guard")
+    parser.add_argument("--provenance", action="store_true",
+                        help="add the provenance column (outputs naming a trackable value; coverage, not detection)")
     parser.add_argument("--rows-out", type=Path, default=None,
                         help="per-row verdicts as JSONL (text hash, source, label, split, every detector)")
     parser.add_argument("--out", type=Path, default=Path("artifacts/injection-eval/report.json"))

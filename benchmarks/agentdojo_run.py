@@ -117,7 +117,7 @@ class GuardedToolsExecutor(ToolsExecutor):
         runtime: FunctionsRuntime,
         env: Env = EmptyEnv(),
         messages: Sequence[ChatMessage] = [],
-        extra_args: dict = {},
+        extra_args: dict = {},  # noqa: B006  (AgentDojo's own signature)
     ):
         if not messages or messages[-1]["role"] != "assistant" or not messages[-1]["tool_calls"]:
             return query, runtime, env, messages, extra_args

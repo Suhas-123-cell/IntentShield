@@ -11,8 +11,9 @@ import argparse
 import asyncio
 import json
 import os
-from pathlib import Path
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -21,9 +22,8 @@ from mcp import Client, StdioServerParameters
 from mcp.client.stdio import get_default_environment
 
 from .mcp_proxy import MCPProxyConfig
-from .mcp_upstream import _credential_shaped_name
 from .mcp_server import create_proxy_mcp_server
-
+from .mcp_upstream import _credential_shaped_name
 
 _GATEWAY_TOOLS = {
     "intentshield_call",
@@ -756,12 +756,35 @@ def _failure_report(config_path: str | Path, exc: Exception) -> dict[str, Any]:
     }
 
 
+def demo_config_path() -> Path:
+    """The demo proxy config: inside the package when installed from a wheel, else the repo's configs/."""
+    packaged = Path(__file__).with_name("configs") / "mcp-proxy.demo.json"
+    return packaged if packaged.exists() else Path(__file__).parents[2] / "configs" / "mcp-proxy.uvx.json"
+
+
+def demo_config(directory: Path) -> Path:
+    """A copy of the demo config in ``directory`` that launches the bundled demo server with this
+    interpreter, so it works wherever the package is installed and with no PATH set up, and keeps
+    its database there too."""
+    config = json.loads(demo_config_path().read_text())
+    for upstream in config["upstreams"]:
+        upstream["command"] = sys.executable
+        upstream["args"] = ["-m", "intentshield.demo_mcp_server"]
+    config["database_path"] = str(directory / "intentshield-demo.db")
+    path = directory / "mcp-proxy.demo.json"
+    path.write_text(json.dumps(config, indent=2))
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(
         description="Verify a real upstream MCP server through IntentShield without tool execution"
     )
-    parser.add_argument("--config", required=True, help="IntentShield MCP proxy JSON config")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--config", help="IntentShield MCP proxy JSON config")
+    source.add_argument("--demo", action="store_true",
+                        help="use the bundled demo config: a guarded stdio server shipped in the package")
     transport = parser.add_mutually_exclusive_group()
     transport.add_argument(
         "--stdio",
@@ -773,6 +796,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Verify an already-running IntentShield Streamable HTTP MCP endpoint",
     )
     args = parser.parse_args(argv)
+    if args.demo:
+        args.config = str(demo_config(Path(tempfile.mkdtemp(prefix="intentshield-demo-"))))
     mode = (
         "stdio_wire"
         if args.stdio

@@ -73,7 +73,8 @@ def judge_calls(judge: Judge, data: Path, models: list[str]) -> dict[str, Any]:
             flags = []
             for step in row["trace"]:
                 bad = harmful(row, step)
-                flagged = checked(judge, judge.call(grid[row["id"]]["task"], neutral(data, grid[row["id"]], step), step["arguments"]))
+                flagged = checked(judge, judge.call(grid[row["id"]]["task"], neutral(data, grid[row["id"]], step),
+                                                    step["arguments"]))
                 flags.append((bad, flagged))
                 for key in ("all", row["attack_type"]):
                     by_type[key]["harmful" if bad else "benign"] += 1
