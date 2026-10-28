@@ -36,6 +36,20 @@ from .mcp_inspect import (
 )
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
+ENV_FILE = Path.home() / ".intentshield" / ".env"  # API keys `intentshield install --judge` stored
+
+
+def load_env_file(path: Path = ENV_FILE) -> None:
+    """KEY=VALUE lines into the environment, for keys not already set. No dotenv dependency:
+    the hook imports only the standard library."""
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        key, sep, value = line.strip().partition("=")
+        if sep and key and not key.startswith("#") and key not in os.environ:
+            os.environ[key] = value.strip().strip("'\"")
 SESSION_TTL = 7 * 86_400  # seconds a session's prompts and taint are kept
 _READ = frozenset({
     "get", "list", "search", "read", "find", "fetch", "query", "retrieve", "show", "view", "describe",
@@ -94,12 +108,18 @@ class HarnessGuard:
                 self.memory = ThreatMemory(threats, packs=pack_set)
             except Exception as exc:  # a corrupt file costs the memory, never the hook
                 print(f"IntentShield threat memory disabled: {type(exc).__name__}: {exc}", file=sys.stderr)
-        self.judge = None
+        self.judge, self.judge_missing = None, ""
         if judge:
             from .judge import Judge
+            load_env_file()
             # A hook holds the harness: one short try, then no opinion (reported below), never minutes
             # of free-tier back-off.
-            self.judge = Judge.from_spec(judge, timeout=10, retries=1)
+            try:
+                self.judge = Judge.from_spec(judge, timeout=10, retries=1)
+            except ValueError as exc:  # no key: the judge is evidence only, so the rules carry on, loudly
+                self.judge_missing = str(exc)
+                print(f"IntentShield judge not configured: {exc}. Run `intentshield install <harness> --judge "
+                      f"{judge.partition(':')[0]}` to store the key, or set it in {ENV_FILE}.", file=sys.stderr)
         self.catalog = Path(catalog).expanduser() if catalog else None
         self.classifier = None
         if classifier:  # imported only when asked for: PyTorch slows every hook start
@@ -232,6 +252,9 @@ class HarnessGuard:
             verdict.reason = ("A tool output in this session tried to instruct the agent; confirm this call."
                               if taint or self._flagged(session)
                               else "IntentShield asks for confirmation of state-changing calls.")
+        if verdict.decision == "allow" and self.judge_missing and self.review != "never":
+            verdict.context = (verdict.context + " " if verdict.context else "") + \
+                "IntentShield: the LLM judge is configured but has no API key; only the rules checked this call."
         if verdict.decision == "allow" and self.judge and self.review != "never":
             # Evidence only: an objection asks the user; agreement adds nothing.
             errors = self.judge.errors
