@@ -389,7 +389,8 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{'-'.join(sorted(u.server_id for u in config.upstream_configs))}.json"
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps([{"name": exposed(t), "description": t.description or ""} for t in tools]))
+        temporary.write_text(json.dumps([{"name": exposed(t), "description": t.description or "",
+                                          "read_only": config.is_read_only(t.qualified_name)} for t in tools]))
         temporary.replace(path)
 
     @asynccontextmanager

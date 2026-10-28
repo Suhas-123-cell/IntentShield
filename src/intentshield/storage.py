@@ -261,18 +261,6 @@ class Storage:
                 self._insert_event(db, row["run_id"], "APPROVAL_CONSUMED", {"approval_id": approval_id})
             return cursor.rowcount == 1
 
-    def get_execution(self, idempotency_key: str) -> dict[str, Any] | None:
-        with self.connect() as db:
-            row = db.execute("SELECT * FROM executions WHERE idempotency_key=?", (idempotency_key,)).fetchone()
-        return self._row(row)
-
-    def save_execution(self, key: str, fingerprint: str, run_id: str, result: dict[str, Any]) -> None:
-        with self.connect() as db:
-            db.execute(
-                "INSERT INTO executions VALUES(?,?,?,?,?)",
-                (key, fingerprint, run_id, json.dumps(result, sort_keys=True), utc_now()),
-            )
-
     def reserve_idempotency(self, key: str, fingerprint: str, run_id: str) -> tuple[str, dict[str, Any] | None]:
         """Reserve a mutation key atomically.
 
