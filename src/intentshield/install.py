@@ -59,12 +59,21 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
 
 
+_JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|on|default)(:[A-Za-z0-9_.:/-]+)?")
+
+
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None) -> str:
+    """The shell command the harness runs on every event. Every piece is quoted and validated:
+    the harness hands the string to a shell."""
     command = f"{shlex.quote(hook)} {harness}"
     if review:
-        command += f" --review {review}"
+        if review not in ("tainted", "always", "never"):
+            raise ValueError(f"--review must be tainted, always or never, not {review!r}")
+        command += f" --review {shlex.quote(review)}"
     if judge:
-        command += f" --judge {judge}"
+        if not _JUDGE_SPEC.fullmatch(judge):
+            raise ValueError(f"--judge must be ollama[:model], groq[:model] or gemini[:model], not {judge!r}")
+        command += f" --judge {shlex.quote(judge)}"
     return command
 
 
@@ -238,6 +247,8 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
     if dry_run:
         print(f"--- would write {path}\n{text}", end="")
         return
+    if path.is_symlink():  # a dotfiles link: write its target, not a regular file in its place
+        path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
@@ -270,11 +281,12 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             return path
         _write(path, new, dry_run)
     else:
+        existed = path.exists()
         settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command))
         if not changed:
             print(f"already installed: {path}")
             return path
-        if harness == "cursor":
+        if harness == "cursor" and not existed:  # a file Cursor wrote already has it; uninstall restores theirs
             settings.setdefault("version", 1)
         _write(path, json.dumps(settings, indent=2) + "\n", dry_run)
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
@@ -292,11 +304,17 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
     else:
         settings, changed = remove_hooks(_read_json(path))
         text = json.dumps(settings, indent=2) + "\n"
-    if changed:
-        _write(path, text, dry_run)
-        print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
-    else:
+    if not changed:
         print(f"nothing to remove: {path}")
+        return path
+    emptied = not text.strip() or text.strip() in ("{}", json.dumps({"version": 1}, indent=2))
+    if emptied and not path.is_symlink():  # a file only `install` created: leave nothing behind
+        if not dry_run:
+            path.unlink()
+        print(f"{'would remove' if dry_run else 'removed'} {path} (it held only IntentShield's hooks)")
+        return path
+    _write(path, text, dry_run)
+    print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
     return path
 
 
@@ -339,6 +357,8 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
          dry_run: bool = False) -> list[str]:
     """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file."""
     out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"{path} does not exist")
     data = _read_json(path)
     entries = data.get("mcpServers")
     if not isinstance(entries, dict):
@@ -353,7 +373,9 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         if servers and name not in servers:
             continue
         if not isinstance(server, dict) or not server.get("command") or server.get("url"):
-            continue  # HTTP servers are not launched by the harness; guard those with the gateway
+            # HTTP servers are not launched by the client, so there is no process to stand in front of.
+            print(f"skipped {name}: not a stdio server (guard HTTP servers with the gateway, see docs/guide.md)")
+            continue
         if _is_wrapped(server):
             continue
         config_path = out_dir / f"{server_stem(name, path)}.json"
