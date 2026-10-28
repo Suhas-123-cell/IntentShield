@@ -110,7 +110,7 @@ def create_app(
         if not approval_token:
             return
         expected = f"Bearer {approval_token}"
-        if authorization is None or not hmac.compare_digest(authorization, expected):
+        if authorization is None or not hmac.compare_digest(authorization.encode(), expected.encode()):
             raise HTTPException(
                 401,
                 "A valid operator control token is required",
@@ -123,7 +123,8 @@ def create_app(
         if not run_token:
             return
         accepted = [f"Bearer {token}" for token in (run_token, approval_token) if token]
-        if authorization is None or not any(hmac.compare_digest(authorization, item) for item in accepted):
+        if authorization is None or not any(hmac.compare_digest(authorization.encode(), item.encode())
+                                            for item in accepted):
             raise HTTPException(
                 401,
                 "A valid agent or operator token is required",

@@ -257,6 +257,34 @@ is novel. On review, the placement finding is too thin, and partly a known conse
 the hook schemas. On today's evidence, the realistic outcome is an artifact or tool paper
 (route 1). A research paper needs route 2, and no amount of framing substitutes for it.
 
+## 10. What can be claimed as a contribution (2026-10-29)
+
+After a search of the open-source MCP guards shipping in October 2026 (Snyk Agent Scan, Cisco
+mcp-scanner, Lasso MCP Gateway, LlamaFirewall, mcp-guardian, ToolHive, Docker MCP Gateway, Progent,
+CaMeL; table in the README), three things in IntentShield have no counterpart, and one of them is
+measured well enough to defend:
+
+1. **Self-disclosure parameter stripping, with a precision measurement.** The mechanism: a schema
+   parameter that asks the agent for its model name, system prompt or conversation is removed before
+   the agent sees the tool, and any value sent for it is dropped. The measurement
+   (`benchmarks/self_disclosure_eval.py`, `results/self-disclosure.md`): on the 159 distinct tool
+   schemas the four MSB agents were shown, 54 parameters stripped, all on attack-role servers, 0 of
+   194 on the 86 clean tools; and harm executed through such a parameter in 23/29 (Gemini 3.5
+   Flash-Lite), 33/33 (llama3.1:8b), 48/129 (qwen2.5:7b) and 51/122 (ornith:9b) harmful cases. The
+   finding that goes with it: for the capable agents in the sample (Gemini, Claude Haiku live), what a
+   schema asked for leaked more than injected text did. The prior art is MSB's own attack and "The
+   Stochastic Deputy" (2609.14780), which removes tenant identity from schemas for a different reason;
+   neither measures a defense's precision on real catalogs.
+2. **One rule set in four harnesses plus a proxy**, with the measured split of what each placement
+   sees (coverage study). Engineering, not a research claim.
+3. **The harm funnel with a trivial structural baseline** (§9), which showed that MSB's executed-harm
+   metric cannot rank mutation-holding guards. A benchmark-design note.
+
+Honest ceiling for item 1: a workshop or short paper, or the centrepiece of the artifact paper's
+"what the detectors add" section. It rests on one benchmark's catalogs (13 clean servers), and the
+rule is a pattern match that a renamed parameter with a neutral description would pass; the
+measurement says it is precise on real catalogs, not that it is complete.
+
 ## 9. Route 3: an evaluation-methodology paper (audited 2026-10-14)
 
 **The idea.** On MSB, executed harm cannot tell guards apart. Every guard arm that holds

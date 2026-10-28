@@ -16,10 +16,14 @@ library is imported, so the commands start fast.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
+import shlex
 import shutil
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -55,7 +59,7 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
 
 
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None) -> str:
-    command = f"{hook} {harness}"
+    command = f"{shlex.quote(hook)} {harness}"
     return f"{command} --review {review}" if review else command
 
 
@@ -82,17 +86,35 @@ def hook_entries(harness: str, command: str) -> dict[str, Any]:
 
 
 def _ours(entry: Any) -> bool:
-    """Whether a hook group or hook entry runs intentshield-hook."""
-    if not isinstance(entry, dict):
+    """Whether a hook entry runs intentshield-hook: its command's program is that executable, not
+    merely a command that mentions it."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("command"), str):
         return False
-    if _HOOK in str(entry.get("command", "")):
-        return True
-    hooks = entry.get("hooks")
-    return isinstance(hooks, list) and any(_ours(hook) for hook in hooks)
+    try:
+        argv = shlex.split(entry["command"])
+    except ValueError:
+        return False
+    return bool(argv) and Path(argv[0]).stem == _HOOK
+
+
+def _without_ours(groups: list[Any]) -> list[Any]:
+    """The groups with our handlers removed; a group that held other handlers too keeps them."""
+    kept = []
+    for group in groups:
+        if _ours(group):
+            continue
+        if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+            handlers = [hook for hook in group["hooks"] if not _ours(hook)]
+            if not handlers:
+                continue
+            group = {**group, "hooks": handlers}
+        kept.append(group)
+    return kept
 
 
 def merge_hooks(settings: dict[str, Any], entries: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Add the entries to ``settings["hooks"]`` where no IntentShield hook is registered yet."""
+    """Put the entries in ``settings["hooks"]``, replacing any IntentShield handler already there
+    (so a stale path from a deleted environment is repaired, not kept)."""
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise ValueError("'hooks' is not an object")
@@ -101,8 +123,9 @@ def merge_hooks(settings: dict[str, Any], entries: dict[str, Any]) -> tuple[dict
         existing = hooks.setdefault(event, [])
         if not isinstance(existing, list):
             raise ValueError(f"hooks.{event} is not a list")
-        if not any(_ours(group) for group in existing):
-            existing.extend(groups)
+        merged = _without_ours(existing) + groups
+        if merged != existing:
+            hooks[event] = merged
             changed = True
     return settings, changed
 
@@ -116,8 +139,8 @@ def remove_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         groups = hooks[event]
         if not isinstance(groups, list):
             continue
-        kept = [group for group in groups if not _ours(group)]
-        if len(kept) != len(groups):
+        kept = _without_ours(groups)
+        if kept != groups:
             changed = True
             if kept:
                 hooks[event] = kept
@@ -142,7 +165,7 @@ def codex_toml(command: str) -> str:
             for hook in group["hooks"]:
                 lines.append(f"[[hooks.{event}.hooks]]")
                 lines.append(f'type = "{hook["type"]}"')
-                lines.append(f'command = "{hook["command"]}"')
+                lines.append(f"command = {json.dumps(hook['command'])}")  # a TOML basic string; escapes a Windows path
             lines.append("")
     lines.append(_TOML_END)
     return "\n".join(lines) + "\n"
@@ -169,11 +192,21 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _write(path: Path, text: str, dry_run: bool) -> None:
+    """Atomic: the user's settings file is never left truncated."""
     if dry_run:
         print(f"--- would write {path}\n{text}", end="")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(text)
+        if path.exists():
+            os.chmod(tmp, path.stat().st_mode & 0o777)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
@@ -183,11 +216,14 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
     command = hook_command(harness, hook or executable(_HOOK), review)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
-        if _TOML_BEGIN in text:
+        tomllib.loads(text)  # refuse to append to a file Codex could not read either
+        stripped, _ = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
+        new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command)
+        tomllib.loads(new)
+        if new == text:
             print(f"already installed: {path}")
             return path
-        tomllib.loads(text)  # refuse to append to a file Codex could not read either
-        _write(path, (text.rstrip("\n") + "\n\n" if text.strip() else "") + codex_toml(command), dry_run)
+        _write(path, new, dry_run)
     else:
         settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command))
         if not changed:
@@ -219,24 +255,36 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
     return path
 
 
+def server_stem(name: str, config: Path | None = None) -> str:
+    """A server id and file stem for a server name: the name itself when it is already a valid id and
+    the stem is only for the id, else sanitized plus a short hash of the name and the client file it
+    came from, so "my server" and "my-server", or "github" in two clients' files, never share a file."""
+    stem = _SERVER_ID.sub("-", name).strip("-.").replace("__", "-") or "server"
+    if not re.match(r"^[A-Za-z0-9]", stem):
+        stem = "s-" + stem
+    if stem != name or config is not None:
+        key = f"{config.resolve() if config else ''}\0{name}".encode()
+        stem = f"{stem}-{hashlib.sha256(key).hexdigest()[:8]}"
+    return stem
+
+
 def proxy_config(name: str, server: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     """A transparent-proxy config for one stdio server of an ``mcpServers`` file. Literal ``env``
     values stay in the harness's file (it sets them on the proxy process), and the proxy forwards
-    them by name, so no secret is copied."""
-    server_id = _SERVER_ID.sub("-", name).strip("-.") or "server"
-    if not re.match(r"^[A-Za-z0-9]", server_id):
-        server_id = "s-" + server_id
+    them by name, so no secret is copied. The threat memory is the file the hooks use too
+    (``~/.intentshield/threats.db`` with the default ``out_dir``), so what one layer learns the other knows."""
+    server_id = server_stem(name)
     env = server.get("env") or {}
     upstream: dict[str, Any] = {"server_id": server_id, "transport": "stdio", "command": server["command"],
                                "args": list(server.get("args") or [])}
     if env:
         upstream["env_from_env"] = {key: key for key in env}
     return {"upstreams": [upstream], "database_path": str(out_dir / f"{server_id}.db"),
-            "threat_memory_path": str(out_dir / "threats.db")}
+            "threat_memory_path": os.getenv("INTENTSHIELD_THREAT_DB") or str(out_dir.parent / "threats.db")}
 
 
 def _is_wrapped(server: dict[str, Any]) -> bool:
-    return Path(str(server.get("command", ""))).name == _PROXY and "--transparent" in (server.get("args") or [])
+    return Path(str(server.get("command", ""))).stem == _PROXY and "--transparent" in (server.get("args") or [])
 
 
 def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
@@ -260,8 +308,11 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
             continue  # HTTP servers are not launched by the harness; guard those with the gateway
         if _is_wrapped(server):
             continue
-        config_path = out_dir / f"{_SERVER_ID.sub('-', name)}.json"
-        _write(config_path, json.dumps(proxy_config(name, server, out_dir), indent=2) + "\n", dry_run)
+        config_path = out_dir / f"{server_stem(name, path)}.json"
+        generated = proxy_config(name, server, out_dir)
+        from .mcp_proxy import MCPProxyConfig  # the proxy must accept it before the client file changes
+        MCPProxyConfig.model_validate(generated)
+        _write(config_path, json.dumps(generated, indent=2) + "\n", dry_run)
         entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
         wrapped.append(name)
     if wrapped:

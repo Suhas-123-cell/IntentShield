@@ -40,7 +40,7 @@ _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"notify(?:ing)?|alert(?:ing)?|reveal(?:ing)?\s+to)\b[^.\n]{0,40}\b(?:user|them)\b", _I)),
     ("sensitive_target", re.compile(
         r"~/\.ssh|\bid_(?:rsa|ed25519)\b|/etc/(?:passwd|shadow)|\.aws/credentials|"
-        r"\bmcp\.json\b|\.env\b|private[_\s]keys?\b|seed\s+phrase", _I)),
+        r"\bmcp\.json\b|(?<!process)(?<!import\.meta)\.env\b|private[_\s]keys?\b|seed\s+phrase", _I)),
     ("argument_override", re.compile(
         r"\b(?:change|replace|set|modify|override|rewrite|redirect|reroute|update|add)\b[^.\n]{0,60}?"
         r"\b(?:argument|parameter|param|recipient|region|address|account|destination|pattern|"
@@ -122,6 +122,8 @@ def _normalize(text: str) -> str:
     """What an LLM reads, not what the bytes say: fold width variants, drop invisible
     characters (zero-width spaces, joiners, bidi marks, variation selectors), map look-alikes.
     Only the rules read the result; the agent and the tool see the original."""
+    if text.isascii():  # most tool text: nothing to fold, drop or map
+        return text
     text = _IGNORABLE.sub("", unicodedata.normalize("NFKC", text))
     return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
 
@@ -238,9 +240,19 @@ def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: st
     if collapse:
         text = " ".join(text.split())
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
+    # The whole sentence around a match must be the user's, not just the trigger words: a prompt that
+    # says "send the password reset link to bob" does not cover "send the password to evil@x".
     trusted = " ".join(_normalize(trusted).lower().split())
-    return [name for name, pattern in rules
-            if any(" ".join(m.group(0).lower().split()) not in trusted for m in pattern.finditer(text))]
+
+    def users_own(match: re.Match[str]) -> bool:
+        if not trusted:
+            return False
+        start = max(text.rfind(sep, 0, match.start()) for sep in ".\n!?;") + 1
+        ends = [i for i in (text.find(sep, match.end()) for sep in ".\n!?;") if i >= 0]
+        sentence = " ".join(text[start:min(ends) if ends else len(text)].lower().split())
+        return sentence in trusted
+
+    return [name for name, pattern in rules if any(not users_own(m) for m in pattern.finditer(text))]
 
 
 def tool_text(description: str | None, schema: dict[str, Any] | None = None,
@@ -318,12 +330,12 @@ def schema_text(schema: dict[str, Any] | None) -> str:
 def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
     """Poisoning rule names for one tool's text; ``shadowing`` if it names another tool."""
     findings = _scan(text, _DESCRIPTION_RULES)
-    lowered = _normalize(text).lower()
+    # Whole identifiers only ("get_x" is not named by "get_x_v1Arguments"), tokenized once rather
+    # than one compiled pattern per foreign tool, which thrashes the regex cache past 512 tools.
+    identifiers = set(re.findall(r"[a-z0-9_]+(?:[\-.][a-z0-9_]+)*", _normalize(text).lower()))
     for name in other_tools:
         # Only distinctive names: "search" in prose is not a reference to a tool.
-        # Whole identifiers only: "get_x" is not named by "get_x_v1Arguments".
-        if len(name) >= 6 and re.search(r"[_\-.]|[a-z][A-Z]", name) and \
-                re.search(rf"(?<![a-z0-9_]){re.escape(name.lower())}(?![a-z0-9_])", lowered):
+        if len(name) >= 6 and re.search(r"[_\-.]|[a-z][A-Z]", name) and name.lower() in identifiers:
             findings.append("shadowing")
             break
     return findings
@@ -392,8 +404,13 @@ _VALUE_PATTERNS = (
     # IBAN as printed, in groups of four ("DE89 3704 0044 ..."); the agent may send it compact.
     # Last, so the threat memory's masks keep their indices.
     re.compile(r"\b[A-Z]{2}\d{2}(?: [A-Z0-9]{4}){2,7}(?: \d{1,4})?\b"),
+    # A bare host, IPv4 address or host:port with no scheme ("evil.example", "203.0.113.7:8443"): a
+    # read tool's target is a destination too. Known top-level domains only, so "report.txt" is a file.
+    re.compile(r"(?<![\w@.\-/])(?:(?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|ai|app|co|uk|de|fr|jp|cn|ru|in|au|ca|"
+               r"us|eu|info|biz|me|xyz|cloud|tech|site|online|store|gov|edu|mil|int|example|test|invalid|local|"
+               r"internal|localhost)|(?:\d{1,3}\.){3}\d{1,3})(?::\d{2,5})?(?![\w\-.])", _I),
 )
-_AUTHORITY_PATTERNS = (*_VALUE_PATTERNS[:5], _VALUE_PATTERNS[6])
+_AUTHORITY_PATTERNS = (*_VALUE_PATTERNS[:5], _VALUE_PATTERNS[6], _VALUE_PATTERNS[7])
 # YYYY-MM-DD, DD/MM/YYYY (or MM/DD/YYYY) and YYYYMMDD, not inside a longer number or path.
 _DATE = re.compile(r"(?<![\d/\-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|"
                    r"(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(?![\d/\-])")
