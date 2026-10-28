@@ -16,6 +16,7 @@ library is imported, so the commands start fast.
 from __future__ import annotations
 
 import argparse
+import getpass
 import hashlib
 import json
 import os
@@ -58,9 +59,50 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
 
 
-def hook_command(harness: str, hook: str = _HOOK, review: str | None = None) -> str:
+def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None) -> str:
     command = f"{shlex.quote(hook)} {harness}"
-    return f"{command} --review {review}" if review else command
+    if review:
+        command += f" --review {review}"
+    if judge:
+        command += f" --judge {judge}"
+    return command
+
+
+_KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
+
+
+def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None = None,
+                     ask=getpass.getpass) -> Path | None:
+    """The key a hosted judge needs, stored in ``~/.intentshield/.env`` (0600) where every hook
+    process reads it. Asks on the terminal when it is neither given nor already set. Returns the
+    file written, or None when nothing was needed."""
+    provider = judge.partition(":")[0]
+    env = _KEY_FOR.get(provider)
+    if env is None:  # ollama: local, no key
+        return None
+    path = (home or Path.home()) / ".intentshield" / ".env"
+    stored = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            key, sep, value = line.strip().partition("=")
+            if sep:
+                stored[key] = value
+    if not api_key and (os.getenv(env) or stored.get(env)):
+        return None
+    if not api_key:
+        if ask is getpass.getpass and not sys.stdin.isatty():
+            raise ValueError(f"{env} is not set; pass --api-key or export it before `install --judge {provider}`")
+        api_key = ask(f"{env} for the {provider} judge (stored in {path}, never printed): ").strip()
+        if not api_key:
+            raise ValueError(f"no {env} given")
+    stored[env] = api_key
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write("".join(f"{k}={v}\n" for k, v in stored.items()))
+    os.chmod(path, 0o600)
+    print(f"stored {env} in {path}")
+    return path
 
 
 def hook_entries(harness: str, command: str) -> dict[str, Any]:
@@ -210,10 +252,13 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
 
 
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
-            dry_run: bool = False, home: Path | None = None, cwd: Path | None = None) -> Path:
+            dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
+            judge: str | None = None, api_key: str | None = None, ask=getpass.getpass) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched."""
     path = settings_path(harness, scope, home, cwd)
-    command = hook_command(harness, hook or executable(_HOOK), review)
+    if judge and not dry_run:
+        ensure_judge_key(judge, home, api_key, ask)
+    command = hook_command(harness, hook or executable(_HOOK), review, judge)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
@@ -360,6 +405,10 @@ def add_subcommands(sub: Any) -> None:
         if verb == "install":
             p.add_argument("--review", choices=("tainted", "always", "never"), default=None,
                            help="pass --review to the hook (Codex and Gemini CLI cannot ask, so 'always' denies)")
+            p.add_argument("--judge", nargs="?", const="groq", default=None, metavar="PROVIDER[:MODEL]",
+                           help="turn on the LLM judge: groq (default, asks for GROQ_API_KEY once), gemini, "
+                                "or ollama (local)")
+            p.add_argument("--api-key", default=None, help="the judge's API key, instead of being asked")
     for verb in ("wrap", "unwrap"):
         p = sub.add_parser(verb, help=f"{verb} stdio MCP servers of an mcpServers file "
                                       f"{'in' if verb == 'wrap' else 'from'} the transparent proxy")
@@ -376,7 +425,8 @@ def add_subcommands(sub: Any) -> None:
 def run(args: argparse.Namespace) -> int:
     try:
         if args.command == "install":
-            install(args.harness, args.scope, args.review, dry_run=args.dry_run)
+            install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
+                    api_key=args.api_key)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":
