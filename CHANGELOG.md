@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- PyPI metadata: the summary now starts "IntentShield for MCP" and names prompt injection; more keywords
+  (`intentshield`, `mcp-security`, `llm-security`, ...), Python 3.14 and AI classifiers, and a Documentation link.
+- Internal cleanup with no change in behaviour: the hook handler is split per harness, the proxy's control
+  routes moved out of `run_mcp_server` and share one error mapping, and an over-engineering pass removed
+  duplicated helpers and dead code (net about 160 lines). `python -m intentshield.install` is gone; use
+  `intentshield install`.
+
 ## 0.3.2
 
 - The proxy's judge now has a time budget for tool descriptions at connect
