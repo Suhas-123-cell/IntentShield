@@ -412,13 +412,21 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
             continue
         args = server.get("args") or []
         config = Path(args[args.index("--config") + 1])
-        upstream = json.loads(config.read_text())["upstreams"][0]
-        original = {key: value for key, value in server.items() if key not in ("command", "args")}
-        original["command"] = upstream["command"]
-        if "args" in upstream:
-            original["args"] = list(upstream["args"])
+        generated = json.loads(config.read_text())
+        upstream = generated["upstreams"][0]
+        # The entry's own key order is kept: only command and args are swapped back in place.
+        original = {}
+        for key, value in server.items():
+            if key == "command":
+                original["command"] = upstream["command"]
+            elif key == "args":
+                if "args" in upstream:
+                    original["args"] = list(upstream["args"])
+            else:
+                original[key] = value
         residue.append(config)
-        residue.append(Path(json.loads(config.read_text())["database_path"]))
+        if generated.get("database_path"):
+            residue.append(Path(generated["database_path"]))
         entries[name] = original
         restored.append(name)
     if restored:
