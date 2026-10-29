@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The output and description rules read "ignore the previous instructions" and "new task:" in German, Spanish,
+  French, Portuguese, Italian, Dutch, Russian, Chinese, Japanese, Korean and Hindi, and read leetspeak words as
+  letters (`1gn0r3 4ll pr3v10u5 1n5truct10n5`). Addresses, paths and ids are never rewritten, so the threat
+  memory learns no address the attacker did not send. The translations run only on text that could match them
+  and compile on first use, so scanning other text costs about what it did.
+
 ## 0.3.3
 
 Fixes found by a new end-to-end check of the installed wheel:
