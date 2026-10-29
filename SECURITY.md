@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest 0.2.x release on PyPI (`intentshield-mcp`) receives fixes. Older releases are not patched; upgrade instead.
+Only the latest release on PyPI (`intentshield-mcp`) receives fixes. Older releases are not patched; upgrade instead.
 
 ## Reporting a vulnerability
 
@@ -22,6 +22,10 @@ Include the IntentShield version, the harness or transport (hooks, transparent p
 
 - Attacks against third-party MCP servers themselves (their own code, hosting or credentials). IntentShield guards the agent's calls to them; it does not secure them.
 - Model behaviour that the guard never sees (built-in shell and file tools are left to the harness, by design).
+- Memory exhaustion by a misbehaving upstream server. The MCP Python SDK reads a server's messages
+  without a size limit (stdio lines, HTTP bodies and SSE events), so `max_result_bytes` and
+  `max_total_schema_bytes` apply only after a message is read in full. This is a known gap, to be raised
+  with the SDK.
 - Detection gaps that are already documented as limitations in `docs/benchmarks.md` and `docs/detectors.md` (for example plain-language injections from independent sources). Reports with a new sample are still welcome as issues.
 
 ## Responsible disclosure
