@@ -161,4 +161,7 @@ def test_agent_token_guards_mcp_endpoint_but_not_control_route(monkeypatch, demo
     assert client.get("/control/rules", headers=control).json() == {"enabled": False}
     assert client.post("/control/rules/propose", json={"example_id": "x"}, headers=control).status_code == 409
     assert client.post("/control/rules/r1", json={"decision": "maybe"}, headers=control).status_code == 422
+    # A body the parser cannot take, or a decision of the wrong type, is the caller's to fix, never a 500.
+    for body in (b"[" * 100_000 + b"]" * 100_000, b"\xff\xfe", b'{"decision": ["approve"]}'):
+        assert client.post("/control/rules/r1", content=body, headers=control).status_code == 422
     assert client.post("/control/rules/r1", json={"decision": "approve"}, headers=control).status_code == 409
