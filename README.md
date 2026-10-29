@@ -2,7 +2,7 @@
 
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
-**Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.<br>
+**Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's gateway leaves no harmful call in the human's review queue (the hooks leave 5/2/3 cases on qwen/llama/ornith; the trivial baseline up to 19% of cases), paid for with 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.<br>
 **Not covered:** the harness's built-in shell and file tools (only MCP calls are checked); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss; and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI and Cursor hooks are tested on event shapes, not run live. See [Limitations](#limitations).
 
 [![CI](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml/badge.svg)](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml)
@@ -119,9 +119,11 @@ are tested on event shapes only. Every option, the gateway's tools and the proxy
 
 ## Results
 
-The MSB, MCPTox, judge (groq/ollama) and adaptive numbers are regenerated from committed traces by
-`benchmarks/paper_numbers.py` (`results/README.md`); the Gemini judge row, the AgentDojo slack row and
-the injection table come from runs whose raw inputs are not committed. Rerun 2026-10-29. Protocols,
+The MSB rows are regenerated from the committed traces by `benchmarks/paper_numbers.py` (the case grid is
+`results/msb/cases.jsonl`), the MCPTox rows by `benchmarks/mcptox.py --replay` (needs the MCPTox-Benchmark
+checkout); the judge, adaptive and injection rows are committed reports under `results/`, of which only the
+injection table's rules column replays offline, from `results/injection/` plus the InjecAgent checkout
+(`results/README.md`). Protocols,
 every per-type table and the limits of each benchmark are in [docs/benchmarks.md](docs/benchmarks.md);
 the learned detectors' training and negative results in [docs/detectors.md](docs/detectors.md).
 
@@ -138,7 +140,7 @@ criterion.
 | qwen2.5:7b (218) | 58.7% [52.1, 65.0] | gateway **0.0%**, hooks **0.0%**, trivial baseline **0.0%** | gateway 0, trivial baseline 27 (12.4%) | 68.6% / 51.4% / 42.9% / 50.7% |
 | llama3.1:8b (220) | 15.0% | **0.0%** on all three | gateway 0, trivial baseline 0 | 70.0% / 36.4% / 22.1% / 57.1% |
 | ornith:9b (216) | 56.0% | **0.0%** on all three | gateway 0, trivial baseline 41 (19.0%) | 82.7% / 59.7% / 51.1% / 54.0% |
-| Gemini 3.5 Flash-Lite (99) | 29.3% | **0.0%** | - | 96.8% / 66.7% / 58.7% / - |
+| Gemini 3.5 Flash-Lite (99) | 29.3% | gateway **0.0%**, trivial baseline **0.0%** (no hooks arm) | gateway 0, trivial baseline 2 (2.0%) | 96.8% / 66.7% / 58.7% / - |
 
 **Read this before quoting it.** Every mutation-holding guard scores 0% executed harm by construction
 (MSB's harms are file writes or a leaked model name), so the trivial baseline reaches 0.0% too and the
@@ -154,15 +156,20 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   54 parameters stripped, all on attack-role servers, 0 of 194 parameters on the 86 task and filesystem
   tools; undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen)
   and 51/122 (ornith) harmful calls in the unpaired undefended runs (`results/self-disclosure.md`).
-- **Prompt-injection detection**, 3,717 held-out texts incl. 142 hard benign ones: rules + exemplars on
-  outputs catch 57.8% and flag 2.5% of benign texts (rules alone 49.9% / 2.1%); plain-language
-  injections from independent sources stay mostly undetected, and on the families independent of the
-  rules' tuning the rules catch 2.1% ([docs/detectors.md](docs/detectors.md#adaptive-injection-detection)).
+- **Prompt-injection detection**, 3,717 texts incl. 142 hard benign ones (held out for the learned
+  detectors; the rules were tuned on 1,505 of the 2,959 injections): on the 1,454 injections from families
+  independent of the rules' tuning, the rules catch 2.1% and rules + exemplars 18.1%. Over all 3,717,
+  rules + exemplars on outputs catch 57.8% and flag 2.5% of benign texts (rules alone 49.9% / 2.1%);
+  plain-language injections from independent sources stay mostly undetected
+  ([docs/detectors.md](docs/detectors.md#adaptive-injection-detection)).
 - **Adaptive attacker on IntentShield's own detectors**, 42 seeds, 5 attempts each: with local
   qwen2.5:7b rewriting, 16/42 seeds evaded the static rules + exemplars and 13/42 the learning arm (not
   significant; weak attacker). With Gemini 3.5 Flash-Lite rewriting, the rules + exemplars were evaded
-  on 42/42 seeds, while argument provenance held every canary call for review (canary_unreviewed 0/42,
-  `results/adaptive-gemini.json`).
+  on 42/42 seeds, while argument provenance held every canary call for review (canary_unreviewed 0/42;
+  41 stopped by provenance, 1 by the threat memory; `results/adaptive-gemini.json`). Caveats: the validity
+  judge is the same model as the attacker and lenient (2 of 8 spot-checked rewrites were not requests to
+  send data), and provenance holds by construction, because a valid try must keep the canary verbatim
+  (`results/improve/README.md`, Phase 3).
 - **Live Claude Code (Haiku)** vs a malicious server, 3 prompts x 3 arms: model name leaked 3/3
   unguarded, 0/3 with hooks (field sent blank); hooks + proxy quarantined the server, which received
   nothing. **Live Gemini CLI**, same check: notes exfiltrated 3/3 unguarded, 0/3 with hooks, though one

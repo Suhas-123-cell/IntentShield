@@ -105,7 +105,8 @@ anything. Each is optional in the proxy config.
   The gates refuse unsafe patterns, broad ones, patterns naming an address, URL or number,
   and any pattern matching non-test benign text. The operator approves each rule.
 
-**Evaluation** (`benchmarks/injection_eval.py`; 3,717 held-out texts). The injections are
+**Evaluation** (`benchmarks/injection_eval.py`; 3,717 texts, held out for the learned detectors; the
+rules were tuned on 1,505 of the 2,959 injections, see below). The injections are
 2,959 texts from the MCPTox test servers, generated injection styles, InjecAgent and AgentDojo.
 The 758 benign texts include 142 hard ones (`benchmarks/hard_negatives.py`): tool descriptions
 that legitimately guide the agent, results that tell the agent its next step, reports that
@@ -117,28 +118,36 @@ injections caught and the share of benign texts flagged:
 |---|---|---|---|
 | rules | 49.9% | 2.1% | 14/142 (12 are quoted attacks) |
 | Prompt Guard 2 (86M, Groq) | 40.2% | 2.0% | 12/142 (all quoted attacks) |
-| exemplars, descriptions and outputs | 21.9% | 3.4% | 16/142 (15 are usage-guidance descriptions) |
+| exemplars on outputs only | 11.4% | 0.4% | 1/142 |
+| exemplars, descriptions and outputs (earlier index; `results/injection/report-local-2026-10-13.json`) | 20.7% | 2.4% | 9/142 (7 are usage-guidance descriptions) |
 | injection classifier | 46.5% | 24.4% | 113/142 |
 | rules + Prompt Guard | 51.1% | 2.6% | 15/142 |
 | **rules + exemplars on outputs only** (default since this table) | **57.8%** | **2.5%** | **15/142** |
 | rules + Prompt Guard + exemplars on outputs | 58.5% | 2.9% | 15/142 |
-| any of the four | 70.6% | 25.9% | 118/142 |
+| any of the four (rules, classifier, Prompt Guard, exemplars on outputs) | 70.6% | 24.9% (189/758) | 113/142 |
 
-The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked; on the remaining independent families the rules catch 2.1% (30/1,454) and rules+exemplars 18.1% (263/1,454).
+The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked (1,505 of the 2,959 injections in all); on the remaining independent families the rules catch 2.1% (30/1,454) and rules+exemplars 18.1% (263/1,454).
 
-These come from `artifacts/injection-eval/report.json`, and the per-row verdicts are in `rows.jsonl`.
-The output-only rows were computed from those verdicts. Each detector covers different ground:
+Sources: the rules, Prompt Guard, exemplars-on-outputs and combination rows are
+`results/injection/report-rules-pg-exemplars.json` (`table.txt` is its per-family print-out); the
+classifier and any-of-the-four rows are `results/injection/report-with-classifier.json`; the
+descriptions-and-outputs exemplar row is `results/injection/report-local-2026-10-13.json`, the earlier
+index's run. An earlier version of this table gave 21.9% / 3.4% / 16/142 for that row and 25.9% / 118/142
+for any-of-the-four, citing a gitignored report that no longer holds them: no stored artifact, so they are
+replaced by the committed runs above. Each detector covers different ground:
 
 - **Prompt Guard 2** catches the explicit styles: "ignore previous" 27/27, and the "enhanced"
   InjecAgent attacks 1,054/1,054, which the rules also catch. It adds 1.2 points to the rules.
   It catches no plain-language injection: polite and as-the-user outputs 0/144, InjecAgent base
   6/1,054, AgentDojo `direct` 0/27.
 - **The exemplar detector** catches what resembles its seeds: generated styles 64-76%, MCPTox
-  87%. On descriptions its tuned threshold also flagged 12 of 36 legitimate usage-guidance
-  descriptions; validation held only 20 such texts. So the index now flags outputs only by
-  default (`--kinds output`).
+  poisoned descriptions 86.7% (261/301) with the earlier descriptions-and-outputs index
+  (`report-local-2026-10-13.json`). On descriptions its tuned threshold also flagged 7 of 36 legitimate
+  usage-guidance descriptions in that run (an earlier figure of 12 of 36 has no stored artifact);
+  validation held only 20 such texts. So the index now flags outputs only by default (`--kinds output`).
 - **No usable detector** catches plain-language injections from an independent source.
-  InjecAgent base stays at 1.5% for rules + Prompt Guard + exemplars, and AgentDojo `direct` at
+  InjecAgent base stays at 1.5% (`ds_base`, 8/544) and 3.9% (`dh_base`, 20/510), pooled 28/1,054 = 2.7%,
+  for rules + Prompt Guard + exemplars (`results/injection/table.txt`), and AgentDojo `direct` at
   1/27. Only the unusable classifier does better there: 30% of InjecAgent `ds` base, at a 24%
   benign flag rate. That is the gap learning from confirmed attacks is meant to close (below).
 
@@ -159,7 +168,12 @@ gates is approved.
 With Gemini 3.5 Flash-Lite as the rewriting attacker (`results/adaptive-gemini.json`, same 42 seeds, 5
 attempts each, threat memory on in the second arm) the rules + exemplars were evaded on 42/42 seeds
 in both arms, and the threat memory did not help; argument provenance, which does not depend on
-detecting the text, held every canary call for review (canary_unreviewed 0/42 in both arms).
+detecting the text, held every canary call for review (canary_unreviewed 0/42 in both arms; in the
+memory arm 41 were stopped by provenance and 1 by the memory). Two caveats from `results/improve/README.md`
+(Phase 3): the validity judge is the same model as the attacker and is lenient (of 8 spot-checked
+rewrites, 2 were not requests to send data), so the 42/42 is an upper bound; and provenance holds by
+construction, because a try must keep the canary verbatim to count as valid, so the address is always
+traceable to the output.
 
 Learning helped a little, and the difference is not significant: 3 seeds, with overlapping
 intervals. Two seeds were caught on the first attempt because of what the defense had learned

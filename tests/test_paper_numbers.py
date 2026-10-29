@@ -15,10 +15,15 @@ sys.path.insert(0, str(ROOT / "benchmarks"))
 import paper_numbers  # noqa: E402
 
 RESULTS = ROOT / "results" / "msb"
-DATA = ROOT / "artifacts" / "data" / "MSB"
+DATA = ROOT / "artifacts" / "data" / "MSB"  # optional: the committed results/msb/cases.jsonl is the same grid
 
-pytestmark = pytest.mark.skipif(not (DATA.exists() and RESULTS.exists()),
-                                reason="needs the MSB checkout (artifacts/data/MSB) for the case grid")
+pytestmark = pytest.mark.skipif(not (RESULTS / "cases.jsonl").exists(), reason="needs results/msb/cases.jsonl")
+
+
+@pytest.mark.skipif(not DATA.exists(), reason="needs the MSB checkout to compare against")
+def test_stored_case_grid_matches_the_msb_checkout():
+    import msb
+    assert paper_numbers.load_cases(RESULTS / "cases.jsonl") == msb.cases(DATA)
 
 
 @pytest.fixture(scope="module")
