@@ -181,7 +181,7 @@ injected sentence, and a bare trigger's payload is learned only when it names a 
 
 | Variable | Purpose |
 |---|---|
-| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP) and, in the web API, on proposing calls and reading runs (the operator token works there too; needs `INTENTSHIELD_CONTROL_TOKEN`). Unset leaves them open on loopback. |
+| `INTENTSHIELD_AGENT_TOKEN` | Bearer token required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP) and, in the web API, on proposing calls, reading runs, the tool list, metrics and security status (the operator token works there too; needs `INTENTSHIELD_CONTROL_TOKEN`). Required, like the control token, whenever `INTENTSHIELD_PROXY_CONFIG` is set; unset in the simulated mode leaves those routes open on loopback. |
 | `INTENTSHIELD_CONTROL_TOKEN` | Bearer token for the human approval endpoint. |
 | `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and, in proxy mode over Streamable HTTP, `/mcp` (default 120, `0` disables). In memory, per process. |
 | `INTENTSHIELD_THREAT_DB`, `INTENTSHIELD_THREAT_MEMORY`, `INTENTSHIELD_THREAT_PACKS` | Hook threat memory file, on/off switch (default on) and threat pack directory. |
@@ -301,6 +301,7 @@ catalog rather than the simulated tools, set:
 ```dotenv
 INTENTSHIELD_PROXY_CONFIG=configs/mcp-proxy.demo.json
 INTENTSHIELD_CONTROL_TOKEN=replace-with-a-long-random-value
+INTENTSHIELD_AGENT_TOKEN=replace-with-another-long-random-value
 ```
 
 Then start `.venv/bin/intentshield`. The FastAPI lifespan opens the configured
@@ -499,13 +500,8 @@ cannot ask); `intentshield uninstall <harness>` removes them. The same entries a
 `configs/harness/` for a manual install; they call `intentshield-hook` by name, so put the
 install's `bin` on the harness's `PATH` or use absolute paths.
 
-| harness | hook config | rewrite arguments | ask the user |
-|---|---|---|---|
-| Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` and the MCP resource tools | yes | yes |
-| Codex CLI | `~/.codex/config.toml`: same events | yes | no: asks become denials with a reason |
-| Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no: the agent is told to resend | yes |
-| Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no: denials with a reason |
-| any other MCP client | no hooks; the transparent proxy below still guards descriptions, schemas and outputs | - | - |
+The per-harness table (hook config, argument rewriting, asking the user) is in the
+[README](../README.md#what-each-layer-sees-and-stops).
 
 The proxy layer needs no harness support at all: `intentshield wrap <file>` rewrites every stdio
 server in an `mcpServers` file (Claude Code `.mcp.json`, Cursor `mcp.json`, Gemini CLI
