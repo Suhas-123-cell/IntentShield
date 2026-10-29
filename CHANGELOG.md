@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2
 
 - The proxy's judge now has a time budget for tool descriptions at connect
   (`judge_catalog_budget_seconds`, default 20). Before, it read every description one by one at up to
