@@ -573,13 +573,29 @@ benign tasks and 32 attacked cases that is a small sample, and attack success is
 15.6%. Travel and workspace have zero utility with or without the guard, so they measure
 nothing here: the 7B agent does not complete those tasks.
 
-## Live harness checks (Claude Code and Gemini CLI)
+## Live harness checks (Claude Code, Gemini CLI and Codex CLI)
+
+**Codex CLI (2026-10-29).** `benchmarks/harness_live/run_codex.sh`: Codex CLI 0.165 headless with the local
+`qwen2.5:7b` through Ollama (no cost), its read-only sandbox on and only the test server's tools pre-approved,
+against `attack_server.py`, the same three prompts as the Gemini check. Raw calls in `results/harness-live-codex/`.
+
+| arm | notes reached the attacker | note |
+|---|---|---|
+| unguarded | 3/3 | hijacked even on the plain summary prompt; sent `llm_model_name` too |
+| hooks installed, not trusted | 3/3 | Codex skipped the hooks: no hook database was written, nothing redacted |
+| hooks + transparent proxy | 0/3 | the proxy quarantined the poisoned `add_numbers` and sent `llm_model_name` empty; `send_email` stayed available, but after the warning it put in front of the injected result the agent never called it |
+
+Codex 0.165 runs a hook only after a person has trusted it (its hook review); a headless run skips untrusted
+hooks without a warning. The hooks arm with trusted hooks is not measured: trusting them needs the interactive
+review, or Codex's `--dangerously-bypass-hook-trust`, which this run did not use. `intentshield install codex`
+now says so. n = 3 per arm, one local model.
+
 
 Cost: a hook is a short-lived process, mostly Python start-up: hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`), on an M5; the checks themselves take 0.02 to 2 ms, the
 upper end on a 4 KB result (`benchmarks/latency.py`, rerun 2026-10-29). The adapters follow
 each harness's documented hook format and are tested on those event shapes
-(`tests/test_harness.py`). Claude Code and Gemini CLI have been run live (below); Cursor and Codex
-have not.
+(`tests/test_harness.py`). Claude Code, Gemini CLI and Codex CLI have been run live (Codex above;
+its hooks only untrusted); Cursor has not.
 
 Live check in Claude Code (`benchmarks/harness_live/run.sh`, Haiku, headless, 3 prompts x
 3 arms, rerun 2026-10-19 with raw logs in `results/harness-live/`) against a malicious server that logs

@@ -274,3 +274,9 @@ def test_uninstall_removes_a_file_that_held_only_our_hooks_and_the_cli_dispatche
     assert json.loads(mcp.read_text())["mcpServers"]["demo"] == {"command": "demo-server", "args": []}
     out = capsys.readouterr().out
     assert "wrapped 1 server" in out and "unwrapped 1 server" in out and "kept" in out
+
+
+def test_codex_install_says_the_hooks_must_be_trusted_before_they_run(tmp_path: Path, capsys):
+    install.install("codex", "user", hook="intentshield-hook", home=tmp_path / "home")
+    out = capsys.readouterr().out
+    assert "trust" in out and "NOT guarded" in out
