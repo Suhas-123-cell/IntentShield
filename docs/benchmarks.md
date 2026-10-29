@@ -272,7 +272,8 @@ calls to a reviewer. Blocking those instead gave 27.3% false block in the full p
 By paradigm (quarantine + provenance): Template-1 0.0%, Template-2 0.5%,
 Template-3 (argument tampering) 1.7% (17/980). Quarantine catches 96.5% of the 1,312
 poisoned descriptions (1,266, without the cross-server shadowing check; recomputed 2026-10-13
-with the current scanner) and flags 3 of 362 real tools (0.8%).
+with the current scanner) and flags 3 of 362 real tools (0.8%). These description-level counts have no
+stored artifact; the committed replay report holds call-level counts only.
 
 Caveats. The scanner rules were developed on MCPTox, so these are tuning-set
 numbers, not held-out; held-out evidence needs MCP-SafetyBench or MSB descriptions. No operator config
@@ -312,7 +313,7 @@ Both scanners now NFKC-normalize, drop invisible format characters and map commo
 Cyrillic/Greek look-alikes before matching, and also scan base64, hex, URL- and
 HTML-escaped text decoded up to three layers deep; false flags on the 362 clean tools stay
 at 3. Paraphrase survives mostly through the shadowing check: of the 1,266 descriptions
-the rules flag without it, the rules alone still flag 42.9% (543) after paraphrase, so an attacker who also avoids naming
+the rules flag without it, the rules alone still flag 42.9% (543; no stored artifact) after paraphrase, so an attacker who also avoids naming
 another server's tool would get through. Whether every rewrite still steers a model
 was not tested. MSB was meant as the held-out check for the output rules (its output-borne
 injections matched none of the original output rules), but the output rules were then

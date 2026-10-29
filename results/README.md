@@ -50,8 +50,9 @@ full proxy reached human 12/1579 = 0.8% [0.4, 1.3] (was 13). Every other count i
 | `gateway-intent-advisory` | gateway, DeBERTa v2 as advisory evidence (MSB v11) | on |
 | `gateway-prompt-guard` | gateway plus Llama Prompt Guard 2 (qwen only) | off |
 
-**Code versions.** Every arm ran on code whose guard and runner behave as at commit `0a3776d`,
-apart from the intent model. The qwen2.5:7b `none`, `baseline` and `gateway` arms are the MSB v12
+**Code versions.** Only the three qwen v12 files below are shown to run on code whose guard and runner
+behave as at commit `0a3776d` (their provenance records it); the other arms are believed equivalent
+apart from the intent model, but that is not verified, because they carry no provenance. The qwen2.5:7b `none`, `baseline` and `gateway` arms are the MSB v12
 reruns of 2026-10-19; the originals (2026-10-12/13) predated gateway and hook fixes. Runs from v12
 on carry their commit, intent model hash, Ollama model digest and container image in
 `MANIFEST.json`; older runs have `"provenance": null`, and their dates and commits are in
