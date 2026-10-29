@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
+
+Fixes found by a new end-to-end check of the installed wheel:
+
+- `intentshield install` then `uninstall` now gives back a JSON settings file byte for byte whatever its
+  formatting. Before, only a file already written with two-space indents came back unchanged; any other was
+  reformatted and its non-ASCII text escaped (`"naïve"` became `"na\u00efve"`). The original is kept in
+  `~/.intentshield/backups/` until uninstall; if the file was edited in between, the edit is kept and the
+  non-ASCII text stays as written. `wrap` and `unwrap` do the same for the `mcpServers` file.
+- The proxy's control routes answer 422, not 500, to a JSON body nested deeper than the parser allows, to a
+  `decision` that is a list or object, and (instead of 409) to a body that is not UTF-8.
 
 - PyPI metadata: the summary now starts "IntentShield for MCP" and names prompt injection; more keywords
   (`intentshield`, `mcp-security`, `llm-security`, ...), Python 3.14 and AI classifiers, and a Documentation link.
