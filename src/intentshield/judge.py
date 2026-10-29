@@ -12,8 +12,10 @@ withhold a tool, never authorize anything the rules would stop.
   too, so only "injection" counts. It reads the user's request, so a request between people that the
   user asked to read is told apart from one aimed at the agent.
 
-Network errors, rate limits that outlast the retries and unparsable answers count as
-no opinion and are counted in ``errors``. Standard library only, so hooks start fast.
+Network errors, rate limits that outlast the retries and answers without one of the question's
+verdicts count as no opinion and are counted in ``errors``. A result longer than one reading is read
+in overlapping windows, so padding cannot push an instruction out of view. Standard library only, so
+hooks start fast.
 """
 from __future__ import annotations
 
@@ -138,6 +140,8 @@ def _elide(text: str, cap: int, tail: float = 0.5) -> str:
     follows the padding."""
     if len(text) <= cap:
         return text
+    if cap < 80:  # the omission marker alone would outgrow a short cap
+        return text[:cap] + "…"
     head = int(cap * (1 - tail))
     return f"{text[:head]} …[{len(text) - cap} characters omitted]… {text[len(text) - (cap - head):]}"
 
@@ -152,17 +156,21 @@ def _shrink(value: Any, cap: int) -> Any:
     return value
 
 
-def _call_payload(intent: str, tool: str, arguments: dict[str, Any], budget: int = 8_000) -> str:
+def _call_payload(intent: str, tool: str, arguments: dict[str, Any], budget: int = 8_000) -> str | None:
     """Tool and arguments always in view, whole JSON: a long session's prompts or a long argument
     once pushed the tool and its recipient past a plain cut. Arguments get half the budget (long
-    strings elided in the middle), the user's messages the rest, most recent first in importance."""
+    strings elided in the middle), the user's messages the rest, most recent first in importance.
+    None when the arguments cannot fit even with every string cut short (thousands of keys or items):
+    what the judge cannot read it cannot vouch for."""
     cap = 4_000
     while True:
         shown = _shrink(arguments, cap)
-        if len(json.dumps(shown, ensure_ascii=False)) <= budget // 2 or cap <= 64:
+        if len(json.dumps(shown, ensure_ascii=False)) <= budget // 2:
             break
+        if cap <= 16:
+            return None
         cap //= 2
-    room = max(500, budget - len(json.dumps({"tool": tool[:200], "arguments": shown}, ensure_ascii=False)) - 40)
+    room = max(budget // 4, budget - len(json.dumps({"tool": tool[:200], "arguments": shown}, ensure_ascii=False)) - 40)
     while True:  # escapes (a newline is two characters in JSON) count against the budget too
         payload = json.dumps({"tool": tool[:200], "arguments": shown,
                               "user_messages": _elide(intent, room, tail=0.75)}, ensure_ascii=False)
@@ -172,6 +180,41 @@ def _call_payload(intent: str, tool: str, arguments: dict[str, Any], budget: int
 
 
 _ANSWER_CACHE_SIZE = 5_000
+VERDICTS = {"call": ("consistent", "inconsistent"), "output": ("injection", "clean"), "tool": ("safe", "unsafe")}
+
+
+def parse_answer(content: str | None, verdicts: tuple[str, ...]) -> dict[str, Any] | None:
+    """The first JSON object in ``content`` whose ``verdict`` is one of ``verdicts`` (case and spaces
+    ignored), normalised; None otherwise. A greedy ``{.*}`` once read two objects as one, and an
+    answer such as ``"Injection"`` or ``{"classification": ...}`` passed as no objection uncounted."""
+    decoder = json.JSONDecoder()
+    text = content or ""
+    for start in [m.start() for m in re.finditer(r"\{", text)]:
+        try:
+            item, _ = decoder.raw_decode(text, start)
+        except ValueError:
+            continue
+        if isinstance(item, dict) and isinstance(item.get("verdict"), str) \
+                and item["verdict"].strip().lower() in verdicts:
+            return {**item, "verdict": item["verdict"].strip().lower()}
+    return None
+
+
+def windows(text: str, size: int, limit: int, overlap: int = 400) -> tuple[list[str], int]:
+    """``text`` as overlapping windows of ``size`` characters, and how many were left unread. Past
+    ``limit`` windows, the first and last are kept and the rest chosen by how much they look like a
+    request (an address, a URL, a verb of sending or a word to the reader), in their order."""
+    if len(text) <= size:
+        return [text], 0
+    step = size - overlap
+    parts = [text[i:i + size] for i in range(0, max(len(text) - overlap, 1), step)]
+    if len(parts) <= limit:
+        return parts, 0
+    cue = re.compile(r"@|https?://|\b(?:you|your|assistant|agent|AI|please|send|forward|email|upload|share|"
+                     r"post|call|run|delete|transfer|pay|must|should)\b", re.I)
+    middle = sorted(range(1, len(parts) - 1), key=lambda i: -len(cue.findall(parts[i])))[:max(limit - 2, 0)]
+    keep = sorted({0, len(parts) - 1, *middle})
+    return [parts[i] for i in keep], len(parts) - len(keep)
 
 
 class Judge:
@@ -181,7 +224,8 @@ class Judge:
     _cache_lock = threading.Lock()
 
     def __init__(self, provider: str = "groq", model: str | None = None, api_key: str | None = None,
-                 cache: str | Path | None = None, timeout: float = 30, retries: int = 4) -> None:
+                 cache: str | Path | None = None, timeout: float = 30, retries: int = 4,
+                 max_windows: int = 6) -> None:
         if provider not in PROVIDERS:
             raise ValueError(f"judge provider must be one of {sorted(PROVIDERS)}")
         self.url, env, default, self.extra = PROVIDERS[provider]
@@ -194,12 +238,20 @@ class Judge:
                 raise ValueError(f"the {provider} judge needs {env}")
         self.timeout, self.retries, self.errors = timeout, retries, 0
         self.last_error = ""
+        # A local model's context (Ollama's default is 4,096 tokens) must hold the prompt, the request
+        # and one window; Ollama truncates silently, dropping the system prompt first.
+        self.window = 3_000 if provider == "ollama" else 6_000
+        self.max_windows, self.unread = max_windows, 0  # windows of long results left unread, counted
+        self._count_lock = threading.Lock()
         # Benchmarks keep answers on disk so a rerun after a rate limit spends nothing twice.
         self.cache_path = Path(cache) if cache else None
         if self.cache_path and self.cache_path.exists():
             for line in self.cache_path.read_text().splitlines():
-                item = json.loads(line)
-                self._answers[item["key"]] = item["answer"]
+                try:  # an interrupted append leaves a partial line; skip it rather than refuse to start
+                    item = json.loads(line)
+                    self._answers[item["key"]] = item["answer"]
+                except (ValueError, KeyError, TypeError):
+                    continue
 
     @classmethod
     def from_spec(cls, spec: str, **kwargs: Any) -> "Judge":
@@ -211,22 +263,20 @@ class Judge:
             provider = "groq"
         return cls(provider, model or None, **kwargs)
 
-    def _ask(self, system: str, user: str) -> dict[str, Any] | None:
-        key = hashlib.sha256(f"{self.model}\0{system}\0{user}".encode()).hexdigest()
+    def _ask(self, question: str, system: str, user: str) -> dict[str, Any] | None:
+        key = hashlib.sha256(f"{self.model}\0{system}\0{user}".encode()).hexdigest()  # benchmark caches on disk use this key
         with self._cache_lock:
             if key in self._answers:
                 return self._answers[key]
-        content, self.last_error = post_chat(self.url, self.api_key, {
+        content, error = post_chat(self.url, self.api_key, {
             "model": self.model, "temperature": 0, "response_format": {"type": "json_object"}, **self.extra,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
             self.timeout, self.retries)
-        match = re.search(r"\{.*\}", content or "", re.S)
-        try:
-            answer = json.loads(match.group(0)) if match else None
-        except ValueError:
-            answer = None
-        if not isinstance(answer, dict):
-            self.errors += 1
+        answer = parse_answer(content, VERDICTS[question])
+        if answer is None:  # not cached: a glitch must not become the answer for the life of a proxy
+            with self._count_lock:
+                self.errors += 1
+                self.last_error = error or f"no {'/'.join(VERDICTS[question])} verdict in: {(content or '')[:120]}"
             return None
         with self._cache_lock:
             self._answers[key] = answer
@@ -240,25 +290,36 @@ class Judge:
 
     def call(self, intent: str, tool: str, arguments: dict[str, Any]) -> str | None:
         """Why the call does not serve the user's request, or None (it does, or no opinion)."""
-        answer = self._ask(CALL_PROMPT, _call_payload(intent, tool, arguments))
+        payload = _call_payload(intent, tool, arguments)
+        if payload is None:
+            return "the call's arguments are too large for the judge to read"
+        answer = self._ask("call", CALL_PROMPT, payload)
         if answer and answer.get("verdict") == "inconsistent":
             return str(answer.get("reason") or "the call is not part of the user's request")[:300]
         return None
 
     def output(self, intent: str, tool: str, result: str) -> str | None:
         """Why a tool's result tries to steer the agent beyond the user's request, or None. Untrusted text,
-        as for ``tool``: "clean" earns nothing; only "injection" adds evidence."""
-        answer = self._ask(OUTPUT_PROMPT, json.dumps({"user_request": _elide(intent or "(not given)", 2_000),
-                                                      "tool": tool[:200], "result": _elide(result, 6_000)},
-                                                     ensure_ascii=False))
-        if answer and answer.get("verdict") == "injection":
-            return str(answer.get("reason") or "the result tries to instruct the agent")[:300]
+        as for ``tool``: "clean" earns nothing; only "injection" adds evidence. A long result is read in
+        overlapping windows (``windows``), stopping at the first objection; windows past ``max_windows``
+        are counted in ``unread``."""
+        parts, skipped = windows(result, self.window, self.max_windows)
+        with self._count_lock:
+            self.unread += skipped
+        request = _elide(intent or "(not given)", 2_000 if self.window > 3_000 else 1_000)
+        for n, part in enumerate(parts):
+            shown = part if len(parts) == 1 else f"[part {n + 1} of {len(parts)} of a longer result] {part}"
+            answer = self._ask("output", OUTPUT_PROMPT, json.dumps(
+                {"user_request": request, "tool": tool[:200], "result": shown}, ensure_ascii=False))
+            if answer and answer.get("verdict") == "injection":
+                return str(answer.get("reason") or "the result tries to instruct the agent")[:300]
         return None
 
     def tool(self, name: str, description: str) -> str | None:
         """Why the description tries to instruct the agent, or None."""
-        answer = self._ask(TOOL_PROMPT, json.dumps({"tool": name[:200], "description": _elide(description, 7_600)},
-                                                   ensure_ascii=False))
-        if answer and answer.get("verdict") == "unsafe":
-            return str(answer.get("reason") or "the description tries to instruct the agent")[:300]
+        for part in windows(description, 2 * self.window, self.max_windows)[0]:
+            answer = self._ask("tool", TOOL_PROMPT, json.dumps({"tool": name[:200], "description": part},
+                                                               ensure_ascii=False))
+            if answer and answer.get("verdict") == "unsafe":
+                return str(answer.get("reason") or "the description tries to instruct the agent")[:300]
         return None
