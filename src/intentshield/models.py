@@ -7,6 +7,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+class SecuritySignals(BaseModel):
+    """The scores the audit trail records for a call. Derived by the security supervisor for a
+    registered tool; fixed at the fail-closed extreme for an unregistered one, which the policy
+    blocks before anything else is consulted."""
+
+    injection_score: float = Field(ge=0.0, le=1.0)
+    intent_alignment: float = Field(ge=0.0, le=1.0)
+    risk_score: float = Field(ge=0.0, le=1.0)
+
 class Decision(StrEnum):
     ALLOW = "ALLOW"
     REVIEW = "REVIEW"

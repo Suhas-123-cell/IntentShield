@@ -327,7 +327,8 @@ class MCPProxyRuntime:
         self._prompt_guard: Any = None  # kept so a benchmark can count its errors, like the judge's
         if config.prompt_guard:
             from .prompt_guard import PromptGuard
-            guard = self._prompt_guard = PromptGuard(config.prompt_guard)
+            # Bounded like the judge: the call holds the agent, so one short try, then no opinion.
+            guard = self._prompt_guard = PromptGuard(config.prompt_guard, timeout=15, retries=1)
             self._detectors.append(("prompt_guard", lambda text, kind: guard.flags(text)))
         self._learner: Any = None
         self._rules: Any = None
@@ -433,12 +434,17 @@ class MCPProxyRuntime:
     async def _close_upstreams(self) -> None:
         # MCP transport context managers are task-affine. Close them in the
         # same lifespan task that opened them rather than child gather tasks.
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
+        interrupted: BaseException | None = None
         for upstream in reversed(tuple(self.upstreams.values())):
             try:
                 await upstream.close()
-            except BaseException as exc:
+            except Exception as exc:
                 errors.append(exc)
+            except BaseException as exc:  # cancellation: close the rest, then let it propagate as itself
+                interrupted = interrupted or exc
+        if interrupted is not None:
+            raise interrupted
         if errors:
             raise RuntimeError(f"Failed to close {len(errors)} upstream MCP connection(s)") from errors[0]
 
@@ -482,6 +488,10 @@ class MCPProxyRuntime:
             split = scan_server(tool_text(t.description, t.input_schema, t.title) for t in own)
             if split and self.config.quarantine_poisoned_tools:
                 self._quarantined.update({tool.qualified_name: list(split) for tool in own})
+        names_by_server: dict[str, set[str]] = {}
+        for tool in tools:
+            names_by_server.setdefault(tool.server_id, set()).add(tool.name)
+        catalog_names = self._catalog_names()  # one directory scan, not one per tool
         for tool in tools:
             qualified = tool.qualified_name
             # Untrusted text: scanned for poisoning; a reference to another
@@ -489,8 +499,9 @@ class MCPProxyRuntime:
             text = tool_text(tool.description, tool.input_schema, tool.title)
             if extra := schema_text(tool.input_schema):
                 text = f"{text}\n{extra}"
-            own = {other.name for other in tools if other.server_id == tool.server_id}
-            foreign = {other.name for other in tools if other.server_id != tool.server_id} | self._catalog_names()
+            own = names_by_server[tool.server_id]
+            foreign = set().union(*(names for sid, names in names_by_server.items() if sid != tool.server_id),
+                                  catalog_names)
             findings = scan_description(text, foreign - own)
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
@@ -663,10 +674,12 @@ class MCPProxyRuntime:
         return verdict
 
     def _rule_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
+        known = self._known_threat(user_intent, call)  # a SQLite read: outside the lock
         with self._lock:
-            return self._rule_check_locked(run_id, user_intent, call)
+            return self._rule_check_locked(run_id, user_intent, call, known)
 
-    def _rule_check_locked(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
+    def _rule_check_locked(self, run_id: str, user_intent: str, call: ToolCall,
+                           known: str | None) -> ReasonCode | None:
         if call.tool_name in self._quarantined:
             return ReasonCode.BLOCK_TOOL_QUARANTINED
         if run_id in self._untrusted_intents:
@@ -674,7 +687,6 @@ class MCPProxyRuntime:
         # Argument provenance: a distinctive value (email, URL, account, path, id)
         # the user never gave must not come from an injected output in this run
         # or from another tool's description.
-        known = self._known_threat(user_intent, call)
         users_own = distinctive_values(user_intent) - self._intent_from_outputs.get(run_id, set())
         values = distinctive_values(call.arguments) - users_own
         if not values:
@@ -749,16 +761,9 @@ class MCPProxyRuntime:
                 self._tainted.update(distinctive_values(message))
 
     def _inspect_result(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
-        with self._lock:
-            return self._inspect_result_locked(run_id, call, result)
-
-    def _inspect_result_locked(self, run_id: str, call: ToolCall, result: dict[str, Any]) -> dict[str, Any]:
         upstream = result.get("upstream", result)
-        for value in authority_values(upstream):  # a re-seen value moves to the end, so eviction never drops a fresh one
-            self._observed.pop(value, None)
-            self._observed[value] = None
-        for stale in list(itertools.islice(self._observed, max(0, len(self._observed) - 50_000))):
-            del self._observed[stale]
+        # Scanning, the learned detectors and the threat-memory lookups run outside the lock: a
+        # hosted detector can take seconds, and the event loop takes the same lock in create_run.
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
         known = [] if findings else self._remember("text_matches", upstream) or []
@@ -770,24 +775,32 @@ class MCPProxyRuntime:
             "line_split_rules" if scan_output_collapsed(upstream)
             else "threat_memory" if known or self._remember("hostile", call.tool_name.partition(":")[0])
             else self._semantic_flag(text, "output"))
-        if self._learner is not None:  # only learning links a reviewed call to the text it reused
-            outputs = self._outputs.setdefault(run_id, [])
-            outputs.append({"tool_name": call.tool_name, "text": text[:20_000],
-                            "values": distinctive_values(upstream), "flagged": bool(findings or detector)})
-            del outputs[:-32]
-            for stale in list(itertools.islice(self._outputs, max(0, len(self._outputs) - 64))):
-                del self._outputs[stale]
+        values = distinctive_values(upstream)
+        with self._lock:  # the merge into the session state is the only part another thread can race
+            for value in authority_values(upstream):  # a re-seen value moves to the end, so eviction never drops a fresh one
+                self._observed.pop(value, None)
+                self._observed[value] = None
+            for stale in list(itertools.islice(self._observed, max(0, len(self._observed) - 50_000))):
+                del self._observed[stale]
+            if self._learner is not None:  # only learning links a reviewed call to the text it reused
+                outputs = self._outputs.setdefault(run_id, [])
+                outputs.append({"tool_name": call.tool_name, "text": text[:20_000],
+                                "values": values, "flagged": bool(findings or detector)})
+                del outputs[:-32]
+                for stale in list(itertools.islice(self._outputs, max(0, len(self._outputs) - 64))):
+                    del self._outputs[stale]
+            if findings:
+                self._injection_seen = True
+                self._tainted.update(values)
+            elif detector:
+                self._injection_seen = True
+                self._suspect_values.update(values)
         if not findings:
             if detector:
-                self._injection_seen = True
-                self._suspect_values.update(distinctive_values(upstream))
                 self._service().storage.add_event(run_id, "MCP_OUTPUT_SUSPECTED",
                                                   {"tool_name": call.tool_name, "detector": detector})
                 return {**result, "injection_suspected": True, "injection_findings": ["semantic_instruction"]}
             return result
-        values = distinctive_values(result.get("upstream", result))
-        self._injection_seen = True
-        self._tainted.update(values)
         if self._memory and not known:  # only rule-confirmed text teaches it, never a pack's or its own
             run = self._service().storage.get_run(run_id) or {}
             self._remember("record_attack", upstream, findings, source=call.tool_name.partition(":")[0],

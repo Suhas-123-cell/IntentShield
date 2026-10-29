@@ -541,9 +541,18 @@ def run_mcp_server(
                 return hmac.compare_digest(request.headers.get("authorization", "").encode(),
                                            f"Bearer {control_token}".encode())
 
+            def guarded(handler):
+                """Every control route behind the one bearer check, with a malformed body as 422."""
+                async def route(request: Request) -> JSONResponse:
+                    if not authorized(request):
+                        return JSONResponse({"error": "unauthorized"}, status_code=401)
+                    try:
+                        return await handler(request)
+                    except (json.JSONDecodeError, AttributeError, TypeError):
+                        return JSONResponse({"error": "body must be a JSON object"}, status_code=422)
+                return route
+
             async def decide_approval(request: Request) -> JSONResponse:
-                if not authorized(request):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
                 try:
                     payload = await request.json()
                     decision = payload.get("decision")
@@ -564,13 +573,9 @@ def run_mcp_server(
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
             async def learning(request: Request) -> JSONResponse:
-                if not authorized(request):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
                 return JSONResponse(await server.intentshield_runtime.learning_status())
 
             async def learn_example(request: Request) -> JSONResponse:
-                if not authorized(request):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
                 try:
                     payload = await request.json()
                     if not isinstance(payload.get("text"), str):
@@ -580,17 +585,12 @@ def run_mcp_server(
                 except ValueError as exc:
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
-            app.add_route(
-                "/control/approvals/{approval_id}", decide_approval, methods=["POST"]
+            app.add_route("/control/approvals/{approval_id}", guarded(decide_approval), methods=["POST"]
             )
             async def rules(request: Request) -> JSONResponse:
-                if not authorized(request):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
                 return JSONResponse(await server.intentshield_runtime.rules_status())
 
             async def propose_rules(request: Request) -> JSONResponse:
-                if not authorized(request):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
                 try:
                     payload = await request.json()
                     return JSONResponse({"proposals": await server.intentshield_runtime.propose_rules(
@@ -601,8 +601,6 @@ def run_mcp_server(
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
             async def decide_rule(request: Request) -> JSONResponse:
-                if not authorized(request):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
                 try:
                     payload = await request.json()
                     if payload.get("decision") not in {"approve", "reject"}:
@@ -614,11 +612,11 @@ def run_mcp_server(
                 except ValueError as exc:
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
-            app.add_route("/control/learning", learning, methods=["GET"])
-            app.add_route("/control/learning/examples", learn_example, methods=["POST"])
-            app.add_route("/control/rules", rules, methods=["GET"])
-            app.add_route("/control/rules/propose", propose_rules, methods=["POST"])
-            app.add_route("/control/rules/{rule_id}", decide_rule, methods=["POST"])
+            app.add_route("/control/learning", guarded(learning), methods=["GET"])
+            app.add_route("/control/learning/examples", guarded(learn_example), methods=["POST"])
+            app.add_route("/control/rules", guarded(rules), methods=["GET"])
+            app.add_route("/control/rules/propose", guarded(propose_rules), methods=["POST"])
+            app.add_route("/control/rules/{rule_id}", guarded(decide_rule), methods=["POST"])
 
         uvicorn.run(app, host=host, port=port, log_level="info", proxy_headers=False)
     elif transport == "streamable-http":
