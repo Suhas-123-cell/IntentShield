@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -79,6 +80,11 @@ class MCPProxyConfig(BaseModel):
     # the user's request; an objection withholds the tool or sends the call to review.
     # It never allows anything. The key comes from GROQ_API_KEY or GEMINI_API_KEY.
     judge: str | None = None
+    # Time the judge may spend on descriptions at connect, which runs before the proxy answers the
+    # client's ``initialize`` (clients give up after about 30 s). A call already started may run past
+    # it by up to 30 s. Tools not reached get no opinion, as on a judge error; they are logged and
+    # listed in an ``MCP_JUDGE_BUDGET_SPENT`` event.
+    judge_catalog_budget_seconds: float = Field(default=20, gt=0)
     # Optional Llama Prompt Guard 2 on Groq (``prompt_guard.py``): a model id from
     # ``prompt_guard.MODELS``. Read like the classifier, on descriptions and outputs the rules
     # pass; evidence only. The key comes from GROQ_API_KEY.
@@ -293,6 +299,7 @@ class MCPProxyRuntime:
         # Parameters asking the agent for its model, prompt or conversation: hidden from
         # the agent and always sent upstream empty.
         self._redacted: dict[str, set[str]] = {}
+        self._unjudged: list[str] = []  # descriptions the judge's connect budget did not reach
         self._visible_schemas: dict[str, dict[str, Any]] = {}
         # Distinctive values from outputs that carried injection text. Kept for the whole
         # session, not per run: the agent opens runs itself, so a fresh run must not wash
@@ -414,6 +421,12 @@ class MCPProxyRuntime:
             self.service.storage.add_event(
                 self._ensure_system_run(), "MCP_TOOLS_QUARANTINED", {"tools": self._quarantined}
             )
+        if self._unjudged:
+            logger.warning("judge budget spent before every description was read",
+                           extra={"unjudged": len(self._unjudged)})
+            self.service.storage.add_event(
+                self._ensure_system_run(), "MCP_JUDGE_BUDGET_SPENT", {"tools": self._unjudged}
+            )
         if self._redacted:
             self.service.storage.add_event(
                 self._ensure_system_run(), "MCP_SELF_DISCLOSURE_FIELDS",
@@ -484,6 +497,8 @@ class MCPProxyRuntime:
     def _build_registry(self, tools: list[MCPTool]) -> dict[str, ToolSpec]:
         registry: dict[str, ToolSpec] = {}
         self._quarantined, self._description_values, self._redacted = {}, {}, {}
+        self._unjudged = []
+        judge_deadline = time.monotonic() + self.config.judge_catalog_budget_seconds
         # An instruction split across one server's tools quarantines all of them.
         for server_id in dict.fromkeys(tool.server_id for tool in tools):
             own = [tool for tool in tools if tool.server_id == server_id]
@@ -515,7 +530,11 @@ class MCPProxyRuntime:
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_KNOWN_THREAT
                 elif self._semantic_flag(text, "description"):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_CLASSIFIER_FLAGGED
-                elif self._judge and self._judge.tool(qualified, text):
+                elif not self._judge:
+                    pass
+                elif time.monotonic() >= judge_deadline:
+                    self._unjudged.append(qualified)
+                elif self._judge.tool(qualified, text):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_JUDGE_FLAGGED
             self._description_values[qualified] = distinctive_values(text)
             hidden = self_disclosure_fields(tool.input_schema)
