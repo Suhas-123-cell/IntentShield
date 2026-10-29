@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.4
 
 - The output and description rules read "ignore the previous instructions" and "new task:" in German, Spanish,
   French, Portuguese, Italian, Dutch, Russian, Chinese, Japanese, Korean and Hindi, and read leetspeak words as
