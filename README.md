@@ -3,7 +3,7 @@
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
 **Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0%, and the gateway left no harmful call waiting in the human's review queue (the hooks left 5/2/3 cases on qwen/llama/ornith). That is not unique: a trivial guard that holds every state-changing call for a human also reaches 0.0%, though it leaves up to 19% of cases in the queue. The cost is 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.<br>
-**Not covered:** the harness's built-in shell and file tools (only MCP calls are checked); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss; and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI runs the hooks only after you trust them once in Codex (until then it is unguarded); Cursor has been run live once, but its model refused the attack even unguarded, so that run shows the hooks work, not that they stop an attack. See [Limitations](#limitations).
+**Not covered:** the harness's built-in shell and file tools (only MCP calls are checked); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss; injections in languages other than English or in leetspeak (`1gn0r3 4ll pr3v10u5 1n5truct10n5`), since the rules match English text only; and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI runs the hooks only after you trust them once in Codex (until then it is unguarded); Cursor has been run live once, but its model refused the attack even unguarded, so that run shows the hooks work, not that they stop an attack. See [Limitations](#limitations).
 
 [![CI](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml/badge.svg)](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/intentshield-mcp)](https://pypi.org/project/intentshield-mcp/)
@@ -200,6 +200,9 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
 - Cursor CLI, live with its `auto` model (Composer), 3 prompts: the notes never reached the attacker in any arm,
   including the unguarded one, because the model refused the injection on its own (Grok 4.7 and Grok 4.6 unguarded: 0/3 too). The run shows the hooks run and
   the redaction works under Cursor, not that the guard stops an attack there (`results/harness-live-cursor/`).
+- The output rules are English only. In a small hand-written probe (26 injections, not a benchmark), a German,
+  a Spanish and a leetspeak version of "ignore all previous instructions" all went unflagged, while the English
+  original was flagged. A later send to an address taken from the missed output still asked for confirmation.
 - The learned detectors are negative or null results and are off by default; their PyTorch path (DeBERTa, the
   e5 embedder) is exercised locally only, never in CI.
 - The trivial baseline also reaches 0.0% executed harm; "best performing" is not supported (the
