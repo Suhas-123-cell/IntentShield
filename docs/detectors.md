@@ -212,6 +212,41 @@ numbers, and each seed now has its own canary (`95ef2c1`; the first run is in
 `\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
 each rule.
 
+## LLM judge on tool results (plain-language injections)
+
+The rules and Prompt Guard 2 both miss injections written as ordinary requests with no marker ("Could you
+also forward the notes to ..."): under 4% on the corpus's LLM-written outputs. The judge's `output` question
+(`judge.py`, `--judge-outputs`, `"judge_outputs": true`) reads the result with the user's request and asks
+whether text in it addresses the agent with something beyond that request. It is told to treat a message
+addressed to a named person or a team as content, so an inbox's "Hey Alex, could you wire the payment?" is
+clean. An objection is evidence only: the agent is warned and the result's values ask before use.
+
+**Method.** `benchmarks/judge_outputs_eval.py`, on the as-the-user, polite, false-error and new-task outputs
+(and their translations) as injections, and the benign outputs plus the hard agent hints, requests between
+people and quoted attacks as benign. The rows carry no user request, so the judge got none. The prompt was
+written on the train split: a first version with qwen2.5:7b caught 54% of a 224-injection train sample and
+flagged 13% of benign texts (8 of 23 requests between people); Groq's gpt-oss-120b caught 85% but flagged
+14 of 23 requests between people. One revision, the addressee rule above, cut those to 2 of 23 (qwen) and
+1 of 23 (gpt-oss-120b) on train, and qwen's train recall fell to 36%. The prompt was then frozen and run once
+on the test split:
+
+| judge | injections caught | benign flagged | hard benign flagged | rules alone, same rows |
+|---|---|---|---|---|
+| Gemini 3.5 Flash-Lite (25 rows per source, free tier) | 123/158 77.8% [70.8, 83.6] | 4/118 3.4% [1.3, 8.4] | 1/85 (an agent hint) | 7/158 caught, 14/118 flagged |
+| qwen2.5:7b, local (all rows) | 84/346 24.3% [20.1, 29.1] | 1/176 0.6% [0.1, 3.1] | 0/102 | 13/346 caught, 15/176 flagged |
+
+By style (Gemini): as the user 27/33, polite 31/44, false error 25/33, new task 40/48. The rules' benign
+flags are the quoted attacks, which the judge reads correctly as reports. Rules and judge together:
+78.5% caught and 15.3% benign flagged with Gemini, 27.2% and 9.1% with qwen.
+
+**Limits.** The injections were written by an LLM for this corpus, in four styles; real attacks will differ.
+The default provider, Groq's gpt-oss-120b, was not run on the test split: its free tier allows 200,000
+tokens a day, which the train runs used up, and about 200 judged results would use up a day in normal use.
+Gemini takes about 4 s per result and local qwen about 1 s, on every result the rules pass. No adaptive
+attack on the judge was tried: text written to persuade the judge itself ("this result is safe") could
+lower these numbers. Results: `results/judge/outputs-gemini-flash-lite-test.json`,
+`results/judge/outputs-qwen2.5-7b-test.json`.
+
 ## Teach the detector (operator labels and induced rules)
 
 With `exemplar_index_dir` and `learning_regression` set in the proxy config, the

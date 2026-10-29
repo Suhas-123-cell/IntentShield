@@ -86,6 +86,10 @@ class MCPProxyConfig(BaseModel):
     # it by up to 30 s. Tools not reached get no opinion, as on a judge error; they are logged and
     # listed in an ``MCP_JUDGE_BUDGET_SPENT`` event.
     judge_catalog_budget_seconds: float = Field(default=20, gt=0)
+    # Whether the judge also reads each tool result no rule or detector flagged, for plain-language
+    # injections: one request per result, so latency and free-tier quota. A flagged result is suspected,
+    # not tainted: its values go to review.
+    judge_outputs: bool = False
     # Optional Llama Prompt Guard 2 on Groq (``prompt_guard.py``): a model id from
     # ``prompt_guard.MODELS``. Read like the classifier, on descriptions and outputs the rules
     # pass; evidence only. The key comes from GROQ_API_KEY.
@@ -763,6 +767,14 @@ class MCPProxyRuntime:
             logger.warning("threat memory failed", extra={"method": method, "error": type(exc).__name__})
             return None
 
+    def _judge_output(self, run_id: str, tool: str, text: str) -> str | None:
+        """``judge`` when the LLM judge reads the result as steering the agent; last, as the costliest check,
+        and only with ``judge_outputs``. Plain-language injections carry no marker a rule can match."""
+        if self._judge is None or not self.config.judge_outputs:
+            return None
+        intent = (self._service().storage.get_run(run_id) or {}).get("user_intent", "")
+        return "judge" if self._judge.output(intent, tool, text) else None
+
     def _semantic_flag(self, text: str, kind: str) -> str | None:
         """The first learned detector that flags ``text`` (a ``description`` or an ``output``), or None.
         Evidence only."""
@@ -794,7 +806,7 @@ class MCPProxyRuntime:
         detector = None if findings else (
             "line_split_rules" if scan_output_collapsed(upstream)
             else "threat_memory" if known or self._remember("hostile", call.tool_name.partition(":")[0])
-            else self._semantic_flag(text, "output"))
+            else self._semantic_flag(text, "output") or self._judge_output(run_id, call.tool_name, text))
         values = distinctive_values(upstream)
         with self._lock:  # the merge into the session state is the only part another thread can race
             for value in authority_values(upstream):  # a re-seen value moves to the end, so eviction never drops a fresh one
