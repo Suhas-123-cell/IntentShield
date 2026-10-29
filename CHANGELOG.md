@@ -92,7 +92,8 @@ first-run experience, benchmark rigor); every behaviour change has a regression 
   notes reached the attacker in 3/3 runs; with the hooks installed but not trusted, also 3/3, because
   Codex 0.165 silently skips hooks nobody has trusted; with the transparent proxy, 0/3 (the
   agent did not call `send_email` after the proxy's warning on the injected result).
-  `intentshield install codex` now says the hooks must be trusted once in Codex before they run.
+  `intentshield install codex` now says the hooks must be trusted once in Codex before they run. With
+  the hooks trusted, the `PreToolUse` hook denied the attacker's `send_email` in 3/3 runs.
 - Benchmarks: `paper_numbers.py` also prints task-tool-executed, truncated and Wilson cells and
   the README headline strings, with a test; the MCPTox replay was regenerated on current code
   (quarantine+provenance 19/1579 = 1.2%); the injection evaluation inputs and the Gemini judge
