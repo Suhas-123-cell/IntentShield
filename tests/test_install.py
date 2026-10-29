@@ -1,6 +1,7 @@
 """``intentshield install|uninstall|wrap|unwrap``: the hook and proxy installers."""
 from __future__ import annotations
 
+import argparse
 import json
 import tomllib
 from pathlib import Path
@@ -234,6 +235,16 @@ def test_hook_command_quotes_and_validates_its_arguments():
         install.hook_command("claude", judge="groq:$(touch /tmp/pwned)")
     with pytest.raises(ValueError, match="review"):
         install.hook_command("claude", review="sometimes")
+    assert install.hook_command("claude", "h", judge="ollama", judge_outputs=True) == \
+        "h claude --judge ollama --judge-outputs"
+    assert install.hook_command("claude", "h", judge_outputs=True) == "h claude"  # only with a judge
+
+
+def test_judge_outputs_is_refused_without_a_judge(capsys):
+    parser = argparse.ArgumentParser()
+    install.add_subcommands(parser.add_subparsers(dest="command"))
+    assert install.run(parser.parse_args(["install", "claude", "--judge-outputs", "--dry-run"])) == 1
+    assert "--judge-outputs needs --judge" in capsys.readouterr().err
 
 
 def test_install_writes_through_a_settings_symlink(tmp_path: Path):

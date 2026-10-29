@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The LLM judge can read tool results too (`--judge-outputs` for the hooks and `intentshield install`,
+  `"judge_outputs": true` for the proxy; off by default). It is told the user's request and asked whether
+  the result addresses the agent with something beyond it, which is how plain-language injections with no
+  marker get caught; a request between people in a mailbox or a chat is not. An objection is evidence
+  only: the agent is warned and values from that result ask before use. On the corpus's test split,
+  Gemini 3.5 Flash-Lite caught 77.8% of plain-language injections at 3.4% benign false flags, and local
+  qwen2.5:7b 24.3% at 0.6% (`benchmarks/judge_outputs_eval.py`, `results/judge/`).
+
 ## 0.3.5
 
 - The override rule reads "ignore the previous instructions" with one typo in one of its three words
