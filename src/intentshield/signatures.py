@@ -62,7 +62,7 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-_REPEATS = {_C.MAX_REPEAT, _C.MIN_REPEAT, getattr(_C, "POSSESSIVE_REPEAT", None)} - {None}
+_REPEATS = {_C.MAX_REPEAT, _C.MIN_REPEAT, _C.POSSESSIVE_REPEAT}
 _NARROW = {_C.CATEGORY_SPACE, _C.CATEGORY_DIGIT}  # cannot run into the letters of the words around them
 MAX_SCAN = 20_000  # characters of a text that rules read
 _WINDOW = 200  # a repeat bounded above this backtracks like an unbounded one on MAX_SCAN characters
@@ -156,8 +156,7 @@ def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
             for branch in av[1]:
                 if problem := _backtracking(list(branch), inside, wide):
                     return problem
-        elif op in (_C.ASSERT, _C.ASSERT_NOT, _C.GROUPREF, getattr(_C, "GROUPREF_EXISTS", None),
-                    getattr(_C, "ATOMIC_GROUP", None)):
+        elif op in (_C.ASSERT, _C.ASSERT_NOT, _C.GROUPREF, _C.GROUPREF_EXISTS, _C.ATOMIC_GROUP):
             return "lookaround or backreference"
     return None
 
