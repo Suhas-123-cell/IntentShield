@@ -17,7 +17,7 @@ External rows are never trained on (split ``external``). The family of a row is 
 translations of each source merged into one ``_translated`` family.
 
 A detector maps (text, kind) to flagged or not, where kind is ``description`` or ``output``; it returns
-None where it does not apply (the judge has no output check). Wilson CIs treat rows as independent; they
+None where it does not apply. Wilson CIs treat rows as independent; they
 are not (rows share templates), so read them as a floor.
 """
 from __future__ import annotations
@@ -111,7 +111,10 @@ def detectors(args: argparse.Namespace) -> dict[str, Detector]:
     if args.judge:
         from intentshield.judge import Judge
         judge = Judge.from_spec(args.judge)
-        found["judge"] = lambda text, kind: (judge.tool("tool", text) is not None) if kind == "description" else None
+        # Outputs without the user's request, which the rows do not carry: harder than in use, where the
+        # hook passes the user's prompt.
+        found["judge"] = lambda text, kind: (judge.tool("tool", text) if kind == "description"
+                                             else judge.output("", "tool", text)) is not None
     found = {name: functools.lru_cache(maxsize=None)(detect) for name, detect in found.items()}
     for combo in filter(None, (args.combine or "").split(",")):
         parts = combo.split("+")
@@ -170,7 +173,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--agentdojo", type=Path, default=Path("artifacts/data/agentdojo-strings.jsonl"))
     parser.add_argument("--splits", default="test,external", help="dataset splits to score (external = never trained on)")
     parser.add_argument("--classifier", default=None, help="injection classifier artifact dir")
-    parser.add_argument("--judge", default=None, help="groq or gemini[:model]; descriptions only, uses free-tier quota")
+    parser.add_argument("--judge", default=None, help="groq, gemini or ollama[:model], on descriptions and outputs")
     parser.add_argument("--prompt-guard", nargs="?", const="meta-llama/llama-prompt-guard-2-86m", default=None,
                         help="Llama Prompt Guard 2 on Groq (free tier; scores cached on disk)")
     parser.add_argument("--prompt-guard-threshold", type=float, default=0.5)
