@@ -174,18 +174,43 @@ _THEIRS = {
 }
 
 
+@pytest.mark.parametrize("style", ["indented", "hand-written"])
 @pytest.mark.parametrize("scope", ["user", "project"])
 @pytest.mark.parametrize("harness", ["claude", "cursor", "gemini"])
 def test_install_then_uninstall_restores_every_json_settings_file_byte_for_byte(tmp_path: Path, harness: str,
-                                                                               scope: str):
+                                                                               scope: str, style: str):
     home, cwd = tmp_path / "home", tmp_path / "repo"
     path = install.settings_path(harness, scope, home, cwd)
     path.parent.mkdir(parents=True)
-    before = json.dumps(_THEIRS[harness], indent=2) + "\n"
+    theirs = {**_THEIRS[harness], "note": "naïve ☃"}
+    before = (json.dumps(theirs, indent=2) + "\n" if style == "indented"
+              else json.dumps(theirs, indent=4, ensure_ascii=False).replace("\n    ", "\n\t"))
     path.write_text(before)
     install.install(harness, scope, hook="intentshield-hook", home=home, cwd=cwd)
     assert "intentshield-hook" in path.read_text()
     install.uninstall(harness, scope, home=home, cwd=cwd)
+    assert path.read_text() == before
+
+
+def test_uninstall_after_the_user_edited_the_file_keeps_their_edit_and_text(tmp_path: Path):
+    home = tmp_path / "home"
+    path = home / ".claude" / "settings.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"theme": "dark", "note": "naïve ☃"}')
+    install.install("claude", "user", hook="intentshield-hook", home=home)
+    path.write_text(path.read_text().replace('"dark"', '"light"'))
+    install.uninstall("claude", "user", home=home)
+    assert json.loads(path.read_text()) == {"theme": "light", "note": "naïve ☃"} and "☃" in path.read_text()
+    assert not list((home / ".intentshield" / "backups").iterdir())
+
+
+def test_wrap_then_unwrap_restores_the_mcp_file_byte_for_byte(tmp_path: Path):
+    path = tmp_path / ".mcp.json"
+    before = '{"mcpServers": {"notes": {"command": "uvx", "args": ["notes-mcp"], "env": {"NAME": "t \\u2713"}}}}'
+    path.write_text(before)
+    install.wrap(path, out_dir=tmp_path / "proxies", proxy="intentshield-mcp")
+    assert "--transparent" in path.read_text()
+    install.unwrap(path)
     assert path.read_text() == before
 
 
