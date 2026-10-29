@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 - Cursor: a call resent with a self-disclosure field already empty, as the hook's denial asks, is no
   longer denied again. Before, an empty field still counted as redacted, so on Cursor (which cannot
