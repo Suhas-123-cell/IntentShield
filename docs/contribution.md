@@ -545,7 +545,7 @@ publishes no detection numbers.
 
 | guard | licence | descriptions | outputs | argument provenance | rug pull | harness hooks | proxy | runs without a key | published numbers |
 |---|---|---|---|---|---|---|---|---|---|
-| IntentShield | Apache-2.0 | rules + quarantine | rules + taint | yes | yes | Claude Code, Codex, Cursor, Gemini CLI | yes | yes | MSB, MCPTox, InjecAgent, AgentDojo, false-flag rates |
+| IntentShield | Apache-2.0 | rules + quarantine; offline scan of installed servers (`intentshield scan`) | rules + taint | yes, plus credential egress | yes | Claude Code, Codex, Cursor, Gemini CLI | yes | yes | MSB, MCPTox, InjecAgent, AgentDojo, false-flag rates |
 | [Snyk Agent Scan](https://github.com/snyk/agent-scan) (ex-Invariant mcp-scan) | Apache-2.0 | yes, via Snyk's API | - | - | pinning | discovery only | - | no | n.p. |
 | [Cisco mcp-scanner](https://github.com/cisco-ai-defense/mcp-scanner) | Apache-2.0 | YARA + LLM | - | - | - | - | - | YARA only | n.p. |
 | [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) | MIT | scan mode | secret/PII masking | - | - | - | yes | masking only | n.p. |
@@ -553,6 +553,24 @@ publishes no detection numbers.
 | [mcp-guardian](https://github.com/eqtylab/mcp-guardian) | Apache-2.0 | - | log | - | - | - | approval per call | yes | n.p. |
 | [ToolHive](https://github.com/stacklok/toolhive), [Docker MCP Gateway](https://github.com/docker/mcp-gateway) | Apache-2.0 / MIT | filtering | - | - | - | - | containers, secrets | yes | n.p. |
 | [Progent](https://github.com/sunblaze-ucb/progent), [CaMeL](https://arxiv.org/abs/2503.18813) | MIT / research | - | capabilities | policy or data flow | - | - | - | needs an LLM | AgentDojo near 0% ASR on frontier models |
+
+Also found on 2026-10-29, described here from their own READMEs and listings only (not installed or
+tested): [mcp-context-protector](https://github.com/trailofbits/mcp-context-protector) (Trail of Bits: a
+wrapper that pins server configs and descriptions, quarantines tool responses and strips ANSI control
+characters), [MCP Defender](https://mcp.so/servers/mcp-defender) (a desktop app proxying MCP traffic for
+Cursor and similar clients), [pipelock](https://github.com/pipelab-org/pipelock) (an egress firewall for
+HTTP, MCP, A2A and WebSocket traffic: exfiltration, SSRF and prompt injection, with signed action
+receipts), [hol-guard](https://github.com/hashgraph-online/hol-guard) (a runtime blocker for risky tools,
+secret access and malicious packages), and the offline scanners
+[mcprobe](https://github.com/tamish560/mcprobe) and [mcphound](https://github.com/tayler-id/mcphound)
+(description injection, shadowing and drift, with SARIF output). Snyk Agent Scan now also reports toxic
+flows and hardcoded secrets. None of them was found to publish detection or false-positive rates.
+
+After this comparison IntentShield gained the two features most of them share: an offline scan of the
+servers already installed (poisoning, self-disclosure, shadowing, hardcoded credentials, toxic flows,
+pinning, SARIF; Snyk's equivalent sends descriptions to its API) and a credential-egress check in the
+hooks and the proxy. A head-to-head run of another guard on IntentShield's corpora was not done: the one
+candidate that runs offline (Cisco mcp-scanner's YARA mode) was not installed in this session.
 
 What that table supports: among the seven guards surveyed on 2026-10-29, IntentShield is the most broadly
 scoped keyless open-source MCP guard, and the only MCP-specific one that publishes benchmark results and
@@ -589,7 +607,9 @@ the negative-result classifiers still ship in the core package. The reviewer's t
 7k lines instead of 11k) is in §11 above as the next refactor.
 
 What the other guards have that IntentShield lacks: sandboxed server execution (ToolHive, Docker),
-secret and PII masking in results (Lasso, Docker), signed provenance of server packages (ToolHive),
-and a trace-level alignment check (LlamaFirewall). Only the self-disclosure stripping, the
+secret and PII masking in results (Lasso, Docker; IntentShield detects credentials leaving in arguments
+and written into configs, but does not mask results), signed provenance of server packages (ToolHive),
+signed action receipts (pipelock), SSRF checks on outgoing URLs (pipelock), and a trace-level alignment
+check (LlamaFirewall). Only the self-disclosure stripping, the
 four-harness hook integration and the hooks-plus-proxy split have no counterpart among the seven guards
 surveyed on 2026-10-29.

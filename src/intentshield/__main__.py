@@ -6,6 +6,7 @@
     intentshield uninstall <harness>
     intentshield wrap <mcp json>       # put the transparent proxy in front of the servers a client launches
     intentshield unwrap <mcp json>
+    intentshield scan [config ...]     # find the MCP servers your agents use and check them offline
 
 The guard itself is ``intentshield-hook`` (hooks) and ``intentshield-mcp`` (gateway and transparent
 proxy); this command installs and runs them.
@@ -15,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, install
+from . import __version__, install, scan
 
 
 def serve(port: int = 8000) -> None:
@@ -39,11 +40,12 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("serve", help="run the local dashboard and API (the default)").add_argument(
         "--port", type=int, default=8000, help="TCP port on 127.0.0.1 (default 8000)")
     install.add_subcommands(sub)
+    scan.add_subcommand(sub)
     args = parser.parse_args(argv or ["serve"])
     if args.command == "serve":
         serve(args.port)
         return
-    sys.exit(install.run(args))
+    sys.exit(scan.run(args) if args.command == "scan" else install.run(args))
 
 
 if __name__ == "__main__":

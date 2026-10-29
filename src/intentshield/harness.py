@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import credentials
 from .mcp_inspect import (
     authority_values,
     distinctive_values,
@@ -283,6 +284,18 @@ class HarnessGuard:
         if untrusted:
             return Verdict("deny", "An argument value came from a tool output that contained injected "
                                    f"instructions, not from the user: {', '.join(_show(v) for v in sorted(untrusted)[:3])}.")
+        # A credential the user did not type, leaving in an argument: what an injection that got the agent to
+        # read a token or a key file sends. After an injection it is denied; otherwise the user decides.
+        leaving = {c: kind for c, kind in credentials.find(arguments).items() if c not in intent}
+        if leaving:
+            shown = ", ".join(credentials.masked(c, kind) for c, kind in sorted(leaving.items())[:3])
+            if taint or self._flagged(session):
+                return Verdict("deny", f"An argument carries a credential the user did not give ({shown}), "
+                                       "in a session where a tool output tried to instruct the agent.")
+            if self.review != "never":
+                verdict.decision = "ask"
+                verdict.reason = f"An argument carries a credential the user did not give ({shown}); confirm this call."
+                return verdict
         known = self._known_threat(intent, values, arguments)
         if known and known[0] == "block":
             return Verdict("deny", f"An argument matches a known attack: {_show(known[1])}.")
