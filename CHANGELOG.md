@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The proxy's judge now has a time budget for tool descriptions at connect
+  (`judge_catalog_budget_seconds`, default 20). Before, it read every description one by one at up to
+  30 s each, so a large catalog could hold the client's `initialize` for hours. Descriptions it does not
+  reach get no opinion, as on a judge error, and are listed in an `MCP_JUDGE_BUDGET_SPENT` event.
+
 ## 0.3.1
 
 - Cursor: a call resent with a self-disclosure field already empty, as the hook's denial asks, is no

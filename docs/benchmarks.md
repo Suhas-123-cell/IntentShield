@@ -207,7 +207,9 @@ The proxy guards all three places an MCP attack enters (related work and next st
   serves the user's request. It sees only the user's prompt and the call's name and
   arguments, never tool outputs, so injected text reaches it only through arguments.
   Like the classifier it is evidence: it can send a call to `REVIEW_JUDGE_FLAGGED` or
-  withhold a tool, never authorize. The hooks take the same `--judge`
+  withhold a tool, never authorize. At connect the proxy gives it
+  `judge_catalog_budget_seconds` (default 20) for all descriptions; the ones it does not reach get
+  no opinion and are listed in an `MCP_JUDGE_BUDGET_SPENT` event. The hooks take the same `--judge`
   (`INTENTSHIELD_HOOK_JUDGE`). See `src/intentshield/judge.py`.
 
   **Which judge to use.** Measured on the same 3,717 held-out texts as the detector table
