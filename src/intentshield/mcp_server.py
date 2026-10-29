@@ -502,7 +502,7 @@ class _Unprocessable(Exception):
 async def _json_object(request: Any) -> dict[str, Any]:
     try:
         payload = await request.json()
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):  # not JSON, not UTF-8, or nested past the parser's depth
         payload = None
     if not isinstance(payload, dict):
         raise _Unprocessable("body must be a JSON object")
@@ -510,7 +510,7 @@ async def _json_object(request: Any) -> dict[str, Any]:
 
 
 def _approve(payload: dict[str, Any]) -> bool:
-    if payload.get("decision") not in {"approve", "reject"}:
+    if payload.get("decision") not in ("approve", "reject"):  # a tuple: a list or dict here must not raise
         raise _Unprocessable("decision must be approve or reject")
     return payload["decision"] == "approve"
 
