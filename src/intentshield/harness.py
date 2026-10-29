@@ -447,103 +447,126 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
     """One hook event in, the harness's JSON reply out (None: no opinion)."""
     name = event.get("hook_event_name", "")
     session = str(event.get("session_id") or event.get("conversation_id") or "default")
-
     if harness in ("claude", "codex"):
-        if name == "UserPromptSubmit":
-            hint = guard.prompt(session, event.get("prompt", ""))
-            return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": hint}} if hint else None
-        split = _split_claude(event.get("tool_name", ""))
-        if split is None and event.get("tool_name") in _RESOURCE_TOOLS:
-            split = (str(_as_dict(event.get("tool_input")).get("server") or "mcp"), _RESOURCE_TOOLS[event["tool_name"]])
-        if split is None:
-            return None
-        tool = f"{split[0]}:{split[1]}"
-        if name == "PreToolUse":
-            v = guard.call(session, tool, _as_dict(event.get("tool_input")))
-            if v.decision == "allow" and v.arguments is None and not v.context:
-                return None  # no opinion: the harness's own permission flow decides
-            if v.decision == "allow" and guard.mutates(tool):
-                # A rewrite must not turn "no opinion" into an explicit allow for a state change.
-                v.decision = "ask"
-                v.reason = v.context + (" Confirm this call." if harness == "claude"
-                                        else " Call the tool again with those fields empty.")
-            decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
-            if decision == "ask" and event.get("tool_use_id"):
-                guard.asked(session, str(event["tool_use_id"]))
-            out: dict[str, Any] = {"hookEventName": "PreToolUse"}
-            if not (decision == "allow" and harness == "claude"):
-                # Claude Code applies updatedInput without a decision and keeps its own permission
-                # prompt; an explicit allow would skip it for any call that merely got redacted.
-                out.update(permissionDecision=decision, permissionDecisionReason=v.reason or v.context)
-            if v.arguments is not None and decision != "deny":
-                out["updatedInput"] = v.arguments
-            if v.context:
-                out["additionalContext"] = v.context
-            return {"hookSpecificOutput": out}
-        if name == "PostToolUse":
-            if event.get("tool_use_id"):
-                guard.ran(session, str(event["tool_use_id"]), tool)
-            v = guard.result(session, tool, event.get("tool_response", event.get("tool_output")))
-            if not v.findings:
-                return None
-            out = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": v.context}}
-            if v.decision == "deny":
-                if harness == "claude":
-                    out["hookSpecificOutput"]["updatedToolOutput"] = v.reason
-                else:
-                    out.update(decision="block", reason=v.reason)  # Codex replaces the result
-            return out
-        return None
-
+        return _claude(harness, name, session, event, guard)
     if harness == "cursor":
-        if name == "beforeSubmitPrompt":
-            guard.prompt(session, event.get("prompt", ""))
-            return {"continue": True}
-        tool = f"{event.get('mcp_server_name') or event.get('server') or 'mcp'}:{event.get('tool_name', '')}"
-        if name == "beforeMCPExecution":
-            v = guard.call(session, tool, _as_dict(event.get("tool_input")))
-            if v.arguments is not None and v.decision != "deny":
-                # Cursor cannot rewrite arguments, and an approved ask would send them as they are;
-                # the agent is told what to resend, and any confirmation comes with that call.
-                v = Verdict("deny", v.context + " Call the tool again with those fields empty.")
-            reply: dict[str, Any] = {"permission": v.decision}
-            if v.reason:
-                reply.update(user_message=v.reason, agent_message=v.reason)
-            return reply
-        if name == "afterMCPExecution":
-            guard.result(session, tool, _as_dict(event.get("result_json")))
-            return {}
-        return None
-
+        return _cursor(name, session, event, guard)
     if harness == "gemini":
-        if name == "BeforeAgent":
-            hint = guard.prompt(session, event.get("prompt", ""))
-            return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": hint}} if hint else None
-        if "mcp_context" not in event:
-            return None  # built-in tool, not MCP
-        context = event.get("mcp_context") or {}
-        server = context.get("server_name") or context.get("serverName") or "mcp"
-        # mcp_context names the server's own tool; tool_name is "mcp_<server>_<tool>", whose
-        # server words would count in is_mutation.
-        tool = f"{server}:{context.get('tool_name') or event.get('tool_name', '')}"
-        if name == "BeforeTool":
-            v = guard.call(session, tool, _as_dict(event.get("tool_input")))
-            if v.decision != "allow":  # Gemini CLI has no ask; a confirmation request is a denial with a reason
-                return {"decision": "deny", "reason": v.reason}
-            if v.arguments is not None:
-                return {"hookSpecificOutput": {"tool_input": v.arguments, "additionalContext": v.context}}
-            return None
-        if name == "AfterTool":
-            response = event.get("tool_response") or {}
-            v = guard.result(session, tool, response.get("llmContent", response) if isinstance(response, dict) else response)
-            if not v.findings:
-                return None
-            if v.decision == "deny":
-                return {"decision": "deny", "reason": v.reason}
-            return {"hookSpecificOutput": {"additionalContext": v.context}}
-        return None
-
+        return _gemini(name, session, event, guard)
     raise ValueError(f"Unknown harness: {harness}")
+
+
+def _prompt_hint(name: str, session: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:
+    hint = guard.prompt(session, event.get("prompt", ""))
+    return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": hint}} if hint else None
+
+
+def _claude(harness: str, name: str, session: str, event: dict[str, Any],
+            guard: HarnessGuard) -> dict[str, Any] | None:
+    """Claude Code and Codex CLI share one hook format; they differ in what a reply can do."""
+    if name == "UserPromptSubmit":
+        return _prompt_hint(name, session, event, guard)
+    split = _split_claude(event.get("tool_name", ""))
+    if split is None and event.get("tool_name") in _RESOURCE_TOOLS:
+        split = (str(_as_dict(event.get("tool_input")).get("server") or "mcp"), _RESOURCE_TOOLS[event["tool_name"]])
+    if split is None:
+        return None
+    tool = f"{split[0]}:{split[1]}"
+    if name == "PreToolUse":
+        return _claude_call(harness, session, tool, event, guard)
+    if name == "PostToolUse":
+        return _claude_result(harness, session, tool, event, guard)
+    return None
+
+
+def _claude_call(harness: str, session: str, tool: str, event: dict[str, Any],
+                 guard: HarnessGuard) -> dict[str, Any] | None:
+    v = guard.call(session, tool, _as_dict(event.get("tool_input")))
+    if v.decision == "allow" and v.arguments is None and not v.context:
+        return None  # no opinion: the harness's own permission flow decides
+    if v.decision == "allow" and guard.mutates(tool):
+        # A rewrite must not turn "no opinion" into an explicit allow for a state change.
+        v.decision = "ask"
+        v.reason = v.context + (" Confirm this call." if harness == "claude"
+                                else " Call the tool again with those fields empty.")
+    decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
+    if decision == "ask" and event.get("tool_use_id"):
+        guard.asked(session, str(event["tool_use_id"]))
+    out: dict[str, Any] = {"hookEventName": "PreToolUse"}
+    if not (decision == "allow" and harness == "claude"):
+        # Claude Code applies updatedInput without a decision and keeps its own permission
+        # prompt; an explicit allow would skip it for any call that merely got redacted.
+        out.update(permissionDecision=decision, permissionDecisionReason=v.reason or v.context)
+    if v.arguments is not None and decision != "deny":
+        out["updatedInput"] = v.arguments
+    if v.context:
+        out["additionalContext"] = v.context
+    return {"hookSpecificOutput": out}
+
+
+def _claude_result(harness: str, session: str, tool: str, event: dict[str, Any],
+                   guard: HarnessGuard) -> dict[str, Any] | None:
+    if event.get("tool_use_id"):
+        guard.ran(session, str(event["tool_use_id"]), tool)
+    v = guard.result(session, tool, event.get("tool_response", event.get("tool_output")))
+    if not v.findings:
+        return None
+    out: dict[str, Any] = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": v.context}}
+    if v.decision == "deny":
+        if harness == "claude":
+            out["hookSpecificOutput"]["updatedToolOutput"] = v.reason
+        else:
+            out.update(decision="block", reason=v.reason)  # Codex replaces the result
+    return out
+
+
+def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:
+    if name == "beforeSubmitPrompt":
+        guard.prompt(session, event.get("prompt", ""))
+        return {"continue": True}
+    tool = f"{event.get('mcp_server_name') or event.get('server') or 'mcp'}:{event.get('tool_name', '')}"
+    if name == "beforeMCPExecution":
+        v = guard.call(session, tool, _as_dict(event.get("tool_input")))
+        if v.arguments is not None and v.decision != "deny":
+            # Cursor cannot rewrite arguments, and an approved ask would send them as they are;
+            # the agent is told what to resend, and any confirmation comes with that call.
+            v = Verdict("deny", v.context + " Call the tool again with those fields empty.")
+        reply: dict[str, Any] = {"permission": v.decision}
+        if v.reason:
+            reply.update(user_message=v.reason, agent_message=v.reason)
+        return reply
+    if name == "afterMCPExecution":
+        guard.result(session, tool, _as_dict(event.get("result_json")))
+        return {}
+    return None
+
+
+def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:
+    if name == "BeforeAgent":
+        return _prompt_hint(name, session, event, guard)
+    if "mcp_context" not in event:
+        return None  # built-in tool, not MCP
+    context = event.get("mcp_context") or {}
+    server = context.get("server_name") or context.get("serverName") or "mcp"
+    # mcp_context names the server's own tool; tool_name is "mcp_<server>_<tool>", whose
+    # server words would count in is_mutation.
+    tool = f"{server}:{context.get('tool_name') or event.get('tool_name', '')}"
+    if name == "BeforeTool":
+        v = guard.call(session, tool, _as_dict(event.get("tool_input")))
+        if v.decision != "allow":  # Gemini CLI has no ask; a confirmation request is a denial with a reason
+            return {"decision": "deny", "reason": v.reason}
+        if v.arguments is not None:
+            return {"hookSpecificOutput": {"tool_input": v.arguments, "additionalContext": v.context}}
+        return None
+    if name == "AfterTool":
+        response = event.get("tool_response") or {}
+        v = guard.result(session, tool, response.get("llmContent", response) if isinstance(response, dict) else response)
+        if not v.findings:
+            return None
+        if v.decision == "deny":
+            return {"decision": "deny", "reason": v.reason}
+        return {"hookSpecificOutput": {"additionalContext": v.context}}
+    return None
 
 
 def main(argv: list[str] | None = None) -> None:
