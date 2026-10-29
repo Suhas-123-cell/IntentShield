@@ -106,15 +106,23 @@ def test_proxy_judge_stops_reading_descriptions_when_its_budget_is_spent(tmp_pat
                         "send_message": "Send a message."})
 
     async def exercise() -> None:
-        async with runtime(tmp_path, upstream, judge="stub", judge_catalog_budget_seconds=15) as shield:
-            catalog = {t["name"]: t for t in await shield.tool_catalog()}
-            # The budget covers one reading: read_page is judged; add, the poisoned one, gets no opinion.
-            assert not any(t["judge_flagged"] for t in catalog.values())
+        async with runtime(tmp_path, upstream, judge="stub", judge_catalog_budget_seconds=15,
+                           expose_upstream_descriptions=True) as shield:
+            # The budget covers one reading: read_page is judged; add, the poisoned one, is not reached.
             assert shield._unjudged == ["web:add", "web:send_message"]
             storage = shield.service.storage
             spent = [e["payload"] for run in storage.list_runs() for e in storage.list_events(run["id"])
                      if e["kind"] == "MCP_JUDGE_BUDGET_SPENT"]
             assert spent == [{"tools": ["web:add", "web:send_message"]}]
+            # Not reached is not judged clean: no free text until a later pass reads it.
+            shown = {tool.name: tool.description for tool, _ in await shield.transparent_tools()}
+            assert shown["read_page"] == "Read a web page."
+            assert shown["send_message"].startswith("Description withheld")
+            # That list was a refresh: it judged one more (add), which the judge flags; the last is still unread.
+            assert shield._unjudged == ["web:send_message"]
+            catalog = {t["name"]: t for t in await shield.tool_catalog(refresh=False)}
+            assert catalog["web:add"]["judge_flagged"] and "vendor" not in catalog["web:add"]["description"]
+            assert "not yet reviewed" in catalog["web:send_message"]["description"]
 
     asyncio.run(exercise())
 

@@ -49,11 +49,18 @@ class IntentShieldService:
         security_supervisor: SecurityAnalysisSupervisor | None = None,
         pre_policy_check: Callable[[str, str, ToolCall], ReasonCode | None] | None = None,
         result_inspector: Callable[[str, ToolCall, dict[str, Any]], dict[str, Any]] | None = None,
+        error_inspector: Callable[[str, ToolCall, Exception], Exception] | None = None,
+        dry_run_limit: int = 20,
     ) -> None:
         # Optional hooks for the MCP proxy: a veto run before policy (run_id,
-        # intent, call) and a pass over every executed result (run_id, call, result).
+        # intent, call), a pass over every executed result (run_id, call, result) and one over
+        # the exception an executor raised, whose text reaches the agent like a result's.
         self.pre_policy_check = pre_policy_check
         self.result_inspector = result_inspector
+        self.error_inspector = error_inspector
+        # Dry runs per run: each answers with the exact reason code, so an unbounded loop of them maps the policy.
+        self.dry_run_limit = dry_run_limit
+        self._dry_runs: dict[str, int] = {}
         self.storage = storage
         self.email_tools = email_tools or SimulatedEmailTools()
         self.registry = registry or build_registry(self.email_tools)
@@ -180,17 +187,24 @@ class IntentShieldService:
         """Evaluate policy without audit writes, approvals, or tool execution.
 
         This is intentionally a dry-run primitive for configuration verification.
-        It never accepts an approval and never creates an executable approval.
+        It never accepts an approval and never creates an executable approval. The only write is one
+        ``DRY_RUN`` event per evaluation (no arguments), and a run gets ``dry_run_limit`` of them.
         """
         if call.approval_id:
             raise ValueError("Dry-run evaluation does not accept approval_id")
         run = self.storage.get_run(run_id)
         if not run:
             raise KeyError(f"Unknown run: {run_id}")
+        used = self._dry_runs.get(run_id, 0)
+        self._dry_runs[run_id] = used + 1
+        for stale in list(self._dry_runs)[:max(0, len(self._dry_runs) - 1_000)]:
+            del self._dry_runs[stale]
+        if used >= self.dry_run_limit:
+            return self._dry_run_result(run_id, call, Decision.BLOCK, [ReasonCode.BLOCK_DRY_RUN_LIMIT], used)
         signals, assessment = self._security_assessment(run["user_intent"], call)
         veto = self.pre_policy_check(run_id, run["user_intent"], call) if self.pre_policy_check else None
         if veto and not veto.startswith("REVIEW_"):
-            return self._result(run_id, call, signals, Decision.BLOCK, [veto], assessment=assessment)
+            return self._dry_run_result(run_id, call, Decision.BLOCK, [veto], used, signals, assessment)
         outcome = self.policy.evaluate(PolicyContext(
             run_id=run_id,
             user_intent=run["user_intent"],
@@ -204,15 +218,18 @@ class IntentShieldService:
                 assessment.disposition.value if assessment else "CLEAR_FOR_POLICY"
             ),
         ))
-        return self._result(
-            run_id,
-            call,
-            signals,
-            outcome.decision,
-            outcome.reason_codes,
-            arguments=outcome.parsed_arguments,
-            assessment=assessment,
-        )
+        return self._dry_run_result(run_id, call, outcome.decision, outcome.reason_codes, used, signals, assessment,
+                                    arguments=outcome.parsed_arguments)
+
+    def _dry_run_result(self, run_id: str, call: ToolCall, decision: Decision, reasons: list[ReasonCode],
+                        used: int, signals: SecuritySignals | None = None,
+                        assessment: SecurityAssessment | None = None,
+                        arguments: dict[str, Any] | None = None) -> GatewayResult:
+        self.storage.add_event(run_id, "DRY_RUN", {"tool_name": call.tool_name, "decision": decision.value,
+                                                   "reason_codes": [str(r) for r in reasons], "n": used + 1})
+        return self._result(run_id, call, signals or SecuritySignals(injection_score=1.0, intent_alignment=0.0,
+                                                                     risk_score=1.0),
+                            decision, reasons, arguments=arguments, assessment=assessment)
 
     def _approval_state(self, run_id: str, call: ToolCall, fingerprint: str) -> tuple[bool, ReasonCode | None]:
         if not call.approval_id:
@@ -351,6 +368,11 @@ class IntentShieldService:
         try:
             result = spec.executor(parsed)
         except Exception as exc:
+            if self.error_inspector:
+                try:
+                    exc = self.error_inspector(run_id, call, exc)
+                except Exception:  # the inspection adds a marker; its failure must not hide the error
+                    logger.warning("error inspection failed", extra={"run_id": run_id})
             if spec.mutation and reservation == "RESERVED" and call.idempotency_key:
                 error = {"type": type(exc).__name__, "message": str(exc)[:500]}
                 self.storage.mark_idempotency_in_doubt(call.idempotency_key, fingerprint, error)
@@ -362,7 +384,7 @@ class IntentShieldService:
                 return self._blocked(
                     run_id, call, ReasonCode.BLOCK_EXECUTION_IN_DOUBT, signals, assessment
                 )
-            raise
+            raise exc
         if self.result_inspector:
             try:
                 result = self.result_inspector(run_id, call, result)
