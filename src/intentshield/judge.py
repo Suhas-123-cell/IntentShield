@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -84,6 +85,9 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
     request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={
         "Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": "intentshield-judge"})
     error = ""
+    # ``timeout`` bounds each attempt; the whole call, sleeps included, must finish within
+    # (retries + 1) attempts' worth, so a ``Retry-After`` of minutes never holds a hook.
+    deadline = time.monotonic() + timeout * (retries + 1)
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -95,10 +99,13 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
             if exc.code not in (429, 500, 502, 503, 504) or attempt == retries or daily:
                 break
             wait = exc.headers.get("retry-after")
-            time.sleep(min(float(wait) if wait and wait.replace(".", "").isdigit() else 5 * 2 ** attempt, 120))
+            pause = min(float(wait) if wait and wait.replace(".", "").isdigit() else 5 * 2 ** attempt, 120)
+            if time.monotonic() + pause > deadline:
+                break
+            time.sleep(pause)
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as exc:
             error = f"{type(exc).__name__}: {exc}"[:200]
-            if attempt == retries:
+            if attempt == retries or time.monotonic() + 2 ** attempt > deadline:
                 break
             time.sleep(2 ** attempt)
     return None, error
@@ -147,7 +154,9 @@ _ANSWER_CACHE_SIZE = 5_000
 
 class Judge:
     # Answers shared by every judge in the process: a proxy is rebuilt per run, tools are not.
+    # Written from ``to_thread`` workers, so reads and writes take the lock.
     _answers: dict[str, dict[str, Any]] = {}
+    _cache_lock = threading.Lock()
 
     def __init__(self, provider: str = "groq", model: str | None = None, api_key: str | None = None,
                  cache: str | Path | None = None, timeout: float = 30, retries: int = 4) -> None:
@@ -182,8 +191,9 @@ class Judge:
 
     def _ask(self, system: str, user: str) -> dict[str, Any] | None:
         key = hashlib.sha256(f"{self.model}\0{system}\0{user}".encode()).hexdigest()
-        if key in self._answers:
-            return self._answers[key]
+        with self._cache_lock:
+            if key in self._answers:
+                return self._answers[key]
         content, self.last_error = post_chat(self.url, self.api_key, {
             "model": self.model, "temperature": 0, "response_format": {"type": "json_object"}, **self.extra,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
@@ -196,10 +206,11 @@ class Judge:
         if not isinstance(answer, dict):
             self.errors += 1
             return None
-        self._answers[key] = answer
-        # Bounded: a long-lived proxy must not grow the shared cache without limit.
-        while len(self._answers) > _ANSWER_CACHE_SIZE:
-            del self._answers[next(iter(self._answers))]
+        with self._cache_lock:
+            self._answers[key] = answer
+            # Bounded: a long-lived proxy must not grow the shared cache without limit.
+            while len(self._answers) > _ANSWER_CACHE_SIZE:
+                del self._answers[next(iter(self._answers))]
         if self.cache_path:
             with self.cache_path.open("a") as handle:
                 handle.write(json.dumps({"key": key, "answer": answer}) + "\n")

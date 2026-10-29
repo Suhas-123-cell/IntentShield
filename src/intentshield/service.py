@@ -8,9 +8,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
-from .detector import SecuritySignals, compute_security_signals
 from .intent_classifier import DebertaGroundingAdapter, DebertaIntentClassifier
-from .models import Decision, GatewayResult, PolicyContext, ReasonCode, ToolCall
+from .models import Decision, GatewayResult, PolicyContext, ReasonCode, SecuritySignals, ToolCall
 from .policy import PolicyConfig, PolicyEngine, default_policy_path
 from .security_agents import (
     DetectionEvidence,
@@ -122,16 +121,17 @@ class IntentShieldService:
             "idempotency_key": call.idempotency_key,
         })
 
-    def _signals(self, user_intent: str, call: ToolCall) -> SecuritySignals:
-        spec = self.registry.get(call.tool_name)
-        return compute_security_signals(user_intent, call, mutation=bool(spec and spec.mutation))
+    @staticmethod
+    def _unregistered_signals() -> SecuritySignals:
+        """A tool the registry does not know is blocked as such; its signals are the worst case."""
+        return SecuritySignals(injection_score=1.0, intent_alignment=0.0, risk_score=1.0)
 
     def _security_assessment(
         self, user_intent: str, call: ToolCall
     ) -> tuple[SecuritySignals, SecurityAssessment | None]:
         spec = self.registry.get(call.tool_name)
         if spec is None:
-            return self._signals(user_intent, call), None
+            return self._unregistered_signals(), None
         metadata = TrustedToolMetadata.from_spec(
             spec,
             allowed_resources=self.config.allowed_resources,

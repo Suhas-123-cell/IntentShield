@@ -49,6 +49,17 @@ first-run experience, benchmark rigor); every behaviour change has a regression 
   written on (on the independent families: rules 2.1%, rules+exemplars 18.1%). The Gemini
   adaptive attacker (42/42 evasions; provenance still held every canary) is in the detector
   docs, and the DeBERTa advisory row is marked unconfirmed.
+- Second code pass: the proxy lock covers only the merge into the session state, so a slow
+  learned detector in a worker no longer stalls the event loop (test: `create_run` returns while
+  a detector sleeps); Prompt Guard gets the judge's 15 s / one-retry bound; a judge back-off
+  never outlives its budget (`Retry-After: 120` no longer holds a hook); the built-in regex
+  security agents run on the caller's thread, so a busy worker pool cannot score a benign call
+  as a timeout (threads and the deadline remain for a classifier or custom agent); the legacy
+  `detector.py` heuristic is gone, unregistered tools get fixed fail-closed signals; upstream
+  close lets cancellation propagate unchanged; the catalog directory is scanned once per
+  connect, not once per tool; the judge and Prompt Guard caches are bounded and locked; hook
+  transactions roll back on error and the guard can be closed; the control routes share one
+  auth wrapper and answer a malformed body with 422.
 - Benchmarks: `paper_numbers.py` also prints task-tool-executed, truncated and Wilson cells and
   the README headline strings, with a test; the MCPTox replay was regenerated on current code
   (quarantine+provenance 19/1579 = 1.2%); the injection evaluation inputs and the Gemini judge

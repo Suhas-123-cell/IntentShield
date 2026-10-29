@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from pathlib import Path
 
 from .judge import post_chat
@@ -33,8 +34,9 @@ def windows(text: str, size: int) -> list[str]:
 
 
 class PromptGuard:
-    # Window scores shared by every instance in the process.
+    # Window scores shared by every instance in the process; written from ``to_thread`` workers.
     _scores: dict[str, float] = {}
+    _cache_lock = threading.Lock()
 
     def __init__(self, model: str = MODELS[0], api_key: str | None = None, threshold: float = 0.5,
                  cache: str | Path | None = None, timeout: float = 30, retries: int = 4) -> None:
@@ -54,8 +56,9 @@ class PromptGuard:
     def _window(self, text: str) -> float | None:
         """One window's score; splits it in halves while Groq says it is too long."""
         key = hashlib.sha256(f"{self.model}\0{text}".encode()).hexdigest()
-        if key in self._scores:
-            return self._scores[key]
+        with self._cache_lock:
+            if key in self._scores:
+                return self._scores[key]
         content, error = post_chat(URL, self.api_key, {"model": self.model,
                                                        "messages": [{"role": "user", "content": text}]},
                                    self.timeout, self.retries)
@@ -69,7 +72,10 @@ class PromptGuard:
         if score is None or not 0.0 <= score <= 1.0:
             self.errors, self.last_error = self.errors + 1, error or "score out of range"
             return None
-        self._scores[key] = score
+        with self._cache_lock:
+            self._scores[key] = score
+            while len(self._scores) > 20_000:  # bounded, oldest window out
+                del self._scores[next(iter(self._scores))]
         if self.cache_path:
             with self.cache_path.open("a") as handle:
                 handle.write(json.dumps({"key": key, "score": score}) + "\n")

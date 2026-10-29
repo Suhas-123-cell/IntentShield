@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from test_mcp_guardrail import Fixture, call, runtime
 
-from intentshield.detector import compute_security_signals
 from intentshield.mcp_inspect import (
     distinctive_values,
     leaf_text,
@@ -69,7 +68,6 @@ def test_leaf_text_keeps_keys_numbers_and_order_without_recursion_limits():
 def test_argument_rules_see_through_whitespace_and_unicode_tricks(payload: str):
     call_ = ToolCall(tool_name="demo:read_note", arguments={"note_id": payload})
     assert DeterministicDetectionAgent().analyze("Read my note", call_, None).injection_score >= 0.75
-    assert compute_security_signals("Read my note", call_).injection_score >= 0.5
 
 
 def test_argument_rules_still_exempt_what_the_user_typed():
@@ -83,7 +81,7 @@ def test_argument_rules_still_exempt_what_the_user_typed():
 def test_unbounded_recipient_rule_stays_linear():
     call_ = ToolCall(tool_name="unregistered", arguments={"a": "send " * 40_000})
     started = time.monotonic()
-    compute_security_signals("Read my note", call_)
+    DeterministicDetectionAgent().analyze("Read my note", call_, None)
     assert time.monotonic() - started < 2
 
 
@@ -140,7 +138,6 @@ def test_keys_equal_after_normalization_do_not_hide_a_value():
     for arguments in ({"value\u200b": payload, "value": "home"}, {"note": payload, "n\u043ete": "x"}):
         call_ = ToolCall(tool_name="web:read_page", arguments=arguments)
         assert DeterministicDetectionAgent().analyze("Read the page", call_, None).injection_score >= 0.75
-        assert compute_security_signals("Read the page", call_).injection_score >= 0.5
 
 
 def test_nested_escapes_cannot_multiply_the_decoding_work():
