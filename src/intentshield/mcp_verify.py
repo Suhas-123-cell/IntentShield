@@ -66,23 +66,23 @@ def _matched_patterns(
     return matched, unmatched
 
 
-def _destination_bindings(
-    config: MCPProxyConfig, catalog: list[dict[str, Any]]
+def _bindings(
+    fields: dict[str, str], catalog: list[dict[str, Any]]
 ) -> tuple[list[dict[str, str]], list[str], list[dict[str, str]]]:
-    """Resolve destination mappings exactly as the proxy runtime does."""
+    """Resolve per-tool destination or resource mappings against discovered schemas, as the
+    proxy runtime does."""
     resolved: list[dict[str, str]] = []
-    unmatched: set[str] = set(config.destination_fields)
+    unmatched: set[str] = set(fields)
     invalid_fields: list[dict[str, str]] = []
 
     for tool in catalog:
         qualified = str(tool["name"])
         # The runtime intentionally accepts only qualified keys. An unqualified
-        # destination rule could silently apply to the same raw name on the
-        # wrong upstream server.
-        if qualified not in config.destination_fields:
+        # rule could silently apply to the same raw name on the wrong upstream server.
+        if qualified not in fields:
             continue
         unmatched.discard(qualified)
-        field = config.destination_fields[qualified]
+        field = fields[qualified]
         schema = tool.get("schema", {})
         properties = schema.get("properties", {})
         required = schema.get("required", [])
@@ -103,37 +103,15 @@ def _destination_bindings(
     )
 
 
-def _resource_bindings(
-    config: MCPProxyConfig, catalog: list[dict[str, Any]]
-) -> tuple[list[dict[str, str]], list[str], list[dict[str, str]]]:
-    """Resolve per-tool resource mappings against discovered schemas."""
-    resolved: list[dict[str, str]] = []
-    unmatched: set[str] = set(config.resource_fields)
-    invalid_fields: list[dict[str, str]] = []
-
-    for tool in catalog:
-        qualified = str(tool["name"])
-        if qualified not in config.resource_fields:
-            continue
-        unmatched.discard(qualified)
-        field = config.resource_fields[qualified]
-        schema = tool.get("schema", {})
-        properties = schema.get("properties", {})
-        required = schema.get("required", [])
-        if (
-            not isinstance(properties, dict)
-            or field not in properties
-            or not isinstance(required, list)
-            or field not in required
-        ):
-            invalid_fields.append({"tool": qualified, "field": field})
-        else:
-            resolved.append({"tool": qualified, "field": field})
-
-    return (
-        sorted(resolved, key=lambda item: (item["tool"], item["field"])),
-        sorted(unmatched),
-        sorted(invalid_fields, key=lambda item: (item["tool"], item["field"])),
+def _empty_patterns(patterns_by_tool: dict[str, list[str]]) -> list[dict[str, str]]:
+    return sorted(
+        [
+            {"tool": tool_name, "pattern": pattern}
+            for tool_name, patterns in patterns_by_tool.items()
+            for pattern in patterns
+            if not pattern.strip()
+        ],
+        key=lambda item: (item["tool"], item["pattern"]),
     )
 
 
@@ -184,21 +162,13 @@ def _policy_checks(
     )
 
     resolved_destinations, unmatched_destination_tools, invalid_destination_fields = (
-        _destination_bindings(config, catalog)
+        _bindings(config.destination_fields, catalog)
     )
     destination_patterns = {
         tool_name: sorted(patterns)
         for tool_name, patterns in sorted(config.allowed_destinations_by_tool.items())
     }
-    empty_destination_patterns = sorted(
-        [
-            {"tool": tool_name, "pattern": pattern}
-            for tool_name, patterns in destination_patterns.items()
-            for pattern in patterns
-            if not pattern.strip()
-        ],
-        key=lambda item: (item["tool"], item["pattern"]),
-    )
+    empty_destination_patterns = _empty_patterns(destination_patterns)
     destination_errors: list[str] = []
     if unmatched_destination_tools:
         destination_errors.append("destination mapping references an undiscovered tool")
@@ -216,21 +186,13 @@ def _policy_checks(
         destination_errors.append("allowed_destinations contains an empty pattern")
 
     resolved_resources, unmatched_resource_tools, invalid_resource_fields = (
-        _resource_bindings(config, catalog)
+        _bindings(config.resource_fields, catalog)
     )
     resource_patterns = {
         tool_name: sorted(patterns)
         for tool_name, patterns in sorted(config.allowed_resources_by_tool.items())
     }
-    empty_resource_patterns = sorted(
-        [
-            {"tool": tool_name, "pattern": pattern}
-            for tool_name, patterns in resource_patterns.items()
-            for pattern in patterns
-            if not pattern.strip()
-        ],
-        key=lambda item: (item["tool"], item["pattern"]),
-    )
+    empty_resource_patterns = _empty_patterns(resource_patterns)
     resource_errors: list[str] = []
     if unmatched_resource_tools:
         resource_errors.append("resource mapping references an undiscovered tool")
