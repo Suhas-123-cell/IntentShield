@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+Breaking:
+
+- With `INTENTSHIELD_PROXY_CONFIG` set, the web dashboard refuses to start without
+  `INTENTSHIELD_AGENT_TOKEN` (it already required the control token), and `/api/tools`,
+  `/api/metrics` and `/api/security/status` need the agent token whenever one is set.
+- `intentshield.api` no longer builds an app at import (`intentshield.api.app` is gone); use
+  `create_app()`, or `uvicorn --factory intentshield.api:create_app`.
+- `intentshield.detector` is removed; `SecuritySignals` is in `intentshield.models`.
+- `HarnessGuard` takes its options as keyword arguments only.
+- The built-in gateway and the dashboard default their database to `~/.intentshield/gateway.db`
+  instead of the working directory.
+- Codex CLI: hooks run only after you trust them once in Codex; `intentshield install codex` says so.
 
 Fixes from a second five-critic pass (code quality, guard security, tests and CI, docs and
 first-run experience, benchmark rigor); every behaviour change has a regression test.
