@@ -10,10 +10,13 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --extra dev --frozen
+      - run: uv sync --extra dev --frozen --python ${{ matrix.python }}
       - run: uv run ruff check src tests benchmarks
       - run: uv run pytest -q
       - run: INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -q tests/test_mcp_http_e2e.py

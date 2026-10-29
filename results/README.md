@@ -7,7 +7,7 @@ verified on 2026-10-20. Write numbers from these files, not from older notes.
 
 ```sh
 # MSB: every table, paired bootstrap difference, review load and the Gemini breakdown.
-# Needs only the MSB checkout for the case grid (artifacts/data/MSB), no Docker or model.
+# Needs nothing outside results/ (the case grid is msb/cases.jsonl; an MSB checkout at artifacts/data/MSB is used if present), no Docker or model.
 .venv/bin/python benchmarks/paper_numbers.py            # checks MANIFEST.json hashes first
 ```
 
@@ -18,16 +18,24 @@ bounds to 4 places before display (`7bd8b2e`), which had shifted some figures by
 report; every count is unchanged. Corrected figures: MCPTox rules recall 96.3% (290/301), call
 layer benign review 46.7%, quarantine + provenance interval [0.8, 1.9].
 
+On 2026-10-29 `mcptox/report-replay-lenient.json` was regenerated once more on current code, with the
+command in the table below (offline, intent model off). Four counts moved: quarantine + provenance
+attack success 19/1579 = 1.2% [0.8, 1.9] (was 20/1579 = 1.3% [0.8, 1.9]); call layer + provenance
+attack success 550/1579 = 34.8% [32.5, 37.2] (was 552, 35.0%) and reached human 594/1579 (was 593);
+full proxy reached human 12/1579 = 0.8% [0.4, 1.3] (was 13). Every other count is unchanged.
+
 | Directory | What | Command |
 |---|---|---|
 | `msb/<model>/<arm>.jsonl` | MSB held-out traces, 220 cases (Gemini: 99) | `benchmarks/msb.py --per-type 20 --holdout` (see `MANIFEST.json`) |
-| `mcptox/` | MCPTox replay, all proxy layers | `benchmarks/mcptox.py --replay --lenient-reads` |
+| `msb/cases.jsonl` | the MSB case grid (1,600 cases: id, attack type, agent, system prompt, task tool, task, attack task, implementation), as `benchmarks/msb.py cases()` builds it from the MSB checkout at commit `c1d6a70171e4d2c44c87a2ae909d13df00c6aa8d`; `paper_numbers.py` reads it when `artifacts/data/MSB` is absent, so a clean clone and CI can replay the tables | written 2026-10-29; sha256 in `MANIFEST.json` |
+| `mcptox/` | MCPTox replay, all proxy layers | `INTENTSHIELD_INTENT_MODEL_DIR=/nonexistent benchmarks/mcptox.py --data artifacts/data/MCPTox-Benchmark --replay --lenient-reads --out results/mcptox` |
 | `injection/` | output-injection detectors, 3,717 held-out rows | `benchmarks/injection_eval.py --exemplars artifacts/exemplars --prompt-guard --combine ...` |
 | `agentdojo/` | structural floor on AgentDojo's published GPT-4o logs | `benchmarks/agentdojo_floor.py replay` |
 | `harness-live/` | live Claude Code (Haiku) vs the malicious notes server, 3 prompts x 3 arms | `OUT=... benchmarks/harness_live/run.sh` |
 | `harness-live-gemini/` | the same check in Gemini CLI (gemini-3.1-flash-lite), with each agent's tool-call trace | `OUT=... benchmarks/harness_live/run_gemini.sh` |
 | `real-incidents/report.txt` | four documented in-the-wild malicious-MCP incidents replayed through the guard (citations in `benchmarks/real_incidents/SOURCES.md`) | `benchmarks/real_incidents.py` |
-| `latency.json` (cited, 2026-10-16), `latency-rerun-2026-10-19.json` | hook and proxy overhead on an Apple M5; in the rerun, per-event and per-call figures agree within 0.1 ms and start-up differs by up to 18 ms (interpreter 17 vs 15 ms, proxy start-up overhead 257 vs 275 ms) | `benchmarks/latency.py` |
+| `latency.json` (2026-10-16), `latency-rerun-2026-10-19.json` | hook and proxy overhead on an Apple M5 before the threat memory was on by default: hook p50 35 ms per event as a process (the "35 ms" figure), 0.02 to 1.1 ms in process; transparent proxy +1.9 ms per call (p50 2.43 vs 0.54 ms direct). In the rerun, per-event and per-call figures agree within 0.1 ms and start-up differs by up to 18 ms (interpreter 17 vs 15 ms, proxy start-up overhead 257 vs 275 ms) | `benchmarks/latency.py` |
+| `improve/baseline/latency.json` (code at `4dac01f`, threat memory on) | the source of the README's "about 42 ms per MCP call": hook p50 41 to 47 ms per event as a process, 0.02 to 2 ms in process; transparent proxy +1.9 ms per call (2.55 vs 0.65 ms) | `benchmarks/latency.py` (see `improve/README.md`) |
 | `adaptive-attacker.json` | adaptive attacker vs static and learning detectors | `benchmarks/adaptive_attacker.py` |
 
 ## MSB arms
@@ -42,12 +50,24 @@ layer benign review 46.7%, quarantine + provenance interval [0.8, 1.9].
 | `gateway-intent-advisory` | gateway, DeBERTa v2 as advisory evidence (MSB v11) | on |
 | `gateway-prompt-guard` | gateway plus Llama Prompt Guard 2 (qwen only) | off |
 
-**Code versions.** Every arm ran on code whose guard and runner behave as at commit `0a3776d`,
-apart from the intent model. The qwen2.5:7b `none`, `baseline` and `gateway` arms are the MSB v12
+**Code versions.** Only the three qwen v12 files below are shown to run on code whose guard and runner
+behave as at commit `0a3776d` (their provenance records it); the other arms are believed equivalent
+apart from the intent model, but that is not verified, because they carry no provenance. The qwen2.5:7b `none`, `baseline` and `gateway` arms are the MSB v12
 reruns of 2026-10-19; the originals (2026-10-12/13) predated gateway and hook fixes. Runs from v12
 on carry their commit, intent model hash, Ollama model digest and container image in
 `MANIFEST.json`; older runs have `"provenance": null`, and their dates and commits are in
-`docs/artifact-paper.md` §4.
+`docs/artifact-paper.md` §4. Only those three qwen files have provenance; the other 19 of the 22
+trace files are earlier runs on older code: every `hooks` arm, `gateway-prompt-guard` and all the
+llama3.1:8b and ornith:9b main arms are MSB v8, the Gemini arms v9, `gateway-intent-veto` v10 and
+`gateway-intent-advisory` v11 (`source` in `MANIFEST.json`).
+
+**What does not replay offline.** `paper_numbers.py` and the injection table's rules column do; the
+rest needs inputs or services that are not in this directory: the exemplar index
+(`artifacts/exemplars`, built from the e5 embedder) and Prompt Guard 2 scores (Groq), so the
+exemplar and Prompt Guard columns are the committed reports only; the MCPTox-Benchmark and
+InjecAgent checkouts (`artifacts/data/`); the LLM judge runs (`judge/`, Groq, Gemini or Ollama) and the
+adaptive-attacker runs (`adaptive-*.json`, a rewriting model); and the MSB trace files themselves,
+which need Docker and the agent model to regenerate, 19 of which carry `provenance: null`.
 
 **Reproducibility.** Agents ran at temperature 0, one run per arm. Rerunning llama3.1:8b `none`
 five days later reproduced all 220 call sequences and every per-case metric; 24 final answers
@@ -56,3 +76,17 @@ differed only in wording.
 **Known gaps.** Cases a server failed to start for (`c0343`) or the agent timed out on are listed
 per arm by `paper_numbers.py` and dropped from every arm of that model. The descriptions-exposed and
 hooks-with-intent-on qwen arms ran on older code and are not here.
+
+## Evaluation inputs copied from `artifacts/`
+
+`artifacts/` is gitignored, so the inputs behind the injection and judge tables are copied here
+(2026-10-29, byte for byte, all under 1.4 MB; checked for keys and real addresses: the only e-mail
+addresses are the fictional ones in AgentDojo's and MCPTox's own task text).
+
+| File | What | Feeds |
+|---|---|---|
+| `injection/dataset.jsonl` | 3,509 texts from `benchmarks/injection_data.py`: MCPTox poisoned (1,302) and clean (310) descriptions, their translations, and generated tool outputs; fields `text, label (instruction/data), source, group, split (train 1,931 / validation 660 / test 918)` | the injection table scores its `test` split (716 instruction, 202 data); `train` is what `intentshield.exemplars` builds the exemplar index from |
+| `injection/hard_negatives.jsonl` | 294 hard benign texts from `benchmarks/hard_negatives.py` (usage guidance in descriptions, agent hints, human requests, quoted attacks, a few translated), all `label: data` | the table's 142 hard benign rows are its `test` split |
+| `injection/agentdojo-strings.jsonl` | 532 AgentDojo strings from `benchmarks/agentdojo_export.py`: 397 environment texts (`data`) and 135 injected instructions, 27 per attack (`agentdojo_*`); copied from `artifacts/data/agentdojo-strings.jsonl` | the `external` split's `agentdojo_*` families |
+| `injection/report-local-2026-10-13.json` | `injection_eval.py` on 2026-10-13 with the classifier and the earlier exemplar index that scanned descriptions and outputs (rules, classifier, exemplars, any); copied from `artifacts/injection-eval/report-local.json` | the "exemplars, descriptions and outputs" row of `docs/detectors.md` (20.7% / 2.4% / 9/142; MCPTox 261/301) |
+| `judge/report-gemini_gemini-3.5-flash-lite.json` | `benchmarks/judge_eval.py --judge gemini` on 2026-10-12: Gemini 3.5 Flash-Lite on the held-out MCPTox descriptions; rates in this older file are rounded to 4 places (300/301 = 0.9967, 5/108 = 0.0463) | the README's "LLM judge on held-out descriptions" row for Gemini |

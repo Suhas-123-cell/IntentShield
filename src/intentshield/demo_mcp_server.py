@@ -45,9 +45,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--transport", choices=("stdio", "streamable-http"), default="stdio"
     )
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8010)
-    parser.add_argument("--path", default="/mcp")
+    parser.add_argument("--host", default="127.0.0.1", help="bind address for streamable-http")
+    parser.add_argument("--port", type=int, default=8010, help="port for streamable-http")
+    parser.add_argument("--path", default="/mcp", help="URL path of the streamable-http endpoint")
     args = parser.parse_args(argv)
     if args.transport == "streamable-http":
         server.run(

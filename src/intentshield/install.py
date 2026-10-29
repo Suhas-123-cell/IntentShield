@@ -59,12 +59,21 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
 
 
+_JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|on|default)(:[A-Za-z0-9_.:/-]+)?")
+
+
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None) -> str:
+    """The shell command the harness runs on every event. Every piece is quoted and validated:
+    the harness hands the string to a shell."""
     command = f"{shlex.quote(hook)} {harness}"
     if review:
-        command += f" --review {review}"
+        if review not in ("tainted", "always", "never"):
+            raise ValueError(f"--review must be tainted, always or never, not {review!r}")
+        command += f" --review {shlex.quote(review)}"
     if judge:
-        command += f" --judge {judge}"
+        if not _JUDGE_SPEC.fullmatch(judge):
+            raise ValueError(f"--judge must be ollama[:model], groq[:model] or gemini[:model], not {judge!r}")
+        command += f" --judge {shlex.quote(judge)}"
     return command
 
 
@@ -227,7 +236,10 @@ def _strip_toml_block(text: str) -> tuple[str, bool]:
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists() or not path.read_text().strip():
         return {}
-    data = json.loads(path.read_text())
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise json.JSONDecodeError(f"{path} is not valid JSON: {exc.msg}", exc.doc, exc.pos) from None
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a JSON object")
     return data
@@ -238,6 +250,8 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
     if dry_run:
         print(f"--- would write {path}\n{text}", end="")
         return
+    if path.is_symlink():  # a dotfiles link: write its target, not a regular file in its place
+        path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
@@ -270,11 +284,12 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             return path
         _write(path, new, dry_run)
     else:
+        existed = path.exists()
         settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command))
         if not changed:
             print(f"already installed: {path}")
             return path
-        if harness == "cursor":
+        if harness == "cursor" and not existed:  # a file Cursor wrote already has it; uninstall restores theirs
             settings.setdefault("version", 1)
         _write(path, json.dumps(settings, indent=2) + "\n", dry_run)
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
@@ -292,11 +307,17 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
     else:
         settings, changed = remove_hooks(_read_json(path))
         text = json.dumps(settings, indent=2) + "\n"
-    if changed:
-        _write(path, text, dry_run)
-        print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
-    else:
+    if not changed:
         print(f"nothing to remove: {path}")
+        return path
+    emptied = not text.strip() or text.strip() in ("{}", json.dumps({"version": 1}, indent=2))
+    if emptied and not path.is_symlink():  # a file only `install` created: leave nothing behind
+        if not dry_run:
+            path.unlink()
+        print(f"{'would remove' if dry_run else 'removed'} {path} (it held only IntentShield's hooks)")
+        return path
+    _write(path, text, dry_run)
+    print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
     return path
 
 
@@ -320,8 +341,9 @@ def proxy_config(name: str, server: dict[str, Any], out_dir: Path) -> dict[str, 
     (``~/.intentshield/threats.db`` with the default ``out_dir``), so what one layer learns the other knows."""
     server_id = server_stem(name)
     env = server.get("env") or {}
-    upstream: dict[str, Any] = {"server_id": server_id, "transport": "stdio", "command": server["command"],
-                               "args": list(server.get("args") or [])}
+    upstream: dict[str, Any] = {"server_id": server_id, "transport": "stdio", "command": server["command"]}
+    if "args" in server:  # kept exactly (even empty) so unwrap restores the entry as it was
+        upstream["args"] = list(server.get("args") or [])
     if env:
         upstream["env_from_env"] = {key: key for key in env}
     return {"upstreams": [upstream], "database_path": str(out_dir / f"{server_id}.db"),
@@ -339,6 +361,8 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
          dry_run: bool = False) -> list[str]:
     """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file."""
     out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"{path} does not exist")
     data = _read_json(path)
     entries = data.get("mcpServers")
     if not isinstance(entries, dict):
@@ -353,7 +377,9 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         if servers and name not in servers:
             continue
         if not isinstance(server, dict) or not server.get("command") or server.get("url"):
-            continue  # HTTP servers are not launched by the harness; guard those with the gateway
+            # HTTP servers are not launched by the client, so there is no process to stand in front of.
+            print(f"skipped {name}: not a stdio server (guard HTTP servers with the gateway, see docs/guide.md)")
+            continue
         if _is_wrapped(server):
             continue
         config_path = out_dir / f"{server_stem(name, path)}.json"
@@ -365,7 +391,11 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         wrapped.append(name)
     if wrapped:
         _write(path, json.dumps(data, indent=2) + "\n", dry_run)
-    print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped) or '-'}")
+        print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
+    elif any(isinstance(s, dict) and _is_wrapped(s) for s in entries.values()):
+        print(f"already wrapped: {path}")
+    else:
+        print(f"nothing to wrap in {path}: no stdio servers")
     return wrapped
 
 
@@ -376,6 +406,7 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
     if not isinstance(entries, dict):
         raise ValueError(f"{path} has no 'mcpServers' object")
     restored: list[str] = []
+    residue: list[Path] = []
     for name, server in entries.items():
         if (servers and name not in servers) or not isinstance(server, dict) or not _is_wrapped(server):
             continue
@@ -384,21 +415,27 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
         upstream = json.loads(config.read_text())["upstreams"][0]
         original = {key: value for key, value in server.items() if key not in ("command", "args")}
         original["command"] = upstream["command"]
-        if upstream.get("args"):
+        if "args" in upstream:
             original["args"] = list(upstream["args"])
+        residue.append(config)
+        residue.append(Path(json.loads(config.read_text())["database_path"]))
         entries[name] = original
         restored.append(name)
     if restored:
         _write(path, json.dumps(data, indent=2) + "\n", dry_run)
-    print(f"{'would unwrap' if dry_run else 'unwrapped'} {len(restored)} server(s) in {path}: "
-          f"{', '.join(restored) or '-'}")
+        print(f"{'would unwrap' if dry_run else 'unwrapped'} {len(restored)} server(s) in {path}: {', '.join(restored)}")
+        kept = [str(p) for p in residue if p.exists()]
+        if kept:
+            print(f"kept (the proxy's config and audit database; delete them if the server is gone): {', '.join(kept)}")
+    else:
+        print(f"nothing to unwrap in {path}")
     return restored
 
 
 def add_subcommands(sub: Any) -> None:
     for verb in ("install", "uninstall"):
         p = sub.add_parser(verb, help=f"{verb} the IntentShield hooks in an agent harness")
-        p.add_argument("harness", choices=HARNESSES)
+        p.add_argument("harness", choices=HARNESSES, help="the agent harness whose settings file to edit")
         p.add_argument("--scope", choices=("user", "project"), default="user",
                        help="user: the harness's home settings; project: its settings in the current directory")
         p.add_argument("--dry-run", action="store_true", help="print the file instead of writing it")
@@ -416,7 +453,7 @@ def add_subcommands(sub: Any) -> None:
                        help="e.g. .mcp.json (Claude Code), .cursor/mcp.json, ~/.gemini/settings.json")
         p.add_argument("--server", action="append", dest="servers", metavar="NAME",
                        help="only this server (repeatable)")
-        p.add_argument("--dry-run", action="store_true")
+        p.add_argument("--dry-run", action="store_true", help="print the files instead of writing them")
         if verb == "wrap":
             p.add_argument("--out-dir", type=Path, default=None,
                            help="where generated proxy configs and databases go (default ~/.intentshield/proxies)")
@@ -435,7 +472,7 @@ def run(args: argparse.Namespace) -> int:
             unwrap(args.config, args.servers, dry_run=args.dry_run)
         else:
             return 2
-    except (OSError, ValueError, KeyError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, ValueError, KeyError, IndexError, tomllib.TOMLDecodeError) as exc:
         print(f"intentshield {args.command}: {exc}", file=sys.stderr)
         return 1
     return 0

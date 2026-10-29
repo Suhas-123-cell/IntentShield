@@ -915,13 +915,20 @@ def main(argv: list[str] | None = None) -> None:
     from . import rule_packs
 
     parser = argparse.ArgumentParser(prog="intentshield-threats", description=__doc__.split("\n")[0])
-    parser.add_argument("--db", default=default_db())
+    parser.add_argument("--db", default=default_db(),
+                        help="threat memory database (default $INTENTSHIELD_THREAT_DB or ~/.intentshield/threats.db)")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("list", "stats", "export"):
-        commands.add_parser(name)
-    for name, arg in (("confirm", "id"), ("revoke", "id"), ("allow", "value"), ("import", "feed"),
-                      ("benign", "text")):
-        commands.add_parser(name).add_argument(arg)
+    for name, help_text in (("list", "every remembered attack value and rule, with its level and source"),
+                            ("stats", "counts by level, source and age"),
+                            ("export", "the memory as a feed another operator can import")):
+        commands.add_parser(name, help=help_text)
+    for name, arg, help_text, arg_help in (
+            ("confirm", "id", "promote a remembered attack from review to block", "item id from `list`"),
+            ("revoke", "id", "forget a remembered attack", "item id from `list`"),
+            ("allow", "value", "mark a value benign so it is never remembered as an attack", "the exact value"),
+            ("import", "feed", "import a feed written by `export`", "path of the feed file"),
+            ("benign", "text", "record an output text as benign (a false positive)", "the output text")):
+        commands.add_parser(name, help=help_text).add_argument(arg, help=arg_help)
     rule_packs.add_commands(commands.add_parser("pack", help="verify, install, update, export and sign threat packs"))
     args = parser.parse_args(argv)
     try:

@@ -61,7 +61,7 @@ def hook(runs: int, tmp: Path) -> dict[str, Any]:
             if i >= 2:
                 process[name].append((time.perf_counter() - start) * 1000)
     out["process"] = {name: stats(ms) for name, ms in process.items()}
-    guard = HarnessGuard(str(tmp / "inproc.db"), "tainted", "warn", None, str(tmp / "tools"), None)
+    guard = HarnessGuard(str(tmp / "inproc.db"), review="tainted", outputs="warn", catalog=str(tmp / "tools"))
     inproc: dict[str, list[float]] = {name: [] for name in EVENTS}
     for _ in range(runs * 10):
         for name, event in EVENTS.items():

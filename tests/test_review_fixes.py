@@ -218,8 +218,9 @@ def test_old_sessions_are_pruned_from_the_hook_database(tmp_path: Path):
     db = tmp_path / "h.db"
     HarnessGuard(db)
     with sqlite3.connect(db) as conn:
-        conn.execute("INSERT INTO sessions VALUES ('old', 'my secret plan', '[]', ?, 0)", (time.time() - 8 * 86_400,))
-        conn.execute("INSERT INTO sessions VALUES ('new', 'today', '[]', ?, 0)", (time.time(),))
+        conn.execute("INSERT INTO sessions (id, intent, taint, updated) VALUES ('old', 'my secret plan', '[]', ?)",
+                         (time.time() - 8 * 86_400,))
+        conn.execute("INSERT INTO sessions (id, intent, taint, updated) VALUES ('new', 'today', '[]', ?)", (time.time(),))
         conn.execute("INSERT INTO observed VALUES ('old', 'x@y.test')")
     HarnessGuard(db)
     with sqlite3.connect(db) as conn:
@@ -257,3 +258,61 @@ def test_a_judge_without_a_key_degrades_to_rules_and_says_so(tmp_path: Path, mon
     handle("claude", claude("UserPromptSubmit", prompt="list notes"), g)
     reply = handle("claude", claude("PreToolUse", tool_name="mcp__notes__list_notes", tool_input={}), g)
     assert "no API key" in reply["hookSpecificOutput"]["additionalContext"]
+
+
+def test_create_run_is_not_blocked_by_a_slow_output_detector(tmp_path: Path):
+    """The lock only covers the state merge: a learned detector that takes seconds in a worker
+    must not stall the event loop, which opens runs under the same lock."""
+    import asyncio
+    import threading
+    import time
+
+    from test_mcp_guardrail import Fixture, runtime
+
+    from intentshield.models import ToolCall
+
+    entered, release = threading.Event(), threading.Event()
+
+    def slow(text: str, kind: str) -> bool:
+        entered.set()
+        release.wait(5)
+        return False
+
+    async def exercise() -> None:
+        async with runtime(tmp_path, Fixture({"read_page": "Reads a page."}, page="A plain page.")) as shield:
+            shield._detectors.append(("slow", slow))
+            run = await shield.create_run("Read the page")
+            schema_hash = next(t["schema_hash"] for t in await shield.tool_catalog() if t["name"] == "web:read_page")
+            pending = asyncio.create_task(shield.evaluate_and_execute(
+                run, ToolCall(tool_name="web:read_page", arguments={"value": "1"}, schema_hash=schema_hash)))
+            await asyncio.to_thread(entered.wait, 5)  # the worker is inside the detector now
+            started = time.monotonic()
+            await shield.create_run("Read the page again")
+            assert time.monotonic() - started < 1
+            release.set()
+            assert (await pending).executed
+
+    asyncio.run(exercise())
+
+
+def test_judge_back_off_never_outlives_its_budget(monkeypatch):
+    """A ``Retry-After: 120`` from a free tier must not hold a hook for two minutes."""
+    import email.message
+    import io
+    import time
+    import urllib.error
+    import urllib.request
+
+    from intentshield import judge as judge_module
+
+    headers = email.message.Message()
+    headers["Retry-After"] = "120"
+
+    def rate_limited(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", headers, io.BytesIO(b"slow down"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", rate_limited)
+    started = time.monotonic()
+    content, error = judge_module.post_chat("https://judge.invalid/v1/chat/completions", "k", {}, timeout=1, retries=1)
+    assert content is None and error.startswith("HTTP 429")
+    assert time.monotonic() - started < 3

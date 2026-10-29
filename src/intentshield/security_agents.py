@@ -449,10 +449,18 @@ class SecurityAnalysisSupervisor:
         self.config = config or SecuritySupervisorConfig()
         self.detection_agent = detection_agent or DeterministicDetectionAgent()
         self.grounding_agent = grounding_agent or DeterministicGroundingAgent(classifier)
+        # The built-in regex agents take about a millisecond and cannot hang: they run on the
+        # caller's thread, so a busy pool or a GIL stall can never score a benign call as a
+        # timeout. Threads and the deadline are for a classifier or a custom agent.
+        self._inline = detection_agent is None and grounding_agent is None and classifier is None
         self._executor = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="intentshield-security"
         )
         self._slots = BoundedSemaphore(2)
+
+    def close(self) -> None:
+        """Stop the worker threads; a pending analysis is abandoned, never waited for."""
+        self._executor.shutdown(wait=False, cancel_futures=True)
 
     def _submit(
         self,
@@ -460,8 +468,11 @@ class SecurityAnalysisSupervisor:
         user_intent: str,
         call: ToolCall,
         metadata: TrustedToolMetadata,
+        deadline: float,
     ) -> Future[DetectionEvidence | GroundingEvidence] | None:
-        if not self._slots.acquire(blocking=False):
+        # Concurrent calls queue for a slot within the same deadline instead of being scored as a
+        # timeout at once: a busy gateway must not block benign calls at random.
+        if not self._slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
             return None
 
         def run() -> DetectionEvidence | GroundingEvidence:
@@ -485,22 +496,40 @@ class SecurityAnalysisSupervisor:
         if not user_intent.strip():
             raise ValueError("user_intent must not be blank")
 
+        if self._inline:
+            return self._combine(self._inline_detection(user_intent, call, metadata),
+                                 self._inline_grounding(user_intent, call, metadata), metadata)
+        deadline = time.monotonic() + self.config.timeout_ms / 1000
         futures: dict[str, Future[DetectionEvidence | GroundingEvidence] | None] = {
             "detection": self._submit(
-                self.detection_agent, user_intent, call, metadata
+                self.detection_agent, user_intent, call, metadata, deadline
             ),
             "grounding": self._submit(
-                self.grounding_agent, user_intent, call, metadata
+                self.grounding_agent, user_intent, call, metadata, deadline
             ),
         }
         active = {future for future in futures.values() if future is not None}
-        done, pending = wait(active, timeout=self.config.timeout_ms / 1000)
+        done, pending = wait(active, timeout=max(0.0, deadline - time.monotonic()))
         for future in pending:
             future.cancel()
 
         detection = self._detection_result(futures["detection"], done)
         grounding = self._grounding_result(futures["grounding"], done)
         return self._combine(detection, grounding, metadata)
+
+    def _inline_detection(self, user_intent: str, call: ToolCall, metadata: TrustedToolMetadata) -> DetectionEvidence:
+        try:
+            return DetectionEvidence.model_validate(self.detection_agent.analyze(user_intent, call, metadata))
+        except Exception:
+            return DetectionEvidence(status=EvidenceStatus.FAILED, injection_score=1.0,
+                                     reason_codes=(EvidenceReason.AGENT_FAILURE,))
+
+    def _inline_grounding(self, user_intent: str, call: ToolCall, metadata: TrustedToolMetadata) -> GroundingEvidence:
+        try:
+            return GroundingEvidence.model_validate(self.grounding_agent.analyze(user_intent, call, metadata))
+        except Exception:
+            return GroundingEvidence(status=EvidenceStatus.FAILED, intent_alignment=0.0, scope_score=0.0,
+                                     reason_codes=(EvidenceReason.AGENT_FAILURE,))
 
     @staticmethod
     def _detection_result(
