@@ -76,7 +76,8 @@ def test_cursor_cannot_rewrite_so_a_leaking_call_is_denied_with_instructions(tmp
              "tool_name": "search", "tool_input": json.dumps({"q": "x", "llm_name": "gpt"})}
     reply = handle("cursor", event, g)
     assert reply["permission"] == "deny" and "llm_name" in reply["agent_message"]
-    event["tool_input"] = json.dumps({"q": "x"})
+    # Resending with the field empty, as the message asks, goes through; a required field cannot be dropped.
+    event["tool_input"] = json.dumps({"q": "x", "llm_name": ""})
     assert handle("cursor", event, g) == {"permission": "allow"}
     assert handle("cursor", {"hook_event_name": "afterMCPExecution", "conversation_id": "c1",
                              "mcp_server_name": "pubmed", "tool_name": "search",
@@ -250,7 +251,7 @@ def test_cursor_ask_does_not_drop_a_pending_redaction(tmp_path: Path):
              "tool_name": "update_record", "tool_input": json.dumps({"id": "7", "llm_name": "gpt"})}
     reply = handle("cursor", event, g)
     assert reply["permission"] == "deny" and "llm_name" in reply["agent_message"]
-    event["tool_input"] = json.dumps({"id": "7"})
+    event["tool_input"] = json.dumps({"id": "7", "llm_name": ""})
     assert handle("cursor", event, g)["permission"] == "ask"
 
 

@@ -3,7 +3,7 @@
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
 **Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0%, and the gateway left no harmful call waiting in the human's review queue (the hooks left 5/2/3 cases on qwen/llama/ornith). That is not unique: a trivial guard that holds every state-changing call for a human also reaches 0.0%, though it leaves up to 19% of cases in the queue. The cost is 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.<br>
-**Not covered:** the harness's built-in shell and file tools (only MCP calls are checked); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss; and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI runs the hooks only after you trust them once in Codex (until then it is unguarded); Cursor hooks are tested on event shapes, not run live. See [Limitations](#limitations).
+**Not covered:** the harness's built-in shell and file tools (only MCP calls are checked); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss; and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI runs the hooks only after you trust them once in Codex (until then it is unguarded); Cursor has been run live once, but its model refused the attack even unguarded, so that run shows the hooks work, not that they stop an attack. See [Limitations](#limitations).
 
 [![CI](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml/badge.svg)](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/intentshield-mcp)](https://pypi.org/project/intentshield-mcp/)
@@ -113,8 +113,8 @@ when the model routes calls through `intentshield_call` and states the intent it
 | Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no: denials with a reason |
 | any other MCP client | no hooks; the transparent proxy still guards descriptions, schemas and outputs | - | - |
 
-Claude Code and Gemini CLI have been run live against a malicious server; Codex CLI and Cursor hooks
-are tested on event shapes only. Every option, the gateway's tools and the proxy config keys are in
+Claude Code, Gemini CLI, Codex CLI and Cursor have been run live against a malicious server
+([docs/benchmarks.md](docs/benchmarks.md#live-harness-checks-claude-code-gemini-cli-codex-cli-and-cursor)). Every option, the gateway's tools and the proxy config keys are in
 [docs/guide.md](docs/guide.md#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli).
 
 ## Results
@@ -196,7 +196,10 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   as with no guard. With the transparent proxy the notes never left in 3/3: `send_email` stayed available,
   but the agent did not call it after the proxy's warning on the injected result
   (`results/harness-live-codex/`). With the hooks trusted, the hook denied the attacker's `send_email` in
-  3/3 runs (`results/harness-live-codex-trusted/`). Cursor hooks are tested on event shapes only.
+  3/3 runs (`results/harness-live-codex-trusted/`).
+- Cursor CLI, live with its `auto` model (Composer), 3 prompts: the notes never reached the attacker in any arm,
+  including the unguarded one, because the model refused the injection on its own. The run shows the hooks run and
+  the redaction works under Cursor, not that the guard stops an attack there (`results/harness-live-cursor/`).
 - The learned detectors are negative or null results and are off by default; their PyTorch path (DeBERTa, the
   e5 embedder) is exercised locally only, never in CI.
 - The trivial baseline also reaches 0.0% executed harm; "best performing" is not supported (the

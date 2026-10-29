@@ -409,7 +409,8 @@ def _redact(value: Any, path: str = "") -> tuple[Any, set[str]]:
         for key, child in value.items():
             if str(key) in names:
                 result[key] = ""
-                hidden.add(f"{path}{key}")
+                if child not in ("", None):  # already empty discloses nothing; Cursor's resend must pass
+                    hidden.add(f"{path}{key}")
             else:
                 result[key], found = _redact(child, f"{path}{key}.")
                 hidden |= found
