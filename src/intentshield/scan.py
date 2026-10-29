@@ -14,7 +14,9 @@ guard's own rules. Nothing is sent anywhere and no API key is needed.
 - **Changes since the last scan:** a tool description that changed after it was first seen (rug pull).
   The hashes are kept in ``~/.intentshield/scan-pins.json``.
 
-Starting a server runs its code, as the client would; ``--no-connect`` checks the configs only.
+Starting a server runs its code, as the client would, with a minimal environment (no API keys of yours);
+``--no-connect`` checks the configs only. A server named by a config in the current directory is code the
+repository chose, so it is started only with ``--connect-project``.
 """
 from __future__ import annotations
 
@@ -24,15 +26,19 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import stat
+import sys
+import tempfile
 import tomllib
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from . import credentials
 from .harness import is_mutation
-from .install import server_stem
+from .install import _HOOK, server_stem
 from .mcp_inspect import scan_description, scan_server, self_disclosure_fields, tool_text
 
 ERROR, WARNING, NOTE = "error", "warning", "note"
@@ -47,7 +53,7 @@ RULES = {
     "config_readable": (WARNING, "The config holds a credential and other users can read the file."),
     "name_clash": (WARNING, "Two servers of one client offer a tool with the same name."),
     "toxic_flow": (WARNING, "One client can read untrusted content, reach private data and send data out."),
-    "not_scanned": (NOTE, "The server could not be started or listed."),
+    "not_scanned": (NOTE, "The server could not be started or listed, or was not started (project config)."),
 }
 
 # Where each client keeps its MCP servers: (client, path relative to home or cwd, key holding the servers).
@@ -90,6 +96,8 @@ class Server:
     entry: dict[str, Any]
     tools: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+    project: bool = False         # named by a config in the working directory, not by the user's own
+    skipped: str | None = None    # why it was not started
 
 
 @dataclass
@@ -113,18 +121,20 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
     """The MCP servers of every config found, or of ``files`` (``mcpServers`` or ``servers`` JSON)."""
     found: list[Server] = []
     if files:
-        sources = [("file", path, "") for path in files]
+        sources = [("file", path, "", False) for path in files]
     else:
-        sources = [(c, home / rel, key) for c, rel, key in _USER_CONFIGS] + \
-                  [(c, cwd / rel, key) for c, rel, key in _PROJECT_CONFIGS]
-    for client, path, key in sources:
-        if not path.is_file():
+        sources = [(c, home / rel, key, False) for c, rel, key in _USER_CONFIGS] + \
+                  [(c, cwd / rel, key, True) for c, rel, key in _PROJECT_CONFIGS]
+    seen: set[Path] = set()
+    for client, path, key, project in sources:
+        if not path.is_file() or (resolved := path.resolve()) in seen:  # in the home directory, a project file is the user's
             continue
+        seen.add(resolved)
         try:
             data = tomllib.loads(path.read_text("utf-8")) if path.suffix == ".toml" else \
                 json.loads(path.read_text("utf-8"))
         except (OSError, ValueError) as exc:
-            found.append(Server(client, path, "(config)", {}, error=f"unreadable: {exc}"))
+            found.append(Server(client, path, "(config)", {}, error=f"unreadable: {exc}", project=project))
             continue
         if not isinstance(data, dict):
             continue
@@ -136,8 +146,19 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
         for group in groups:
             for name, entry in (group or {}).items() if isinstance(group, dict) else ():
                 if isinstance(entry, dict):
-                    found.append(Server(client, path, str(name), entry))
+                    found.append(Server(client, path, str(name), entry, project=project))
     return found
+
+
+# What a server may inherit from the scanning shell, as the MCP SDK's own default list: enough to find its
+# interpreter and temp directory, none of the API keys in the environment.
+_SAFE_ENV = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TEMP", "TMP",
+             "SystemRoot", "SYSTEMROOT", "SYSTEMDRIVE", "APPDATA", "LOCALAPPDATA", "USERPROFILE", "USERNAME",
+             "HOMEDRIVE", "HOMEPATH", "PROCESSOR_ARCHITECTURE", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")
+
+
+def safe_environment() -> dict[str, str]:
+    return {key: os.environ[key] for key in _SAFE_ENV if key in os.environ}
 
 
 def upstream_config(server: Server) -> dict[str, Any] | None:
@@ -154,7 +175,7 @@ def upstream_config(server: Server) -> dict[str, Any] | None:
     config: dict[str, Any] = {"server_id": server_stem(server.name), "timeout_seconds": 20, "read_timeout_seconds": 20}
     if command:
         env = {str(k): str(v) for k, v in (entry.get("env") or {}).items()}
-        return {**config, "transport": "stdio", "command": str(command), "args": args, "env": {**os.environ, **env}}
+        return {**config, "transport": "stdio", "command": str(command), "args": args, "env": {**safe_environment(), **env}}
     url = entry.get("url") or entry.get("httpUrl") or entry.get("serverUrl")
     if url and entry.get("type") != "sse" and not str(url).rstrip("/").endswith("/sse"):
         return {**config, "transport": "streamable_http", "url": str(url),
@@ -170,7 +191,7 @@ async def _list_tools(server: Server, timeout: float) -> None:
         server.error = "no stdio command or Streamable HTTP URL (SSE servers are not scanned)"
         return
     # The proxy's config refuses literal credentials so that none is written into its file; the scan writes
-    # none, and starts the server with the environment and headers its client would give it.
+    # none, and starts the server with the entry's own environment and headers over a minimal inherited one.
     secrets = {key: config.pop(key) for key in ("env", "headers") if key in config}
     try:
         async with asyncio.timeout(timeout):
@@ -262,24 +283,58 @@ def _tool_findings(servers: list[Server], pins: dict[str, str]) -> list[Finding]
     return findings
 
 
+def _hook_commands(node: Any) -> Iterator[Any]:
+    """Every hook entry (a dict with a ``command``) of a settings file's ``hooks`` value, however the client
+    nests them: a list of groups each holding a ``hooks`` list (Claude Code, Gemini CLI, Codex CLI), or a list
+    of entries (Cursor)."""
+    if isinstance(node, dict):
+        if "command" in node:
+            yield node
+        for child in node.values():
+            yield from _hook_commands(child)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _hook_commands(child)
+
+
 def guarded(client: str, home: Path) -> bool:
-    """Whether the IntentShield hooks are registered for ``client``."""
+    """Whether a hook entry of ``client`` runs ``intentshield-hook``: the settings are parsed, so a file that
+    only mentions the name (a comment, a removed entry's note) does not count."""
     rel = _HOOK_SETTINGS.get(client)
-    try:
-        return bool(rel) and "intentshield-hook" in (home / rel).read_text("utf-8")
-    except OSError:
+    if not rel:
         return False
+    try:
+        path = home / rel
+        text = path.read_text("utf-8")
+        data = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
+    except (OSError, ValueError):
+        return False
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    for entry in _hook_commands(hooks):
+        try:
+            argv = shlex.split(entry["command"]) if isinstance(entry["command"], str) else []
+        except ValueError:
+            continue
+        if argv and Path(argv[0]).stem == _HOOK:
+            return True
+    return False
 
 
 def scan(servers: list[Server], *, connect: bool = True, timeout: float = 30.0,
-         pins: dict[str, str] | None = None) -> list[Finding]:
-    """Findings for ``servers``; ``pins`` (tool key to hash) is compared and gains the tools first seen."""
+         pins: dict[str, str] | None = None, connect_project: bool = False) -> list[Finding]:
+    """Findings for ``servers``; ``pins`` (tool key to hash) is compared and gains the tools first seen.
+    A server of a project config is only started with ``connect_project``."""
+    for server in servers:
+        if server.project and not connect_project and server.error is None:
+            server.skipped = ("named by a config in the current directory, so not started "
+                              "(pass --connect-project to start it)")
     if connect:
         for server in servers:
-            if server.error is None:
+            if server.error is None and server.skipped is None:
                 asyncio.run(_list_tools(server, timeout))
     findings = _config_findings(servers) + _tool_findings(servers, {} if pins is None else pins)
-    findings += [Finding("not_scanned", s.path, s.name, s.error) for s in servers if s.error]
+    findings += [Finding("not_scanned", s.path, s.name, s.error or s.skipped) for s in servers
+                 if s.error or (s.skipped and connect)]
     return findings
 
 
@@ -294,7 +349,7 @@ def sarif(findings: list[Finding]) -> dict[str, Any]:
                                       for rule, (level, text) in RULES.items()]}},
         "results": [{"ruleId": f.rule, "level": f.level,
                      "message": {"text": f"{f.server}{':' + f.tool if f.tool else ''}: {f.message}"},
-                     "locations": [{"physicalLocation": {"artifactLocation": {"uri": f.path.as_uri()}}}]}
+                     "locations": [{"physicalLocation": {"artifactLocation": {"uri": f.path.resolve().as_uri()}}}]}
                     for f in findings]}]}
 
 
@@ -307,6 +362,7 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
         lines.append(f"{client} ({state}): {len(group)} server(s){tools}")
         for server in group:
             status = f"not scanned: {server.error}" if server.error else \
+                f"not started: {server.skipped}" if server.skipped and connected else \
                 f"{len(server.tools)} tool(s)" if connected else "config only"
             lines.append(f"  {server.name}  {server.path}  [{status}]")
     for f in sorted(findings, key=lambda f: ("error", "warning", "note").index(f.level)):
@@ -323,6 +379,9 @@ def add_subcommand(sub: Any) -> None:
     p = sub.add_parser("scan", help="find the MCP servers your agents use and check them offline")
     p.add_argument("files", nargs="*", type=Path, help="MCP config files to scan instead of the installed ones")
     p.add_argument("--no-connect", action="store_true", help="check the configs only; start no server")
+    p.add_argument("--connect-project", action="store_true",
+                   help="also start the servers named by configs in the current directory (.mcp.json, ...): "
+                        "code the repository chose, run with your user rights")
     p.add_argument("--format", choices=("text", "json", "sarif"), default="text")
     p.add_argument("--timeout", type=float, default=30.0, help="seconds per server (default 30)")
     p.add_argument("--pins", type=Path, default=Path.home() / ".intentshield" / "scan-pins.json",
@@ -331,26 +390,64 @@ def add_subcommand(sub: Any) -> None:
     p.add_argument("--update-pins", action="store_true", help="accept every tool as it is now")
 
 
+def load_pins(path: Path) -> dict[str, str]:
+    """The saved tool hashes. A file that cannot be read as a {key: hash} object is not trusted as a baseline
+    and is not lost either: it is copied to ``.bak`` before the next save replaces it, and the user is told."""
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        print(f"intentshield scan: cannot read {path} ({exc}); starting without a baseline", file=sys.stderr)
+        return {}
+    try:
+        data = json.loads(text)
+        if not isinstance(data, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in data.items()):
+            raise ValueError("not an object of tool keys and hashes")
+    except ValueError as exc:
+        backup = path.with_name(path.name + ".bak")
+        try:
+            backup.write_text(text)
+        except OSError:
+            pass
+        print(f"intentshield scan: {path} is not a valid pins file ({exc}); its tools are treated as new, "
+              f"and the old file is kept as {backup}", file=sys.stderr)
+        return {}
+    return data
+
+
+def save_pins(path: Path, pins: dict[str, str]) -> None:
+    """Atomic and private (0600): a scan interrupted or run twice at once never leaves half a baseline."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(json.dumps(pins, indent=1, sort_keys=True))
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
 def run(args: argparse.Namespace) -> int:
     home, cwd = Path.home(), Path.cwd()
     servers = discover(home, cwd, args.files or None)
-    pins: dict[str, str] = {}
-    if not args.no_pins and not args.update_pins and args.pins.is_file():
-        try:
-            pins = json.loads(args.pins.read_text())
-        except (OSError, ValueError):
-            pins = {}
-    findings = scan(servers, connect=not args.no_connect, timeout=args.timeout, pins=pins)
+    pins = load_pins(args.pins) if not args.no_pins and not args.update_pins else {}
+    findings = scan(servers, connect=not args.no_connect, timeout=args.timeout, pins=pins,
+                    connect_project=args.connect_project)
+    skipped = [s for s in servers if s.skipped and not args.no_connect]
+    if skipped:
+        print("intentshield scan: not started (config in the current directory; --connect-project starts them): "
+              + ", ".join(f"{s.name} ({s.path})" for s in skipped), file=sys.stderr)
     if not args.no_pins and not args.no_connect and any(s.tools for s in servers):
-        args.pins.parent.mkdir(parents=True, exist_ok=True)
-        args.pins.write_text(json.dumps(pins, indent=1, sort_keys=True))
+        save_pins(args.pins, pins)
     if args.format == "json":
         print(json.dumps({"servers": [{"client": s.client, "config": str(s.path), "name": s.name,
-                                       "tools": len(s.tools), "error": s.error} for s in servers],
+                                       "tools": len(s.tools), "error": s.error, "skipped": s.skipped}
+                                      for s in servers],
                           "findings": [f.as_dict() for f in findings]}, indent=2))
     elif args.format == "sarif":
         print(json.dumps(sarif(findings), indent=2))
     else:
         print(report(servers, findings, home, connected=not args.no_connect))
     return 1 if any(f.level == ERROR for f in findings) else 0
-

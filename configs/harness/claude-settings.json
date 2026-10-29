@@ -4,6 +4,8 @@
     "PreToolUse": [{"matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
                     "hooks": [{"type": "command", "command": "intentshield-hook claude", "onFailure": "block"}]}],
     "PostToolUse": [{"matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
-                     "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}]
+                     "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}],
+    "PostToolUseFailure": [{"matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
+                            "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}]
   }
 }
