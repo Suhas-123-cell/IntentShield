@@ -54,6 +54,7 @@ import re
 import tempfile
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -427,11 +428,7 @@ class PackSet:
                  for pack, rule_id, rule_target, level, pattern in self._rules
                  if rule_target == target and pattern.search(collapsed)]
         if target != "argument" and self._prints:
-            counts: dict[str, int] = {}
-            for item in prints:
-                for key in self._index.get(item, ()):
-                    counts[key] = counts.get(key, 0) + 1
-            for key, n in counts.items():
+            for key, n in Counter(key for item in prints for key in self._index.get(item, ())).items():
                 pack, own, level = self._prints[key]
                 if n / len(own) >= containment:
                     found.append({"name": f"pack:{key.partition('/')[2]}", "pack": pack, "level": level,

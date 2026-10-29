@@ -73,22 +73,10 @@ class PolicyEngine:
         if context.injection_score >= self.config.injection_block_threshold:
             return self._block(ReasonCode.BLOCK_INJECTION_DETECTED)
 
-        if spec.resource_field:
-            raw_resource = call.arguments.get(spec.resource_field)
-            if (
-                spec.resource_field not in call.arguments
-                or not isinstance(raw_resource, str)
-                or not raw_resource.strip()
-            ):
-                return self._block(ReasonCode.BLOCK_RESOURCE_OUT_OF_SCOPE)
-        if spec.destination_field:
-            raw_destination = call.arguments.get(spec.destination_field)
-            if (
-                spec.destination_field not in call.arguments
-                or not isinstance(raw_destination, str)
-                or not raw_destination.strip()
-            ):
-                return self._block(ReasonCode.BLOCK_DESTINATION_OUT_OF_SCOPE)
+        for field, reason in ((spec.resource_field, ReasonCode.BLOCK_RESOURCE_OUT_OF_SCOPE),
+                              (spec.destination_field, ReasonCode.BLOCK_DESTINATION_OUT_OF_SCOPE)):
+            if field and not (isinstance(raw := call.arguments.get(field), str) and raw.strip()):
+                return self._block(reason)
 
         try:
             parsed_model = spec.parse_arguments(call.arguments)
