@@ -219,8 +219,11 @@ class Storage:
         query = ("SELECT approvals.*, runs.user_intent AS request FROM approvals "
                  "JOIN runs ON runs.id = approvals.run_id")
         with self.connect() as db:
-            rows = db.execute(f"{query}{' WHERE approvals.status=?' if status else ''} ORDER BY approvals.created_at DESC",
-                              (status,) if status else ()).fetchall()
+            if status:
+                rows = db.execute(f"{query} WHERE approvals.status=? ORDER BY approvals.created_at DESC",
+                                  (status,)).fetchall()
+            else:
+                rows = db.execute(f"{query} ORDER BY approvals.created_at DESC").fetchall()
         return [{**dict(row), "reasons": json.loads(row["reasons_json"] or "[]")} for row in rows]
 
     def decide_approval(self, approval_id: str, status: str) -> bool:
