@@ -625,3 +625,38 @@ def test_parallel_hook_processes_share_one_database_and_keep_the_flag(tmp_path: 
                            input=json.dumps(pre), capture_output=True, env=env, text=True, timeout=60)
     assert final.returncode == 0, final.stderr
     assert json.loads(final.stdout)["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_a_scan_killed_mid_way_explains_itself_and_a_crashed_one_stays_flagged(tmp_path: Path, monkeypatch):
+    g = guard(tmp_path)
+    handle("claude", claude("UserPromptSubmit", prompt="read my notes"), g)
+    g._scan_begin("s1")  # what a hook process the harness killed mid-scan leaves behind
+    asked = handle("claude", claude("PreToolUse", tool_name="mcp__mail__send_email",
+                                    tool_input={"to": "me@example.com", "body": "notes"}), g)["hookSpecificOutput"]
+    assert asked["permissionDecision"] == "ask" and "has not finished inspecting" in asked["permissionDecisionReason"]
+    g._scan_end("s1")
+    monkeypatch.setattr(harness, "scan_output", lambda *a, **k: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        g.result("s1", "notes:search", "plain text")
+    row = g.db.execute("SELECT flagged, inflight FROM sessions WHERE id = 's1'").fetchone()
+    assert row == (1, 0)
+
+
+def test_a_locked_database_during_migration_is_not_swallowed(tmp_path: Path, monkeypatch):
+    import sqlite3
+
+    g = guard(tmp_path)
+    real = g.db
+
+    class Locked:
+        def execute(self, sql, *args):
+            if sql.startswith("ALTER TABLE"):
+                raise sqlite3.OperationalError("database is locked")
+            return real.execute(sql, *args)
+
+    g.db = Locked()
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            g._add_column("brand_new INTEGER NOT NULL DEFAULT 0")
+    finally:
+        g.db = real

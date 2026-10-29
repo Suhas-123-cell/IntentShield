@@ -21,7 +21,7 @@ import sqlite3
 import sys
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -147,18 +147,10 @@ class HarnessGuard:
                         "taint TEXT NOT NULL, updated REAL NOT NULL)")
         # Result scans in progress. Hook processes run in parallel, so a clean scan must never
         # restore a flag another process is setting: the counter is monotonic per scan.
-        if "inflight" not in {row[1] for row in self.db.execute("PRAGMA table_info(sessions)")}:
-            try:
-                self.db.execute("ALTER TABLE sessions ADD COLUMN inflight INTEGER NOT NULL DEFAULT 0")
-            except sqlite3.OperationalError:  # a concurrent hook added it first
-                pass
+        self._add_column("inflight INTEGER NOT NULL DEFAULT 0")
         # Whether any output of the session tried to instruct the agent, even one that named no
         # value to taint ("delete the repository now").
-        if "flagged" not in {row[1] for row in self.db.execute("PRAGMA table_info(sessions)")}:
-            try:
-                self.db.execute("ALTER TABLE sessions ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0")
-            except sqlite3.OperationalError:  # another hook process added it first
-                pass
+        self._add_column("flagged INTEGER NOT NULL DEFAULT 0")
         # Recipients, URLs, accounts and paths seen in any tool output of the session.
         self.db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
                         "PRIMARY KEY (session, value))")
@@ -190,6 +182,18 @@ class HarnessGuard:
             known = self._read_only.get(f"{tool.partition(':')[0]}__{name}")
         return is_mutation(tool) if known is None else not known
 
+    def _add_column(self, definition: str) -> None:
+        """Adds a sessions column an older hooks.db lacks. Only a concurrent hook adding it first is
+        expected; any other error (a locked or corrupt database) propagates and the hook fails closed."""
+        name = definition.split()[0]
+        if name in {row[1] for row in self.db.execute("PRAGMA table_info(sessions)")}:
+            return
+        try:
+            self.db.execute(f"ALTER TABLE sessions ADD COLUMN {definition}")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc):
+                raise
+
     @contextmanager
     def _tx(self) -> Iterator[None]:
         """One immediate transaction; rolled back if the body raises, so a reused guard never sits
@@ -213,6 +217,15 @@ class HarnessGuard:
         """Flagged by an output, or a scan of one is still running (or died) in some hook process."""
         row = self.db.execute("SELECT flagged, inflight FROM sessions WHERE id = ?", (session,)).fetchone()
         return bool(row and (row[0] or row[1] > 0))
+
+    def _flag_reason(self, session: str, taint: set[str]) -> str:
+        row = self.db.execute("SELECT flagged, inflight FROM sessions WHERE id = ?", (session,)).fetchone()
+        if taint or (row and row[0]):
+            return "A tool output in this session tried to instruct the agent; confirm this call."
+        if row and row[1]:
+            return ("IntentShield has not finished inspecting a tool output in this session (the scan is still "
+                    "running or was interrupted); confirm this call. A new session starts clean.")
+        return "IntentShield asks for confirmation of state-changing calls."
 
     def _scan_begin(self, session: str) -> None:
         self.db.execute("INSERT INTO sessions (id, intent, taint, updated, inflight) VALUES (?, '', '[]', ?, 1) "
@@ -289,9 +302,7 @@ class HarnessGuard:
         elif self.mutates(tool) and (self.review == "always" or (
                 self.review == "tainted" and (taint or self._flagged(session)))):
             verdict.decision = "ask"
-            verdict.reason = ("A tool output in this session tried to instruct the agent; confirm this call."
-                              if taint or self._flagged(session)
-                              else "IntentShield asks for confirmation of state-changing calls.")
+            verdict.reason = self._flag_reason(session, taint)
         if verdict.decision == "allow" and self.judge_missing and self.review != "never":
             verdict.context = (verdict.context + " " if verdict.context else "") + \
                 "IntentShield: the LLM judge is configured but has no API key; only the rules checked this call."
@@ -340,6 +351,17 @@ class HarnessGuard:
         # times the hook out on a huge output, or it crashes) leaves later state-changing calls
         # asking for confirmation instead of running as if the output were clean.
         self._scan_begin(session)
+        try:
+            return self._result(session, tool, output)
+        except BaseException:
+            # The output went uninspected: the session stays flagged for good (an in-flight count
+            # alone is what a killed process leaves behind).
+            with self._tx():
+                self.db.execute("UPDATE sessions SET flagged = 1 WHERE id = ?", (session,))
+                self._scan_end(session)
+            raise
+
+    def _result(self, session: str, tool: str, output: Any) -> Verdict:
         # Scanned without the user's prompts as trusted text: an output repeating a phrase the
         # user once typed ("New task:") is still an instruction.
         findings = scan_output(output)
@@ -599,7 +621,7 @@ def _flag_session(db: str, session: str) -> None:
     """Best effort, when the guard itself could not run: a throwaway connection marks the session
     flagged. A failure here is reported, not raised; the call path already failed closed."""
     try:
-        with sqlite3.connect(db, timeout=1) as conn:
+        with closing(sqlite3.connect(db, timeout=1)) as conn, conn:
             conn.execute("INSERT INTO sessions (id, intent, taint, updated, flagged) VALUES (?, '', '[]', ?, 1) "
                          "ON CONFLICT(id) DO UPDATE SET flagged = 1", (session, time.time()))
     except Exception as exc:
