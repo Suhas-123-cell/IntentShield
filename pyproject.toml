@@ -5,20 +5,26 @@ build-backend = "hatchling.build"
 [project]
 name = "intentshield-mcp"
 version = "0.3.2"
-description = "Offline-first guardrail for MCP tool calls: hooks for Claude Code, Codex CLI, Cursor and Gemini CLI, plus a transparent MCP proxy"
+description = "IntentShield for MCP: an offline-first security guardrail against prompt injection in MCP tool calls, with hooks for Claude Code, Codex CLI, Cursor and Gemini CLI and a transparent MCP proxy"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-keywords = ["mcp", "model-context-protocol", "prompt-injection", "agent-security", "guardrail", "claude-code", "codex", "cursor", "gemini-cli"]
+keywords = [
+  "intentshield", "mcp", "model-context-protocol", "mcp-security", "mcp-proxy", "prompt-injection", "tool-poisoning",
+  "guardrail", "guardrails", "agent-security", "llm-security", "ai-security", "claude-code", "codex", "cursor", "gemini-cli",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Security",
   "Topic :: Software Development :: Libraries",
 ]
@@ -47,6 +53,7 @@ learning = [
 [project.urls]
 Homepage = "https://github.com/Suhas-123-cell/IntentShield"
 Repository = "https://github.com/Suhas-123-cell/IntentShield"
+Documentation = "https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/README.md"
 Issues = "https://github.com/Suhas-123-cell/IntentShield/issues"
 Changelog = "https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md"
 
