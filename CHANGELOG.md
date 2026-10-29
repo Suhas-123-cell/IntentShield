@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.6
 
 - The LLM judge can read tool results too (`--judge-outputs` for the hooks and `intentshield install`,
   `"judge_outputs": true` for the proxy; off by default). It is told the user's request and asked whether
