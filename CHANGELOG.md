@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Cursor: a call resent with a self-disclosure field already empty, as the hook's denial asks, is no
+  longer denied again. Before, an empty field still counted as redacted, so on Cursor (which cannot
+  rewrite arguments) the call could never go through. Found in the first live Cursor run.
+- `benchmarks/harness_live/run_cursor.sh` runs Cursor CLI headless against the attack server (no guard,
+  hooks, proxy, both); results in `results/harness-live-cursor/` and `docs/benchmarks.md`.
+
 ## 0.3.0
 
 Breaking:
