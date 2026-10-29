@@ -13,7 +13,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .mcp_proxy import MCPProxyConfig, MCPProxyRuntime
+from .mcp_proxy import MCPProxyConfig, MCPProxyRuntime, RunLimitError
 from .model_gateway import ModelGateway, ModelProviderError
 from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, ToolCall
 from .ratelimit import RateLimiter
@@ -89,11 +89,20 @@ def create_app(
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         return response
 
+    @app.exception_handler(RunLimitError)
+    async def run_limit(_request: Request, exc: RunLimitError):
+        return JSONResponse({"detail": str(exc)}, status_code=429)
+
     limiter = RateLimiter.from_env()
     if limiter is not None:
         @app.middleware("http")
         async def rate_limit(request: Request, call_next):
             client = request.client.host if request.client else "unknown"
+            if approval_token and request.url.path.startswith("/api/approvals") and hmac.compare_digest(
+                    request.headers.get("authorization", "").encode(), f"Bearer {approval_token}".encode()):
+                # One client address covers every local process: junk posted to the run routes must not
+                # lock the operator out of approvals, so a request proving the control token has its own bucket.
+                client = f"operator:{client}"
             if request.url.path not in ("/health", "/api/health") and not limiter.allow(client):
                 return JSONResponse(
                     {"detail": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
@@ -276,7 +285,7 @@ def create_app(
         try:
             if runtime is not None:
                 return await runtime.decide_approval(
-                    approval_id, request.decision == "approve"
+                    approval_id, request.decision == "approve", request.trust_source
                 )
             return await asyncio.to_thread(
                 service().decide_approval, approval_id, request.decision == "approve"

@@ -167,7 +167,7 @@ def hostile_memory(path: Path, server: str) -> ThreatMemory:
     return memory
 
 
-def test_approving_a_call_in_the_proxy_clears_its_hostile_server(tmp_path: Path):
+def test_vouching_for_the_server_in_the_proxy_clears_its_hostile_reputation(tmp_path: Path):
     memory = hostile_memory(tmp_path / "threats.db", "web")
 
     async def exercise() -> None:
@@ -177,7 +177,7 @@ def test_approving_a_call_in_the_proxy_clears_its_hostile_server(tmp_path: Path)
             run_id = await shield.create_run("Send the report message to the team")
             sent = await shield.evaluate_and_execute(run_id, call(catalog, "web:send_message", to="team", body="report"))
             assert sent.decision is Decision.REVIEW and memory.hostile("web")
-            await shield.decide_approval(sent.approval_id, True)
+            await shield.decide_approval(sent.approval_id, True, trust_source=True)
             assert not memory.hostile("web")
 
     asyncio.run(exercise())
