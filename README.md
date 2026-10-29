@@ -2,7 +2,8 @@
 
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
-**Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.
+**Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0% — but a trivial guard that holds every state-changing call for a human also reaches 0.0%. IntentShield's difference is that no harmful call reaches the human's review queue (baseline: up to 19% of cases), paid for with 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.<br>
+**Not covered:** the harness's built-in shell and file tools (only MCP calls are checked); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss; and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI and Cursor hooks are tested on event shapes, not run live. See [Limitations](#limitations).
 
 [![CI](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml/badge.svg)](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/intentshield-mcp)](https://pypi.org/project/intentshield-mcp/)
@@ -100,7 +101,7 @@ when the model routes calls through `intentshield_call` and states the intent it
 
 | layer | how it is wired | sees | stops |
 |---|---|---|---|
-| **Hooks** (`intentshield-hook <harness>`, via `intentshield install`) | Claude Code, Codex CLI, Cursor, Gemini CLI hook events; per-session SQLite at `~/.intentshield/hooks.db` | the user's prompt, every MCP call and result, MCP resource reads | sends self-disclosure parameters (`llm_name`, `system_prompt`, ...) empty; denies a call whose arguments carry injected instructions or a value that came from an injected output and not from the user; scans every result and taints the session; asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before state-changing calls once tainted (`--review always\|tainted\|never`). A crashing or missing hook denies the call. Built-in tools (shell, file edits) are left to the harness. |
+| **Hooks** (`intentshield-hook <harness>`, via `intentshield install`) | Claude Code, Codex CLI, Cursor, Gemini CLI hook events; per-session SQLite at `~/.intentshield/hooks.db` | the user's prompt, every MCP call and result, MCP resource reads | sends self-disclosure parameters (`llm_name`, `system_prompt`, ...) empty; denies a call whose arguments carry injected instructions or a value that came from an injected output and not from the user; scans every result and taints the session; asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before state-changing calls once tainted (`--review always\|tainted\|never`). A crashing or missing hook denies the call where the harness has a flag for it (Claude Code `onFailure: block`, Cursor `failClosed`; Codex CLI and Gemini CLI have none, so there a crash is a missing opinion). Built-in tools (shell, file edits) are left to the harness. |
 | **Transparent proxy** (`intentshield-mcp --transparent`, via `intentshield wrap`, stdio only) | wraps each MCP server the client launches; no harness support needed | the upstream's descriptions, schemas, annotations and results | hides tools whose description matches poisoning rules or that changed after connect (rug pull, fails closed until restart); removes self-disclosure parameters from schemas; flags injected results. Servers reached over HTTP (`"url"`) are not launched by the client, so `wrap` leaves them alone. |
 | **Gateway** (`intentshield-mcp --transport streamable-http` or `stdio`) | exposes five `intentshield_*` tools; the model creates a run with the user's intent and calls tools through `intentshield_call` with the exact schema hash | intent as stated by the model, the guarded catalog, every call and result | the full `PolicyEngine`: allow/prohibit lists, schema binding, budgets, grounding, provenance, idempotency, and human approval of mutations over a bearer-protected control endpoint. `BLOCK` and `REVIEW` never contact the upstream. |
 
@@ -183,7 +184,8 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
 - MCPTox description numbers are tuning-set. The output rules were written from MSB templates, so MSB is
   not held out for them.
 - Codex CLI and Cursor hooks are tested on event shapes, not run live.
-- The learned detectors are negative or null results and are off by default.
+- The learned detectors are negative or null results and are off by default; their PyTorch path (DeBERTa, the
+  e5 embedder) is exercised locally only, never in CI.
 - The trivial baseline also reaches 0.0% executed harm; "best performing" is not supported (the
   comparison with other guards is in [docs/contribution.md](docs/contribution.md#121-where-it-stands-among-open-source-mcp-guards)).
 
@@ -222,19 +224,17 @@ every key is explained in [docs/guide.md](docs/guide.md#configure-another-upstre
 
 ## Security boundary
 
-Model output, upstream tool descriptions, schemas, annotations, and results are
-untrusted input. Gemini may propose a call; detection, grounding, DeBERTa and the
-learned injection detectors (Prompt Guard 2, exemplars, approved induced rules)
-produce immutable evidence only. None can approve or execute. Only the operator,
-through the bearer-protected control endpoint, can label text for learning or
-approve an induced rule. Tool output is what gets labelled; it never chooses a
-label. Learning changes only the exemplar detector, behind a regression gate. The deterministic
-policy engine remains the sole authorization boundary and the service remains
-the sole executor path. IntentShield validates arguments against the bound
-upstream schema before invoking MCP. Catalog drift fails closed until restart.
-Agent-visible schemas remove untrusted annotation text while retaining the
-original schema internally for validation and hashing. Request arguments,
-catalogs, schemas, model responses, and result sizes are bounded.
+- **Untrusted:** everything the model says and everything an MCP server sends (tool descriptions, schemas,
+  annotations, results). It is scanned, bounded in size and never followed as an instruction.
+- **Who decides:** the deterministic policy engine is the only thing that can allow a call, and the service is the
+  only path that executes one. Detectors (rules, the optional classifier, Prompt Guard, exemplars, the LLM judge)
+  add evidence; none of them can approve or execute.
+- **Who approves:** a human, through the bearer-protected control endpoint, approves a held call exactly as it was
+  shown. If the tool's schema or description changed since, the approval is refused. Operator labels only teach
+  the exemplar detector, behind a regression gate.
+- **Fails closed:** a crashing hook denies the call where the harness supports it (see the table above); an output
+  scan that never finishes leaves the session flagged; catalog drift blocks the tool until restart; a dead upstream
+  is an error result, never a silent allow. Arguments are validated against the schema bound at connect.
 
 ## Further reading
 

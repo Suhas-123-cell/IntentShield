@@ -60,6 +60,19 @@ first-run experience, benchmark rigor); every behaviour change has a regression 
   connect, not once per tool; the judge and Prompt Guard caches are bounded and locked; hook
   transactions roll back on error and the guard can be closed; the control routes share one
   auth wrapper and answer a malformed body with 422.
+- Third pass: result scans are counted in flight per session, so two parallel hook processes can
+  no longer let a clean scan un-flag a session an injected result just flagged (regression test
+  interleaves the two); a hook that fails before it can scan an output flags the session through a
+  throwaway connection; the hook guard is closed on exit. Behind the web proxy the agent token is
+  now mandatory and the tool list, metrics and security-status routes need it too. `create_app`
+  calls python-dotenv correctly again (the previous pass broke `intentshield serve`; a test now
+  runs the real call). The missing-credential error names the variables; `wrap`/`unwrap` report
+  "already wrapped", restore an empty `args` list exactly, name the generated files they leave
+  behind and give one line for invalid JSON; every remaining argument has help text. Tests cover
+  the upstream catalog limits and call failures through the fake SDK client, a real child that
+  prints garbage and exits, fail-closed for every harness, and eight hook processes sharing one
+  database. CI also runs Python 3.14. The README opens with what is not covered and states the
+  security boundary in plain words.
 - Benchmarks: `paper_numbers.py` also prints task-tool-executed, truncated and Wilson cells and
   the README headline strings, with a test; the MCPTox replay was regenerated on current code
   (quarantine+provenance 19/1579 = 1.2%); the injection evaluation inputs and the Gemini judge

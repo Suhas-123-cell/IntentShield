@@ -255,3 +255,22 @@ def test_a_wrapped_server_with_an_env_block_answers_tool_calls(tmp_path: Path, m
             assert not result.is_error and "IntentShield demo note" in result.content[0].text
 
     asyncio.run(exercise())
+
+
+def test_uninstall_removes_a_file_that_held_only_our_hooks_and_the_cli_dispatches(tmp_path: Path, capsys):
+    from intentshield import __main__ as cli
+
+    home = tmp_path / "home"
+    path = install.install("claude", "user", hook="intentshield-hook", home=home)
+    assert path.exists()
+    install.uninstall("claude", "user", home=home)
+    assert not path.exists() and "removed" in capsys.readouterr().out
+    mcp = tmp_path / ".mcp.json"
+    mcp.write_text(json.dumps({"mcpServers": {"demo": {"command": "demo-server", "args": []}}}))
+    for argv in (["wrap", str(mcp), "--out-dir", str(tmp_path / "proxies")], ["unwrap", str(mcp)]):
+        with pytest.raises(SystemExit) as exit_:
+            cli.main(argv)
+        assert exit_.value.code == 0
+    assert json.loads(mcp.read_text())["mcpServers"]["demo"] == {"command": "demo-server", "args": []}
+    out = capsys.readouterr().out
+    assert "wrapped 1 server" in out and "unwrapped 1 server" in out and "kept" in out

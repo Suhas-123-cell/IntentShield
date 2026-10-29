@@ -637,7 +637,8 @@ def main(argv: list[str] | None = None) -> None:
     configure_logging()
     parser = argparse.ArgumentParser(description="Run the IntentShield MCP gateway")
     parser.add_argument(
-        "--transport", choices=("stdio", "streamable-http"), default="stdio"
+        "--transport", choices=("stdio", "streamable-http"), default="stdio",
+        help="stdio for a client that launches this process; streamable-http to listen on --host:--port",
     )
     parser.add_argument("--db", default=os.getenv("INTENTSHIELD_DB") or str(Path.home() / ".intentshield" / "gateway.db"),
                         help="SQLite audit database of the built-in demo gateway (default ~/.intentshield/gateway.db; "
