@@ -183,6 +183,11 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   rules + exemplars on outputs catch 57.8% and flag 2.5% of benign texts (rules alone 49.9% / 2.1%);
   plain-language injections from independent sources stay mostly undetected
   ([docs/detectors.md](docs/detectors.md#adaptive-injection-detection)).
+- **Against Meta's Prompt Guard 2** (the detector in LlamaFirewall; rerun 2026-10-29, paired on the same
+  texts): on InjecAgent, the one source neither was tuned on, the rules catch 50.8% and Prompt Guard 2
+  50.3%; on plain-language injections both stay under 4%. The rules lead only where they were written from
+  the data (MCPTox, AgentDojo templates), so they are an offline equal, not a better detector
+  ([docs/detectors.md](docs/detectors.md#adaptive-injection-detection)).
 - **Adaptive attacker on IntentShield's own detectors**, 42 seeds, 5 attempts each: with local
   qwen2.5:7b rewriting, 16/42 seeds evaded the static rules + exemplars and 13/42 the learning arm (not
   significant; weak attacker). With Gemini 3.5 Flash-Lite rewriting, the rules + exemplars were evaded

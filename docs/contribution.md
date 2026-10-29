@@ -572,6 +572,10 @@ pinning, SARIF; Snyk's equivalent sends descriptions to its API) and a credentia
 hooks and the proxy. A head-to-head run of another guard on IntentShield's corpora was not done: the one
 candidate that runs offline (Cisco mcp-scanner's YARA mode) was not installed in this session.
 
+Detection, measured against one of them (2026-10-29, `docs/detectors.md`): on InjecAgent, which neither was
+tuned on, IntentShield's rules and Prompt Guard 2 are level (50.8% against 50.3% of 2,108 injections); both
+miss plain-language injections; the rules lead only on data they were written from.
+
 What that table supports: among the seven guards surveyed on 2026-10-29, IntentShield is the most broadly
 scoped keyless open-source MCP guard, and the only MCP-specific one that publishes benchmark results and
 false-positive rates. What it
