@@ -1,12 +1,15 @@
 # Benchmarks: protocols, full tables and limits
 
-Moved from the README on 2026-10-29. The MSB, MCPTox, judge (groq/ollama) and adaptive numbers are regenerated from committed traces by `benchmarks/paper_numbers.py` (see `results/README.md`); the Gemini judge row, the AgentDojo slack row and the injection table come from runs whose raw inputs are not committed. The README keeps the summary.
+Moved from the README on 2026-10-29. The README keeps the summary.
 
 ## Headline numbers (moved from the README on 2026-10-29)
 
-The MSB, MCPTox, judge (groq/ollama) and adaptive numbers are regenerated from committed traces by
-`benchmarks/paper_numbers.py` (`results/README.md`); the Gemini judge row, the AgentDojo slack row and the
-injection table come from runs whose raw inputs are not committed. Rerun 2026-10-29. Protocols, every per-type table and the limits of each benchmark are in
+Provenance: the MSB rows are regenerated from the committed traces by `benchmarks/paper_numbers.py`
+(the case grid is `results/msb/cases.jsonl`, so no MSB checkout is needed); the MCPTox rows by
+`benchmarks/mcptox.py --replay`, which needs the MCPTox-Benchmark checkout; the judge, adaptive and
+injection rows are committed reports under `results/`, of which only the injection table's rules column
+replays offline, from `results/injection/` plus the InjecAgent checkout (`results/README.md`). Rerun
+2026-10-29. Protocols, every per-type table and the limits of each benchmark are in
 the sections below; the learned detectors' training and negative results in
 [detectors.md](detectors.md). Read the limitations at the end of this section before quoting.
 
@@ -15,22 +18,26 @@ the host; 220 held-out cases (20 per attack type, tuning cases excluded, neutral
 temperature 0, four agents (qwen2.5:7b, llama3.1:8b, ornith:9b locally; Gemini 3.5 Flash-Lite on 99 of
 the cases). Four arms: no guard; a trivial baseline that withholds descriptions, strips self-disclosure
 parameters and holds every mutation for a human; IntentShield as a gateway; IntentShield as hooks. Harm
-follows MSB's own scoring on what reached the server; a call waiting for review is not executed.
+follows MSB's own scoring on what reached the server; a call waiting for review is not executed. Only
+the qwen2.5:7b none, baseline and gateway traces are the 2026-10-19 reruns on current code with recorded
+provenance; the other 19 of the 22 trace files (every hooks arm, every llama, ornith and Gemini arm, and
+the intent and Prompt Guard arms) come from the earlier MSB v8/v9/v10/v11 runs on older code and carry
+`provenance: null` in `results/msb/MANIFEST.json`.
 
 ### Headline
 
 | check | unguarded | with IntentShield |
 |---|---|---|
 | MSB held-out, harmful action executed (220 held-out cases, 218/220/216 paired; qwen2.5:7b / llama3.1:8b / ornith:9b) | 58.7% / 15.0% / 56.0% | gateway **0.0%** and hooks **0.0%** on all three; the trivial baseline also 0.0% |
-| MSB held-out, harmful call left in the human's review queue | - | gateway 0 on all three; trivial baseline 12.4% / 0 / 19.0% of cases |
+| MSB held-out, harmful call left in the human's review queue | - | gateway 0 on all three; hooks 5 / 2 / 3 cases; trivial baseline 12.4% / 0 / 19.0% of cases |
 | MSB held-out, user task done, gateway minus trivial baseline (paired cluster bootstrap) | - | −8.6 [−16.1, −3.8] / −14.3 [−26.0, −5.1] / −8.6 [−16.7, −2.5] points |
-| MSB with Gemini 3.5 Flash-Lite (99 of the same cases) | 29.3% harm, 96.8% user task | 0.0% harm; user task 58.7% (trivial baseline 66.7%) |
+| MSB with Gemini 3.5 Flash-Lite (99 of the same cases) | 29.3% harm, 96.8% user task | 0.0% harm (trivial baseline also 0.0%); harmful call left in review: gateway 0, trivial baseline 2/99 (2.0%); user task 58.7% (trivial baseline 66.7%) |
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3 with hooks alone (field sent blank); hooks + proxy quarantined the server, which received nothing (n=3 per arm, raw logs in `results/harness-live/`) |
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off (the v11 traces record no intent evidence and no provenance, so it is not confirmed that the model was active in that arm; treat as unconfirmed) |
 | Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 54 parameters stripped, all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`) |
-| Prompt-injection detection, 3,717 held-out texts incl. 142 hard benign ones | - | rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (rules alone 49.9% / 2.1%; Prompt Guard 2 adds 0.7 points); plain-language injections from independent sources stay mostly undetected |
+| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors; the rules were tuned on 1,505 of the 2,959 injections) | - | on the 1,454 injections independent of the rules' tuning: rules 2.1%, rules + exemplars 18.1%. Over all 3,717, rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (rules alone 49.9% / 2.1%; Prompt Guard 2 adds 0.7 points); plain-language injections from independent sources stay mostly undetected |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
 Paired cluster bootstrap of `user_task`, gateway minus baseline: −8.6 [−16.1, −3.8] (qwen), −14.3
@@ -50,18 +57,10 @@ calls, paid for with utility and more benign reviews.
 | Adaptive attacker (Gemini 3.5 Flash-Lite rewriting blocked injections, 42 seeds) | rules + exemplars evaded 42/42; threat memory did not help; argument provenance held every canary call for review (canary_unreviewed 0/42, `results/adaptive-gemini.json`) |
 | Overhead (Apple M5) | hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`); the decision itself 0.02 to 2 ms; proxy +1.9 ms per call |
 
-### Limitations (summary)
+### Limitations
 
-- Single runs at temperature 0; 20 draws per MSB attack template, so Wilson intervals are too narrow and the
-  cluster bootstrap is the one to cite.
-- Local 7 to 9B agents, plus one hosted model on 99 cases. No frontier-model AgentDojo run.
-- The MSB runner deviates from MSB (injection text only on the task server, list-directory tools allowed).
-- MCPTox description numbers are tuning-set. The output rules were written from MSB templates, so MSB is
-  not held out for them.
-- A run that hits the 10-step cap is scored as a failed user task, and truncation differs across arms, so
-  part of the utility gap is the step cap.
-- Codex CLI and Cursor hooks are tested on event shapes, not run live.
-- The learned detectors are negative or null results and are off by default.
+The cross-cutting limitations are listed once, in the README's [Limitations](../README.md#limitations);
+each benchmark's own limits follow in its section below.
 
 ## Offline evaluation
 
@@ -254,12 +253,14 @@ where the model ignored the poison and served the user. Worst case for the
 description layer: every model saw the poisoned text. *full proxy* also credits
 quarantine, under which the model would never have seen it.
 
+Rebuilt from `results/mcptox/report-replay-lenient.json`, 2026-10-29.
+
 | defense | attack success [95% CI] | benign false block | benign sent to review |
 |---|---|---|---|
 | none | 100% | 0% | 0% |
-| quarantine + provenance (no intent grounding) | **1.3%** [0.8, 1.9] | **3.5%** [3.1, 4.1] | 0% |
+| quarantine + provenance (no intent grounding) | **1.2%** (19/1579) [0.8, 1.9] | **3.5%** [3.1, 4.1] | 0% |
 | call layer (policy + grounding, lenient reads) | 45.5% (+54.4% to human review) | 0.0% | 46.7% |
-| call layer + provenance | 35.0% (+37.6% to review) | 0.0% | 46.7% |
+| call layer + provenance | 34.8% (+37.6% to review) | 0.0% | 46.7% |
 | full proxy (all layers, lenient reads) | 0.4% [0.2, 0.9] | 3.5% [3.1, 4.1] | 46.3% |
 
 "Attack success" counts only calls that would run with no human. A mutation the
@@ -269,7 +270,7 @@ That keeps false blocks at the description layer's 3.5% but sends 46% of benign
 calls to a reviewer. Blocking those instead gave 27.3% false block in the full proxy.
 
 By paradigm (quarantine + provenance): Template-1 0.0%, Template-2 0.5%,
-Template-3 (argument tampering) 1.8%. Quarantine catches 96.5% of the 1,312
+Template-3 (argument tampering) 1.7% (17/980). Quarantine catches 96.5% of the 1,312
 poisoned descriptions (1,266, without the cross-server shadowing check; recomputed 2026-10-13
 with the current scanner) and flags 3 of 362 real tools (0.8%).
 
