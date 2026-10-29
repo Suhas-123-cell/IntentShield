@@ -198,7 +198,7 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   (`results/harness-live-codex/`). With the hooks trusted, the hook denied the attacker's `send_email` in
   3/3 runs (`results/harness-live-codex-trusted/`).
 - Cursor CLI, live with its `auto` model (Composer), 3 prompts: the notes never reached the attacker in any arm,
-  including the unguarded one, because the model refused the injection on its own (Grok 4.7 unguarded: 0/3 too). The run shows the hooks run and
+  including the unguarded one, because the model refused the injection on its own (Grok 4.7 and Grok 4.6 unguarded: 0/3 too). The run shows the hooks run and
   the redaction works under Cursor, not that the guard stops an attack there (`results/harness-live-cursor/`).
 - The learned detectors are negative or null results and are off by default; their PyTorch path (DeBERTa, the
   e5 embedder) is exercised locally only, never in CI.
