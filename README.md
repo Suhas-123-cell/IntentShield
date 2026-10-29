@@ -133,7 +133,8 @@ MSB (MCP Security Bench) runs real MCP servers in Docker with an agent on the ho
 guard; a trivial baseline that withholds descriptions, strips self-disclosure parameters and holds every
 mutation for a human; IntentShield as a gateway; IntentShield as hooks. Harm follows MSB's own scoring on
 what reached the server; a call waiting for review is not executed. `user_task` is MSB's task-completion
-criterion.
+criterion. The hooks arms (and the llama and ornith arms) are earlier MSB v8 runs on older code, paired
+with the qwen v12 reruns; `results/README.md` lists which runs carry provenance.
 
 | agent (paired cases) | harm executed, unguarded | harm executed, guarded | harmful call left in the human's review queue | user_task: none / trivial baseline / gateway / hooks |
 |---|---|---|---|---|
