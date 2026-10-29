@@ -234,10 +234,11 @@ def _strip_toml_block(text: str) -> tuple[str, bool]:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    if not path.exists() or not path.read_text().strip():
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    if not text.strip():
         return {}
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise json.JSONDecodeError(f"{path} is not valid JSON: {exc.msg}", exc.doc, exc.pos) from None
     if not isinstance(data, dict):
@@ -255,7 +256,7 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
-        with os.fdopen(fd, "w") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
         if path.exists():
             os.chmod(tmp, path.stat().st_mode & 0o777)
@@ -263,6 +264,33 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+def _json_text(data: dict[str, Any]) -> str:
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _backup_path(path: Path, home: Path | None) -> Path:
+    key = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:16]
+    return (home or Path.home()) / ".intentshield" / "backups" / f"{key}.json"
+
+
+def _keep_original(path: Path, home: Path | None, dry_run: bool) -> None:
+    """Before the first change to a user's JSON file, keep its exact bytes: JSON keeps no formatting to
+    round-trip, so undoing the change puts these back when nothing else changed meanwhile."""
+    backup = _backup_path(path, home)
+    if path.exists() and not dry_run and not backup.exists():
+        _write(backup, json.dumps({"path": str(path.resolve()), "text": path.read_text(encoding="utf-8")}), False)
+
+
+def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[str, bool]:
+    """The file's text with our change undone: its original bytes (True) when the rest is as it was."""
+    backup = _backup_path(path, home)
+    if backup.exists():
+        original = json.loads(backup.read_text(encoding="utf-8"))["text"]
+        if json.loads(original or "{}") == data:
+            return original, True
+    return _json_text(data), False
 
 
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
@@ -291,7 +319,8 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             return path
         if harness == "cursor" and not existed:  # a file Cursor wrote already has it; uninstall restores theirs
             settings.setdefault("version", 1)
-        _write(path, json.dumps(settings, indent=2) + "\n", dry_run)
+        _keep_original(path, home, dry_run)
+        _write(path, _json_text(settings), dry_run)
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
     if harness == "codex":
         # Measured 2026-10-29 with Codex CLI 0.165: hooks nobody has trusted are skipped, and the
@@ -307,11 +336,12 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
     if not path.exists():
         print(f"nothing to remove: {path}")
         return path
+    backup = _backup_path(path, home)  # this install is being undone either way
     if harness == "codex":
         text, changed = _strip_toml_block(path.read_text())
     else:
         settings, changed = remove_hooks(_read_json(path))
-        text = json.dumps(settings, indent=2) + "\n"
+        text, _ = _undone_text(path, settings, home)
     if not changed:
         print(f"nothing to remove: {path}")
         return path
@@ -319,9 +349,12 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
     if emptied and not path.is_symlink():  # a file only `install` created: leave nothing behind
         if not dry_run:
             path.unlink()
+            backup.unlink(missing_ok=True)
         print(f"{'would remove' if dry_run else 'removed'} {path} (it held only IntentShield's hooks)")
         return path
     _write(path, text, dry_run)
+    if not dry_run:
+        backup.unlink(missing_ok=True)
     print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
     return path
 
@@ -395,7 +428,8 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
         wrapped.append(name)
     if wrapped:
-        _write(path, json.dumps(data, indent=2) + "\n", dry_run)
+        _keep_original(path, None, dry_run)
+        _write(path, _json_text(data), dry_run)
         print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
     elif any(isinstance(s, dict) and _is_wrapped(s) for s in entries.values()):
         print(f"already wrapped: {path}")
@@ -435,7 +469,10 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
         entries[name] = original
         restored.append(name)
     if restored:
-        _write(path, json.dumps(data, indent=2) + "\n", dry_run)
+        text, original = _undone_text(path, data, None)
+        _write(path, text, dry_run)
+        if original and not dry_run:
+            _backup_path(path, None).unlink()
         print(f"{'would unwrap' if dry_run else 'unwrapped'} {len(restored)} server(s) in {path}: {', '.join(restored)}")
         kept = [str(p) for p in residue if p.exists()]
         if kept:
