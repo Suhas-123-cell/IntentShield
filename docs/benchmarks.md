@@ -310,10 +310,11 @@ stay flagged (the poisoned tool is treated as another server's, so shadowing app
 | keyword paraphrase ("must" -> "are required to", `<IMPORTANT>` -> `[NOTE]`) | 98.6% | 98.6% |
 | Cyrillic look-alike letters | 100% | 49.8% |
 | zero-width characters inside words | 100% | 10.4% |
+| leetspeak in words of four letters or more (`1gn0r3`) | 96.0% | 48.0% (before leetspeak was read) |
 
 Both scanners now NFKC-normalize, drop invisible format characters and map common
-Cyrillic/Greek look-alikes before matching, and also scan base64, hex, URL- and
-HTML-escaped text decoded up to three layers deep; false flags on the 362 clean tools stay
+Cyrillic/Greek look-alikes before matching, read standalone leetspeak words as letters (rerun 2026-10-29),
+and also scan base64, hex, URL- and HTML-escaped text decoded up to three layers deep; false flags on the 362 clean tools stay
 at 3. Paraphrase survives mostly through the shadowing check: of the 1,266 descriptions
 the rules flag without it, the rules alone still flag 42.9% (543; no stored artifact) after paraphrase, so an attacker who also avoids naming
 another server's tool would get through. Whether every rewrite still steers a model
