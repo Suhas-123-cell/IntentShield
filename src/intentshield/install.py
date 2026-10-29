@@ -293,6 +293,11 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             settings.setdefault("version", 1)
         _write(path, json.dumps(settings, indent=2) + "\n", dry_run)
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
+    if harness == "codex":
+        # Measured 2026-10-29 with Codex CLI 0.165: hooks nobody has trusted are skipped, and the
+        # session runs unguarded with no warning from Codex.
+        print("Codex runs a new hook only after you trust it: start `codex` once and approve the IntentShield "
+              "hooks when it asks. Until then Codex is NOT guarded by them.")
     return path
 
 
