@@ -16,6 +16,7 @@ class SecuritySignals(BaseModel):
     intent_alignment: float = Field(ge=0.0, le=1.0)
     risk_score: float = Field(ge=0.0, le=1.0)
 
+
 class Decision(StrEnum):
     ALLOW = "ALLOW"
     REVIEW = "REVIEW"

@@ -73,6 +73,15 @@ first-run experience, benchmark rigor); every behaviour change has a regression 
   prints garbage and exits, fail-closed for every harness, and eight hook processes sharing one
   database. CI also runs Python 3.14. The README opens with what is not covered and states the
   security boundary in plain words.
+- Fourth pass: the MSB case grid is committed (`results/msb/cases.jsonl`, MSB commit recorded in
+  the manifest), so `paper_numbers.py` and its test run from a clean clone and in CI; the README's
+  provenance sentence now says exactly which rows replay offline; the headline scopes the
+  review-queue claim to the gateway (hooks leave 5/2/3 cases); the Gemini review-queue cell,
+  three stale MCPTox cells (1.2%, 34.8%, 1.7%) and two unsourced detector cells are corrected
+  from committed reports; the adaptive attacker carries its judge-leniency caveats;
+  `results/README.md` lists what does not replay offline. Control routes treat only a non-object
+  body as 422 (other errors surface), run events are written off the event loop, dropped close
+  errors are logged, and the signed-pack test can no longer skip silently.
 - Benchmarks: `paper_numbers.py` also prints task-tool-executed, truncated and Wilson cells and
   the README headline strings, with a test; the MCPTox replay was regenerated on current code
   (quarantine+provenance 19/1579 = 1.2%); the injection evaluation inputs and the Gemini judge
