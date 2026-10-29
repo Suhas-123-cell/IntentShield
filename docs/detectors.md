@@ -134,7 +134,32 @@ classifier and any-of-the-four rows are `results/injection/report-with-classifie
 descriptions-and-outputs exemplar row is `results/injection/report-local-2026-10-13.json`, the earlier
 index's run. An earlier version of this table gave 21.9% / 3.4% / 16/142 for that row and 25.9% / 118/142
 for any-of-the-four, citing a gitignored report that no longer holds them: no stored artifact, so they are
-replaced by the committed runs above. Each detector covers different ground:
+replaced by the committed runs above.
+
+**Rerun on 2026-10-29 with the 0.3.5 rules** (`results/injection/report-rules-pg-2026-10-29.json`; Prompt
+Guard 2 scores from the same cache, so its column is unchanged). The rules now catch 50.9% and flag 2.2%
+of benign texts (49.9% / 2.1% above). The difference is 27 AgentDojo "Ignore your previous iunstructions"
+rows, caught since the override tolerates one typo, a rule written after this comparison showed the miss
+(so those rows are no longer independent of the rules), and one translated quoted attack. By source, with
+Wilson 95% intervals and an exact McNemar test on the paired verdicts:
+
+| source | | rules | Prompt Guard 2 | only rules / only PG2 | p |
+|---|---|---|---|---|---|
+| InjecAgent (neither tuned on it) | attacks | 1,071/2,108 50.8% [48.7, 52.9] | 1,060/2,108 50.3% [48.2, 52.4] | 17 / 6 | 0.035 |
+| AgentDojo (rules partly written from it) | attacks | 108/135 80.0% | 34/135 25.2% | 74 / 0 | <0.001 |
+| AgentDojo | benign | 0/397 | 3/397 | 0 / 3 | 0.25 |
+| LLM-written plain-language outputs | attacks | 13/346 3.8% | 0/346 0.0% | 13 / 0 | <0.001 |
+| MCPTox descriptions (rules tuned on them) | attacks | 313/370 84.6% | 95/370 25.7% | 218 / 0 | <0.001 |
+| MCPTox descriptions | benign | 2/128 | 0/128 | 2 / 0 | 0.5 |
+| hard benign texts | benign | 15/142 10.6% | 12/142 8.5% | 3 / 0 | 0.25 |
+
+On the 1,427 injections independent of the rules (InjecAgent base, the LLM-written outputs, AgentDojo
+`direct`) the rules catch 30 (2.1%) and Prompt Guard 2 catches 6 (0.4%). Read together: on explicit
+injections neither was tuned on, the rules and Prompt Guard 2 are level (half a point apart on InjecAgent);
+both miss plain-language injections; the rules' large leads are on data they were written from. The rules
+are an offline, keyless equal of Prompt Guard 2 on explicit attacks, not a better detector.
+
+Each detector covers different ground:
 
 - **Prompt Guard 2** catches the explicit styles: "ignore previous" 27/27, and the "enhanced"
   InjecAgent attacks 1,054/1,054, which the rules also catch. It adds 1.2 points to the rules.

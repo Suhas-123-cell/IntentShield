@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.5
 
+- The override rule reads "ignore the previous instructions" with one typo in one of its three words
+  ("Ignore your previous iunstructions", "Ingore all previous instructions"). A comparison with Meta's
+  Prompt Guard 2 showed the rules missing AgentDojo's 27 misspelled cases, which Prompt Guard caught; they
+  now catch them, and the comparison is in `docs/detectors.md`.
 - `intentshield scan` finds the MCP servers configured for Claude Code, Claude Desktop, Cursor, Gemini CLI,
   Codex CLI, Windsurf and VS Code (or the files named), starts each one, lists its tools without calling
   any, and checks them offline: poisoned descriptions, split instructions, self-disclosure parameters,
