@@ -7,6 +7,12 @@
   letters (`1gn0r3 4ll pr3v10u5 1n5truct10n5`). Addresses, paths and ids are never rewritten, so the threat
   memory learns no address the attacker did not send. The translations run only on text that could match them
   and compile on first use, so scanning other text costs about what it did.
+- New output rules: text addressed to the AI that asks for data to leave (`agent_address`), text speaking for
+  the user that sends data to an address (`user_proxy`), a JSON tool call with an order to run it
+  (`forged_tool_call`), and a markdown image whose URL carries a placeholder to fill (`image_exfiltration`).
+  `role_marker` also reads Llama 3, Phi and Gemma template tokens and Alpaca's `### Instruction:`, and text
+  after a right-to-left override is read in the order it is shown. Scanning a 4 KB result takes about
+  0.4 ms more.
 
 ## 0.3.3
 
