@@ -490,12 +490,3 @@ def run(args: argparse.Namespace) -> int:
         return 1
     return 0
 
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="intentshield", description=__doc__.split("\n\n")[0])
-    add_subcommands(parser.add_subparsers(dest="command", required=True))
-    return run(parser.parse_args(argv))
-
-
-if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())
