@@ -79,9 +79,9 @@ import time
 import zlib
 from collections import Counter
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 from urllib.parse import urlsplit
@@ -96,6 +96,7 @@ from .mcp_inspect import (
     readable,
     sourced_from,
 )
+from .storage import add_column
 
 MAX_TEXT = 20_000  # as learning.MAX_TEXT (not imported: learning needs numpy)
 SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
@@ -156,16 +157,16 @@ CREATE TABLE IF NOT EXISTS threat_allowlist (value TEXT PRIMARY KEY, added REAL 
 CREATE TABLE IF NOT EXISTS threat_benign (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, added REAL NOT NULL);
 """
 # Columns added after the first schema. Processes starting together may both try to add one.
-_ADDED = (("threat_indicators", "decided_at REAL"), ("threat_fingerprints", "decided_at REAL"),
-          ("threat_fingerprints", "anchor_json TEXT"))
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+_ADDED = (("threat_indicators", "decided_at", "REAL"), ("threat_fingerprints", "decided_at", "REAL"),
+          ("threat_fingerprints", "anchor_json", "TEXT"))
 
 
 def _id(*parts: str) -> str:
     return hashlib.sha256("\x00".join(parts).encode()).hexdigest()[:20]
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def as_text(value: Any) -> str:
@@ -313,13 +314,10 @@ class _State:
     prints_loaded: bool = False
     allow: frozenset[str] = frozenset()
     benign_texts: tuple[str, ...] = ()  # the operator's; shingled only when something is learned
-    benign_cache: tuple[frozenset[int], ...] | None = None
 
-    @property
+    @cached_property
     def benign(self) -> tuple[frozenset[int], ...]:
-        if self.benign_cache is None:
-            self.benign_cache = benign_shingles() + tuple(map(text_shingles, self.benign_texts))
-        return self.benign_cache
+        return benign_shingles() + tuple(map(text_shingles, self.benign_texts))
 
 
 def strongest(matches: Iterable[ThreatMatch | None]) -> ThreatMatch | None:
@@ -349,13 +347,8 @@ class ThreatMemory:
             except sqlite3.OperationalError:  # another process is switching it; busy_timeout still holds
                 pass
             db.executescript(_SCHEMA)
-            for table, column in _ADDED:
-                if column.split()[0] not in {r[1] for r in db.execute(f"PRAGMA table_info({table})")}:
-                    try:
-                        db.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
-                    except sqlite3.OperationalError as exc:
-                        if "duplicate column" not in str(exc):
-                            raise
+            for table, column, kind in _ADDED:
+                add_column(db, table, column, kind)
         finally:
             db.close()
         self._lock = threading.Lock()
@@ -849,9 +842,6 @@ class ThreatMemory:
                     revoked.append(row["id"])
         return {"id": item, "revoked": revoked}
 
-    def benign_texts(self) -> list[str]:
-        return [r[0] for r in self._read("SELECT text FROM threat_benign ORDER BY id")]
-
     @staticmethod
     def _public(row: Any) -> dict[str, Any]:
         row = dict(row)
@@ -943,7 +933,7 @@ def main(argv: list[str] | None = None) -> None:
     except (KeyError, ValueError, OSError, sqlite3.Error, rule_packs.PackError) as exc:
         print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}))
         sys.exit(1)
-    print(json.dumps(result, indent=2, default=lambda o: asdict(o) if hasattr(o, "__dataclass_fields__") else str(o)))
+    print(json.dumps(result, indent=2, default=lambda o: asdict(o) if is_dataclass(o) else str(o)))
 
 
 if __name__ == "__main__":  # pragma: no cover
