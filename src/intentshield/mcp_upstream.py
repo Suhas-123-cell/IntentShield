@@ -406,7 +406,9 @@ class MCPUpstream:
                 await stack.enter_async_context(http_client)
                 target = sdk.streamable_http_client(self.config.url, http_client=http_client)
 
-            client = sdk.Client(target, read_timeout_seconds=self.config.read_timeout_seconds)
+            # The SDK's response cache honours a server-supplied ``ttlMs``, which would let the server
+            # decide that the rug-pull check never sees a changed listing: no caching at all.
+            client = sdk.Client(target, read_timeout_seconds=self.config.read_timeout_seconds, cache=None)
             connected_client = await stack.enter_async_context(client)
         except MCPUpstreamError:
             await stack.aclose()
