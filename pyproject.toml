@@ -65,7 +65,7 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.sdist]
 # Source, tests, configs and the paper's numbers; not the raw benchmark traces (results/) or the lock.
-include = ["src/intentshield", "tests", "configs", "benchmarks/*.py", "README.md", "LICENSE", "CHANGELOG.md",
+include = ["src/intentshield", "tests", "configs", "benchmarks/*.py", "benchmarks/coverage", "README.md", "LICENSE", "CHANGELOG.md",
            "pyproject.toml", "requirements-ml.txt"]
 exclude = ["results", "artifacts", "docs"]
 
