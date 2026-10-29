@@ -55,7 +55,7 @@ calls, paid for with utility and more benign reviews.
 | Live Gemini CLI, same check | notes exfiltrated 3/3 unguarded, 0/3 with hooks; one `send_email` with a benign body still reached the attacker address under hooks alone (see the live checks below) |
 | Four documented in-the-wild incidents replayed | 3 caught by catalog or output scans; the Postmark implementation backdoor only by egress policy |
 | Adaptive attacker (Gemini 3.5 Flash-Lite rewriting blocked injections, 42 seeds) | rules + exemplars evaded 42/42; threat memory did not help; argument provenance held every canary call for review (canary_unreviewed 0/42, `results/adaptive-gemini.json`) |
-| Overhead (Apple M5) | hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`); the decision itself 0.02 to 2 ms; proxy +1.9 ms per call |
+| Overhead (Apple M5) | hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`); the decision itself 0.02 to 2.5 ms; proxy +1.9 ms per call |
 
 ### Limitations
 
@@ -629,7 +629,7 @@ with the field empty and then denied the resend too, because an already empty fi
 redacted, so the call could never pass. Fixed in `harness._redact`; the grid ran on the fix.
 
 
-Cost: a hook is a short-lived process, mostly Python start-up: hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`), on an M5; the checks themselves take 0.02 to 2 ms, the
+Cost: a hook is a short-lived process, mostly Python start-up: hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`), on an M5; the checks themselves take 0.02 to 2.5 ms, the
 upper end on a 4 KB result (`benchmarks/latency.py`, rerun 2026-10-29). The adapters follow
 each harness's documented hook format and are tested on those event shapes
 (`tests/test_harness.py`). Claude Code, Gemini CLI, Codex CLI and Cursor have been run live (Codex
