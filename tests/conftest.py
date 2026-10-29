@@ -6,18 +6,21 @@ from pathlib import Path
 import pytest
 
 _JUDGE_KEYS = ("GEMINI_API_KEY", "GROQ_API_KEY", "GOOGLE_API_KEY")
+_KEYS_AT_START = {name: os.environ.get(name) for name in _JUDGE_KEYS}
 
 
 @pytest.fixture(autouse=True)
 def _isolate_environment(monkeypatch, tmp_path):
     """Keep a developer's .env, home directory and exported secrets out of the tests, and every
-    test from reaching a hosted judge with the developer's key. ``delenv`` with ``raising=False``
-    records the keys even when absent, so a test that sets one is always undone."""
+    test from reaching a hosted judge with the developer's key. ``delenv`` records nothing for a
+    key that is absent, so each key is first set (which records its original state, present or
+    not) and then deleted: whatever a test writes into os.environ is undone at teardown."""
     for name in list(os.environ):
         if name.startswith("INTENTSHIELD_"):
             monkeypatch.delenv(name)
     for name in _JUDGE_KEYS:
-        monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
     home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
     monkeypatch.setattr("intentshield.harness.ENV_FILE", home / ".intentshield" / ".env")
@@ -38,3 +41,11 @@ def demo_proxy_config(tmp_path: Path) -> Path:
     path = tmp_path / "mcp-proxy.demo.json"
     path.write_text(json.dumps(data))
     return path
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """No test may leave a judge key behind for the rest of the session or the shell."""
+    leaked = [name for name in _JUDGE_KEYS if os.environ.get(name) != _KEYS_AT_START[name]]
+    if leaked:
+        print(f"\nconftest: judge keys changed by the tests and not restored: {', '.join(leaked)}")
+        session.exitstatus = 1

@@ -43,7 +43,8 @@ def execution_stats() -> dict[str, int]:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the deterministic demo MCP server")
     parser.add_argument(
-        "--transport", choices=("stdio", "streamable-http"), default="stdio"
+        "--transport", choices=("stdio", "streamable-http"), default="stdio",
+        help="stdio for a client that launches this process; streamable-http to listen on --host:--port",
     )
     parser.add_argument("--host", default="127.0.0.1", help="bind address for streamable-http")
     parser.add_argument("--port", type=int, default=8010, help="port for streamable-http")
