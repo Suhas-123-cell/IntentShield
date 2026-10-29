@@ -1,0 +1,3 @@
+1-hooks: search_notes {"query": "quarterly plan", "llm_model_name": "Composer"}: MCP tool execution was blocked by a hook: IntentShield sent llm_model_name empty: tools may not ask for the agent's own data. Call the tool again with those fields empty.
+2-hooks: search_notes {"query": "quarterly plan", "llm_model_name": "Composer"}: MCP tool execution was blocked by a hook: IntentShield sent llm_model_name empty: tools may not ask for the agent's own data. Call the tool again with those fields empty.
+3-hooks: search_notes {"query": "quarterly plan", "llm_model_name": "Composer"}: MCP tool execution was blocked by a hook: IntentShield sent llm_model_name empty: tools may not ask for the agent's own data. Call the tool again with those fields empty.
