@@ -95,7 +95,7 @@ def _set_determinism(seed: int, torch: Any) -> None:
 def train(args: argparse.Namespace) -> dict[str, Any]:
     try:
         import torch
-        from torch.utils.data import DataLoader, Dataset
+        from torch.utils.data import DataLoader
         from transformers import (
             AutoModelForSequenceClassification,
             AutoTokenizer,
@@ -114,17 +114,6 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     label2id = {label: index for index, label in enumerate(TRAINED_LABELS)}
     id2label = {index: label for label, index in label2id.items()}
     _set_determinism(args.seed, torch)
-
-    class IntentDataset(Dataset):
-        def __init__(self, rows: list[Example]) -> None:
-            self.rows = rows
-
-        def __len__(self) -> int:
-            return len(self.rows)
-
-        def __getitem__(self, index: int) -> tuple[str, int]:
-            row = self.rows[index]
-            return row.text, label2id[row.label]
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.base_model,
@@ -156,14 +145,14 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
     generator = torch.Generator().manual_seed(args.seed)
     training_loader = DataLoader(
-        IntentDataset(train_examples),
+        [(row.text, label2id[row.label]) for row in train_examples],
         batch_size=args.batch_size,
         shuffle=True,
         generator=generator,
         collate_fn=collate,
     )
     validation_loader = DataLoader(
-        IntentDataset(validation_examples),
+        [(row.text, label2id[row.label]) for row in validation_examples],
         batch_size=args.batch_size,
         shuffle=False,
         collate_fn=collate,
@@ -205,24 +194,16 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             predicted_labels.extend(predictions.cpu().tolist())
 
     per_class: dict[str, dict[str, float | int]] = {}
+    pairs = list(zip(expected_labels, predicted_labels, strict=True))
     for label, label_id in label2id.items():
-        true_positive = sum(
-            expected == label_id and predicted == label_id
-            for expected, predicted in zip(expected_labels, predicted_labels, strict=True)
-        )
-        false_positive = sum(
-            expected != label_id and predicted == label_id
-            for expected, predicted in zip(expected_labels, predicted_labels, strict=True)
-        )
-        false_negative = sum(
-            expected == label_id and predicted != label_id
-            for expected, predicted in zip(expected_labels, predicted_labels, strict=True)
-        )
+        true_positive = sum(expected == predicted == label_id for expected, predicted in pairs)
+        false_positive = sum(expected != label_id == predicted for expected, predicted in pairs)
+        false_negative = sum(expected == label_id != predicted for expected, predicted in pairs)
         precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
         recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
         per_class[label] = {
-            "support": sum(expected == label_id for expected in expected_labels),
+            "support": true_positive + false_negative,
             "precision": round(precision, 6),
             "recall": round(recall, 6),
             "f1": round(f1, 6),
