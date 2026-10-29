@@ -24,6 +24,13 @@ from .tools import SimulatedEmailTools, ToolSpec, build_registry, canonical_json
 logger = logging.getLogger(__name__)
 
 
+_IDEMPOTENCY_BLOCKS = {
+    "CONFLICT": ReasonCode.BLOCK_IDEMPOTENCY_CONFLICT,
+    "IN_PROGRESS": ReasonCode.BLOCK_IDEMPOTENCY_IN_PROGRESS,
+    "IN_DOUBT": ReasonCode.BLOCK_EXECUTION_IN_DOUBT,
+}
+
+
 @lru_cache(maxsize=4)
 def _shared_intent_classifier(artifact_dir: str) -> DebertaIntentClassifier:
     return DebertaIntentClassifier(artifact_dir)
@@ -121,17 +128,13 @@ class IntentShieldService:
             "idempotency_key": call.idempotency_key,
         })
 
-    @staticmethod
-    def _unregistered_signals() -> SecuritySignals:
-        """A tool the registry does not know is blocked as such; its signals are the worst case."""
-        return SecuritySignals(injection_score=1.0, intent_alignment=0.0, risk_score=1.0)
-
     def _security_assessment(
         self, user_intent: str, call: ToolCall
     ) -> tuple[SecuritySignals, SecurityAssessment | None]:
         spec = self.registry.get(call.tool_name)
         if spec is None:
-            return self._unregistered_signals(), None
+            # blocked as unregistered; its signals are the worst case
+            return SecuritySignals(injection_score=1.0, intent_alignment=0.0, risk_score=1.0), None
         metadata = TrustedToolMetadata.from_spec(
             spec,
             allowed_resources=self.config.allowed_resources,
@@ -207,7 +210,7 @@ class IntentShieldService:
             signals,
             outcome.decision,
             outcome.reason_codes,
-            arguments=outcome.parsed_arguments or call.arguments,
+            arguments=outcome.parsed_arguments,
             assessment=assessment,
         )
 
@@ -272,23 +275,11 @@ class IntentShieldService:
 
         spec = self.registry.get(call.tool_name)
         if spec and spec.mutation and call.idempotency_key:
-            existing = self.storage.inspect_idempotency(call.idempotency_key, fingerprint)
-            if existing == "CONFLICT":
+            # IN_DOUBT: an approval could never run it, a human must reconcile the first outcome.
+            if existing_block := _IDEMPOTENCY_BLOCKS.get(
+                    self.storage.inspect_idempotency(call.idempotency_key, fingerprint)):
                 self._consume_denied_approval(call, fingerprint, approval_verified)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_IDEMPOTENCY_CONFLICT, signals, assessment
-                )
-            if existing == "IN_PROGRESS":
-                self._consume_denied_approval(call, fingerprint, approval_verified)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_IDEMPOTENCY_IN_PROGRESS, signals, assessment
-                )
-            if existing == "IN_DOUBT":
-                # An approval could never run it: a human must reconcile the first outcome.
-                self._consume_denied_approval(call, fingerprint, approval_verified)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_EXECUTION_IN_DOUBT, signals, assessment
-                )
+                return self._blocked(run_id, call, existing_block, signals, assessment)
 
         outcome = self.policy.evaluate(PolicyContext(
             run_id=run_id,
@@ -312,7 +303,7 @@ class IntentShieldService:
             approval_id = self._ensure_approval(run_id, call, fingerprint, call_index, outcome.reason_codes)
             response = self._result(
                 run_id, call, signals, Decision.REVIEW, outcome.reason_codes,
-                arguments=outcome.parsed_arguments or call.arguments, approval_id=approval_id,
+                arguments=outcome.parsed_arguments, approval_id=approval_id,
                 assessment=assessment,
             )
             self._record_decision(response)
@@ -326,16 +317,9 @@ class IntentShieldService:
             if not (call.idempotency_key and call.approval_id):  # the policy engine guarantees both
                 raise RuntimeError("mutation reached execution without an approval and idempotency key")
             reservation, replay_result = self.storage.reserve_idempotency(call.idempotency_key, fingerprint, run_id)
-            if reservation == "CONFLICT":
+            if reservation in ("CONFLICT", "IN_PROGRESS"):
                 self._consume_denied_approval(call, fingerprint, approval_verified)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_IDEMPOTENCY_CONFLICT, signals, assessment
-                )
-            if reservation == "IN_PROGRESS":
-                self._consume_denied_approval(call, fingerprint, approval_verified)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_IDEMPOTENCY_IN_PROGRESS, signals, assessment
-                )
+                return self._blocked(run_id, call, _IDEMPOTENCY_BLOCKS[reservation], signals, assessment)
             if reservation == "IN_DOUBT":
                 # Consume this separately granted approval: it was considered,
                 # but execution is forbidden until a human reconciles the first outcome.
@@ -394,7 +378,7 @@ class IntentShieldService:
 
         response = self._result(
             run_id, call, signals, Decision.ALLOW, outcome.reason_codes,
-            arguments=outcome.parsed_arguments or call.arguments, approval_id=call.approval_id,
+            arguments=outcome.parsed_arguments, approval_id=call.approval_id,
             executed=True, result=result,
             assessment=assessment,
         )
@@ -457,14 +441,14 @@ class IntentShieldService:
         })
 
     def _ensure_approval(self, run_id: str, call: ToolCall, fingerprint: str, call_index: int,
-                         reasons: list[ReasonCode] | None = None) -> str:
+                         reasons: list[ReasonCode]) -> str:
         approval_id = f"approval-{uuid.uuid4().hex[:12]}"
         expires = datetime.now(UTC) + timedelta(seconds=self.config.approval_ttl_seconds)
         self.storage.create_approval({
             "id": approval_id, "run_id": run_id, "tool_name": call.tool_name,
             "args_json": canonical_json(call.arguments), "call_fingerprint": fingerprint,
             "call_json": call.model_dump_json(), "call_index": call_index, "expires_at": expires.isoformat(),
-            "reasons": [reason.value for reason in reasons or []],
+            "reasons": [reason.value for reason in reasons],
         })
         self.storage.add_event(run_id, "APPROVAL_REQUESTED", {
             "approval_id": approval_id, "expires_at": expires.isoformat()

@@ -205,11 +205,6 @@ def leaf_text(value: Any) -> str:
     return "\n".join(parts)
 
 
-def _surface(value: Any) -> str:
-    """Scan text of any value: a string as is; a structure as its leaves."""
-    return leaf_text(value)
-
-
 def argument_surface(value: Any) -> str:
     """One line of JSON with every key and string normalized as the rules read it (decoded,
     NFKC, invisible characters dropped, look-alikes mapped, whitespace collapsed), objects as
@@ -275,7 +270,7 @@ def tool_text(description: str | None, schema: dict[str, Any] | None = None,
                 elif key in {"description", "$comment"} and isinstance(value, str):
                     parts.append(value)
                 elif key in {"examples", "default", "enum"}:
-                    parts.append(_surface(value))
+                    parts.append(leaf_text(value))
                 elif key == "properties" and isinstance(value, dict):
                     for name, spec in value.items():
                         visit(spec, str(name))
@@ -379,7 +374,7 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
 
 
 def scan_output(value: Any, trusted: str = "") -> list[str]:
-    return _scan(_surface(value), _OUTPUT_RULES, trusted)
+    return _scan(leaf_text(value), _OUTPUT_RULES, trusted)
 
 
 def scan_output_collapsed(value: Any, trusted: str = "") -> list[str]:
@@ -389,7 +384,7 @@ def scan_output_collapsed(value: Any, trusted: str = "") -> list[str]:
     from them. Weaker evidence: short UI or listing text ("Email\nPassword") reads as a sentence
     here too, so a hit asks before a value from the output is used, like a learned detector's flag,
     and never taints the session."""
-    return [f"collapsed_{name}" for name in _scan(_surface(value), _OUTPUT_RULES, trusted, collapse=True)]
+    return [f"collapsed_{name}" for name in _scan(leaf_text(value), _OUTPUT_RULES, trusted, collapse=True)]
 
 
 # The lookbehinds start a match only where a run begins; without them findall retries

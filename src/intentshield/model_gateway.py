@@ -11,7 +11,6 @@ import json
 import os
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -32,18 +31,9 @@ _SYSTEM_PROMPT = (
 )
 
 
-@dataclass(frozen=True)
-class _ProviderSettings:
-    key_env: str
-    model_env: str
-    default_model: str
-
-
-_SETTINGS = _ProviderSettings(
-    key_env="GEMINI_API_KEY",
-    model_env="INTENTSHIELD_GEMINI_MODEL",
-    default_model="gemini-3.8-flash",
-)
+_KEY_ENV = "GEMINI_API_KEY"
+_MODEL_ENV = "INTENTSHIELD_GEMINI_MODEL"
+_DEFAULT_MODEL = "gemini-3.8-flash"
 
 
 class ModelProposal(BaseModel):
@@ -97,8 +87,8 @@ class ModelGateway:
             ModelProviderStatus(
                 provider="gemini",
                 model=self._model(),
-                configured=bool(self._environ.get(_SETTINGS.key_env, "").strip()),
-                key_environment_variable=_SETTINGS.key_env,
+                configured=bool(self._environ.get(_KEY_ENV, "").strip()),
+                key_environment_variable=_KEY_ENV,
             )
         ]
 
@@ -108,11 +98,11 @@ class ModelGateway:
         user_intent: str,
         registry: Mapping[str, ToolSpec],
     ) -> ModelProposal:
-        api_key = self._environ.get(_SETTINGS.key_env, "").strip()
+        api_key = self._environ.get(_KEY_ENV, "").strip()
         if not api_key:
             raise ModelProviderError(
                 "MODEL_PROVIDER_NOT_CONFIGURED",
-                f"Gemini is not configured; set {_SETTINGS.key_env}",
+                f"Gemini is not configured; set {_KEY_ENV}",
                 provider=provider,
             )
         if not registry:
@@ -161,7 +151,7 @@ class ModelGateway:
         )
 
     def _model(self) -> str:
-        return self._environ.get(_SETTINGS.model_env, "").strip() or _SETTINGS.default_model
+        return self._environ.get(_MODEL_ENV, "").strip() or _DEFAULT_MODEL
 
     def _call_gemini(
         self,
@@ -185,30 +175,17 @@ class ModelGateway:
                 }
             },
         }
-        return self._request(
-            "gemini", url, {"x-goog-api-key": api_key}, payload
-        )
-
-    def _request(
-        self,
-        provider: ModelProvider,
-        url: str,
-        headers: Mapping[str, str],
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
         try:
-            return self._transport(url, headers, payload, self._timeout_seconds)
+            return self._transport(url, {"x-goog-api-key": api_key}, payload, self._timeout_seconds)
         except ModelProviderError as exc:
             if exc.provider == "remote":
-                raise ModelProviderError(
-                    exc.code, exc.message, provider=provider
-                ) from exc
+                raise ModelProviderError(exc.code, exc.message, provider="gemini") from exc
             raise
         except Exception as exc:
             raise ModelProviderError(
                 "MODEL_PROVIDER_UNAVAILABLE",
-                f"{provider} request failed: {type(exc).__name__}",
-                provider=provider,
+                f"gemini request failed: {type(exc).__name__}",
+                provider="gemini",
             ) from exc
 
 
@@ -231,11 +208,10 @@ def _tool_declarations(
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     declarations: list[dict[str, Any]] = []
     aliases: dict[str, str] = {}
-    reserved_aliases = {_NO_ACTION_FUNCTION}
     for index, (tool_name, spec) in enumerate(sorted(registry.items())):
         base = re.sub(r"[^A-Za-z0-9_-]+", "_", tool_name).strip("_-") or f"tool_{index}"
         alias = base[:64]
-        if alias in aliases or alias in reserved_aliases:
+        if alias in aliases or alias == _NO_ACTION_FUNCTION:
             suffix = f"_{index}"
             alias = f"{alias[:64 - len(suffix)]}{suffix}"
         aliases[alias] = tool_name

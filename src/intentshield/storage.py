@@ -12,6 +12,16 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def add_column(db: sqlite3.Connection, table: str, column: str, kind: str) -> None:
+    if column in {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}:
+        return
+    try:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+    except sqlite3.OperationalError as exc:  # a process starting at the same time added it first
+        if "duplicate column" not in str(exc):
+            raise
+
+
 class Storage:
     def __init__(self, path: str | Path = "intentshield.db") -> None:
         self.path = str(path)
@@ -96,7 +106,7 @@ class Storage:
                 ("approvals", "reasons_json", "TEXT"),
                 ("idempotency_reservations", "error_json", "TEXT"),
             ):
-                self._add_column(db, table, column, kind)
+                add_column(db, table, column, kind)
             # Preserve pre-reservation idempotency records conservatively. Their
             # old fingerprints will conflict rather than permit a duplicate side effect.
             db.execute(
@@ -105,16 +115,6 @@ class Storage:
                    SELECT idempotency_key,call_fingerprint,run_id,'COMPLETED',result_json,created_at,created_at
                    FROM executions"""
             )
-
-    @staticmethod
-    def _add_column(db: sqlite3.Connection, table: str, column: str, kind: str) -> None:
-        if column in {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}:
-            return
-        try:
-            db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
-        except sqlite3.OperationalError as exc:  # a process starting at the same time added it first
-            if "duplicate column" not in str(exc):
-                raise
 
     @staticmethod
     def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:

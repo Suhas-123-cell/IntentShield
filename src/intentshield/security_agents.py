@@ -239,6 +239,15 @@ _WRITE_ACTIONS = frozenset(
 )
 
 
+def _no_detection(status: EvidenceStatus, reason: EvidenceReason) -> DetectionEvidence:
+    """Fail closed: an agent that did not answer scores as a certain injection."""
+    return DetectionEvidence(status=status, injection_score=1.0, reason_codes=(reason,))
+
+
+def _no_grounding(status: EvidenceStatus, reason: EvidenceReason) -> GroundingEvidence:
+    return GroundingEvidence(status=status, intent_alignment=0.0, scope_score=0.0, reason_codes=(reason,))
+
+
 def _elapsed_ms(start: float) -> float:
     return round((time.monotonic() - start) * 1000, 3)
 
@@ -521,15 +530,13 @@ class SecurityAnalysisSupervisor:
         try:
             return DetectionEvidence.model_validate(self.detection_agent.analyze(user_intent, call, metadata))
         except Exception:
-            return DetectionEvidence(status=EvidenceStatus.FAILED, injection_score=1.0,
-                                     reason_codes=(EvidenceReason.AGENT_FAILURE,))
+            return _no_detection(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     def _inline_grounding(self, user_intent: str, call: ToolCall, metadata: TrustedToolMetadata) -> GroundingEvidence:
         try:
             return GroundingEvidence.model_validate(self.grounding_agent.analyze(user_intent, call, metadata))
         except Exception:
-            return GroundingEvidence(status=EvidenceStatus.FAILED, intent_alignment=0.0, scope_score=0.0,
-                                     reason_codes=(EvidenceReason.AGENT_FAILURE,))
+            return _no_grounding(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     @staticmethod
     def _detection_result(
@@ -537,19 +544,11 @@ class SecurityAnalysisSupervisor:
         done: set[Future[DetectionEvidence | GroundingEvidence]],
     ) -> DetectionEvidence:
         if future is None or future not in done:
-            return DetectionEvidence(
-                status=EvidenceStatus.TIMED_OUT,
-                injection_score=1.0,
-                reason_codes=(EvidenceReason.AGENT_TIMEOUT,),
-            )
+            return _no_detection(EvidenceStatus.TIMED_OUT, EvidenceReason.AGENT_TIMEOUT)
         try:
             return DetectionEvidence.model_validate(future.result())
         except Exception:
-            return DetectionEvidence(
-                status=EvidenceStatus.FAILED,
-                injection_score=1.0,
-                reason_codes=(EvidenceReason.AGENT_FAILURE,),
-            )
+            return _no_detection(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     @staticmethod
     def _grounding_result(
@@ -557,21 +556,11 @@ class SecurityAnalysisSupervisor:
         done: set[Future[DetectionEvidence | GroundingEvidence]],
     ) -> GroundingEvidence:
         if future is None or future not in done:
-            return GroundingEvidence(
-                status=EvidenceStatus.TIMED_OUT,
-                intent_alignment=0.0,
-                scope_score=0.0,
-                reason_codes=(EvidenceReason.AGENT_TIMEOUT,),
-            )
+            return _no_grounding(EvidenceStatus.TIMED_OUT, EvidenceReason.AGENT_TIMEOUT)
         try:
             return GroundingEvidence.model_validate(future.result())
         except Exception:
-            return GroundingEvidence(
-                status=EvidenceStatus.FAILED,
-                intent_alignment=0.0,
-                scope_score=0.0,
-                reason_codes=(EvidenceReason.AGENT_FAILURE,),
-            )
+            return _no_grounding(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     def _combine(
         self,
