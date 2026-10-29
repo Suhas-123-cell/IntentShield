@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 import review_gate  # noqa: E402
 
@@ -18,6 +20,8 @@ def test_the_gate_fails_on_a_rise_over_the_slack_and_on_a_missing_pair():
     assert review_gate.compare(baseline, {"msb qwen/none/gateway": 0.2}) == ["live memory: missing from the current run"]
 
 
+@pytest.mark.skipif(not (review_gate.BASELINE / "msb-replay.json").exists(),
+                    reason="needs results/improve/baseline (not in the sdist)")
 def test_the_committed_baseline_has_every_replayed_pair():
     msb = json.loads((review_gate.BASELINE / "msb-replay.json").read_text())
     live = json.loads((review_gate.BASELINE / "harness-live-replay.json").read_text())

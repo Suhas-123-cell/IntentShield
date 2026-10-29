@@ -82,6 +82,12 @@ first-run experience, benchmark rigor); every behaviour change has a regression 
   `results/README.md` lists what does not replay offline. Control routes treat only a non-object
   body as 422 (other errors surface), run events are written off the event loop, dropped close
   errors are logged, and the signed-pack test can no longer skip silently.
+- Fifth pass: a crashed output scan leaves the session flagged, and an interrupted one says so in
+  the confirmation reason; hook migrations only tolerate a concurrent "duplicate column". The test
+  conftest now really restores the judge keys after each test (it used to leave a key a test wrote
+  in place), and a session-end check fails the run if one leaks. The sdist's own test run is
+  green (it ships `benchmarks/coverage`, and the review-gate baseline test skips without
+  `results/`). `unwrap` keeps each entry's key order; the README headline is two plain sentences.
 - Benchmarks: `paper_numbers.py` also prints task-tool-executed, truncated and Wilson cells and
   the README headline strings, with a test; the MCPTox replay was regenerated on current code
   (quarantine+provenance 19/1579 = 1.2%); the injection evaluation inputs and the Gemini judge
