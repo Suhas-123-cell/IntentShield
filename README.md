@@ -49,6 +49,26 @@ is the offline alternative. Every judge is evidence only: a flagged description 
 review, never silently dropped. Measurements and the recommendation are in
 [docs/benchmarks.md](docs/benchmarks.md#mcp-guardrail-layers).
 
+### Scan the MCP servers you already use
+
+```sh
+intentshield scan                  # every MCP config found: Claude Code, Claude Desktop, Cursor, Gemini CLI,
+                                   # Codex CLI, Windsurf, VS Code; or name files: intentshield scan .mcp.json
+intentshield scan --no-connect     # the configs only; start no server
+intentshield scan --format sarif   # for GitHub code scanning; also --format json
+```
+
+It starts each server as its client would, lists its tools (calling none) and checks them offline with
+the guard's rules: poisoned descriptions and schemas, an instruction split across one server's tools,
+parameters that ask for the agent's own model, prompt or conversation, shadowing and tool names two
+servers share. It also reports credentials written into a config (shown masked), a config holding one
+that other users can read, and a toxic flow: one client that can read untrusted content, reach private
+data and send data out. The toxic-flow roles come from tool names, descriptions and MCP annotations, so
+treat that check as a prompt to look, not a verdict. Tool hashes are kept in
+`~/.intentshield/scan-pins.json`, and a description that changes is reported on every scan until you
+accept it with `--update-pins`. The command exits 1 when any error-level finding remains. No API key is
+needed and nothing leaves the machine.
+
 ![IntentShield blocking an injected MCP call](https://raw.githubusercontent.com/Suhas-123-cell/IntentShield/main/docs/demo.gif)
 
 ## Quickstart
@@ -101,7 +121,7 @@ when the model routes calls through `intentshield_call` and states the intent it
 
 | layer | how it is wired | sees | stops |
 |---|---|---|---|
-| **Hooks** (`intentshield-hook <harness>`, via `intentshield install`) | Claude Code, Codex CLI, Cursor, Gemini CLI hook events; per-session SQLite at `~/.intentshield/hooks.db` | the user's prompt, every MCP call and result, MCP resource reads | sends self-disclosure parameters (`llm_name`, `system_prompt`, ...) empty; denies a call whose arguments carry injected instructions or a value that came from an injected output and not from the user; scans every result and taints the session; asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before state-changing calls once tainted (`--review always\|tainted\|never`). A crashing or missing hook denies the call where the harness has a flag for it (Claude Code `onFailure: block`, Cursor `failClosed`; Codex CLI and Gemini CLI have none, so there a crash is a missing opinion). Built-in tools (shell, file edits) are left to the harness. |
+| **Hooks** (`intentshield-hook <harness>`, via `intentshield install`) | Claude Code, Codex CLI, Cursor, Gemini CLI hook events; per-session SQLite at `~/.intentshield/hooks.db` | the user's prompt, every MCP call and result, MCP resource reads | sends self-disclosure parameters (`llm_name`, `system_prompt`, ...) empty; denies a call whose arguments carry injected instructions or a value that came from an injected output and not from the user; asks before a call carries a credential the user did not give (GitHub, AWS, Slack, Stripe, OpenAI, Anthropic, Google, Groq and Hugging Face token formats, private keys, JWTs), and denies it once the session is tainted; scans every result and taints the session; asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before state-changing calls once tainted (`--review always\|tainted\|never`). A crashing or missing hook denies the call where the harness has a flag for it (Claude Code `onFailure: block`, Cursor `failClosed`; Codex CLI and Gemini CLI have none, so there a crash is a missing opinion). Built-in tools (shell, file edits) are left to the harness. |
 | **Transparent proxy** (`intentshield-mcp --transparent`, via `intentshield wrap`, stdio only) | wraps each MCP server the client launches; no harness support needed | the upstream's descriptions, schemas, annotations and results | hides tools whose description matches poisoning rules or that changed after connect (rug pull, fails closed until restart); removes self-disclosure parameters from schemas; flags injected results. Servers reached over HTTP (`"url"`) are not launched by the client, so `wrap` leaves them alone. |
 | **Gateway** (`intentshield-mcp --transport streamable-http` or `stdio`) | exposes five `intentshield_*` tools; the model creates a run with the user's intent and calls tools through `intentshield_call` with the exact schema hash | intent as stated by the model, the guarded catalog, every call and result | the full `PolicyEngine`: allow/prohibit lists, schema binding, budgets, grounding, provenance, idempotency, and human approval of mutations over a bearer-protected control endpoint. `BLOCK` and `REVIEW` never contact the upstream. |
 

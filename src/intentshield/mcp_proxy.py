@@ -16,6 +16,7 @@ from typing import Any, Callable
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from . import credentials
 from .judge import Judge
 from .mcp_inspect import (
     authority_values,
@@ -699,6 +700,10 @@ class MCPProxyRuntime:
             return ReasonCode.BLOCK_TOOL_QUARANTINED
         if run_id in self._untrusted_intents:
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
+        # A credential the user did not give, leaving in an argument: what an injection that got the agent to
+        # read a token or a key file sends.
+        if any(credential not in user_intent for credential in credentials.find(call.arguments)):
+            return ReasonCode.BLOCK_CREDENTIAL_EGRESS if self._tainted else ReasonCode.REVIEW_CREDENTIAL_EGRESS
         # Argument provenance: a distinctive value (email, URL, account, path, id)
         # the user never gave must not come from an injected output in this run
         # or from another tool's description.
