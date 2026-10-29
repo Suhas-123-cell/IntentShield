@@ -578,11 +578,7 @@ class MCPProxyRuntime:
                     message = result.error.message if result.error else "Upstream MCP tool failed"
                     self._observe_error(message)
                     raise MCPRemoteToolError(message)
-                normalized_result = self._bounded(result)
-                return {
-                    "trust": "UNTRUSTED_MCP_OUTPUT",
-                    "upstream": normalized_result,
-                }
+                return {"trust": "UNTRUSTED_MCP_OUTPUT", "upstream": self._bounded(result)}
 
             registry[qualified] = ToolSpec(
                 name=qualified,
@@ -596,9 +592,7 @@ class MCPProxyRuntime:
                 ),
                 args_model=MCPArguments,
                 mutation=not self.config.is_read_only(qualified),
-                destination_field=(
-                    self.config.destination_fields.get(qualified)
-                ),
+                destination_field=self.config.destination_fields.get(qualified),
                 executor=execute,
                 schema_override=tool.input_schema,
                 public_schema_override=_public_schema(visible),
@@ -608,9 +602,7 @@ class MCPProxyRuntime:
                 resource_field=self.config.resource_fields.get(qualified),
                 allowed_resources_override=self.config.allowed_resources_by_tool.get(qualified),
                 allowed_destinations_override=self.config.allowed_destinations_by_tool.get(qualified),
-                grounding_terms=tuple(
-                    sorted(self.config.grounding_terms_by_tool.get(qualified, set()))
-                ),
+                grounding_terms=tuple(sorted(self.config.grounding_terms_by_tool.get(qualified, ()))),
             )
             if self.config.is_allowed(qualified) and not registry[qualified].grounding_terms:
                 raise ValueError(

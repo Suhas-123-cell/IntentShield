@@ -289,8 +289,6 @@ def _redact(value: Any, secrets: tuple[str, ...]) -> Any:
         return {key: _redact(item, secrets) for key, item in value.items()}
     if isinstance(value, list):
         return [_redact(item, secrets) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_redact(item, secrets) for item in value)
     return value
 
 
