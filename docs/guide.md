@@ -123,7 +123,8 @@ flow stops after the guarded tool result; it does not send the result back for a
 second generation. Gemini is not the only remote provider overall: if you turn on the
 optional LLM judge (`"judge": "groq"` or `"gemini"`, or the hooks' `--judge`), the user's
 prompt and each checked call's name and arguments, plus tool descriptions the rules
-pass, are sent to Groq or Gemini. The judge is off by default.
+pass, are sent to Groq or Gemini; with `--judge-outputs` (hooks) or `"judge_outputs": true` (proxy),
+every tool result the rules pass is sent too. The judge is off by default.
 
 ## Adaptive threat memory and threat packs
 
@@ -479,7 +480,13 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   - optionally run the injection classifier on results the rules pass
     (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
     result hook, so it is off by default), or the LLM judge (`--judge` alone means the local
-    `ollama:qwen2.5:7b`; `--judge groq` or `gemini[:model]` for a hosted one);
+    `ollama:qwen2.5:7b`; `--judge groq` or `gemini[:model]` for a hosted one). With
+    `--judge-outputs` (or `INTENTSHIELD_HOOK_JUDGE_OUTPUTS=on`) the judge also reads each result
+    the rules pass, for plain-language injections: a result it objects to is treated like a
+    classifier hit (the agent is warned, and any value from it asks before use), never as an
+    injection. It costs one request per result: about 1 s with local qwen2.5:7b and 4 s with
+    Gemini Flash-Lite, and on Groq's free tier (200,000 tokens a day) about 200 results a day,
+    after which the judge has no opinion until the next day;
   - refuse to start on an unknown `--review` or `--outputs` value, from the command line or the
     environment, instead of silently skipping every review branch.
   A hook that crashes denies the call; for Claude Code the example config adds

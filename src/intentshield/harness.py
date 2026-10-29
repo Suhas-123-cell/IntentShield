@@ -100,7 +100,8 @@ class HarnessGuard:
     def __init__(self, path: str | Path, *, review: str = "tainted", outputs: str = "warn",
                  classifier: str | None = None, catalog: str | Path | None = None,
                  judge: str | None = None, threats: str | Path | None = None,
-                 packs: str | Path | None = None, review_output_sourced_arguments: bool = True) -> None:
+                 packs: str | Path | None = None, review_output_sourced_arguments: bool = True,
+                 judge_outputs: bool = False) -> None:
         if review not in ("tainted", "always", "never") or outputs not in ("warn", "block"):
             raise ValueError(f"unknown review mode {review!r} or outputs mode {outputs!r}")
         self.review, self.outputs = review, outputs
@@ -120,7 +121,7 @@ class HarnessGuard:
                 self.memory = ThreatMemory(threats, packs=pack_set)
             except Exception as exc:  # a corrupt file costs the memory, never the hook
                 print(f"IntentShield threat memory disabled: {type(exc).__name__}: {exc}", file=sys.stderr)
-        self.judge, self.judge_missing = None, ""
+        self.judge, self.judge_missing, self.judge_outputs = None, "", judge_outputs
         if judge:
             from .judge import Judge
             load_env_file()
@@ -389,6 +390,14 @@ class HarnessGuard:
             text = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
             weak = scan_output_collapsed(output) or list(dict.fromkeys(hit["name"] for hit in known)) or (
                 ["hostile_source"] if self._memory("hostile", tool.partition(":")[0]) else [])
+            if not weak and self.judge and self.judge_outputs:
+                # Last, as the costliest check: plain-language injections carry no marker a rule can match.
+                errors = self.judge.errors
+                if self.judge.output(self._load(session)[0], tool, text):
+                    weak = ["judge"]
+                elif self.judge.errors > errors:
+                    print(f"IntentShield judge unavailable ({self.judge.last_error}); the rules alone read this "
+                          "result.", file=sys.stderr)
             if not weak and (self.classifier is None or not self.classifier.flags(text)):
                 self._scan_end(session)
                 return Verdict()
@@ -611,6 +620,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--judge", nargs="?", const="ollama", default=os.getenv("INTENTSHIELD_HOOK_JUDGE") or None,
                         help="LLM judge for calls the rules allow: ollama[:model] (default qwen2.5:7b, local, needs "
                              "`ollama pull qwen2.5:7b`), or groq / gemini[:model] (needs that API key)")
+    parser.add_argument("--judge-outputs", action="store_true",
+                        default=os.getenv("INTENTSHIELD_HOOK_JUDGE_OUTPUTS", "off").lower() == "on",
+                        help="the judge also reads each tool result the rules pass, for plain-language injections "
+                             "(one request per result: latency, and free-tier quota)")
     args = parser.parse_args(argv)
     # argparse does not check ``choices`` against a default taken from the environment, and an
     # unknown mode would skip every review branch; a typo must fail closed instead.
@@ -631,7 +644,8 @@ def main(argv: list[str] | None = None) -> None:
         threats = None if args.no_threat_memory else args.threats or str(Path(args.db).with_name("threats.db"))
         guard = HarnessGuard(args.db, review=args.review, outputs=args.outputs, classifier=args.classifier,
                              catalog=args.catalog, judge=args.judge, threats=threats, packs=args.packs,
-                             review_output_sourced_arguments=not args.allow_sourced_reads)
+                             review_output_sourced_arguments=not args.allow_sourced_reads,
+                             judge_outputs=args.judge_outputs)
         reply = handle(args.harness, event, guard)
     except Exception as exc:  # fail closed on calls, open on everything else
         name = event.get("hook_event_name")

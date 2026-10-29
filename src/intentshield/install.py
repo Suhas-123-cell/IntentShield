@@ -62,7 +62,8 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
 _JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|on|default)(:[A-Za-z0-9_.:/-]+)?")
 
 
-def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None) -> str:
+def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None,
+                 judge_outputs: bool = False) -> str:
     """The shell command the harness runs on every event. Every piece is quoted and validated:
     the harness hands the string to a shell."""
     command = f"{shlex.quote(hook)} {harness}"
@@ -74,6 +75,8 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
         if not _JUDGE_SPEC.fullmatch(judge):
             raise ValueError(f"--judge must be ollama[:model], groq[:model] or gemini[:model], not {judge!r}")
         command += f" --judge {shlex.quote(judge)}"
+        if judge_outputs:
+            command += " --judge-outputs"
     return command
 
 
@@ -295,12 +298,13 @@ def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[s
 
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
-            judge: str | None = None, api_key: str | None = None, ask=getpass.getpass) -> Path:
+            judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
+            judge_outputs: bool = False) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched."""
     path = settings_path(harness, scope, home, cwd)
     if judge and not dry_run:
         ensure_judge_key(judge, home, api_key, ask)
-    command = hook_command(harness, hook or executable(_HOOK), review, judge)
+    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
@@ -496,6 +500,9 @@ def add_subcommands(sub: Any) -> None:
                            help="turn on the LLM judge: groq (default, asks for GROQ_API_KEY once), gemini, "
                                 "or ollama (local)")
             p.add_argument("--api-key", default=None, help="the judge's API key, instead of being asked")
+            p.add_argument("--judge-outputs", action="store_true",
+                           help="the judge also reads each tool result the rules pass (catches plain-language "
+                                "injections; one request per result, about 1 s locally, 4 s on Gemini)")
     for verb in ("wrap", "unwrap"):
         p = sub.add_parser(verb, help=f"{verb} stdio MCP servers of an mcpServers file "
                                       f"{'in' if verb == 'wrap' else 'from'} the transparent proxy")
@@ -512,8 +519,10 @@ def add_subcommands(sub: Any) -> None:
 def run(args: argparse.Namespace) -> int:
     try:
         if args.command == "install":
+            if args.judge_outputs and not args.judge:
+                raise ValueError("--judge-outputs needs --judge")
             install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
-                    api_key=args.api_key)
+                    api_key=args.api_key, judge_outputs=args.judge_outputs)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":
