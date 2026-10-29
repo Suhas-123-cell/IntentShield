@@ -1,0 +1,54 @@
+{
+  "judge": "gemini:gemini-3.5-flash-lite",
+  "mcptox_heldout_descriptions": {
+    "poisoned_flagged_by_rules": {
+      "rate": 0.9635,
+      "n": 301,
+      "ci95": [
+        0.9358,
+        0.9795
+      ]
+    },
+    "poisoned_flagged_by_judge": {
+      "rate": 0.9967,
+      "n": 301,
+      "ci95": [
+        0.9814,
+        0.9994
+      ]
+    },
+    "poisoned_flagged_by_either": {
+      "rate": 1.0,
+      "n": 301,
+      "ci95": [
+        0.9874,
+        1.0
+      ]
+    },
+    "clean_flagged_by_rules": {
+      "rate": 0.0185,
+      "n": 108,
+      "ci95": [
+        0.0051,
+        0.065
+      ]
+    },
+    "clean_flagged_by_judge": {
+      "rate": 0.0463,
+      "n": 108,
+      "ci95": [
+        0.0199,
+        0.1038
+      ]
+    },
+    "clean_flagged_by_either": {
+      "rate": 0.0648,
+      "n": 108,
+      "ci95": [
+        0.0317,
+        0.1278
+      ]
+    }
+  },
+  "judge_errors_no_opinion": 0
+}

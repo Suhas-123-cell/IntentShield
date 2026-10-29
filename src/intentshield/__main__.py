@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import install
+from . import __version__, install
 
 
 def serve(port: int = 8000) -> None:
@@ -26,16 +26,18 @@ def serve(port: int = 8000) -> None:
     configure_logging()
     # No proxy headers: every local client would be a trusted proxy and could pick its own
     # address in X-Forwarded-For, dodging the rate limit.
-    uvicorn.run("intentshield.api:app", host="127.0.0.1", port=port, reload=False, proxy_headers=False)
+    uvicorn.run("intentshield.api:create_app", factory=True, host="127.0.0.1", port=port, reload=False,
+                proxy_headers=False)
 
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(prog="intentshield", description=__doc__.strip(),
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--version", action="version", version=f"intentshield {__version__}")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("serve", help="run the local dashboard and API (the default)").add_argument(
-        "--port", type=int, default=8000)
+        "--port", type=int, default=8000, help="TCP port on 127.0.0.1 (default 8000)")
     install.add_subcommands(sub)
     args = parser.parse_args(argv or ["serve"])
     if args.command == "serve":

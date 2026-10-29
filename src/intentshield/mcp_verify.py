@@ -743,8 +743,10 @@ def _failure_report(config_path: str | Path, exc: Exception) -> dict[str, Any]:
                 "details": {
                     "error_type": type(exc).__name__,
                     # Exception strings from configuration validators can echo
-                    # literal API keys. Never include them in machine output.
-                    "error": "Verification failed; diagnostic values are redacted.",
+                    # literal API keys. Never include them in machine output; a
+                    # missing file is the one case where the name is the whole story.
+                    "error": (f"File not found: {exc.filename or config_path}" if isinstance(exc, FileNotFoundError)
+                              else "Verification failed; diagnostic values are redacted."),
                 },
             }
         ],

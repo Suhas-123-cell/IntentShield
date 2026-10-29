@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -69,10 +70,10 @@ def test_api_rejects_client_forged_security_scores(tmp_path: Path):
 
 
 def test_web_proxy_refuses_to_start_without_control_token(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch, demo_proxy_config: Path,
 ):
     monkeypatch.delenv("INTENTSHIELD_CONTROL_TOKEN", raising=False)
-    config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
+    config = demo_proxy_config
 
     with pytest.raises(ValueError, match="CONTROL_TOKEN"):
         create_app(
@@ -82,15 +83,17 @@ def test_web_proxy_refuses_to_start_without_control_token(
         )
 
 
-def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path):
-    config = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
+def test_web_runtime_uses_real_guarded_mcp_catalog(tmp_path: Path, demo_proxy_config: Path):
+    config = demo_proxy_config
     with TestClient(
         create_app(
             database_path=tmp_path / "web-proxy.db",
             proxy_config=config,
             control_token="test-control-token",
+            agent_token="test-agent-token",
         )
     ) as client:
+        client.headers.update({"Authorization": "Bearer test-agent-token"})
         assert client.get("/api/health").json() == {
             "status": "ok",
             "mode": "mcp-proxy",
@@ -178,3 +181,32 @@ def test_dashboard_cannot_be_framed(tmp_path: Path):
 def test_agent_token_without_an_operator_token_is_refused(tmp_path: Path):
     with pytest.raises(ValueError, match="CONTROL_TOKEN"):
         create_app(tmp_path / "half.db", agent_token="agent")
+
+
+def test_web_proxy_refuses_to_start_without_agent_token(tmp_path: Path, demo_proxy_config: Path):
+    with pytest.raises(ValueError, match="AGENT_TOKEN"):
+        create_app(database_path=tmp_path / "no-agent.db", proxy_config=demo_proxy_config,
+                   control_token="operator", agent_token="")
+
+
+def test_read_routes_need_the_agent_token_when_one_is_set(tmp_path: Path):
+    app = create_app(tmp_path / "gated.db", control_token="operator", agent_token="agent")
+    with TestClient(app) as client:
+        for route in ("/api/tools", "/api/metrics", "/api/security/status"):
+            assert client.get(route).status_code == 401
+            assert client.get(route, headers={"Authorization": "Bearer agent"}).status_code == 200
+            assert client.get(route, headers={"Authorization": "Bearer operator"}).status_code == 200
+
+
+def test_create_app_loads_the_working_directory_env_file(tmp_path: Path, monkeypatch):
+    """The real python-dotenv call, not the no-op the suite installs: the default `intentshield`
+    command once shipped with a call signature dotenv does not have."""
+    import dotenv
+
+    monkeypatch.setattr("intentshield.api.load_dotenv", dotenv.load_dotenv)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("INTENTSHIELD_DOTENV_PROBE=loaded\n")
+    monkeypatch.delenv("INTENTSHIELD_DOTENV_PROBE", raising=False)
+    create_app(tmp_path / "dotenv.db")
+    assert os.environ.get("INTENTSHIELD_DOTENV_PROBE") == "loaded"
+    monkeypatch.delenv("INTENTSHIELD_DOTENV_PROBE", raising=False)

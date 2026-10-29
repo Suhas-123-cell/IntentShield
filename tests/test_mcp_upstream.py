@@ -317,7 +317,8 @@ def test_missing_or_empty_environment_credential_fails_clearly_without_secret(
         error = caught.value.as_dict()["error"]
         assert error == {
             "code": "MCP_CREDENTIALS_MISSING",
-            "message": "Required credential environment variables are missing or empty for MCP server 'mail'",
+            "message": "Required credential environment variables are missing or empty for MCP server 'mail': "
+                       "MISSING_MCP_TOKEN",
             "details": {
                 "server_id": "mail",
                 "environment_variables": ["MISSING_MCP_TOKEN"],
@@ -436,5 +437,84 @@ def test_operations_fail_closed_when_disconnected():
         with pytest.raises(MCPUpstreamError) as caught:
             await upstream.call_tool("read")
         assert caught.value.as_dict()["error"]["code"] == "MCP_NOT_CONNECTED"
+
+    asyncio.run(exercise())
+
+
+def _upstream_with(monkeypatch, client_class, **config):
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "FakeClient", client_class)
+    return MCPUpstream(MCPUpstreamConfig(server_id="mail", transport="streamable_http", url="https://example.test/mcp",
+                                         **config), _sdk_loader=fake_bindings)
+
+
+async def _list_error(upstream) -> str:
+    async with upstream:
+        with pytest.raises(MCPUpstreamError) as info:
+            await upstream.list_tools()
+    return info.value.code
+
+
+def test_a_looping_tools_list_cursor_is_an_error(monkeypatch):
+    class Looping(FakeClient):
+        async def list_tools(self, *, cursor=None):
+            page = await super().list_tools(cursor=cursor)
+            page.next_cursor = "page-2"
+            return page
+
+    assert asyncio.run(_list_error(_upstream_with(monkeypatch, Looping))) == "MCP_PAGINATION_LOOP"
+
+
+def test_too_many_catalog_pages_is_an_error(monkeypatch):
+    class Endless(FakeClient):
+        async def list_tools(self, *, cursor=None):
+            page = await super().list_tools(cursor=None)
+            page.next_cursor = f"page-{len(self.list_cursors) + 1}"
+            return page
+
+    assert asyncio.run(_list_error(_upstream_with(monkeypatch, Endless, max_catalog_pages=3))) == "MCP_CATALOG_LIMIT_EXCEEDED"
+
+
+def test_a_tool_without_an_object_schema_is_an_error(monkeypatch):
+    class Schemaless(FakeClient):
+        async def list_tools(self, *, cursor=None):
+            page = await super().list_tools(cursor=cursor)
+            page.tools[0].input_schema = None
+            return page
+
+    assert asyncio.run(_list_error(_upstream_with(monkeypatch, Schemaless))) == "MCP_INVALID_TOOL_SCHEMA"
+
+
+def test_an_sdk_failure_during_a_call_is_wrapped_with_a_stable_code(monkeypatch):
+    class Crashing(FakeClient):
+        async def call_tool(self, name, arguments):
+            raise ConnectionResetError("peer closed")
+
+    async def exercise() -> None:
+        async with _upstream_with(monkeypatch, Crashing) as upstream:
+            with pytest.raises(MCPUpstreamError) as info:
+                await upstream.call_tool("write", {"value": 1})
+            assert info.value.code == "MCP_CALL_TOOL_FAILED"
+            assert info.value.details["exception_type"] == "ConnectionResetError"
+            assert "peer closed" not in info.value.message  # the agent never sees transport detail
+
+    asyncio.run(exercise())
+
+
+def test_a_real_child_that_prints_garbage_and_exits_is_a_bounded_error():
+    """The SDK's own exception types for a crashed stdio server, not a hang."""
+    import sys
+    import time
+
+    config = MCPUpstreamConfig(server_id="junk", transport="stdio", command=sys.executable,
+                               args=("-c", "print('this is not json-rpc'); print('{\"bad\": true}')"),
+                               timeout_seconds=5, read_timeout_seconds=5)
+
+    async def exercise() -> None:
+        started = time.monotonic()
+        with pytest.raises(MCPUpstreamError) as info:
+            await MCPUpstream(config).connect()
+        assert time.monotonic() - started < 30
+        assert info.value.code.startswith("MCP_") and "Traceback" not in info.value.message
 
     asyncio.run(exercise())

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, AsyncIterator
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -19,6 +19,8 @@ from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, 
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
 
+DEFAULT_DB = Path.home() / ".intentshield" / "gateway.db"  # not the working directory
+
 
 def create_app(
     database_path: str | Path | None = None,
@@ -27,7 +29,7 @@ def create_app(
     control_token: str | None = None,
     agent_token: str | None = None,
 ) -> FastAPI:
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))  # the .env of the directory the operator runs in, not the package's
     proxy_path = proxy_config or os.getenv("INTENTSHIELD_PROXY_CONFIG")
     approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN", "")).strip()
     # Optional: when set, proposing calls and reading runs (which hold executed tool results)
@@ -40,6 +42,10 @@ def create_app(
     if run_token and not approval_token:
         # Without it the approval queue, which shows requests and results, would stay open.
         raise ValueError("INTENTSHIELD_CONTROL_TOKEN is required when INTENTSHIELD_AGENT_TOKEN is set")
+    if proxy_path and not run_token:
+        # Behind the proxy, /api/runs drives real upstream tools and shows their results: no local
+        # process may do that without a credential.
+        raise ValueError("INTENTSHIELD_AGENT_TOKEN is required when the web MCP proxy is enabled")
     runtime: MCPProxyRuntime | None = None
     local_service: IntentShieldService | None = None
     if proxy_path:
@@ -49,7 +55,7 @@ def create_app(
         runtime = MCPProxyRuntime(config)
     else:
         local_service = IntentShieldService.default(
-            database_path or os.getenv("INTENTSHIELD_DB", "intentshield.db")
+            database_path or os.getenv("INTENTSHIELD_DB") or DEFAULT_DB
         )
     models = model_gateway or ModelGateway()
     try:
@@ -280,17 +286,17 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 
-    @app.get("/api/tools")
+    @app.get("/api/tools", dependencies=[Depends(require_run_access)])
     async def tools():
         if runtime is not None:
             return await runtime.tool_catalog()
         return service().tool_catalog()
 
-    @app.get("/api/metrics")
+    @app.get("/api/metrics", dependencies=[Depends(require_run_access)])
     def metrics():
         return service().storage.metrics()
 
-    @app.get("/api/security/status")
+    @app.get("/api/security/status", dependencies=[Depends(require_run_access)])
     def security_status():
         return service().security_status()
 
@@ -305,5 +311,3 @@ def create_app(
 
     return app
 
-
-app = create_app()
