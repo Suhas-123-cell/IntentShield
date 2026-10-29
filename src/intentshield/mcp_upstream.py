@@ -309,7 +309,8 @@ def _resolve_environment_references(
     if missing:
         raise MCPUpstreamError(
             "MCP_CREDENTIALS_MISSING",
-            f"Required credential environment variables are missing or empty for MCP server {server_id!r}",
+            f"Required credential environment variables are missing or empty for MCP server {server_id!r}: "
+            f"{', '.join(missing)}",
             details={"server_id": server_id, "environment_variables": missing},
         )
     return {destination: os.environ[source] for destination, source in references.items()}

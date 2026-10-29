@@ -218,8 +218,9 @@ def test_old_sessions_are_pruned_from_the_hook_database(tmp_path: Path):
     db = tmp_path / "h.db"
     HarnessGuard(db)
     with sqlite3.connect(db) as conn:
-        conn.execute("INSERT INTO sessions VALUES ('old', 'my secret plan', '[]', ?, 0)", (time.time() - 8 * 86_400,))
-        conn.execute("INSERT INTO sessions VALUES ('new', 'today', '[]', ?, 0)", (time.time(),))
+        conn.execute("INSERT INTO sessions (id, intent, taint, updated) VALUES ('old', 'my secret plan', '[]', ?)",
+                         (time.time() - 8 * 86_400,))
+        conn.execute("INSERT INTO sessions (id, intent, taint, updated) VALUES ('new', 'today', '[]', ?)", (time.time(),))
         conn.execute("INSERT INTO observed VALUES ('old', 'x@y.test')")
     HarnessGuard(db)
     with sqlite3.connect(db) as conn:
