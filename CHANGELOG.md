@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- `intentshield scan` finds the MCP servers configured for Claude Code, Claude Desktop, Cursor, Gemini CLI,
+  Codex CLI, Windsurf and VS Code (or the files named), starts each one, lists its tools without calling
+  any, and checks them offline: poisoned descriptions, split instructions, self-disclosure parameters,
+  shadowing, shared tool names, credentials written into a config, a config with one that others can read,
+  and toxic flows (untrusted content, private data and a way out within one client). It pins each tool's
+  hash and keeps reporting a changed one until `--update-pins`. Output as text, JSON or SARIF; exit 1 on
+  an error-level finding.
+- A credential the user did not give, leaving in a tool call's arguments, now asks in the hooks
+  (`REVIEW_CREDENTIAL_EGRESS` in the proxy and gateway) and is denied once an injected output was seen.
+  Credentials are recognised by their providers' formats and only ever shown masked.
+
 ## 0.3.4
 
 - The output and description rules read "ignore the previous instructions" and "new task:" in German, Spanish,
