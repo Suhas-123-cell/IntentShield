@@ -451,6 +451,138 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
     return server
 
 
+def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
+                    control_token: str | None, agent_token: str | None) -> Any:
+    """The proxy's Streamable HTTP app: the MCP endpoint behind the agent token, the operator
+    routes behind the control token, and the rate limit in front of both."""
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
+    app = server.streamable_http_app(
+        streamable_http_path=streamable_http_path,
+        stateless_http=True,
+        json_response=True,
+        host=host,
+    )
+
+    if agent_token:
+        async def require_agent_token(request: Request, call_next):
+            if request.url.path.startswith("/control/"):
+                return await call_next(request)
+            supplied = request.headers.get("authorization", "")
+            if not hmac.compare_digest(supplied.encode(), f"Bearer {agent_token}".encode()):
+                return JSONResponse({"error": "unauthorized"}, status_code=401)
+            return await call_next(request)
+
+        app.add_middleware(BaseHTTPMiddleware, dispatch=require_agent_token)
+
+    limiter = RateLimiter.from_env()
+    if limiter is not None:
+        async def rate_limit(request: Request, call_next):
+            client = request.client.host if request.client else "unknown"
+            if not limiter.allow(client):
+                return JSONResponse(
+                    {"error": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
+                )
+            return await call_next(request)
+
+        # Added last so it runs first and also throttles unauthenticated floods.
+        app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit)
+
+    if control_token:
+        _add_control_routes(app, server.intentshield_runtime, control_token)
+    return app
+
+
+class _Unprocessable(Exception):
+    """A control request the operator has to fix; answered 422 with this message."""
+
+
+async def _json_object(request: Any) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict):
+        raise _Unprocessable("body must be a JSON object")
+    return payload
+
+
+def _approve(payload: dict[str, Any]) -> bool:
+    if payload.get("decision") not in {"approve", "reject"}:
+        raise _Unprocessable("decision must be approve or reject")
+    return payload["decision"] == "approve"
+
+
+def _add_control_routes(app: Any, runtime: Any, control_token: str) -> None:
+    """Operator routes under /control/, every one behind the one bearer check. A request to fix is
+    a 422, an unknown id a 404 and a refused state change (a POST's ValueError) a 409; any other
+    error is a real bug and surfaces as one."""
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
+    expected = f"Bearer {control_token}".encode()
+
+    def route(path: str, method: str, not_found: str | None = None):
+        def register(handler):
+            async def endpoint(request: Request) -> JSONResponse:
+                if not hmac.compare_digest(request.headers.get("authorization", "").encode(), expected):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+                try:
+                    return JSONResponse(await handler(request))
+                except _Unprocessable as exc:
+                    return JSONResponse({"error": str(exc)}, status_code=422)
+                except KeyError:
+                    if not_found is None:
+                        raise
+                    return JSONResponse({"error": not_found}, status_code=404)
+                except ValueError as exc:
+                    if method != "POST":
+                        raise
+                    return JSONResponse({"error": str(exc)}, status_code=409)
+
+            app.add_route(path, endpoint, methods=[method])
+            return handler
+        return register
+
+    @route("/control/approvals/{approval_id}", "POST", not_found="approval not found")
+    async def decide_approval(request: Request) -> dict[str, Any]:
+        payload = await _json_object(request)
+        # Optional operator label for the exemplar detector: "injection" with a
+        # rejection, "benign" with an approval (learning.py).
+        result, learned = await runtime.decide_and_learn(
+            request.path_params["approval_id"], _approve(payload), payload.get("learn")
+        )
+        body = result.model_dump(mode="json")
+        return {**body, "learned": learned} if payload.get("learn") else body
+
+    @route("/control/learning", "GET")
+    async def learning(request: Request) -> dict[str, Any]:
+        return await runtime.learning_status()
+
+    @route("/control/learning/examples", "POST")
+    async def learn_example(request: Request) -> dict[str, Any]:
+        payload = await _json_object(request)
+        if not isinstance(payload.get("text"), str):
+            raise _Unprocessable("text must be a string")
+        return await runtime.learn_example(payload["text"], payload.get("label"))
+
+    @route("/control/rules", "GET")
+    async def rules(request: Request) -> dict[str, Any]:
+        return await runtime.rules_status()
+
+    @route("/control/rules/propose", "POST", not_found="no active injection example with that id")
+    async def propose_rules(request: Request) -> dict[str, Any]:
+        payload = await _json_object(request)
+        return {"proposals": await runtime.propose_rules(str(payload.get("example_id")))}
+
+    @route("/control/rules/{rule_id}", "POST", not_found="rule not found")
+    async def decide_rule(request: Request) -> dict[str, Any]:
+        payload = await _json_object(request)
+        return await runtime.decide_rule(request.path_params["rule_id"], _approve(payload))
+
+
 def run_mcp_server(
     *,
     transport: Literal["stdio", "streamable-http"] = "stdio",
@@ -501,136 +633,9 @@ def run_mcp_server(
         )
     if transport == "streamable-http" and proxy_config is not None:
         import uvicorn
-        from starlette.middleware.base import BaseHTTPMiddleware
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse
 
-        app = server.streamable_http_app(
-            streamable_http_path=streamable_http_path,
-            stateless_http=True,
-            json_response=True,
-            host=host,
-        )
-
-        if agent_token:
-            async def require_agent_token(request: Request, call_next):
-                if request.url.path.startswith("/control/"):
-                    return await call_next(request)
-                supplied = request.headers.get("authorization", "")
-                if not hmac.compare_digest(supplied.encode(), f"Bearer {agent_token}".encode()):
-                    return JSONResponse({"error": "unauthorized"}, status_code=401)
-                return await call_next(request)
-
-            app.add_middleware(BaseHTTPMiddleware, dispatch=require_agent_token)
-
-        limiter = RateLimiter.from_env()
-        if limiter is not None:
-            async def rate_limit(request: Request, call_next):
-                client = request.client.host if request.client else "unknown"
-                if not limiter.allow(client):
-                    return JSONResponse(
-                        {"error": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
-                    )
-                return await call_next(request)
-
-            # Added last so it runs first and also throttles unauthenticated floods.
-            app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit)
-
-        if control_token:
-            def authorized(request: Request) -> bool:
-                return hmac.compare_digest(request.headers.get("authorization", "").encode(),
-                                           f"Bearer {control_token}".encode())
-
-            class BadBody(Exception):
-                pass
-
-            async def json_body(request: Request) -> dict[str, Any]:
-                try:
-                    payload = await request.json()
-                except json.JSONDecodeError:
-                    raise BadBody from None
-                if not isinstance(payload, dict):
-                    raise BadBody
-                return payload
-
-            def guarded(handler):
-                """Every control route behind the one bearer check. Only a body that is not a JSON
-                object becomes a 422; any other error is a real bug and surfaces as one."""
-                async def route(request: Request) -> JSONResponse:
-                    if not authorized(request):
-                        return JSONResponse({"error": "unauthorized"}, status_code=401)
-                    try:
-                        return await handler(request)
-                    except BadBody:
-                        return JSONResponse({"error": "body must be a JSON object"}, status_code=422)
-                return route
-
-            async def decide_approval(request: Request) -> JSONResponse:
-                try:
-                    payload = await json_body(request)
-                    decision = payload.get("decision")
-                    if decision not in {"approve", "reject"}:
-                        return JSONResponse(
-                            {"error": "decision must be approve or reject"}, status_code=422
-                        )
-                    # Optional operator label for the exemplar detector: "injection" with a
-                    # rejection, "benign" with an approval (learning.py).
-                    result, learned = await server.intentshield_runtime.decide_and_learn(
-                        request.path_params["approval_id"], decision == "approve", payload.get("learn")
-                    )
-                    body = result.model_dump(mode="json")
-                    return JSONResponse({**body, "learned": learned} if payload.get("learn") else body)
-                except KeyError:
-                    return JSONResponse({"error": "approval not found"}, status_code=404)
-                except ValueError as exc:
-                    return JSONResponse({"error": str(exc)}, status_code=409)
-
-            async def learning(request: Request) -> JSONResponse:
-                return JSONResponse(await server.intentshield_runtime.learning_status())
-
-            async def learn_example(request: Request) -> JSONResponse:
-                try:
-                    payload = await json_body(request)
-                    if not isinstance(payload.get("text"), str):
-                        return JSONResponse({"error": "text must be a string"}, status_code=422)
-                    return JSONResponse(await server.intentshield_runtime.learn_example(
-                        payload["text"], payload.get("label")))
-                except ValueError as exc:
-                    return JSONResponse({"error": str(exc)}, status_code=409)
-
-            app.add_route("/control/approvals/{approval_id}", guarded(decide_approval), methods=["POST"])
-
-            async def rules(request: Request) -> JSONResponse:
-                return JSONResponse(await server.intentshield_runtime.rules_status())
-
-            async def propose_rules(request: Request) -> JSONResponse:
-                try:
-                    payload = await json_body(request)
-                    return JSONResponse({"proposals": await server.intentshield_runtime.propose_rules(
-                        str(payload.get("example_id")))})
-                except KeyError:
-                    return JSONResponse({"error": "no active injection example with that id"}, status_code=404)
-                except ValueError as exc:
-                    return JSONResponse({"error": str(exc)}, status_code=409)
-
-            async def decide_rule(request: Request) -> JSONResponse:
-                try:
-                    payload = await json_body(request)
-                    if payload.get("decision") not in {"approve", "reject"}:
-                        return JSONResponse({"error": "decision must be approve or reject"}, status_code=422)
-                    return JSONResponse(await server.intentshield_runtime.decide_rule(
-                        request.path_params["rule_id"], payload["decision"] == "approve"))
-                except KeyError:
-                    return JSONResponse({"error": "rule not found"}, status_code=404)
-                except ValueError as exc:
-                    return JSONResponse({"error": str(exc)}, status_code=409)
-
-            app.add_route("/control/learning", guarded(learning), methods=["GET"])
-            app.add_route("/control/learning/examples", guarded(learn_example), methods=["POST"])
-            app.add_route("/control/rules", guarded(rules), methods=["GET"])
-            app.add_route("/control/rules/propose", guarded(propose_rules), methods=["POST"])
-            app.add_route("/control/rules/{rule_id}", guarded(decide_rule), methods=["POST"])
-
+        app = _proxy_http_app(server, host=host, streamable_http_path=streamable_http_path,
+                              control_token=control_token, agent_token=agent_token)
         uvicorn.run(app, host=host, port=port, log_level="info", proxy_headers=False)
     elif transport == "streamable-http":
         server.run(
