@@ -57,6 +57,10 @@ class ReasonCode(StrEnum):
     # An indicator the threat memory holds (``threat_memory``): learned ones ask, confirmed ones block.
     REVIEW_KNOWN_THREAT = "REVIEW_KNOWN_THREAT"
     BLOCK_KNOWN_THREAT = "BLOCK_KNOWN_THREAT"
+    # A credential the user did not give, leaving in an argument (``credentials``): it asks, and blocks once the
+    # gateway has seen an injected output.
+    REVIEW_CREDENTIAL_EGRESS = "REVIEW_CREDENTIAL_EGRESS"
+    BLOCK_CREDENTIAL_EGRESS = "BLOCK_CREDENTIAL_EGRESS"
 
 
 class ToolCall(BaseModel):
