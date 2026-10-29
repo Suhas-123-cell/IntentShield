@@ -394,7 +394,10 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{'-'.join(sorted(u.server_id for u in config.upstream_configs))}.json"
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps([{"name": exposed(t), "description": t.description or "",
+        # ``server`` lets the hook key read-only decisions on (server, tool): a bare name alone once lent one
+        # server's read-only tool to another server's tool of the same name.
+        temporary.write_text(json.dumps([{"name": exposed(t), "server": t.qualified_name.partition(":")[0],
+                                          "tool": t.qualified_name.partition(":")[2], "description": t.description or "",
                                           "read_only": config.is_read_only(t.qualified_name)} for t in tools]))
         temporary.replace(path)
 
