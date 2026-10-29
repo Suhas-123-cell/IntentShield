@@ -7,21 +7,111 @@ from __future__ import annotations
 
 import base64
 import binascii
+import functools
 import html
 import json
 import math
 import re
 import unicodedata
 from collections import Counter
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 from urllib.parse import unquote, urlsplit
 
 _I = re.I
+# Cyrillic and Greek letters that render like Latin ones ("іgnоre"); NFKC keeps them.
+# Armenian, Latin-extended and small-capital look-alikes, and typographic apostrophes (a rule
+# reading "user's" must read "user’s" too).
+_CONFUSABLES = str.maketrans(
+    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ"
+    "օսոհցզɡɑɩıӏӀһʏᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡᴢ\u2018\u2019\u02bc\u2032\u00b4",
+    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX"
+    "ounhgqgaiiiihyabcdefghijklmnoprstuvwz" + "'" * 5,
+)
+
+
+def _as_read(pattern: str) -> str:
+    """A pattern for text as ``_normalize`` leaves it. Look-alike letters are mapped (Cyrillic "о" reads as
+    Latin "o"), and a capital can map where its small letter does not ("В" to "B", "в" stays), so each
+    letter with case matches both mapped forms. No character classes with such letters in ``pattern``."""
+    return "".join(f"[{ch.translate(_CONFUSABLES)}{ch.upper().translate(_CONFUSABLES)}]"
+                   if not ch.isascii() and ch.islower() and len(ch.upper()) == 1 else ch for ch in pattern)
+
+
+# "Ignore all previous instructions" in German, Spanish, French, Portuguese, Italian, Dutch, Russian,
+# Chinese, Japanese, Korean and Hindi. Like the English rule they need a word for "previous"; Japanese
+# and Korean also need the imperative, since "if you ignore the previous instructions" is common there.
+_OVERRIDE_TRANSLATED = _as_read(r"(?=[^\W\d_])(?:\b(?:" + "|".join((
+    r"(?:ignorier(?:e|en|t)?|vergiss|vergessen|missachte(?:n|t)?)\s+(?:sie\s+|du\s+)?(?:bitte\s+)?"
+    r"(?:alle\s+|s(?:ä|ae)mtliche\s+)?(?:die\s+|deine\s+|ihre\s+|meine\s+)?(?:vorherigen|vorigen|bisherigen|"
+    r"fr(?:ü|ue)heren|obigen|vorangegangenen|vorhergehenden|urspr(?:ü|ue)nglichen)\s+"
+    r"(?:anweisungen|instruktionen|befehle|vorgaben|anfragen)\b",
+    r"(?:alle\s+|s(?:ä|ae)mtliche\s+)?(?:vorherigen|vorigen|bisherigen|fr(?:ü|ue)heren|obigen|vorangegangenen)\s+"
+    r"(?:anweisungen|instruktionen|befehle|vorgaben)\s+(?:ignorieren|vergessen|missachten)\b",
+    r"(?:ignora|ignore|ignoren|ignorar|olvida|olvide|olviden|olvidar|descarta|descarte|omite|omita|"
+    r"haz\s+caso\s+omiso\s+(?:a|de)|haga\s+caso\s+omiso\s+(?:a|de))\s+(?:todas\s+)?(?:las\s+|tus\s+|sus\s+)?"
+    r"(?:(?:anteriores|previas)\s+(?:instrucciones|indicaciones|(?:ó|o)rdenes)|"
+    r"(?:instrucciones|indicaciones|(?:ó|o)rdenes)\s+(?:anteriores|previas|originales|de\s+arriba))",
+    r"(?:ignore[zr]?|oublie[zr]?|fais\s+abstraction\s+de|faites\s+abstraction\s+de)\s+(?:toutes\s+)?"
+    r"(?:les\s+|tes\s+|vos\s+|des\s+)?(?:(?:pr(?:é|e)c(?:é|e)dentes|anciennes)\s+(?:instructions|consignes|directives)|"
+    r"(?:instructions|consignes|directives)\s+(?:pr(?:é|e)c(?:é|e)dentes|ant(?:é|e)rieures|ci-dessus|initiales))",
+    r"(?:ignore|ignora|ignorem|ignorar|esque(?:ç|c)a|esque(?:ç|c)am|esque(?:ç|c)er|desconsidere|desconsidera|"
+    r"desconsiderar)\s+(?:todas\s+)?(?:as\s+|suas\s+|tuas\s+)?(?:(?:anteriores|pr(?:é|e)vias)\s+"
+    r"(?:instru(?:ç|c)(?:õ|o)es|orienta(?:ç|c)(?:õ|o)es|ordens)|(?:instru(?:ç|c)(?:õ|o)es|orienta(?:ç|c)(?:õ|o)es|"
+    r"ordens)\s+(?:anteriores|pr(?:é|e)vias|acima|originais))",
+    r"(?:ignora|ignori|ignorate|ignorare|dimentica|dimentichi|dimenticate|dimenticare)\s+(?:tutte\s+)?(?:le\s+)?"
+    r"(?:precedenti\s+(?:istruzioni|indicazioni)|(?:istruzioni|indicazioni)\s+(?:precedenti|sopra|iniziali|originali))",
+    r"(?:negeer|vergeet)\s+(?:alle\s+)?(?:de\s+|je\s+|uw\s+)?(?:eerdere|vorige|voorgaande|bovenstaande|"
+    r"oorspronkelijke)\s+(?:instructies|opdrachten|aanwijzingen)\b",
+)) + ")|" + "|".join((
+    r"(?:(?:проигнорируй|игнорируй|забудь)(?:те)?|не\s+обращай(?:те)?\s+внимания\s+на)\s+(?:все\s+)?(?:свои\s+|мои\s+)?"
+    r"(?:предыдущие|прежние|прошлые|вышеуказанные|изначальные|исходные)\s+(?:инструкции|указания|команды)",
+    r"(?:忽略|无视|無視|忘记|忘記|忘掉|忽视|忽視|不要理会|不要理會|不理会|不理會)[^。！？\n]{0,6}?"
+    r"(?:之前|以前|先前|上面|上述|前面|此前|以上|原来|原來|原先)[^。！？\n]{0,6}?(?:指令|指示|命令)",
+    r"(?:以前|前|上記|これまで|今まで|先ほど|先程|最初)の[^。！？\n]{0,8}?(?:指示|命令|指令)[^。！？\n]{0,6}?"
+    r"(?:無視し(?:て|ろ)|無視せよ|忘れ(?:て|ろ|なさい))",
+    r"(?:이전|앞|위|기존|지금까지|원래)(?:의|에서)?\s*(?:모든\s*)?(?:지시|지침|명령|지시사항)[^.\n]{0,8}?"
+    r"(?:무시하(?:고|세요|십시오|라)|무시해|잊어|잊으세요)",
+    r"(?:सभी\s+)?(?:पिछले|पहले\s+के|ऊपर\s+के|पूर्व)\s+(?:सभी\s+|सारे\s+)?(?:निर्देशों|निर्देश|आदेशों|आदेश)\s*"
+    r"(?:को\s+)?(?:अनदेखा|नज़?रअंदाज|भूल)",
+)) + ")")
+# "New task:" and "new instructions:" in the same languages.
+_NEW_TASK_TRANSLATED = _as_read(
+    r"(?=[^\W\d_])(?:\b(?:neue\s+(?:aufgabe|anweisungen?)|nuevas?\s+(?:tarea|instrucci(?:ó|o)n(?:es)?)|"
+    r"nouvelles?\s+(?:t(?:â|a)che|instructions?|consignes?)|novas?\s+(?:tarefa|instru(?:ç|c)(?:ã|a)o|"
+    r"instru(?:ç|c)(?:õ|o)es)|nuov[oae]\s+(?:compito|istruzion[ei])|nieuwe\s+(?:taak|instructies?|opdracht)|"
+    r"нов(?:ая|ые)\s+(?:задача|инструкции|указания))|新的?(?:任务|任務|指令|指示)|新しい(?:指示|タスク|命令)|"
+    r"새로운?\s*(?:지시|작업|명령|지침)|नया\s+कार्य|नए\s+निर्देश)[ \t]*[:\-]")
+
+
+class _Translated:
+    """A rule's English pattern, then its translations. Run on every text, the translations cost several
+    times the English pattern; they run only on text with a non-ASCII character or one of ``stems``, the
+    Latin-script nouns they need (lowercase), since text with neither cannot match them. They compile on
+    first use: compiling them takes a few milliseconds, and every hook event is a new process."""
+
+    def __init__(self, english: str, translated: str, stems: tuple[str, ...]) -> None:
+        self.english, self.source, self.stems = re.compile(english, _I), translated, stems
+
+    @functools.cached_property
+    def translated(self) -> re.Pattern[str]:
+        return re.compile(self.source, _I)
+
+    def finditer(self, text: str) -> Iterator[re.Match[str]]:
+        yield from self.english.finditer(text)
+        if text.isascii():
+            low = text.lower()
+            if not any(stem in low for stem in self.stems):
+                return
+        yield from self.translated.finditer(text)
+
+
 # Rules for text that should describe a tool, not instruct the agent.
-_DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("instruction_override", re.compile(
+_DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
+    ("instruction_override", _Translated(
         r"(?:ignore|disregard|forget)\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?"
-        r"(?:previous|prior|above|earlier|user'?s?|original)\s+(?:instructions?|requests?|quer(?:y|ies))", _I)),
+        r"(?:previous|prior|above|earlier|user'?s?|original)\s+(?:instructions?|requests?|quer(?:y|ies))",
+        _OVERRIDE_TRANSLATED, ("instru", "anweisung", "befehl", "vorgabe", "anfrage", "indica", "rdenes", "consigne",
+                               "directive", "orienta", "ordens", "istruz", "opdracht", "aanwijzing"))),
     ("hidden_directive", re.compile(r"<\s*/?\s*(?:important|system|instructions?|secret|hidden)\s*>", _I)),
     ("cross_tool_directive", re.compile(
         r"\b(?:before|after|prior\s+to|when(?:ever)?|each\s+time)\s+(?:a\s+user\s+)?"
@@ -65,7 +155,7 @@ _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"[^.\n]{0,80}?(?:https?://[^\s\"'<>)]+|[\w.+-]+@[\w-]+\.[\w.-]+)", _I)),
 )
 # Rules for tool outputs: data that tries to become instructions.
-_OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+_OUTPUT_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
     _DESCRIPTION_RULES[0],
     _DESCRIPTION_RULES[1],
     _DESCRIPTION_RULES[3],
@@ -74,8 +164,10 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"\b(?:assistant|AI|agent|model|you)\b[^.\n]{0,30}?\b(?:must|should|need\s+to|are\s+(?:required|instructed)\s+to)"
         r"\s+(?:now\s+|immediately\s+|also\s+)?(?:send|forward|email|transfer|pay|delete|upload|share|grant|"
         r"post|write|call|invoke|execute|run|change|update|create|move)\b", _I)),
-    ("new_task", re.compile(
-        r"\b(?:new|updated|additional|important)\s+(?:task|instructions?|directive)s?[ \t]*[:\-]", _I)),
+    ("new_task", _Translated(
+        r"\b(?:new|updated|additional|important)\s+(?:task|instructions?|directive)s?[ \t]*[:\-]",
+        _NEW_TASK_TRANSLATED, ("aufgabe", "anweisung", "tarea", "instru", "tache", "consigne", "tarefa", "compito",
+                               "istruz", "taak", "opdracht"))),
     ("exfiltration", re.compile(
         r"\b(?:send|forward|email|upload|post|transfer|leak|exfiltrate)\w*\b[^.\n]{0,80}?"
         r"\b(?:password|credential|secret|token|api\s*key|private\s+key|ssn|social\s+security|"
@@ -103,15 +195,6 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
-# Cyrillic and Greek letters that render like Latin ones ("іgnоre"); NFKC keeps them.
-# Armenian, Latin-extended and small-capital look-alikes, and typographic apostrophes (a rule
-# reading "user's" must read "user’s" too).
-_CONFUSABLES = str.maketrans(
-    "аеорсхуіјѕԁԛԝАВЕКМНОРСТХУІЈЅαβεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧ"
-    "օսոհցզɡɑɩıӏӀһʏᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡᴢ\u2018\u2019\u02bc\u2032\u00b4",
-    "aeopcxyijsdqwABEKMHOPCTXYIJSabeiknoptuxABEHIKMNOPTYX"
-    "ounhgqgaiiiihyabcdefghijklmnoprstuvwz" + "'" * 5,
-)
 # Default-ignorable code points outside category Cf, which a renderer shows as nothing: variation
 # selectors, the combining grapheme joiner, Hangul fillers, Mongolian selectors, tags.
 _IGNORABLE = re.compile("[\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u3164\ufe00-\ufe0f\uffa0"
@@ -179,9 +262,32 @@ def _decoded(text: str) -> list[str]:
     return found
 
 
+# Leetspeak ("1gn0r3 4ll pr3v10u5 1n5truct10n5"): a line with a word of letters and digits shaped like it
+# (a digit inside the word, or standing for the first or last letter of a longer one) is read once more
+# with those words' digits as letters. Only words standing alone are read so: "t0x1@mail.test", "/v1/api"
+# and "build-a1b3" are values, and a rewritten value would teach the threat memory an address nobody sent.
+# Lines without such a word ("served in 12ms", "v2", "2026-10-29") are not copied.
+_LEET = str.maketrans("013457", "oieast")
+# Each branch starts at the digit, so the search skips straight to digits instead of trying every letter.
+_LEET_SHAPE = re.compile(r"[013457](?:(?<=[^\W\d_].)[013457]*[^\W\d_]|(?<!\w.)[^\W\d_]{3}|(?<=[^\W\d_]{3}.)(?!\w))")
+_LEET_WORD = re.compile(r"(?<![\w@.:/\\-])(?:[^\W\d_]|[013457])+(?![\w@:/\\-]|\.\w)")
+
+
+def _unleet(text: str) -> list[str]:
+    if not _LEET_SHAPE.search(text):
+        return []
+    lines = []
+    for line in text.splitlines():
+        if _LEET_SHAPE.search(line) and any(_LEET_SHAPE.search(m[0]) for m in _LEET_WORD.finditer(line)):
+            lines.append(_LEET_WORD.sub(lambda m: m[0].translate(_LEET), line))
+    return lines
+
+
 def readable(text: str) -> str:
-    """The text the rules read: the raw text plus its decoded layers, normalized."""
-    return _normalize("\n".join([text, *_decoded(text)]))
+    """The text the rules read: the raw text plus its decoded layers, normalized, then its leetspeak
+    lines read as letters."""
+    text = _normalize("\n".join([text, *_decoded(text)]))
+    return "\n".join([text, *_unleet(text)])
 
 
 def leaf_text(value: Any) -> str:
@@ -229,7 +335,7 @@ def normalized_intent(text: str) -> str:
     return " ".join(_normalize(text).lower().split())
 
 
-def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str]], ...], trusted: str = "",
+def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str] | _Translated], ...], trusted: str = "",
           collapse: bool = False) -> list[str]:
     text = readable(text)
     if collapse:

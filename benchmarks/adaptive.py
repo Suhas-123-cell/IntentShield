@@ -22,6 +22,7 @@ from intentshield.evaluation import wilson  # noqa: E402
 from intentshield.mcp_inspect import distinctive_values, scan_description  # noqa: E402
 
 _LOOKALIKE = str.maketrans({"a": "а", "e": "е", "o": "о", "p": "р", "c": "с", "i": "і"})  # Cyrillic
+_LEET = str.maketrans({"a": "4", "e": "3", "i": "1", "o": "0", "s": "5", "t": "7"})
 _PARAPHRASE = (
     (r"<\s*(/?)\s*important\s*>", r"[\1NOTE]"),
     (r"ignore (?:all )?(?:the )?previous instructions", "set aside what you were told earlier"),
@@ -45,6 +46,10 @@ def homoglyph(text: str) -> str:
     return _words(text, lambda w: w.translate(_LOOKALIKE))
 
 
+def leetspeak(text: str) -> str:
+    return _words(text, lambda w: w.translate(_LEET))
+
+
 def zero_width(text: str) -> str:
     return _words(text, lambda w: w[:2] + "​" + w[2:])
 
@@ -64,6 +69,7 @@ TRANSFORMS: dict[str, Callable[[str], str]] = {
     "original": lambda t: t,
     "homoglyph": homoglyph,
     "zero_width": zero_width,
+    "leetspeak": leetspeak,
     "paraphrase": paraphrase,
     "line_split": line_split,
     "paraphrase+zero_width": lambda t: zero_width(paraphrase(t)),
