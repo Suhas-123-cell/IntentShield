@@ -113,9 +113,11 @@ def test_hmac_signatures_verify_and_a_changed_pack_or_other_key_is_refused():
     assert verify(pack(), Trust(pins=frozenset({digest(pack())}))) == "pin"
 
 
-def test_ed25519_signatures_when_cryptography_is_available():
-    ed25519 = pytest.importorskip("cryptography.hazmat.primitives.asymmetric.ed25519")
+def test_ed25519_signatures():
+    # A hard import: cryptography arrives with the mcp SDK (pyjwt[crypto]); if that edge ever
+    # disappears this test must fail, not skip, so signed packs are never silently untested.
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
     private = ed25519.Ed25519PrivateKey.generate()
     raw = private.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
                                 serialization.NoEncryption())

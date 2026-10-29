@@ -444,6 +444,8 @@ class MCPProxyRuntime:
             except BaseException as exc:  # cancellation: close the rest, then let it propagate as itself
                 interrupted = interrupted or exc
         if interrupted is not None:
+            for exc in errors:  # not lost behind the cancellation
+                logger.warning("upstream close failed", extra={"error": type(exc).__name__})
             raise interrupted
         if errors:
             raise RuntimeError(f"Failed to close {len(errors)} upstream MCP connection(s)") from errors[0]
@@ -614,16 +616,18 @@ class MCPProxyRuntime:
         run_id = await asyncio.to_thread(self._service().create_run, user_intent)
         # The intent exempts what it names from detection and provenance. An intent that
         # repeats a value or instruction from a flagged output is the injection speaking.
-        with self._lock:
+        named = distinctive_values(user_intent)
+        event: tuple[str, dict[str, Any]] | None = None
+        with self._lock:  # decided under the lock, written after it and off the event loop
             flagged = self._tainted | self._suspect_values
-            named = distinctive_values(user_intent)
             if named & flagged or (self._injection_seen and scan_output(user_intent)):
                 self._untrusted_intents.add(run_id)
-                self._service().storage.add_event(run_id, "MCP_INTENT_FROM_OUTPUT", {})
+                event = ("MCP_INTENT_FROM_OUTPUT", {})
             elif not self.config.trusted_intent and (learned := named & self._observed.keys()):
                 self._intent_from_outputs[run_id] = learned
-                self._service().storage.add_event(run_id, "MCP_INTENT_NAMES_OBSERVED_VALUES",
-                                                  {"values": sorted(learned)[:20]})
+                event = ("MCP_INTENT_NAMES_OBSERVED_VALUES", {"values": sorted(learned)[:20]})
+        if event:
+            await asyncio.to_thread(self._service().storage.add_event, run_id, *event)
         return run_id
 
     async def tool_catalog(self, *, refresh: bool = True) -> list[dict[str, Any]]:

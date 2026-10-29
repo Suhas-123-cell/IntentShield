@@ -541,20 +541,33 @@ def run_mcp_server(
                 return hmac.compare_digest(request.headers.get("authorization", "").encode(),
                                            f"Bearer {control_token}".encode())
 
+            class BadBody(Exception):
+                pass
+
+            async def json_body(request: Request) -> dict[str, Any]:
+                try:
+                    payload = await request.json()
+                except json.JSONDecodeError:
+                    raise BadBody from None
+                if not isinstance(payload, dict):
+                    raise BadBody
+                return payload
+
             def guarded(handler):
-                """Every control route behind the one bearer check, with a malformed body as 422."""
+                """Every control route behind the one bearer check. Only a body that is not a JSON
+                object becomes a 422; any other error is a real bug and surfaces as one."""
                 async def route(request: Request) -> JSONResponse:
                     if not authorized(request):
                         return JSONResponse({"error": "unauthorized"}, status_code=401)
                     try:
                         return await handler(request)
-                    except (json.JSONDecodeError, AttributeError, TypeError):
+                    except BadBody:
                         return JSONResponse({"error": "body must be a JSON object"}, status_code=422)
                 return route
 
             async def decide_approval(request: Request) -> JSONResponse:
                 try:
-                    payload = await request.json()
+                    payload = await json_body(request)
                     decision = payload.get("decision")
                     if decision not in {"approve", "reject"}:
                         return JSONResponse(
@@ -577,7 +590,7 @@ def run_mcp_server(
 
             async def learn_example(request: Request) -> JSONResponse:
                 try:
-                    payload = await request.json()
+                    payload = await json_body(request)
                     if not isinstance(payload.get("text"), str):
                         return JSONResponse({"error": "text must be a string"}, status_code=422)
                     return JSONResponse(await server.intentshield_runtime.learn_example(
@@ -585,14 +598,14 @@ def run_mcp_server(
                 except ValueError as exc:
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
-            app.add_route("/control/approvals/{approval_id}", guarded(decide_approval), methods=["POST"]
-            )
+            app.add_route("/control/approvals/{approval_id}", guarded(decide_approval), methods=["POST"])
+
             async def rules(request: Request) -> JSONResponse:
                 return JSONResponse(await server.intentshield_runtime.rules_status())
 
             async def propose_rules(request: Request) -> JSONResponse:
                 try:
-                    payload = await request.json()
+                    payload = await json_body(request)
                     return JSONResponse({"proposals": await server.intentshield_runtime.propose_rules(
                         str(payload.get("example_id")))})
                 except KeyError:
@@ -602,7 +615,7 @@ def run_mcp_server(
 
             async def decide_rule(request: Request) -> JSONResponse:
                 try:
-                    payload = await request.json()
+                    payload = await json_body(request)
                     if payload.get("decision") not in {"approve", "reject"}:
                         return JSONResponse({"error": "decision must be approve or reject"}, status_code=422)
                     return JSONResponse(await server.intentshield_runtime.decide_rule(
