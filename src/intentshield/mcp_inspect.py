@@ -83,14 +83,67 @@ _NEW_TASK_TRANSLATED = _as_read(
     r"새로운?\s*(?:지시|작업|명령|지침)|नया\s+कार्य|नए\s+निर्देश)[ \t]*[:\-]")
 
 
+def _one_typo(word: str, target: str) -> bool:
+    """Whether ``word`` is ``target`` with at most one typo: a letter added, dropped or changed, or two
+    neighbours swapped ("iunstructions", "ingore", "previosu")."""
+    if word == target:
+        return True
+    if len(word) == len(target):
+        diff = [i for i, (a, b) in enumerate(zip(word, target)) if a != b]
+        return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1
+                                  and word[diff[0]] == target[diff[1]] and word[diff[1]] == target[diff[0]])
+    if abs(len(word) - len(target)) != 1:
+        return False
+    short, long = sorted((word, target), key=len)
+    i = next((i for i, (a, b) in enumerate(zip(short, long)) if a != b), len(short))
+    return short[i:] == long[i + 1:]
+
+
+class _WithTypos:
+    """The English override, plus the same phrase with one typo in one of its three words while the
+    other two are spelled right ("Ignore your previous iunstructions" is how AgentDojo writes it). Every
+    pattern starts at a literal word, and text with none of those words is skipped by a substring test."""
+
+    _VERBS, _WHICH, _NOUNS = ("ignore", "disregard", "forget"), ("previous", "prior", "above", "earlier", "original"), \
+        ("instructions", "instruction")
+
+    def __init__(self, english: str) -> None:
+        self.english = re.compile(english, _I)
+        # A typo in the second or the third word, found from the verb; one in the verb, from the two words
+        # after it (the verb is then read back from the text before them).
+        self.after_verb = re.compile(rf"\b(?:{'|'.join(self._VERBS)})\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?"
+                                     r"([a-z]{4,9})\s+([a-z]{10,13})\b", _I)
+        self.tail = re.compile(rf"\b(?:{'|'.join(self._WHICH)})\s+instructions?\b", _I)
+        self.verb_before = re.compile(r"\b([a-z]{5,10})\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?\Z", _I)
+
+    def finditer(self, text: str) -> Iterator[re.Match[str]]:
+        yield from self.english.finditer(text)
+        if "instruction" not in (low := text.lower()) and not any(verb in low for verb in self._VERBS):
+            return  # every candidate needs one of them spelled right: a plain substring test skips most text
+        for match in self.after_verb.finditer(text):
+            which, noun = match[1].lower(), match[2].lower()
+            if (which in self._WHICH and self._typo(noun, self._NOUNS)) or (
+                    noun in self._NOUNS and self._typo(which, self._WHICH)):
+                yield match
+        for match in self.tail.finditer(text):
+            before = self.verb_before.search(text, max(0, match.start() - 40), match.start())
+            if before and self._typo(before[1].lower(), self._VERBS):
+                yield match
+
+    @staticmethod
+    def _typo(word: str, words: tuple[str, ...]) -> bool:
+        return word not in words and any(_one_typo(word, target) for target in words)
+
+
 class _Translated:
     """A rule's English pattern, then its translations. Run on every text, the translations cost several
     times the English pattern; they run only on text with a non-ASCII character or one of ``stems``, the
     Latin-script nouns they need (lowercase), since text with neither cannot match them. They compile on
     first use: compiling them takes a few milliseconds, and every hook event is a new process."""
 
-    def __init__(self, english: str, translated: str, stems: tuple[str, ...]) -> None:
-        self.english, self.source, self.stems = re.compile(english, _I), translated, stems
+    def __init__(self, english: str | _WithTypos, translated: str, stems: tuple[str, ...]) -> None:
+        self.english = re.compile(english, _I) if isinstance(english, str) else english
+        self.source, self.stems = translated, stems
 
     @functools.cached_property
     def translated(self) -> re.Pattern[str]:
@@ -107,9 +160,9 @@ class _Translated:
 
 # Rules for text that should describe a tool, not instruct the agent.
 _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
-    ("instruction_override", _Translated(
+    ("instruction_override", _Translated(_WithTypos(
         r"(?:ignore|disregard|forget)\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?"
-        r"(?:previous|prior|above|earlier|user'?s?|original)\s+(?:instructions?|requests?|quer(?:y|ies))",
+        r"(?:previous|prior|above|earlier|user'?s?|original)\s+(?:instructions?|requests?|quer(?:y|ies))"),
         _OVERRIDE_TRANSLATED, ("instru", "anweisung", "befehl", "vorgabe", "anfrage", "indica", "rdenes", "consigne",
                                "directive", "orienta", "ordens", "istruz", "opdracht", "aanwijzing"))),
     ("hidden_directive", re.compile(r"<\s*/?\s*(?:important|system|instructions?|secret|hidden)\s*>", _I)),
