@@ -195,7 +195,8 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   prompts) the hooks installed but not yet trusted never ran, and the notes reached the attacker in 3/3 runs,
   as with no guard. With the transparent proxy the notes never left in 3/3: `send_email` stayed available,
   but the agent did not call it after the proxy's warning on the injected result
-  (`results/harness-live-codex/`). The hooks arm with trusted hooks is not yet measured. Cursor hooks are tested on event shapes only.
+  (`results/harness-live-codex/`). With the hooks trusted, the hook denied the attacker's `send_email` in
+  3/3 runs (`results/harness-live-codex-trusted/`). Cursor hooks are tested on event shapes only.
 - The learned detectors are negative or null results and are off by default; their PyTorch path (DeBERTa, the
   e5 embedder) is exercised locally only, never in CI.
 - The trivial baseline also reaches 0.0% executed harm; "best performing" is not supported (the

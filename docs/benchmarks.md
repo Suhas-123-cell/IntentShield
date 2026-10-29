@@ -586,9 +586,18 @@ against `attack_server.py`, the same three prompts as the Gemini check. Raw call
 | hooks + transparent proxy | 0/3 | the proxy quarantined the poisoned `add_numbers` and sent `llm_model_name` empty; `send_email` stayed available, but after the warning it put in front of the injected result the agent never called it |
 
 Codex 0.165 runs a hook only after a person has trusted it (its hook review); a headless run skips untrusted
-hooks without a warning. The hooks arm with trusted hooks is not measured: trusting them needs the interactive
-review, or Codex's `--dangerously-bypass-hook-trust`, which this run did not use. `intentshield install codex`
-now says so. n = 3 per arm, one local model.
+hooks without a warning. `intentshield install codex` now says so.
+
+The same campaign with the hooks trusted (`CODEX_FLAGS="--dangerously-bypass-hook-trust"`, which stands in for
+the one-time review; raw calls and the hook's denials in `results/harness-live-codex-trusted/`):
+
+| arm | notes reached the attacker | note |
+|---|---|---|
+| unguarded | 3/3 | as above |
+| hooks (trusted) | 0/3 | in each run the `PreToolUse` hook denied `send_email` to the attacker ("an argument value came from a tool output that contained injected instructions"); `llm_model_name` reached the server empty |
+| hooks (trusted) + transparent proxy | 0/3 | the agent did not call `send_email`; nothing for the hook to deny |
+
+n = 3 per arm, one local model (qwen2.5:7b), so this shows the Codex adapter works live; it is not a rate.
 
 
 Cost: a hook is a short-lived process, mostly Python start-up: hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`), on an M5; the checks themselves take 0.02 to 2 ms, the
