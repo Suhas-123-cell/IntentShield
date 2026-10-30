@@ -33,6 +33,9 @@ HARNESSES = ("claude", "codex", "cursor", "gemini")
 _HOOK = "intentshield-hook"
 _PROXY = "intentshield-mcp"
 _MCP_MATCHER = "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?"
+# Claude Code's built-in tools the hook reads with --builtin-tools: calls it checks, results it scans.
+_BUILTIN_CALLS = "Bash|WebFetch|Read|Write|Edit|MultiEdit|NotebookEdit"
+_BUILTIN_RESULTS = "Bash|WebFetch|WebSearch|Read"
 _SERVER_ID = re.compile(r"[^A-Za-z0-9_.-]")
 
 
@@ -63,7 +66,7 @@ _JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|on|default)(:[A-Za-z0-9_.:/-]+)?"
 
 
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None,
-                 judge_outputs: bool = False) -> str:
+                 judge_outputs: bool = False, builtin_tools: bool = False) -> str:
     """The shell command the harness runs on every event. Every piece is quoted and validated:
     the harness hands the string to a shell."""
     command = f"{shlex.quote(hook)} {harness}"
@@ -77,6 +80,8 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
         command += f" --judge {shlex.quote(judge)}"
         if judge_outputs:
             command += " --judge-outputs"
+    if builtin_tools:
+        command += " --builtin-tools"
     return command
 
 
@@ -126,28 +131,39 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
     return path
 
 
-def hook_entries(harness: str, command: str) -> dict[str, Any]:
-    """The hook configuration for one harness, as ``configs/harness/`` ships it."""
+def hook_entries(harness: str, command: str, builtin_tools: bool = False) -> dict[str, Any]:
+    """The hook configuration for one harness, as ``configs/harness/`` ships it. ``builtin_tools`` also sends
+    the harness's own shell, file and web tools to the hook (whose command must carry --builtin-tools)."""
     if harness == "claude":
+        calls = f"{_MCP_MATCHER}|{_BUILTIN_CALLS}" if builtin_tools else _MCP_MATCHER
+        results = f"{_MCP_MATCHER}|{_BUILTIN_RESULTS}" if builtin_tools else _MCP_MATCHER
         return {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": command}]}],
-                "PreToolUse": [{"matcher": _MCP_MATCHER,
+                "PreToolUse": [{"matcher": calls,
                                 "hooks": [{"type": "command", "command": command, "onFailure": "block"}]}],
-                "PostToolUse": [{"matcher": _MCP_MATCHER, "hooks": [{"type": "command", "command": command}]}],
+                "PostToolUse": [{"matcher": results, "hooks": [{"type": "command", "command": command}]}],
                 # A tool result with isError:true arrives here instead of PostToolUse; its text is as
                 # attacker-controlled as any other.
-                "PostToolUseFailure": [{"matcher": _MCP_MATCHER, "hooks": [{"type": "command", "command": command}]}]}
+                "PostToolUseFailure": [{"matcher": results, "hooks": [{"type": "command", "command": command}]}]}
     if harness == "gemini":
         return {"BeforeAgent": [{"hooks": [{"type": "command", "command": command}]}],
                 "BeforeTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": command}]}],
                 "AfterTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": command}]}]}
     if harness == "cursor":
-        return {"beforeSubmitPrompt": [{"command": command}],
-                "beforeMCPExecution": [{"command": command, "failClosed": True}],
-                "afterMCPExecution": [{"command": command}]}
+        entries = {"beforeSubmitPrompt": [{"command": command}],
+                   "beforeMCPExecution": [{"command": command, "failClosed": True}],
+                   "afterMCPExecution": [{"command": command}]}
+        if builtin_tools:
+            # Not beforeShellExecution: Cursor does not document whether a hook's "allow" skips its own approval
+            # of the command, and the hook answers "allow" to every command it has no objection to.
+            entries.update(beforeReadFile=[{"command": command, "failClosed": True}],
+                           afterShellExecution=[{"command": command}])
+        return entries
     if harness == "codex":
+        # Codex has named its shell tool several ways; the hook ignores the tools it does not know.
+        matcher = ".*" if builtin_tools else "mcp__.*"
         return {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": command}]}],
-                "PreToolUse": [{"matcher": "mcp__.*", "hooks": [{"type": "command", "command": command}]}],
-                "PostToolUse": [{"matcher": "mcp__.*", "hooks": [{"type": "command", "command": command}]}]}
+                "PreToolUse": [{"matcher": matcher, "hooks": [{"type": "command", "command": command}]}],
+                "PostToolUse": [{"matcher": matcher, "hooks": [{"type": "command", "command": command}]}]}
     raise ValueError(f"Unknown harness: {harness}")
 
 
@@ -193,6 +209,15 @@ def merge_hooks(settings: dict[str, Any], entries: dict[str, Any]) -> tuple[dict
         if merged != existing:
             hooks[event] = merged
             changed = True
+    # An event an earlier install used and this one does not (Cursor's beforeReadFile without --builtin-tools).
+    for event in [e for e in hooks if e not in entries and isinstance(hooks[e], list)]:
+        kept = _without_ours(hooks[event])
+        if kept != hooks[event]:
+            changed = True
+            if kept:
+                hooks[event] = kept
+            else:
+                del hooks[event]
     return settings, changed
 
 
@@ -220,10 +245,10 @@ def remove_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], bool]:
 _TOML_BEGIN, _TOML_END = "# >>> intentshield hooks >>>", "# <<< intentshield hooks <<<"
 
 
-def codex_toml(command: str) -> str:
+def codex_toml(command: str, builtin_tools: bool = False) -> str:
     """The Codex CLI hook block, between markers so it can be removed again."""
     lines = [_TOML_BEGIN]
-    for event, groups in hook_entries("codex", command).items():
+    for event, groups in hook_entries("codex", command, builtin_tools).items():
         for group in groups:
             lines.append(f"[[hooks.{event}]]")
             if "matcher" in group:
@@ -316,17 +341,17 @@ def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[s
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
             judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
-            judge_outputs: bool = False) -> Path:
+            judge_outputs: bool = False, builtin_tools: bool = False) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched."""
     path = settings_path(harness, scope, home, cwd)
     if judge and not dry_run:
         ensure_judge_key(judge, home, api_key, ask)
-    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs)
+    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
         stripped, _ = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
-        new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command)
+        new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command, builtin_tools)
         tomllib.loads(new)
         if new == text:
             print(f"already installed: {path}")
@@ -334,7 +359,7 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         _write(path, new, dry_run)
     else:
         existed = path.exists()
-        settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command))
+        settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools))
         if not changed:
             print(f"already installed: {path}")
             return path
@@ -536,6 +561,9 @@ def add_subcommands(sub: Any) -> None:
                            help="turn on the LLM judge: groq (default, asks for GROQ_API_KEY once), gemini, "
                                 "or ollama (local)")
             p.add_argument("--api-key", default=None, help="the judge's API key, instead of being asked")
+            p.add_argument("--builtin-tools", action="store_true",
+                           help="also guard the harness's own shell, file and web tools (Bash, WebFetch, Read, "
+                                "Write...); off by default until its review load is measured")
             p.add_argument("--judge-outputs", action="store_true",
                            help="the judge also reads each tool result the rules pass (catches plain-language "
                                 "injections; one request per result, about 1 s locally, 4 s on Gemini)")
@@ -558,7 +586,7 @@ def run(args: argparse.Namespace) -> int:
             if args.judge_outputs and not args.judge:
                 raise ValueError("--judge-outputs needs --judge")
             install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
-                    api_key=args.api_key, judge_outputs=args.judge_outputs)
+                    api_key=args.api_key, judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":

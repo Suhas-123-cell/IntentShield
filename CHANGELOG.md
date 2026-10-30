@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Built-in tools, opt-in** (`intentshield install <harness> --builtin-tools`, or `--builtin-tools` on the
+  hook). The hooks now read the harness's own shell, web and file tools: Claude Code `Bash`, `WebFetch`,
+  `WebSearch`, `Read`, `Write`, `Edit`; Codex's shell tool; Gemini CLI's shell, fetch, search, read and
+  write tools; Cursor's `beforeReadFile` and `afterShellExecution`. A shell command is parsed for where it
+  reaches, whether it sends data and which secrets it reads (`src/intentshield/shell.py`). A command or
+  fetch to an address from an injected output is denied; sending data to an address that came only from a
+  tool output asks, as does reading secrets and sending data out; after an injection, commands that are not
+  read-only ask. Fetched pages, search results and remote command output are scanned like MCP results; the
+  user's own files and local command output only warn, because the rules fire on ordinary code there.
+  Benign review load (`benchmarks/shell_replay.py`): 0/35 calls on the committed fixture; replaying 40 real
+  Claude Code sessions from five projects, 4/1707 shell calls asked (0.2%, 95% CI 0.1-0.6%), 0/326 reads,
+  0/473 writes, and MCP asks rose from 47/126 to 53/126 because built-in outputs add observed values. On
+  this repository's own sessions, which handle attack text, 711/3339 shell calls asked (21.3%): 7 of 32
+  sessions read real injection text from the network. Off by default until the default is decided.
+- `intentshield doctor`: checks that each harness holds every IntentShield hook, that the hook executable
+  exists, that a hosted judge has its key, that the harness has run a hook since the install (the hooks
+  now record when each harness last ran one), and which stdio servers are not behind the proxy. Exit 1 on
+  a problem.
 - A dropped connection to the judge (the server hanging up mid-response, a reset) now counts as no opinion
   and is retried, like a timeout. Before, it raised, and in a hook a crash blocks the call, so a network blip
   at the judge's provider could block a legitimate tool call.
