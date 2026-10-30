@@ -532,6 +532,25 @@ def _views(text: str) -> list[str]:
     return [view for view in found if view != text]
 
 
+# Reference-style markdown: "![s][1]" with "[1]: https://..." elsewhere, which renders like "![s](https://...)".
+_REF_DEFINITION = re.compile(r"^[ \t]{0,3}\[([^\]\n]{1,100})\]:[ \t]*<?(\S+?)>?(?:[ \t]+[\"'(].*)?$", re.M)
+_REF_IMAGE = re.compile(r"!\[([^\]\n]{0,100})\](?:\[([^\]\n]{0,100})\])?(?![(\[:])")
+
+
+def _hidden_views(text: str) -> list[str]:
+    """Readings only the output rules get, since their text is no source of values: the text reversed and
+    in rot13 (an instruction written so to slip past the rules; a model reads both when asked to), and
+    reference-style markdown images written inline, so the image rules see where they send data."""
+    found = [text[::-1], codecs.encode(text, "rot13")]
+    if "![" in text and (refs := {m[1].strip().lower(): m[2] for m in _REF_DEFINITION.finditer(text)}):
+        def inline(m: re.Match[str]) -> str:
+            url = refs.get((m[2] or m[1]).strip().lower())
+            return f"![{m[1]}]({url})" if url else m[0]
+        if (resolved := _REF_IMAGE.sub(inline, text)) != text:
+            found.append(resolved)
+    return found
+
+
 @functools.lru_cache(maxsize=8)  # the hook reads one output for the rules and for its values in a row
 def _read(text: str) -> str:
     """The raw text plus its decoded layers and its right-to-left overrides as shown, normalized."""
@@ -590,8 +609,10 @@ def normalized_intent(text: str) -> str:
 
 
 def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str] | _Translated], ...], trusted: str = "",
-          collapse: bool = False) -> list[str]:
+          collapse: bool = False, hidden: bool = False) -> list[str]:
     text = readable(text)
+    if hidden:
+        text = "\n".join([text, *_hidden_views(text)])
     if collapse:
         text = " ".join(text.split())
     # Text the user typed is their own request, not an injection ("forward this: ignore ...").
@@ -751,7 +772,7 @@ _AS_SPACE = str.maketrans("|,;", "   ")
 
 def scan_output(value: Any, trusted: str = "") -> list[str]:
     text = leaf_text(value)
-    found = _scan(text, _OUTPUT_RULES, trusted)
+    found = _scan(text, _OUTPUT_RULES, trusted, hidden=True)
     if not isinstance(value, str) or text.translate(_AS_SPACE) != text:
         if (cells := _values_text(value)) != text:
             found += [name for name in _scan(cells, _OUTPUT_RULES, trusted) if name not in found]

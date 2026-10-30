@@ -148,7 +148,7 @@ class HarnessGuard:
             # A hook holds the harness: one short try, then no opinion (reported below), never minutes
             # of free-tier back-off.
             try:
-                self.judge = Judge.from_spec(judge, timeout=10, retries=1)
+                self.judge = Judge.from_spec(judge, timeout=10, retries=1, budget=20)
             except ValueError as exc:  # no key: the judge is evidence only, so the rules carry on, loudly
                 self.judge_missing = str(exc)
                 print(f"IntentShield judge not configured: {exc}. Run `intentshield install <harness> --judge "
@@ -926,11 +926,18 @@ def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
         if v.arguments is not None and v.decision != "deny":
             # Cursor cannot rewrite arguments, and an approved ask would send them as they are;
             # the agent is told what to resend, and any confirmation comes with that call.
-            v = Verdict("deny", v.context + " Call the tool again with those fields empty.")
-        reply: dict[str, Any] = {"permission": v.decision}
-        if v.reason:
-            reply.update(user_message=v.user_reason or v.reason, agent_message=v.reason)
-        return reply
+            return _cursor_reply(Verdict("deny", v.context + " Call the tool again with those fields empty."))
+        # Measured on Cursor CLI 2026.10.22 (benchmarks/harness_live/cursor_hook_probe.py): an "ask" on an MCP
+        # tool its allowlist approves ran the call, 3 of 3 times, so an ask is sent as a refusal.
+        if v.decision == "ask":
+            v = Verdict("deny", v.reason + NO_RETRY, user_reason=v.user_reason)
+        return _cursor_reply(v)
+    if guard.builtin_tools and name == "beforeShellExecution":
+        # Here an "ask" held the command (allowlisted or not) and "allow" did not skip Cursor's own approval.
+        v = guard.shell(session, "builtin:shell", str(event.get("command") or ""))
+        if v.decision == "deny":
+            v.reason += NO_RETRY
+        return _cursor_reply(v)
     if name == "afterMCPExecution":
         # Cursor documents no reply field for this hook, so a warning here reaches no one: what the scan
         # finds still taints the session and shows in the next call's verdict, but the model is not told.
@@ -958,7 +965,19 @@ def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
         if v.decision == "allow":
             return {"permission": "allow"}
         return {"permission": "deny", "user_message": v.reason}
-    return None
+    # Never silence: Cursor reads an empty reply from a failClosed hook as a failure and blocks the call.
+    return {}
+
+
+def _cursor_reply(v: Verdict) -> dict[str, Any]:
+    """A Cursor before-hook reply. No objection is an empty reply, which leaves the call to Cursor's own
+    approval; measured, an explicit "allow" did not skip that approval either, but nothing is gained by it."""
+    if v.decision == "allow" and not v.reason:
+        return {}
+    reply: dict[str, Any] = {"permission": v.decision}
+    if v.reason:
+        reply.update(user_message=v.user_reason or v.reason, agent_message=v.reason)
+    return reply
 
 
 def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:

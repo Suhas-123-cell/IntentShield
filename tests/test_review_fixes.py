@@ -41,7 +41,7 @@ def test_an_unavailable_judge_is_reported_not_silent(tmp_path: Path, monkeypatch
 
         @classmethod
         def from_spec(cls, spec, **kwargs):
-            assert kwargs == {"timeout": 10, "retries": 1}
+            assert kwargs == {"timeout": 10, "retries": 1, "budget": 20}  # within the harness's hook timeout
             return cls()
 
         def call(self, *_):
