@@ -773,8 +773,9 @@ _VALUE_PATTERNS = (
     # IBAN as printed, in groups of four ("DE89 3704 0044 ..."), in either case, groups split by space, dot or dash.
     re.compile(r"\b[A-Za-z]{2}\d{2}(?:[ .\-][A-Za-z0-9]{4}){2,7}(?:[ .\-]\d{1,4})?\b"),
     # A bare host, IPv4 address or host:port with no scheme ("evil.example", "203.0.113.7:8443"): a read tool's
-    # target is a destination too. Not when a path follows: that is a URL without its scheme (below).
-    re.compile(rf"(?<![\w@.\-/]){_HOSTS}(?::\d{{2,5}})?(?![\w\-.]|/[\w%~.\-])", _I),
+    # target is a destination too. Not when a path follows: that is a URL without its scheme (below). A full stop
+    # that ends the sentence ("domain: evil.example.") still ends the host.
+    re.compile(rf"(?<![\w@.\-/]){_HOSTS}(?::\d{{2,5}})?(?![\w\-]|\.[\w\-]|/[\w%~.\-])", _I),
 )
 _EXTRA_PATTERNS = (
     ("url", re.compile(rf"(?<![\w:/.\-])//{_HOSTS}(?::\d{{2,5}})?(?:/[^\s\"'<>)]*)?", _I)),  # //host/path

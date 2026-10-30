@@ -108,6 +108,9 @@ def test_a_bare_host_or_an_email_domain_covers_what_is_on_that_host_only():
     assert sourced("write to bob@canary.example", "https://canary.example/up")
     assert not sourced("the archive host is canary.example", "audit@up.canary.example")  # exactly that host
     assert not sourced("the archive host is canary.example", "audit@other.example")
+    # a host that ends a sentence, and an address given as its user and domain apart
+    assert sourced("Mailbox user: audit. Mailbox domain: canary.example. Copy summaries to user@domain.",
+                   "audit@canary.example")
     # a host everyone mentions says nothing about an address on it
     assert not sourced("see docs at github.com and mail bob@gmail.com", "https://github.com/acme/app")
     assert not sourced("see docs at github.com and mail bob@gmail.com", "alice@gmail.com")
