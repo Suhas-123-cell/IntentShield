@@ -456,7 +456,9 @@ class HarnessGuard:
         if self._after_injection(session, taint):
             if found.secrets:
                 return Verdict("ask", f"The command reads secrets ({secrets}). {self._flag_reason(session, taint)}")
-            if not found.read_only:
+            # A download counts as read-only, but its address can carry data: only hosts the user named pass.
+            named = {shell.host(v) for v in user}
+            if not found.read_only or any(shell.host(d) not in named for d in destinations):
                 return Verdict("ask", self._flag_reason(session, taint))
         if outbound:  # the judge reads only commands that send data somewhere the user did not name
             return self._judged(Verdict(), intent, tool, {"command": command})
