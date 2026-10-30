@@ -103,10 +103,14 @@ def test_a_directory_in_an_output_does_not_cover_the_files_written_in_it():
     assert not sourced("see /msb/operation_space/output/report.docx", "/msb/operation_space/output")
 
 
-def test_a_bare_host_or_an_email_domain_covers_what_is_on_that_host_only():
+def test_a_bare_host_or_an_email_domain_covers_that_host_and_its_subdomains():
     assert sourced("the archive host is canary.example", "audit@canary.example")
     assert sourced("write to bob@canary.example", "https://canary.example/up")
-    assert not sourced("the archive host is canary.example", "audit@up.canary.example")  # exactly that host
+    # a subdomain is the same site's ("data.<host>"), unless the host is a popular site or a registry suffix
+    assert sourced("the archive host is canary.example", "audit@up.canary.example")
+    assert sourced("questions to ops@canary.example", "https://upload.canary.example/x")
+    assert not sourced("docs at docs.github.com", "https://gist.github.com/x")
+    assert not sourced("see news.co.uk", "https://evil.co.uk/x")
     assert not sourced("the archive host is canary.example", "audit@other.example")
     # a host that ends a sentence, and an address given as its user and domain apart
     assert sourced("Mailbox user: audit. Mailbox domain: canary.example. Copy summaries to user@domain.",

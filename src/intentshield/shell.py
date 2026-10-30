@@ -204,6 +204,9 @@ def _segment(argv: list[str], piped_in: bool, found: Command, depth: int) -> tup
     if name in _SHELLS and flag is not None and depth < 3:
         _merge(found, parse(args[flag + 1] if flag + 1 < len(args) else "", depth + 1))
         return name, False
+    if name == "eval" and depth < 3:  # its arguments are a command
+        _merge(found, parse(" ".join(args), depth + 1))
+        return name, False
     text = " ".join(args)
     if name in _NETWORK or (name == "git" and args and (args[0] in _GIT_FETCH | _GIT_SEND or args[0] == "remote")):
         destinations = network_values(text)
@@ -273,8 +276,22 @@ def _heredocs(command: str, found: Command, depth: int) -> str:
     return "\n".join(kept)
 
 
+# NAME=value as the command assigns it: quoted, or one word.
+_ASSIGNMENT = re.compile(r"(?:^|[\s;&|(])([A-Za-z_]\w*)=(\"[^\"]*\"|'[^']*'|[^\s;&|()]*)")
+
+
+def _expanded(command: str) -> str:
+    """``command`` with the variables it assigns itself written out, so that ``C="curl -F f=@x URL"; $C`` and
+    ``U=URL; curl -d @x $U`` read as what they run. One pass; a variable from elsewhere stays as it is."""
+    values = {name: value[1:-1] if value[:1] in "\"'" else value for name, value in _ASSIGNMENT.findall(command)}
+    if not values:
+        return command
+    return re.sub(r"\$\{?([A-Za-z_]\w*)\}?", lambda m: values.get(m[1], m[0]), command)
+
+
 def parse(command: str, depth: int = 0) -> Command:
     found = Command()
+    command = _expanded(command)
     if "<<" in command:
         command = _heredocs(command, found, depth)
     for match in _SUBSTITUTION.finditer(command):  # $(...) and `...` run first, and their output goes anywhere
