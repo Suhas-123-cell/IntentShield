@@ -16,6 +16,12 @@
   counted and said. The in-memory answer cache keys on provider and URL as well as the model.
 - **Output rules** also read the text reversed and in rot13, and reference-style markdown images as inline
   ones. No new flags on 1,365 benign rows or 79 local READMEs; about 0.5 ms more per text.
+- **Provenance:** a host a tool output names bare or as an email's domain now covers its subdomains, except
+  under popular sites and registry suffixes. The review gate's output was byte-identical.
+- **Shell parser:** reads `eval` and variables the command assigns itself, so `C="curl -F f=@x URL"; $C` and
+  `U=URL; curl -d @x $U` show their destination. On 40 real sessions from other projects, shell asks went from
+  4 to 7 of 1,707: each of the three put the user's own site, first seen in a tool output, in a variable, and
+  asks as the same command written out would.
 - **Credentials** are found base64- or hex-encoded, reversed, split over two fields or across lines, and masked
   as written. No new hits on 6,460 corpus rows, 79 READMEs or 12,937 MSB call arguments.
 

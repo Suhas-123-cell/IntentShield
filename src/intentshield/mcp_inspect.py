@@ -844,6 +844,18 @@ def _common_host(host: str) -> bool:
     return any(host == known or host.endswith("." + known) for known in _COMMON_HOSTS)
 
 
+# Second-level labels of country registries ("co.uk", "com.au"): a name under one is not one site.
+_REGISTRY_LABELS = frozenset("co com org net gov ac edu ne or go".split())
+
+
+def _under_host(host: str, parent: str) -> bool:
+    """``host`` is a subdomain of ``parent``, a site's own name ("data.mirror.example" under "mirror.example"),
+    not of a registry suffix or a popular site, where subdomains belong to different owners."""
+    labels = parent.split(".")
+    return (host.endswith("." + parent) and len(labels) >= 2 and not _common_host(parent)
+            and not (len(labels) == 2 and labels[0] in _REGISTRY_LABELS))
+
+
 @functools.cache
 def _home_dir() -> str:
     return str(Path.home()).lower().rstrip("/")
@@ -1091,7 +1103,8 @@ def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = 
         if not (root := _url_root(value)):
             continue
         for host, path in roots:
-            if root[0] != host:
+            # a bare tainted host covers its subdomains as well (weaker: "host")
+            if root[0] != host and (path or not _under_host(root[0], host)):
                 continue
             if path and (root[1] == path or root[1].startswith(path + "/")):
                 found[value] = "path"
@@ -1120,7 +1133,13 @@ def sourced_from(values: set[str], source: Iterable[str], user_values: set[str])
     hosts = {host for kind, host, _ in parsed.values() if kind in ("url", "email", "host") and not _common_host(host)}
     named: set[str] = set()  # hosts the source names bare or as an email's domain
     url_paths: dict[str, list[list[str]]] = {}
+    parents = {".".join(host.split(".")[i:]) for host in hosts for i in range(1, host.count("."))}
     for key in source:
+        parent = key.rpartition("@")[2]  # a bare host, or an email's domain, the call's host lies under
+        if parent in parents and _parse(key)[0] in ("host", "email"):
+            named |= {host for host in hosts if _under_host(host, parent)}
+            if parent == key:
+                continue
         if hosts and any(host in key for host in hosts):
             kind, host, segments = _parse(key)
             if host in hosts:
