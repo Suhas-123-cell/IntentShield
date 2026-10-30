@@ -6,6 +6,7 @@
 - [architecture-and-testing.md](architecture-and-testing.md): module map, entry paths, the full test sequence and failure diagnosis.
 - [benchmarks.md](benchmarks.md): every benchmark protocol and table (MSB, MCPTox, InjecAgent, AgentDojo, judge, self-disclosure, live harness checks, replayed incidents) and the limits of each.
 - [detectors.md](detectors.md): the optional learned detectors, their training, evaluation, negative results, the adaptive attacker and how the operator teaches them.
+- [security-review.md](security-review.md): the 2026-10-30 review of the guard itself, with each finding's severity and status, the measured effect of the fixes and what is still open.
 
 ## Research notes, not user docs
 

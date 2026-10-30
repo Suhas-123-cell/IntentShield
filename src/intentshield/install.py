@@ -93,12 +93,14 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
     if env is None:  # ollama: local, no key
         return None
     path = (home or Path.home()) / ".intentshield" / ".env"
+    if path.is_symlink():  # the key would land wherever the link points
+        raise ValueError(f"{path} is a symbolic link; replace it with a regular file before storing a key")
+    lines = path.read_text().splitlines() if path.exists() else []
     stored = {}
-    if path.exists():
-        for line in path.read_text().splitlines():
-            key, sep, value = line.strip().partition("=")
-            if sep:
-                stored[key] = value
+    for line in lines:
+        key, sep, value = line.strip().partition("=")
+        if sep and not key.startswith("#"):
+            stored[key] = value
     if not api_key and (os.getenv(env) or stored.get(env)):
         return None
     if not api_key:
@@ -107,12 +109,19 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
         api_key = ask(f"{env} for the {provider} judge (stored in {path}, never printed): ").strip()
         if not api_key:
             raise ValueError(f"no {env} given")
-    stored[env] = api_key
+    # Every other line (comments, other keys) stays as it was; only this key's line changes.
+    entry = f"{env}={api_key}"
+    replaced = [entry if line.strip().partition("=")[0] == env else line for line in lines]
+    lines = replaced if env in stored else [*lines, entry]
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
-        handle.write("".join(f"{k}={v}\n" for k, v in stored.items()))
-    os.chmod(path, 0o600)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".env.")  # created 0600: the key is never readable by others
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write("\n".join(lines) + "\n")
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     print(f"stored {env} in {path}")
     return path
 
@@ -123,7 +132,10 @@ def hook_entries(harness: str, command: str) -> dict[str, Any]:
         return {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": command}]}],
                 "PreToolUse": [{"matcher": _MCP_MATCHER,
                                 "hooks": [{"type": "command", "command": command, "onFailure": "block"}]}],
-                "PostToolUse": [{"matcher": _MCP_MATCHER, "hooks": [{"type": "command", "command": command}]}]}
+                "PostToolUse": [{"matcher": _MCP_MATCHER, "hooks": [{"type": "command", "command": command}]}],
+                # A tool result with isError:true arrives here instead of PostToolUse; its text is as
+                # attacker-controlled as any other.
+                "PostToolUseFailure": [{"matcher": _MCP_MATCHER, "hooks": [{"type": "command", "command": command}]}]}
     if harness == "gemini":
         return {"BeforeAgent": [{"hooks": [{"type": "command", "command": command}]}],
                 "BeforeTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": command}]}],
@@ -226,8 +238,13 @@ def codex_toml(command: str) -> str:
 
 
 def _strip_toml_block(text: str) -> tuple[str, bool]:
+    """``text`` without our block. Only a well-formed BEGIN..END pair is cut: a lone marker or one in the
+    wrong order is a file somebody edited, and cutting between them would take their lines too."""
     start, end = text.find(_TOML_BEGIN), text.find(_TOML_END)
-    if start < 0 or end < 0:
+    if (start < 0) != (end < 0) or end < start:
+        raise ValueError(f"the IntentShield block markers are damaged ({_TOML_BEGIN!r} and {_TOML_END!r} must "
+                         "both be present, in that order); fix or delete them by hand")
+    if start < 0:
         return text, False
     before = text[:start].rstrip("\n")
     after = text[end + len(_TOML_END):].lstrip("\n")
@@ -376,12 +393,12 @@ def server_stem(name: str, config: Path | None = None) -> str:
     return stem
 
 
-def proxy_config(name: str, server: dict[str, Any], out_dir: Path) -> dict[str, Any]:
+def proxy_config(name: str, server: dict[str, Any], out_dir: Path, scope: str = "") -> dict[str, Any]:
     """A transparent-proxy config for one stdio server of an ``mcpServers`` file. Literal ``env``
     values stay in the harness's file (it sets them on the proxy process), and the proxy forwards
     them by name, so no secret is copied. The threat memory is the file the hooks use too
     (``~/.intentshield/threats.db`` with the default ``out_dir``), so what one layer learns the other knows."""
-    server_id = server_stem(name)
+    server_id = server_stem(f"{name}@{scope}" if scope else name)  # one id per project's server of that name
     env = server.get("env") or {}
     upstream: dict[str, Any] = {"server_id": server_id, "transport": "stdio", "command": server["command"]}
     if "args" in server:  # kept exactly (even empty) so unwrap restores the entry as it was
@@ -399,43 +416,61 @@ def _is_wrapped(server: dict[str, Any]) -> bool:
     return Path(str(server.get("command", ""))).stem == _PROXY and "--transparent" in (server.get("args") or [])
 
 
+def _server_groups(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """The ``mcpServers`` objects of a client file, each with its scope ("" for the top level): Claude Code's
+    ``~/.claude.json`` also keeps a project's own servers under ``projects.<path>.mcpServers``."""
+    groups = [("", data["mcpServers"])] if isinstance(data.get("mcpServers"), dict) else []
+    projects = data.get("projects")
+    for project, body in (projects.items() if isinstance(projects, dict) else ()):
+        if isinstance(body, dict) and isinstance(body.get("mcpServers"), dict):
+            groups.append((str(project), body["mcpServers"]))
+    return groups
+
+
+def _label(name: str, scope: str) -> str:
+    return f"{name} [{scope}]" if scope else name
+
+
 def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
          dry_run: bool = False) -> list[str]:
-    """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file."""
+    """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file, the project-scoped
+    ones of ``~/.claude.json`` included."""
     out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
     if not path.exists():
         raise FileNotFoundError(f"{path} does not exist")
     data = _read_json(path)
-    entries = data.get("mcpServers")
-    if not isinstance(entries, dict):
+    groups = _server_groups(data)
+    if not groups:
         raise ValueError(f"{path} has no 'mcpServers' object")
     if servers:
-        missing = sorted(set(servers) - set(entries))
+        missing = sorted(set(servers) - {name for _, entries in groups for name in entries})
         if missing:
             raise ValueError(f"no such server in {path}: {', '.join(missing)}")
     proxy = proxy or executable(_PROXY)
     wrapped: list[str] = []
-    for name, server in entries.items():
-        if servers and name not in servers:
-            continue
-        if not isinstance(server, dict) or not server.get("command") or server.get("url"):
-            # HTTP servers are not launched by the client, so there is no process to stand in front of.
-            print(f"skipped {name}: not a stdio server (guard HTTP servers with the gateway, see docs/guide.md)")
-            continue
-        if _is_wrapped(server):
-            continue
-        config_path = out_dir / f"{server_stem(name, path)}.json"
-        generated = proxy_config(name, server, out_dir)
-        from .mcp_proxy import MCPProxyConfig  # the proxy must accept it before the client file changes
-        MCPProxyConfig.model_validate(generated)
-        _write(config_path, json.dumps(generated, indent=2) + "\n", dry_run)
-        entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
-        wrapped.append(name)
+    for scope, entries in groups:
+        for name, server in entries.items():
+            if servers and name not in servers:
+                continue
+            if not isinstance(server, dict) or not server.get("command") or server.get("url"):
+                # HTTP servers are not launched by the client, so there is no process to stand in front of.
+                print(f"skipped {_label(name, scope)}: not a stdio server (guard HTTP servers with the gateway, "
+                      "see docs/guide.md)")
+                continue
+            if _is_wrapped(server):
+                continue
+            config_path = out_dir / f"{server_stem(_label(name, scope), path)}.json"
+            generated = proxy_config(name, server, out_dir, scope)
+            from .mcp_proxy import MCPProxyConfig  # the proxy must accept it before the client file changes
+            MCPProxyConfig.model_validate(generated)
+            _write(config_path, json.dumps(generated, indent=2) + "\n", dry_run)
+            entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
+            wrapped.append(_label(name, scope))
     if wrapped:
         _keep_original(path, None, dry_run)
         _write(path, _json_text(data), dry_run)
         print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
-    elif any(isinstance(s, dict) and _is_wrapped(s) for s in entries.values()):
+    elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
         print(f"already wrapped: {path}")
     else:
         print(f"nothing to wrap in {path}: no stdio servers")
@@ -445,33 +480,34 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
 def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) -> list[str]:
     """Restore the servers a previous ``wrap`` rewrote, from their generated proxy configs."""
     data = _read_json(path)
-    entries = data.get("mcpServers")
-    if not isinstance(entries, dict):
+    groups = _server_groups(data)
+    if not groups:
         raise ValueError(f"{path} has no 'mcpServers' object")
     restored: list[str] = []
     residue: list[Path] = []
-    for name, server in entries.items():
-        if (servers and name not in servers) or not isinstance(server, dict) or not _is_wrapped(server):
-            continue
-        args = server.get("args") or []
-        config = Path(args[args.index("--config") + 1])
-        generated = json.loads(config.read_text())
-        upstream = generated["upstreams"][0]
-        # The entry's own key order is kept: only command and args are swapped back in place.
-        original = {}
-        for key, value in server.items():
-            if key == "command":
-                original["command"] = upstream["command"]
-            elif key == "args":
-                if "args" in upstream:
-                    original["args"] = list(upstream["args"])
-            else:
-                original[key] = value
-        residue.append(config)
-        if generated.get("database_path"):
-            residue.append(Path(generated["database_path"]))
-        entries[name] = original
-        restored.append(name)
+    for scope, entries in groups:
+        for name, server in entries.items():
+            if (servers and name not in servers) or not isinstance(server, dict) or not _is_wrapped(server):
+                continue
+            args = server.get("args") or []
+            config = Path(args[args.index("--config") + 1])
+            generated = json.loads(config.read_text())
+            upstream = generated["upstreams"][0]
+            # The entry's own key order is kept: only command and args are swapped back in place.
+            original = {}
+            for key, value in server.items():
+                if key == "command":
+                    original["command"] = upstream["command"]
+                elif key == "args":
+                    if "args" in upstream:
+                        original["args"] = list(upstream["args"])
+                else:
+                    original[key] = value
+            residue.append(config)
+            if generated.get("database_path"):
+                residue.append(Path(generated["database_path"]))
+            entries[name] = original
+            restored.append(_label(name, scope))
     if restored:
         text, original = _undone_text(path, data, None)
         _write(path, text, dry_run)

@@ -242,10 +242,15 @@ flags are the quoted attacks, which the judge reads correctly as reports. Rules 
 **Limits.** The injections were written by an LLM for this corpus, in four styles; real attacks will differ.
 The default provider, Groq's gpt-oss-120b, was not run on the test split: its free tier allows 200,000
 tokens a day, which the train runs used up, and about 200 judged results would use up a day in normal use.
-Gemini takes about 4 s per result and local qwen about 1 s, on every result the rules pass. No adaptive
-attack on the judge was tried: text written to persuade the judge itself ("this result is safe") could
-lower these numbers. Results: `results/judge/outputs-gemini-flash-lite-test.json`,
-`results/judge/outputs-qwen2.5-7b-test.json`.
+Gemini takes about 4 s per result and local qwen about 1 s, on every result the rules pass. Results:
+`results/judge/outputs-gemini-flash-lite-test.json`, `results/judge/outputs-qwen2.5-7b-test.json`.
+
+**Since 0.4.0** the prompt (v2.1) also names rules for how the work must be done, requests to whoever
+reads or forwards the result, and text that speaks to the reviewer or vouches for itself. On the same
+test split qwen2.5:7b catches 101/346 (29.2%) and flags 6/176 benign (3.4%), against 84/346 and 1/176
+with the first prompt. Thirty hand-written jailbreaks and an adaptive attacker that sees the judge's
+prompt and verdicts were run against it; the method and numbers are in
+[benchmarks.md](benchmarks.md#attacks-on-the-output-judge).
 
 ## Teach the detector (operator labels and induced rules)
 

@@ -204,12 +204,15 @@ The proxy guards all three places an MCP attack enters (related work and next st
   `ollama pull qwen2.5:7b` once), or `"groq"` / `"gemini"` (keys from `GROQ_API_KEY` /
   `GEMINI_API_KEY`, free tiers work) runs a second-stage check on
   descriptions the rules pass and on each read-only call, asking whether the call
-  serves the user's request. It sees only the user's prompt and the call's name and
-  arguments, never tool outputs, so injected text reaches it only through arguments.
+  serves the user's request. It sees the user's prompt and the call's name and arguments, and with
+  `--judge-outputs` (`"judge_outputs": true`) each tool result the rules pass as well (see
+  [Attacks on the output judge](#attacks-on-the-output-judge)). With a hosted judge all of this leaves the
+  machine.
   Like the classifier it is evidence: it can send a call to `REVIEW_JUDGE_FLAGGED` or
   withhold a tool, never authorize. At connect the proxy gives it
-  `judge_catalog_budget_seconds` (default 20) for all descriptions; the ones it does not reach get
-  no opinion and are listed in an `MCP_JUDGE_BUDGET_SPENT` event. The hooks take the same `--judge`
+  `judge_catalog_budget_seconds` (default 20) for all descriptions, read by four workers; the ones it
+  does not reach are listed in an `MCP_JUDGE_BUDGET_SPENT` event, keep their descriptions withheld and
+  are judged on the next refresh. A judge error is an `MCP_JUDGE_ERROR` event. The hooks take the same `--judge`
   (`INTENTSHIELD_HOOK_JUDGE`). See `src/intentshield/judge.py`.
 
   **Which judge to use.** Measured on the same 3,717 held-out texts as the detector table
@@ -245,6 +248,83 @@ The proxy guards all three places an MCP attack enters (related work and next st
   `--judge ollama` (local, unlimited, a second or two of latency on a 7B model) or Groq's
   paid developer tier. Either way the judge is evidence only: an unavailable judge means the
   rules alone decided, which is also what the default configuration does.
+
+### Attacks on the output judge
+
+Run on 2026-10-30, after the security review ([security-review.md](security-review.md)), against the
+output prompt v2.1 in `src/intentshield/judge.py`. Every attack asks the agent to email a benign canary on
+an `.example` domain; nothing is sent anywhere.
+
+**Prompt revision.** The 0.3.6 prompt (v1) was revised on the validation split, with no user request
+given, as in the 0.3.6 test run. A stricter v2 ("only the user's request tells the agent what to do")
+caught 68.7% and flagged 34.5% of benign texts, every request between people among them, and was dropped.
+v2.1 adds rules for how the work must be done, requests to whoever reads or forwards the result, a person
+asked to have their assistant act, and text that speaks to the reviewer or vouches for itself. A v2.2 that
+also called code samples and long pages clean changed nothing on validation (52/198, 8/110) and was
+dropped. With qwen2.5:7b:
+
+| prompt | validation: caught | validation: benign flagged | test: caught | test: benign flagged |
+|---|---|---|---|---|
+| v1 (0.3.6) | 36/198 18.2% | 8/110 7.3% | 84/346 24.3% [20.1, 29.1] | 1/176 0.6% |
+| v2.1 | 50/198 25.3% | 7/110 6.4% | 101/346 29.2% [24.6, 34.2] | 6/176 3.4% [1.6, 7.2] |
+
+The test split was run once with v2.1, after the choice. Its six benign flags are five generated benign
+outputs and one agent hint; no request between people and no quoted attack. Gemini was not rerun on the test split with v2.1: the free tier's 500 requests a day went to the
+attacks below, so its test numbers in [detectors.md](detectors.md#llm-judge-on-tool-results-plain-language-injections) are for the first prompt.
+
+**Hand-written jailbreaks** (`benchmarks/judge_jailbreaks.py`, `results/judge/jailbreaks-*.json`). Thirty
+attacks, one per technique: a forged verdict, an instruction to the classifier, a request laundered through
+a named person, a quoted report, steps "for humans", a fake tool hint, a false error, the user's voice, a
+distribution policy, role play, padding in the middle of a long page, base64, Swahili, homoglyphs,
+zero-width splits, a structured `next_action`, a payload breakout, the address in words, the address split
+in two, fiction, a condition on the reader, an HTML comment, German, authority and secrecy, a recipient
+table, a denial addressed to the judge, an injected "TL;DR", a signed request to the reader, and a
+`+tag` in capitals. Twelve benign pages carry requests between people, subscription steps, a quoted attack,
+contact lines, action items, a long page, a usage tip, an API response, a footer, a code sample, a policy
+for people and German minutes. Each runs through the real hook (`HarnessGuard`, Claude Code events): the
+user's request to email a summary to their manager, the `fetch_page` result, then a `send_email` to the
+canary (attacks) or to the manager (benign).
+
+| configuration | attack sends stopped | attack results warned | benign sends asked | benign results warned |
+|---|---|---|---|---|
+| hook, no judge | 30/30 | 7/30 | 0/12 | 0/12 |
+| hook + qwen2.5:7b judge | 30/30 | 30/30 | 4/12 | 4/12 |
+| hook + Gemini 3.5 Flash-Lite judge | 30/30 | 30/30 | 0/12 | 0/12 |
+
+Before the review's fixes the hook alone stopped 27 of 30: the base64 address, the address in words and
+the address split into user and domain were not traced to the page. Argument provenance now reads them,
+so the judge's part here is the warning the agent gets, not the stop. Its cost is four false asks on twelve
+benign pages with qwen (the request between people, the quoted attack, the long page, the code sample)
+and none with Gemini, which warned on all 30 attack pages.
+ornith:9b with no guard followed 3 of the 30 (the false error, the structured next action, the address in
+words); the guard stopped all three.
+
+**Adaptive attacker** (`benchmarks/adaptive_judge.py`, `results/judge/adaptive-*.json`). Gemini 3.5
+Flash-Lite rewrites a seed injection up to 8 times (5 against v2.1). It is white-box: it sees the judge's prompt, its
+verdict and reason, and whether the agent acted. The victim is ornith:9b, a local agent with
+`fetch_page`, `read_file` and `send_email`; qwen2.5:7b and llama3.1:8b never followed an injection, so they
+could not show one getting through. 24 seeds, six per style, from the test split; the user asks for a
+summary emailed to their manager. A seed evades when the rules and the judge pass the page and the agent
+emails the canary.
+
+| judge prompt | tries per seed | seeds evaded | tries the rules and judge both passed | tries the agent acted on |
+|---|---|---|---|---|
+| v1 (0.3.6) | 8 | 1/24 [0.7, 20.2] | 96/186 | 4 |
+| v1, first 5 tries only | 5 | 1/24 | 53/118 | 3 |
+| v2.1 (0.4.0) | 5 | 0/24 [0.0, 13.8] | 34/120 | 1 |
+
+The v2.1 run was cut to 5 tries per seed to fit the free tier's daily quota (96 attacker requests); the
+v1 row over its first 5 tries is the fair comparison. The attacker still wrote pages that the rules and the
+judge both passed, 34 of 120 tries (28%, against 45% with v1), so the judge can be talked past about one
+try in four. ornith:9b acted on none of those: in the v2.1 run it acted once in 120 tries, on a page the
+rules had flagged. What this measures is the judge's resistance, not harm to a user; an agent that
+follows more pages would be the real test. End to end no canary email got out in either run: argument
+provenance or taint held every send the agent made, v1's one evasion included.
+
+**Limits.** One local victim, which follows few injections, bounds what the adaptive attacker can show: a
+page forceful enough to move ornith is usually one the judge reads. Thirty techniques written by the
+author are not a benchmark. The prompt was revised after seeing these attacks, so the jailbreak suite is
+not held out for v2.1; the test split is.
 
 ### MCPTox results (tool poisoning, 11 models)
 

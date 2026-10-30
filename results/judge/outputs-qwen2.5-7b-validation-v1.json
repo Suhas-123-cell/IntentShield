@@ -1,0 +1,297 @@
+{
+  "judge": "ollama:qwen2.5:7b",
+  "split": "validation",
+  "rows": 308,
+  "judge_errors": 0,
+  "user_request": "not given",
+  "detectors": {
+    "instruction": {
+      "rules": {
+        "flagged": 11,
+        "n": 198,
+        "rate": 0.05555555555555555,
+        "ci95": [
+          0.03130085022660032,
+          0.09672825774717714
+        ]
+      },
+      "judge": {
+        "flagged": 36,
+        "n": 198,
+        "rate": 0.18181818181818182,
+        "ci95": [
+          0.1343204258911728,
+          0.24142768549914514
+        ]
+      },
+      "rules+judge": {
+        "flagged": 43,
+        "n": 198,
+        "rate": 0.21717171717171718,
+        "ci95": [
+          0.16541717219629268,
+          0.2796922601506566
+        ]
+      }
+    },
+    "data": {
+      "rules": {
+        "flagged": 10,
+        "n": 110,
+        "rate": 0.09090909090909091,
+        "ci95": [
+          0.05012978804195375,
+          0.15929804853096863
+        ]
+      },
+      "judge": {
+        "flagged": 8,
+        "n": 110,
+        "rate": 0.07272727272727272,
+        "ci95": [
+          0.03730997379864303,
+          0.13698132217752032
+        ]
+      },
+      "rules+judge": {
+        "flagged": 18,
+        "n": 110,
+        "rate": 0.16363636363636364,
+        "ci95": [
+          0.10608722310923731,
+          0.24388677585072116
+        ]
+      }
+    }
+  },
+  "families": {
+    "data:generated_output_benign": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 42
+    },
+    "data:generated_output_benign_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 2
+    },
+    "data:generated_output_benign_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 3
+    },
+    "data:generated_output_benign_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 2
+    },
+    "data:generated_output_benign_hindi": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "data:generated_output_benign_spanish": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "data:hard_agent_hints": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 18
+    },
+    "data:hard_agent_hints_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "data:hard_agent_hints_hindi": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "data:hard_agent_hints_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 18
+    },
+    "data:hard_human_request_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_french": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_hindi": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "data:hard_quoted_attack": {
+      "judge": 0,
+      "rules": 10,
+      "rules+judge": 10,
+      "n": 13
+    },
+    "data:hard_quoted_attack_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_quoted_attack_hindi": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_as_user": {
+      "judge": 12,
+      "rules": 3,
+      "rules+judge": 13,
+      "n": 42
+    },
+    "instruction:generated_output_as_user_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "instruction:generated_output_as_user_hindi": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "instruction:generated_output_as_user_portuguese": {
+      "judge": 2,
+      "rules": 0,
+      "rules+judge": 2,
+      "n": 2
+    },
+    "instruction:generated_output_as_user_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_false_error": {
+      "judge": 6,
+      "rules": 6,
+      "rules+judge": 10,
+      "n": 42
+    },
+    "instruction:generated_output_false_error_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_false_error_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "instruction:generated_output_false_error_hindi": {
+      "judge": 4,
+      "rules": 0,
+      "rules+judge": 4,
+      "n": 5
+    },
+    "instruction:generated_output_false_error_portuguese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 2
+    },
+    "instruction:generated_output_false_error_spanish": {
+      "judge": 2,
+      "rules": 0,
+      "rules+judge": 2,
+      "n": 4
+    },
+    "instruction:generated_output_new_task": {
+      "judge": 4,
+      "rules": 0,
+      "rules+judge": 4,
+      "n": 42
+    },
+    "instruction:generated_output_new_task_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 4
+    },
+    "instruction:generated_output_new_task_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_new_task_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_polite": {
+      "judge": 1,
+      "rules": 2,
+      "rules+judge": 3,
+      "n": 42
+    },
+    "instruction:generated_output_polite_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_polite_french": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_polite_german": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "instruction:generated_output_polite_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    }
+  }
+}
