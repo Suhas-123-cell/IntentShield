@@ -451,13 +451,18 @@ class HarnessGuard:
             unavailable = ""
             if not weak and self.judge and self.judge_outputs:
                 # Last, as the costliest check: plain-language injections carry no marker a rule can match.
-                errors = self.judge.errors
+                errors, unread = self.judge.errors, self.judge.unread
                 if self.judge.output(self._load(session)[0], tool, text):
                     weak = ["judge"]
                 elif self.judge.errors > errors:
                     print(f"IntentShield judge unavailable ({self.judge.last_error}); the rules alone read this "
                           "result.", file=sys.stderr)
                     unavailable = "IntentShield: the LLM judge was unavailable for this result; only the rules checked it."
+                elif skipped := self.judge.unread - unread:  # a long result's least suspect parts went unread
+                    print(f"IntentShield judge read only part of the {tool} result ({skipped} parts skipped).",
+                          file=sys.stderr)
+                    unavailable = (f"IntentShield: the result of {tool} was too long for the LLM judge to read whole "
+                                   f"({skipped} parts skipped); only the rules read those.")
             if not weak and (self.classifier is None or not self.classifier.flags(text)):
                 self._scan_end(session)
                 return Verdict(context=unavailable)

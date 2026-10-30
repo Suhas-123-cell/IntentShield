@@ -235,9 +235,9 @@ def test_judge_outputs_env_rejects_a_typo_loudly(monkeypatch, tmp_path: Path, ca
 class Judging:
     """A judge that flags results mentioning "vendor" and objects to calls that do."""
 
-    errors, last_error = 0, ""
+    errors, last_error, unread = 0, "", 0
     seen: list[str] = []
-    fail = False
+    fail = skip = False
 
     @classmethod
     def from_spec(cls, _spec: str, **_kwargs) -> "Judging":
@@ -248,6 +248,7 @@ class Judging:
 
     def output(self, _intent: str, _tool: str, result: str) -> str | None:
         Judging.seen.append(result)
+        self.unread += 4 if Judging.skip else 0
         if Judging.fail:
             self.errors += 1
             self.last_error = "timeout"
@@ -258,7 +259,7 @@ class Judging:
 @pytest.fixture
 def judging(monkeypatch):
     monkeypatch.setattr(judge_module, "Judge", Judging)
-    Judging.seen, Judging.fail = [], False
+    Judging.seen, Judging.fail, Judging.skip = [], False, False
 
 
 def test_a_judge_flag_on_an_output_makes_later_writes_ask_but_not_deny(tmp_path: Path, judging):
@@ -287,6 +288,16 @@ def test_an_unavailable_output_judge_is_said_in_the_context(tmp_path: Path, judg
                                   tool_response="A calm page."), g)
     assert "judge was unavailable for this result" in out["hookSpecificOutput"]["additionalContext"]
     assert "judge unavailable" in capsys.readouterr().err
+
+
+def test_a_result_too_long_for_the_judge_to_read_whole_is_said_in_the_context(tmp_path: Path, judging, capsys):
+    Judging.skip = True
+    g = guard(tmp_path, judge="stub", judge_outputs=True)
+    handle("claude", claude("UserPromptSubmit", prompt="Summarize the log"), g)
+    out = handle("claude", claude("PostToolUse", tool_name="mcp__web__read_page", tool_input={},
+                                  tool_response="A calm log line.\n" * 50), g)
+    assert "4 parts skipped" in out["hookSpecificOutput"]["additionalContext"]
+    assert "read only part" in capsys.readouterr().err
 
 
 def test_the_agent_gets_a_fixed_message_instead_of_the_judges_words(tmp_path: Path, judging):

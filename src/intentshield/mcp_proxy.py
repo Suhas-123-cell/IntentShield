@@ -1066,12 +1066,16 @@ class MCPProxyRuntime:
         # The transparent run's "intent" is a label, not the user's request, which this proxy never sees.
         intent = "" if run_id == self._transparent_run else (
             self._service().storage.get_run(run_id) or {}).get("user_intent", "")
+        unread = int(getattr(self._judge, "unread", 0) or 0)
         try:
             flagged = self._judge.output(intent, tool, text)
         except Exception as exc:
             flagged = None
             self._judge_failed(exc)
         self._note_judge_errors(run_id)
+        skipped = int(getattr(self._judge, "unread", 0) or 0) - unread
+        if not flagged and skipped > 0:  # a long result's least suspect parts went unread: say so in the log
+            self._service().storage.add_event(run_id, "MCP_JUDGE_PARTIAL", {"tool_name": tool, "skipped": skipped})
         return "judge" if flagged else None
 
     def _semantic_flag(self, text: str, kind: str, run_id: str | None = None) -> str | None:

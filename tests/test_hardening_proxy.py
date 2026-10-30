@@ -322,7 +322,7 @@ def test_transparent_results_are_inspected_and_their_values_tracked(tmp_path: Pa
 class JudgeStub:
     """A judge that objects to any result mentioning the vendor, and to a description mentioning it."""
 
-    errors, last_error = 0, ""
+    errors, last_error, unread = 0, "", 0
     output_calls: list[str] = []
 
     @classmethod
@@ -337,6 +337,7 @@ class JudgeStub:
 
     def output(self, intent: str, _tool: str, result: str) -> str | None:
         JudgeStub.output_calls.append(intent)
+        self.unread += 3 if "long" in result else 0
         return "asks the agent to pay the vendor" if "vendor" in result else None
 
 
@@ -351,6 +352,19 @@ def test_the_output_judge_flags_transparent_results_without_tainting(tmp_path: P
             assert findings == ["semantic_instruction"] and not shield._tainted
             assert events(shield, "MCP_OUTPUT_SUSPECTED") == [{"tool_name": "web:read_page", "detector": "judge"}]
             assert JudgeStub.output_calls == [""]  # the transparent run's label is not passed off as the user's request
+
+    asyncio.run(exercise())
+
+
+def test_a_result_the_judge_read_only_in_part_is_logged(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(mcp_proxy, "Judge", JudgeStub)
+    upstream = Fixture({"read_page": "Read a web page."}, page="A long and quiet log.")
+
+    async def exercise() -> None:
+        async with plain(tmp_path, upstream, judge="stub", judge_outputs=True) as shield:
+            _, findings = await shield.forward("web:read_page", {"value": "home"})
+            assert not findings
+            assert events(shield, "MCP_JUDGE_PARTIAL") == [{"tool_name": "web:read_page", "skipped": 3}]
 
     asyncio.run(exercise())
 
