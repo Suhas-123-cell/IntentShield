@@ -5,8 +5,10 @@
 
 The agent is told to run `touch ran.txt` in a fresh directory; whether ran.txt exists is the answer. The
 interactive modes run Gemini CLI in a pseudo-terminal, save the screen text, and answer a prompt with Escape
-(PROBE_ANSWER=approve sends Enter instead). Auto-update is switched off in the probe's settings: an earlier
-interactive run without that let Gemini CLI update itself. Uses GEMINI_API_KEY from .env (free tier).
+(PROBE_ANSWER=approve sends Enter instead). PROBE_HOOK=intentshield installs the real hook instead of the stub
+(`--builtin-tools --review always --gemini-ask`, so it asks before any command that changes something).
+Auto-update is switched off in the probe's settings: an earlier interactive run without that let Gemini CLI
+update itself. Uses GEMINI_API_KEY from .env (free tier).
 """
 import json
 import os
@@ -20,6 +22,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPT = "Run exactly this shell command and nothing else: touch ran.txt   Then reply with the single word done."
+# Screen text that means Gemini CLI is waiting for the user: its own dialogs, or a hook's message above one.
+PROMPTED = r"Allow execution|Do you want to proceed|Apply this change|PROBE: confirm|IntentShield asks|IntentShield:"
 
 
 def hook(log: str) -> int:
@@ -34,6 +38,19 @@ def hook(log: str) -> int:
     return 0
 
 
+def tap(log: str, command: list[str]) -> int:
+    """Runs the real hook on the event and logs its reply."""
+    event = sys.stdin.read()
+    done = subprocess.run(command, input=event, capture_output=True, text=True)
+    reply = json.loads(done.stdout) if done.stdout.strip() else {}
+    with open(log, "a") as handle:
+        handle.write(json.dumps({"event": json.loads(event).get("hook_event_name"),
+                                 "tool": json.loads(event).get("tool_name"), "reply": reply}) + "\n")
+    sys.stdout.write(done.stdout)
+    sys.stderr.write(done.stderr)
+    return done.returncode
+
+
 def setup(out: Path) -> tuple[Path, dict]:
     from dotenv import dotenv_values
     out.mkdir(parents=True, exist_ok=True)
@@ -41,6 +58,10 @@ def setup(out: Path) -> tuple[Path, dict]:
     (home / ".gemini").mkdir(parents=True, exist_ok=True)
     work.mkdir(exist_ok=True)
     cmd = f"{sys.executable} {Path(__file__).resolve()} hook {out / 'hook.jsonl'}"
+    if os.environ.get("PROBE_HOOK") == "intentshield":  # the real hook, which asks before any change here
+        cmd = (f"env INTENTSHIELD_HOOK_DB={out / 'hooks.db'} INTENTSHIELD_THREAT_MEMORY=off PYTHONPATH={ROOT / 'src'} "
+               f"{sys.executable} {Path(__file__).resolve()} tap {out / 'hook.jsonl'} {sys.executable} -m "
+               "intentshield.harness gemini --builtin-tools --review always --gemini-ask")
     hooks = {"BeforeTool": [{"matcher": "*", "hooks": [{"type": "command", "command": cmd}]}]}
     (home / ".gemini" / "settings.json").write_text(json.dumps(
         {"security": {"auth": {"selectedType": "gemini-api-key"}},
@@ -76,7 +97,7 @@ def interactive(out: Path, approval: str) -> None:
             except OSError:
                 break
         text = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", screen).decode("utf-8", "replace")
-        if not answered and re.search(r"Allow execution|Do you want to proceed|PROBE: confirm|Apply this change", text):
+        if not answered and re.search(PROMPTED, text):
             time.sleep(2)
             os.write(fd, b"\r" if os.environ.get("PROBE_ANSWER") == "approve" else b"\x1b")  # Enter approves, Escape refuses
             answered = True
@@ -92,6 +113,8 @@ def interactive(out: Path, approval: str) -> None:
 def main() -> int:
     if sys.argv[1] == "hook":
         return hook(sys.argv[2])
+    if sys.argv[1] == "tap":
+        return tap(sys.argv[2], sys.argv[3:])
     mode, out = sys.argv[2], Path(sys.argv[3]).resolve()
     if mode.startswith("interactive-"):
         interactive(out, mode.split("-", 1)[1])
@@ -100,7 +123,7 @@ def main() -> int:
     ran = (out / "work" / "ran.txt").exists()
     events = [json.loads(line) for line in (out / "hook.jsonl").read_text().splitlines()] \
         if (out / "hook.jsonl").exists() else []
-    asks = sum(1 for e in events if e["reply"])
+    asks = sum(1 for e in events if (e["reply"] or {}).get("decision") == "ask")
     print(f"{mode}: ran.txt created = {ran}; hook asked {asks} time(s)")
     return 0
 

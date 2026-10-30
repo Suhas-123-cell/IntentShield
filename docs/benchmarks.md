@@ -818,9 +818,11 @@ asks on every shell command and tells the agent (gemini-3.1-flash-lite) to run `
 | 0.66.0 | headless, yolo | the command did not run; the CLI waited for an answer until killed at 300 s |
 | 0.66.0 | interactive, default | a prompt with the hook's `systemMessage`; Escape cancelled, the command did not run |
 | 0.66.0 | interactive, yolo | the same prompt; Enter ran the command, Escape cancelled it |
+| 0.66.0 | interactive, default, the real hook with `--builtin-tools --review always --gemini-ask` | a prompt with IntentShield's reason; Escape cancelled, Enter ran the command |
 
 One run per cell. An ask is a bypass on 0.37.1 under yolo and a hang on 0.66.0 headless, and the hook input
-carries neither the version nor whether a person is present, so the hook keeps refusing. During the first
+carries neither the version nor whether a person is present, so the hook keeps refusing by default;
+`--gemini-ask` sends real asks for people who run Gemini CLI 0.66 or later interactively. During the first
 interactive try, Gemini CLI updated itself from 0.37.1 to 0.66.0 (the probe now switches auto-update off); the
 built-in tool runs above used 0.37.1.
 
