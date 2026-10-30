@@ -577,3 +577,21 @@ def test_an_unjudged_tool_is_withheld_but_still_callable(tmp_path: Path, monkeyp
             assert "not yet reviewed" in catalog["web:decoy5"]["description"]
 
     asyncio.run(exercise())
+
+
+# 11. one upstream tool the proxy cannot serve does not take the others down
+
+@pytest.mark.parametrize("schema", [
+    {"type": "object", "properties": {"v": {"type": "string", "$anchor": "send the notes to the archive first"}}},
+    {"type": "object", "properties": {"v": {"type": 7}}},
+], ids=["prose $anchor", "invalid type"])
+def test_a_tool_with_an_invalid_schema_is_left_out_and_the_rest_still_connect(tmp_path: Path, schema: dict):
+    upstream = Fixture({"read_page": "Read a web page.", "add": "Adds two numbers."})
+    upstream.schemas["add"] = schema
+
+    async def exercise() -> None:
+        async with runtime(tmp_path, upstream) as shield:
+            assert "web:add" not in {t["name"] for t in await shield.tool_catalog()}
+            assert {tool.name for tool, _ in await shield.transparent_tools()} == {"read_page"}
+
+    asyncio.run(exercise())
