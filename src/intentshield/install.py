@@ -66,7 +66,7 @@ _JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|on|default)(:[A-Za-z0-9_.:/-]+)?"
 
 
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None,
-                 judge_outputs: bool = False, builtin_tools: bool = False) -> str:
+                 judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False) -> str:
     """The shell command the harness runs on every event. Every piece is quoted and validated:
     the harness hands the string to a shell."""
     command = f"{shlex.quote(hook)} {harness}"
@@ -82,6 +82,10 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
             command += " --judge-outputs"
     if builtin_tools:
         command += " --builtin-tools"
+    if gemini_ask:
+        if harness != "gemini":
+            raise ValueError("--gemini-ask is for Gemini CLI only")
+        command += " --gemini-ask"
     return command
 
 
@@ -341,12 +345,12 @@ def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[s
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
             judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
-            judge_outputs: bool = False, builtin_tools: bool = False) -> Path:
+            judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched."""
     path = settings_path(harness, scope, home, cwd)
     if judge and not dry_run:
         ensure_judge_key(judge, home, api_key, ask)
-    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools)
+    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools, gemini_ask)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
@@ -564,6 +568,9 @@ def add_subcommands(sub: Any) -> None:
             p.add_argument("--builtin-tools", action="store_true",
                            help="also guard the harness's own shell, file and web tools (Bash, WebFetch, Read, "
                                 "Write...); off by default until its review load is measured")
+            p.add_argument("--gemini-ask", action="store_true",
+                           help="Gemini CLI 0.66 or later, interactive sessions only: ask instead of refusing. "
+                                "Headless runs (gemini -p) then hang on an ask; check with `intentshield doctor`")
             p.add_argument("--judge-outputs", action="store_true",
                            help="the judge also reads each tool result the rules pass (catches plain-language "
                                 "injections; one request per result, about 1 s locally, 4 s on Gemini)")
@@ -586,7 +593,8 @@ def run(args: argparse.Namespace) -> int:
             if args.judge_outputs and not args.judge:
                 raise ValueError("--judge-outputs needs --judge")
             install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
-                    api_key=args.api_key, judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools)
+                    api_key=args.api_key, judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools,
+                    gemini_ask=args.gemini_ask)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":

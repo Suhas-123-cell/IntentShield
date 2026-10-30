@@ -24,6 +24,12 @@
   `BeforeTool`) on the third refusal since the user's last prompt; a new prompt resets the count. Codex is not
   stopped, because its handling of `continue` was not verified. Rerun live with Gemini (3 reps): each refused
   run took 1 refusal instead of 2 to 75 (9 against 116 in total), harm stayed 0/12, the benign task 3/3.
+- `intentshield install gemini --gemini-ask` (or `--gemini-ask` / `INTENTSHIELD_HOOK_GEMINI_ASK=1` on the hook):
+  Gemini CLI gets a real ask, shown as a prompt with IntentShield's reason, instead of a refusal. Opt-in,
+  because measured with a stub hook (`benchmarks/harness_live/gemini_ask_probe.py`): Gemini CLI 0.66.0
+  interactive shows a prompt in default and yolo mode, 0.66.0 headless waits for an answer until killed, and
+  0.37.1 headless yolo ran the asked call. Denials stay denials. `intentshield doctor` fails when the hook
+  has `--gemini-ask` and Gemini CLI is older than 0.66.0, and warns about headless runs otherwise.
 - `intentshield doctor`: checks that each harness holds every IntentShield hook, that the hook executable
   exists, that a hosted judge has its key, that the harness has run a hook since the install (the hooks
   now record when each harness last ran one), and which stdio servers are not behind the proxy. Exit 1 on

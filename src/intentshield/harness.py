@@ -117,11 +117,14 @@ class HarnessGuard:
                  classifier: str | None = None, catalog: str | Path | None = None,
                  judge: str | None = None, threats: str | Path | None = None,
                  packs: str | Path | None = None, review_output_sourced_arguments: bool = True,
-                 judge_outputs: bool = False, builtin_tools: bool = False) -> None:
+                 judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False) -> None:
         if review not in ("tainted", "always", "never") or outputs not in ("warn", "block"):
             raise ValueError(f"unknown review mode {review!r} or outputs mode {outputs!r}")
         self.review, self.outputs = review, outputs
         self.builtin_tools = builtin_tools  # also guard the harness's own shell, file and web tools
+        # Gemini CLI: send an ask as an ask instead of a refusal. Measured: a real prompt in interactive 0.66.0;
+        # approved by yolo in headless 0.37.1, and a wait with no end in headless 0.66.0. Hence opt-in.
+        self.gemini_ask = gemini_ask
         # As the proxy's setting: a value from a tool output always asks on a side-effecting
         # call; this decides it for reads.
         self.sourced_reads = review_output_sourced_arguments
@@ -973,14 +976,24 @@ def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
     tool = f"{server}:{context.get('tool_name') or event.get('tool_name', '')}"
     if name == "BeforeTool":
         v = guard.call(session, tool, _as_dict(event.get("tool_input")))
-        if v.decision != "allow":  # Gemini CLI has no ask; a confirmation request is a denial with a reason
-            return _gemini_refusal(session, v.reason, guard)
+        if v.decision != "allow":
+            return _gemini_decision(session, v, guard)
         if v.arguments is not None:
             return {"hookSpecificOutput": {"tool_input": v.arguments, "additionalContext": v.context}}
         return None
     if name == "AfterTool":
         return _gemini_result(session, tool, event, guard)
     return None
+
+
+def _gemini_decision(session: str, v: Verdict, guard: HarnessGuard) -> dict[str, Any]:
+    """A call the guard holds. Gemini CLI's ask is a prompt only in an interactive session of a recent version,
+    so by default an ask is a refusal; with --gemini-ask it is sent as an ask, and the user sees why."""
+    if v.decision == "ask" and guard.gemini_ask:
+        shown = v.user_reason or v.reason
+        return {"decision": "ask", "reason": v.reason,
+                "systemMessage": shown if shown.startswith("IntentShield") else f"IntentShield: {shown}"}
+    return _gemini_refusal(session, v.reason, guard)
 
 
 def _gemini_refusal(session: str, reason: str, guard: HarnessGuard) -> dict[str, Any]:
@@ -1014,8 +1027,7 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
     arguments = _as_dict(event.get("tool_input"))
     if name == "BeforeTool":
         v = _builtin_call(guard, session, tool, arguments)
-        # Gemini CLI has no ask; a confirmation request is a denial with a reason
-        return None if v is None or v.decision == "allow" else _gemini_refusal(session, v.reason, guard)
+        return None if v is None or v.decision == "allow" else _gemini_decision(session, v, guard)
     if name == "AfterTool" and _BUILTIN[tool][0] != "write":
         kind, field_name = _BUILTIN[tool]
         target = _builtin_target(kind, field_name, arguments)
@@ -1056,6 +1068,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--builtin-tools", action="store_true",
                         default=os.getenv("INTENTSHIELD_HOOK_BUILTIN_TOOLS", "").lower() in ("1", "true", "yes", "on"),
                         help="also guard the harness's built-in shell, file and web tools (the matcher must send them)")
+    parser.add_argument("--gemini-ask", action="store_true",
+                        default=os.getenv("INTENTSHIELD_HOOK_GEMINI_ASK", "").lower() in ("1", "true", "yes", "on"),
+                        help="Gemini CLI 0.66 or later, interactive only: ask the user instead of refusing. A headless "
+                             "run (gemini -p) then waits for an answer that never comes, and Gemini CLI 0.37 in yolo "
+                             "mode runs the call")
     parser.add_argument("--judge-outputs", action="store_true",
                         help="the judge also reads each tool result the rules pass, for plain-language injections "
                              "(one request per result: latency, and free-tier quota)")
@@ -1086,7 +1103,8 @@ def main(argv: list[str] | None = None) -> None:
         guard = HarnessGuard(args.db, review=args.review, outputs=args.outputs, classifier=args.classifier,
                              catalog=args.catalog, judge=args.judge, threats=threats, packs=args.packs,
                              review_output_sourced_arguments=not args.allow_sourced_reads,
-                             judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools)
+                             judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools,
+                             gemini_ask=args.gemini_ask)
         reply = handle(args.harness, event, guard)
     except Exception as exc:  # fail closed on calls, open on everything else
         name = event.get("hook_event_name")

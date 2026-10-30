@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shlex
 import shutil
 import sqlite3
+import subprocess
 import sys
 import time
 import tomllib
@@ -30,6 +32,21 @@ REQUIRED = {"claude": ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToo
             "cursor": ("beforeSubmitPrompt", "beforeMCPExecution", "afterMCPExecution"),
             "gemini": ("BeforeAgent", "BeforeTool", "AfterTool")}
 _KEYS = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+# The oldest Gemini CLI on which a hook's ask was measured to be a prompt (in 0.37.1 yolo mode approved it).
+GEMINI_ASK_TESTED = (0, 66, 0)
+
+
+def gemini_version() -> tuple[int, ...] | None:
+    """The installed Gemini CLI's version, or None when it cannot be read."""
+    program = shutil.which("gemini")
+    if not program:
+        return None
+    try:
+        out = subprocess.run([program, "--version"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
+    return tuple(int(part) for part in match.groups()) if match else None
 
 
 class Report:
@@ -116,6 +133,8 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
             if not any("Bash" in m for m in matchers):
                 report.line("FAIL", subject, "the hook reads built-in tools but its PreToolUse matcher does not send "
                                              "Bash; run `intentshield install claude --builtin-tools` again")
+        if "--gemini-ask" in argv and harness == "gemini":
+            _check_gemini_ask(report, subject)
     installed = path.stat().st_mtime
     last = (runs or {}).get(harness)
     if runs is None:
@@ -128,6 +147,21 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
     elif not missing:
         report.line("ok", subject, f"hooks installed; last ran {time.strftime('%Y-%m-%d %H:%M', time.localtime(last))}")
     return True
+
+
+def _check_gemini_ask(report: Report, subject: str) -> None:
+    version = gemini_version()
+    tested = ".".join(map(str, GEMINI_ASK_TESTED))
+    if version is None:
+        report.line("warn", subject, f"--gemini-ask is on, but the Gemini CLI version could not be read; it was "
+                                     f"tested on {tested} and later only")
+    elif version < GEMINI_ASK_TESTED:
+        report.line("FAIL", subject, f"--gemini-ask is on, but Gemini CLI {'.'.join(map(str, version))} is older "
+                                     f"than {tested}; on 0.37.1 yolo mode ran a call the hook asked about. Update "
+                                     "Gemini CLI or run `intentshield install gemini` without --gemini-ask")
+    else:
+        report.line("warn", subject, "--gemini-ask is on: interactive sessions get a prompt, but a headless run "
+                                     "(gemini -p) waits for an answer that never comes")
 
 
 def _check_servers(report: Report, path: Path) -> None:

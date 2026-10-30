@@ -514,7 +514,7 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
 
 `intentshield install <harness>` writes the hook entries below into the harness's settings
 file (`--scope project` for the current directory; `--review always` for a harness that
-cannot ask); `intentshield uninstall <harness>` removes them. The same entries are in
+cannot ask; `--gemini-ask` for interactive Gemini CLI 0.66 or later, see the README's per-harness table); `intentshield uninstall <harness>` removes them. The same entries are in
 `configs/harness/` for a manual install; they call `intentshield-hook` by name, so put the
 install's `bin` on the harness's `PATH` or use absolute paths.
 

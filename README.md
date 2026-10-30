@@ -139,9 +139,9 @@ when the model routes calls through `intentshield_call` and states the intent it
 | harness | hook config | rewrite arguments | ask the user |
 |---|---|---|---|
 | Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` and the MCP resource tools | yes | yes |
-| Codex CLI | `~/.codex/config.toml`: same events; Codex runs them only after you trust them once | yes | no: asks become denials with a reason |
+| Codex CLI | `~/.codex/config.toml`: same events; Codex runs them only after you trust them once | yes | no: asks become denials with a reason that tells the agent not to retry |
 | Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no: the agent is told to resend | yes |
-| Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no: denials with a reason |
+| Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no by default: denials with a reason that tells the agent not to retry, and the third refusal since the prompt ends the turn. `install gemini --gemini-ask` sends real asks, which Gemini CLI 0.66 shows as a prompt in an interactive session; a headless run (`gemini -p`) then waits for an answer forever, and Gemini CLI 0.37 in yolo mode ran an asked call. `intentshield doctor` checks the version |
 | any other MCP client | no hooks; the transparent proxy still guards descriptions, schemas and outputs | - | - |
 
 `intentshield doctor` checks the install: every harness's settings hold all IntentShield hooks, the hook
