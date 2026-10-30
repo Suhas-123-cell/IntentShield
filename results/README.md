@@ -90,3 +90,18 @@ addresses are the fictional ones in AgentDojo's and MCPTox's own task text).
 | `injection/agentdojo-strings.jsonl` | 532 AgentDojo strings from `benchmarks/agentdojo_export.py`: 397 environment texts (`data`) and 135 injected instructions, 27 per attack (`agentdojo_*`); copied from `artifacts/data/agentdojo-strings.jsonl` | the `external` split's `agentdojo_*` families |
 | `injection/report-local-2026-10-13.json` | `injection_eval.py` on 2026-10-13 with the classifier and the earlier exemplar index that scanned descriptions and outputs (rules, classifier, exemplars, any); copied from `artifacts/injection-eval/report-local.json` | the "exemplars, descriptions and outputs" row of `docs/detectors.md` (20.7% / 2.4% / 9/142; MCPTox 261/301) |
 | `judge/report-gemini_gemini-3.5-flash-lite.json` | `benchmarks/judge_eval.py --judge gemini` on 2026-10-12: Gemini 3.5 Flash-Lite on the held-out MCPTox descriptions; rates in this older file are rounded to 4 places (300/301 = 0.9967, 5/108 = 0.0463) | the README's "LLM judge on held-out descriptions" row for Gemini |
+
+### Attacks on the output judge (2026-10-30)
+
+From `benchmarks/judge_outputs_eval.py`, `benchmarks/judge_jailbreaks.py` and `benchmarks/adaptive_judge.py`
+after the security review; copied from `artifacts/judge-v2/`, `artifacts/jailbreaks/` and
+`artifacts/adaptive-judge/`. They feed `docs/benchmarks.md#attacks-on-the-output-judge`.
+
+| File | What |
+|---|---|
+| `judge/outputs-qwen2.5-7b-validation-v1.json`, `...-validation-v2.1.json` | qwen2.5:7b on the validation split with the first prompt and with v2.1 (prompt choice) |
+| `judge/outputs-qwen2.5-7b-test-v2.1.json` | qwen2.5:7b on the test split with v2.1, run once after the choice (all 522 rows) |
+| `judge/jailbreaks-qwen2.5-7b.json` | the 30 hand-written attacks and 12 benign pages through the hook, without a judge and with qwen2.5:7b, plus whether ornith:9b followed each attack unguarded |
+| `judge/jailbreaks-gemini-flash-lite.json` | the same suite with Gemini 3.5 Flash-Lite as the judge (no victim); one row corrected after the run, as its `correction` field says |
+| `judge/adaptive-v2.1-qwen2.5-7b.json` | the same attacker against the v2.1 prompt, 24 seeds x 5 tries (cut for the free quota); resumed once after a network reset at seed 21 |
+| `judge/adaptive-v1prompt-qwen2.5-7b.json` | the adaptive attacker (Gemini 3.5 Flash-Lite, 24 seeds x 8 tries) against qwen2.5:7b with the first prompt; the victim is ornith:9b |
