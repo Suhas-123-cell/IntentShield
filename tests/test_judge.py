@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import http.client
 import io
 import json
 import urllib.error
@@ -163,6 +164,24 @@ def test_ollama_judge_needs_no_key_and_reads_the_host_from_the_environment(monke
     assert Judge("ollama").model == "qwen2.5:7b"
 
 
+def test_deepseek_judge_needs_its_key_and_turns_thinking_off(monkeypatch):
+    sent: list[dict] = []
+
+    def urlopen(request, timeout):
+        sent.append(json.loads(request.data))
+        return io.BytesIO(json.dumps({"choices": [{"message": {"content": '{"verdict": "clean"}'}}]}).encode())
+
+    monkeypatch.setattr(judge_module.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(Judge, "_answers", {})
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
+        Judge.from_spec("deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    j = Judge.from_spec("deepseek")
+    assert j.output("summarize", "web:read", "A calm page.") is None
+    assert sent[0]["model"] == "deepseek-flash" and sent[0]["thinking"] == {"type": "disabled"}
+
+
 def test_judge_reads_results_as_injection_or_clean(monkeypatch):
     replies = iter(['{"verdict": "injection", "reason": "asks the agent to forward the notes"}',
                     '{"verdict": "clean", "reason": "an email between people"}'])
@@ -279,3 +298,16 @@ def test_judge_cache_file_survives_a_partial_line(tmp_path: Path, monkeypatch):
     cache.write_text('{"key": "k1", "answer": {"verdict": "clean"}}\n{"key": "k2", "answ\n{"nokey": 1}\n')
     Judge("ollama", cache=cache)
     assert Judge._answers == {"k1": {"verdict": "clean"}}
+
+
+@pytest.mark.parametrize("failure", [http.client.RemoteDisconnected("closed"), ConnectionResetError(54, "reset")])
+def test_a_dropped_connection_is_no_opinion_not_a_crash(monkeypatch, failure):
+    def urlopen(request, timeout):
+        raise failure
+
+    monkeypatch.setattr(judge_module.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(judge_module.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(Judge, "_answers", {})
+    j = Judge("ollama", retries=1)
+    assert j.output("summarize", "web:read", "A calm page.") is None
+    assert j.errors == 1 and type(failure).__name__ in j.last_error

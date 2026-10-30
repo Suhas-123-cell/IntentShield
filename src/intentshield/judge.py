@@ -21,6 +21,7 @@ hooks start fast.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -41,6 +42,10 @@ PROVIDERS = {
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY",
                "gemini-3.5-flash-lite", {}),
     "ollama": (None, None, "qwen2.5:7b", {}),
+    # Paid, no free tier: billed per token (``DEEPSEEK_API_KEY``). Thinking off: a verdict needs no reasoning
+    # tokens, which would be billed.
+    "deepseek": ("https://api.deepseek.com/chat/completions", "DEEPSEEK_API_KEY", "deepseek-flash",
+                 {"thinking": {"type": "disabled"}}),
 }
 
 
@@ -132,7 +137,9 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
             if time.monotonic() + pause > deadline:
                 break
             time.sleep(pause)
-        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as exc:
+        # OSError covers URLError, timeouts and a reset connection; HTTPException a server that hung up
+        # mid-response. Either is no opinion, never a crash in the hook that would block the call.
+        except (OSError, http.client.HTTPException, ValueError, KeyError, IndexError) as exc:
             error = f"{type(exc).__name__}: {exc}"[:200]
             if attempt == retries or time.monotonic() + 2 ** attempt > deadline:
                 break
@@ -260,8 +267,8 @@ class Judge:
 
     @classmethod
     def from_spec(cls, spec: str, **kwargs: Any) -> "Judge":
-        """``groq`` (the default: ``openai/gpt-oss-120b`` on Groq's free tier), ``gemini`` or
-        ``ollama`` (local), optionally with a model: ``groq:openai/gpt-oss-20b``, ``ollama:qwen2.5:7b``.
+        """``groq`` (the default: ``openai/gpt-oss-120b`` on Groq's free tier), ``gemini``, ``deepseek``
+        (paid) or ``ollama`` (local), optionally with a model: ``groq:openai/gpt-oss-20b``, ``ollama:qwen2.5:7b``.
         ``on`` or ``default`` means groq."""
         provider, _, model = spec.partition(":")
         if provider in ("on", "default", "true", "1"):

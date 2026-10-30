@@ -80,7 +80,7 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
     return command
 
 
-_KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
+_KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
 
 
 def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None = None,
