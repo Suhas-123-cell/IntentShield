@@ -84,7 +84,7 @@ def test_a_url_written_any_way_is_the_address_the_call_uses(seen, call):
     ("/Users/me/canary/notes.txt", "file:///Users/me/canary/notes.txt"),
     (r"C:\Users\me\canary\notes.txt", "/Users/me/canary/notes.txt"), ("~/.npmrc", "/home/me/.npmrc"),
     ("~/.env", "$HOME/.env"), ("/Users/me/canary/notes%2Etxt", "/Users/me/canary/notes.txt"),
-    ("/USERS/ME/CANARY/NOTES.TXT", "/Users/me/canary/notes.txt"), ("/Users/me/canary/", "/Users/me/canary/notes.txt"),
+    ("/USERS/ME/CANARY/NOTES.TXT", "/Users/me/canary/notes.txt"),
 ])
 def test_a_path_written_any_way_is_the_file_the_call_uses(seen, call):
     assert sourced(quiet(seen), call)
@@ -96,6 +96,11 @@ def test_an_iban_in_any_case_with_any_separator_is_one_account(seen):
     assert sourced(quiet(seen), "DE89370400440532013000")
     assert sourced(quiet("DE89370400440532013000"), seen)
     assert sourced(quiet("\uff11\uff12\uff13\uff14\uff15\uff16\uff17\uff18\uff19\uff10"), "1234567890")
+
+
+def test_a_directory_in_an_output_does_not_cover_the_files_written_in_it():
+    assert not sourced("Contents of /msb/operation_space/output: report.docx", "/msb/operation_space/output/report.docx")
+    assert not sourced("see /msb/operation_space/output/report.docx", "/msb/operation_space/output")
 
 
 def test_a_bare_host_or_an_email_domain_covers_what_is_on_that_host_only():
