@@ -177,7 +177,8 @@ _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
         r"\b(?:you\s+)?(?:must|shall|need\s+to|have\s+to|always|first|should)\b", _I)),
     ("tool_call_directive", re.compile(
         r"\bmust\s+first\s+(?:(?:\w+\s+){0,4}?(?:['`\"][\w\-.]+['`\"]|[a-z]+[_\-][\w\-]+|(?-i:[a-z]+[A-Z]\w*)))|"
-        r"\b(?:before|when(?:ever)?|prior\s+to)\b[^.\n]{0,100}?\bmust\s+first\b|"
+        r"\b(?:before|when(?:ever)?|prior\s+to)\s+(?:you\s+)?(?:using|use|calling|call|invoking|invoke)\b[^.\n]{0,100}?"
+        r"\bmust\s+first\b|"
         r"\bmust\s+(?:first\s+|also\s+)?(?:call|use|invoke|run|execute|mark)\s+(?:the\s+)?"
         r"(?:['`\"][\w\-.]+['`\"]|[a-z]+[_\-][\w\-]+)", _I)),
     ("prerequisite_call", re.compile(
@@ -499,11 +500,11 @@ def _unmarked(text: str) -> str:
 
 
 # Single letters spelled out with one separator: "i g n o r e", "i.g.n.o.r.e", "i-g-n-o-r-e".
-_SPELLED_OUT = re.compile(r"(?<!\w)(?:[^\W\d_][ .\-_*|/\u00b7]){2,}[^\W\d_](?!\w)")
+_SPELLED_OUT = re.compile(r"(?<!\w)[^\W\d_]([ .\-_*|/\u00b7])(?:[^\W\d_]\1)+[^\W\d_](?!\w)")
 
 
 def _joined(text: str) -> str:
-    return _SPELLED_OUT.sub(lambda m: re.sub(r"[ .\-_*|/\u00b7]", "", m[0]), text)
+    return _SPELLED_OUT.sub(lambda m: m[0].replace(m[1], ""), text)
 
 
 def _views(text: str) -> list[str]:
