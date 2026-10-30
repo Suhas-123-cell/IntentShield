@@ -21,6 +21,8 @@ import argparse
 import hmac
 import json
 import os
+import posixpath
+import re
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -392,7 +394,10 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{'-'.join(sorted(u.server_id for u in config.upstream_configs))}.json"
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps([{"name": exposed(t), "description": t.description or "",
+        # ``server`` lets the hook key read-only decisions on (server, tool): a bare name alone once lent one
+        # server's read-only tool to another server's tool of the same name.
+        temporary.write_text(json.dumps([{"name": exposed(t), "server": t.qualified_name.partition(":")[0],
+                                          "tool": t.qualified_name.partition(":")[2], "description": t.description or "",
                                           "read_only": config.is_read_only(t.qualified_name)} for t in tools]))
         temporary.replace(path)
 
@@ -459,6 +464,16 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
     from starlette.requests import Request
     from starlette.responses import JSONResponse
 
+    normalized = posixpath.normpath(streamable_http_path)
+    if not normalized.startswith("/") or normalized == "/control" or normalized.startswith("/control/"):
+        # The agent-token check lets the operator routes through to their own token: an MCP endpoint
+        # under /control/ would be reachable with no agent token at all.
+        raise ValueError("the MCP path must start with '/' and must not be /control or under /control/")
+    control_paths: list[re.Pattern[str]] = []  # filled once the operator routes exist
+
+    def is_control(path: str) -> bool:
+        return any(pattern.fullmatch(path) for pattern in control_paths)
+
     app = server.streamable_http_app(
         streamable_http_path=streamable_http_path,
         stateless_http=True,
@@ -468,7 +483,7 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
 
     if agent_token:
         async def require_agent_token(request: Request, call_next):
-            if request.url.path.startswith("/control/"):
+            if is_control(request.url.path):  # a route that checks the control token itself, no other path
                 return await call_next(request)
             supplied = request.headers.get("authorization", "")
             if not hmac.compare_digest(supplied.encode(), f"Bearer {agent_token}".encode()):
@@ -481,6 +496,12 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
     if limiter is not None:
         async def rate_limit(request: Request, call_next):
             client = request.client.host if request.client else "unknown"
+            if is_control(request.url.path):
+                # Every local process shares one client address: junk posted to /mcp must not lock the
+                # operator out of approvals, so an operator request that proves its token has a bucket of its own.
+                authorized = bool(control_token) and hmac.compare_digest(
+                    request.headers.get("authorization", "").encode(), f"Bearer {control_token}".encode())
+                client = f"control:{client}" if authorized else f"control-anonymous:{client}"
             if not limiter.allow(client):
                 return JSONResponse(
                     {"error": "rate limit exceeded"}, status_code=429, headers={"Retry-After": "1"}
@@ -491,7 +512,9 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
         app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit)
 
     if control_token:
-        _add_control_routes(app, server.intentshield_runtime, control_token)
+        for path in _add_control_routes(app, server.intentshield_runtime, control_token):
+            pattern = "/".join("[^/]+" if part.startswith("{") else re.escape(part) for part in path.split("/"))
+            control_paths.append(re.compile(pattern + "/?"))
     return app
 
 
@@ -515,7 +538,7 @@ def _approve(payload: dict[str, Any]) -> bool:
     return payload["decision"] == "approve"
 
 
-def _add_control_routes(app: Any, runtime: Any, control_token: str) -> None:
+def _add_control_routes(app: Any, runtime: Any, control_token: str) -> list[str]:
     """Operator routes under /control/, every one behind the one bearer check. A request to fix is
     a 422, an unknown id a 404 and a refused state change (a POST's ValueError) a 409; any other
     error is a real bug and surfaces as one."""
@@ -523,6 +546,7 @@ def _add_control_routes(app: Any, runtime: Any, control_token: str) -> None:
     from starlette.responses import JSONResponse
 
     expected = f"Bearer {control_token}".encode()
+    paths: list[str] = []
 
     def route(path: str, method: str, not_found: str | None = None):
         def register(handler):
@@ -543,6 +567,7 @@ def _add_control_routes(app: Any, runtime: Any, control_token: str) -> None:
                     return JSONResponse({"error": str(exc)}, status_code=409)
 
             app.add_route(path, endpoint, methods=[method])
+            paths.append(path)
             return handler
         return register
 
@@ -550,9 +575,12 @@ def _add_control_routes(app: Any, runtime: Any, control_token: str) -> None:
     async def decide_approval(request: Request) -> dict[str, Any]:
         payload = await _json_object(request)
         # Optional operator label for the exemplar detector: "injection" with a
-        # rejection, "benign" with an approval (learning.py).
+        # rejection, "benign" with an approval (learning.py). ``"trust_source": true`` with an approval
+        # also clears the call's server of the hostile reputation its past attacks gave it; approving
+        # a call alone does not.
         result, learned = await runtime.decide_and_learn(
-            request.path_params["approval_id"], _approve(payload), payload.get("learn")
+            request.path_params["approval_id"], _approve(payload), payload.get("learn"),
+            payload.get("trust_source") is True,
         )
         body = result.model_dump(mode="json")
         return {**body, "learned": learned} if payload.get("learn") else body
@@ -581,6 +609,8 @@ def _add_control_routes(app: Any, runtime: Any, control_token: str) -> None:
     async def decide_rule(request: Request) -> dict[str, Any]:
         payload = await _json_object(request)
         return await runtime.decide_rule(request.path_params["rule_id"], _approve(payload))
+
+    return paths
 
 
 def run_mcp_server(

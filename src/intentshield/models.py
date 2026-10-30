@@ -49,6 +49,7 @@ class ReasonCode(StrEnum):
     BLOCK_APPROVAL_REJECTED = "BLOCK_APPROVAL_REJECTED"
     BLOCK_APPROVAL_MISMATCH = "BLOCK_APPROVAL_MISMATCH"
     BLOCK_APPROVAL_CONSUMED = "BLOCK_APPROVAL_CONSUMED"
+    BLOCK_DRY_RUN_LIMIT = "BLOCK_DRY_RUN_LIMIT"
     BLOCK_IDEMPOTENCY_IN_PROGRESS = "BLOCK_IDEMPOTENCY_IN_PROGRESS"
     BLOCK_EXECUTION_IN_DOUBT = "BLOCK_EXECUTION_IN_DOUBT"
     BLOCK_SECURITY_AGENTS = "BLOCK_SECURITY_AGENTS"
@@ -140,6 +141,8 @@ class ModelRunRequest(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     decision: Literal["approve", "reject"]
+    # Approving one call does not vouch for its server; an operator who does says so here.
+    trust_source: bool = False
 
 
 class PolicyContext(BaseModel):

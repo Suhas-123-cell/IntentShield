@@ -4,7 +4,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-import pytest
 from mcp import Client
 
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime
@@ -318,7 +317,11 @@ def test_untrusted_upstream_tool_names_are_rejected(tmp_path: Path):
             },
         )
         runtime = MCPProxyRuntime(config, upstream=BadNameUpstream())
-        with pytest.raises(ValueError, match="Invalid or duplicate upstream MCP tool"):
-            await runtime.connect()
+        await runtime.connect()  # the tool is left out; the proxy still serves the rest
+        try:
+            assert not [t for t in await runtime.tool_catalog() if t["name"].startswith("fixture:")]
+            assert not await runtime.transparent_tools()
+        finally:
+            await runtime.close()
 
     asyncio.run(exercise())
