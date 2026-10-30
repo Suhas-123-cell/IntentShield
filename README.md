@@ -45,13 +45,14 @@ Gemini CLI `settings.json`, Windsurf, Claude Desktop, ...): each server entry is
 Optional LLM judge: `intentshield install <harness> --judge groq` adds a second-stage check (Groq's
 free tier, `openai/gpt-oss-120b`) on tool descriptions the rules pass and on each read-only call;
 it asks for the key once and stores it in `~/.intentshield/.env`. `--judge ollama` (`qwen2.5:7b`)
-is the offline alternative. Every judge is evidence only: a flagged description is withheld for
+is the offline alternative; `--judge deepseek` (`deepseek-flash`, paid per token, `DEEPSEEK_API_KEY`) caught the
+most plain-language injections of any judge measured. Every judge is evidence only: a flagged description is withheld for
 review, never silently dropped. Add `--judge-outputs` to have the judge also read every tool result
 the rules pass, which is what catches plain-language injections; it costs one request per result
 (about 1 s locally, 4 s on Gemini), and on Groq's free tier it runs out after about 200 results a
 day, so use it with `--judge gemini` or `--judge ollama`. What the judge reads leaves your machine with a
 hosted judge: the user's prompt, call arguments, tool descriptions and, with `--judge-outputs`, tool results
-go to Groq or Google. `--judge ollama` keeps them local. A judge objection on a result makes later
+go to Groq, Google or DeepSeek. `--judge ollama` keeps them local. A judge objection on a result makes later
 state-changing calls ask; it never denies on its own. Measurements and the recommendation are in
 [docs/benchmarks.md](docs/benchmarks.md#mcp-guardrail-layers).
 
@@ -208,6 +209,10 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   An adaptive attacker (Gemini 3.5 Flash-Lite, shown the judge's prompt and verdicts, 24 seeds x 5 tries)
   got pages past the rules and the qwen judge in 34 of 120 tries, but evaded end to end on 0 of 24 seeds:
   the local agent (ornith:9b) followed none of those pages, and provenance held every send it made.
+  With DeepSeek's `deepseek-flash` as the agent the attacker got 40 of 119 pages past the judge and the agent
+  followed none of them either, nor any of the 30 jailbreaks: against that agent the attack fails before the
+  guard is needed. As the judge on the test split, `deepseek-flash` caught 86.1% [82.1, 89.4] of 346
+  plain-language injections and flagged 7.4% of 176 benign texts.
 - **Against Meta's Prompt Guard 2** (the detector in LlamaFirewall; rerun 2026-10-29, paired on the same
   texts): on InjecAgent, the one source neither was tuned on, the rules catch 50.8% and Prompt Guard 2
   50.3%; on plain-language injections both stay under 4%. The rules lead only where they were written from

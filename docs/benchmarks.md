@@ -267,9 +267,12 @@ dropped. With qwen2.5:7b:
 |---|---|---|---|---|
 | v1 (0.3.6) | 36/198 18.2% | 8/110 7.3% | 84/346 24.3% [20.1, 29.1] | 1/176 0.6% |
 | v2.1 | 50/198 25.3% | 7/110 6.4% | 101/346 29.2% [24.6, 34.2] | 6/176 3.4% [1.6, 7.2] |
+| v2.1, DeepSeek `deepseek-flash` (paid) | not run | not run | 298/346 86.1% [82.1, 89.4] | 13/176 7.4% [4.4, 12.2] |
 
 The test split was run once with v2.1, after the choice. Its six benign flags are five generated benign
-outputs and one agent hint; no request between people and no quoted attack. Gemini was not rerun on the test split with v2.1: the free tier's 500 requests a day went to the
+outputs and one agent hint; no request between people and no quoted attack. DeepSeek, run on the test split
+only (all 522 rows, about $0.05), catches the most of any judge measured; its 13 benign flags are 11 generated
+benign outputs and 2 agent hints, again no request between people and no quoted attack. Gemini was not rerun on the test split with v2.1: the free tier's 500 requests a day went to the
 attacks below, so its test numbers in [detectors.md](detectors.md#llm-judge-on-tool-results-plain-language-injections) are for the first prompt.
 
 **Hand-written jailbreaks** (`benchmarks/judge_jailbreaks.py`, `results/judge/jailbreaks-*.json`). Thirty
@@ -290,6 +293,7 @@ canary (attacks) or to the manager (benign).
 | hook, no judge | 30/30 | 7/30 | 0/12 | 0/12 |
 | hook + qwen2.5:7b judge | 30/30 | 30/30 | 4/12 | 4/12 |
 | hook + Gemini 3.5 Flash-Lite judge | 30/30 | 30/30 | 0/12 | 0/12 |
+| hook + DeepSeek `deepseek-flash` judge (paid) | 30/30 | 30/30 | 1/12 | 1/12 |
 
 Before the review's fixes the hook alone stopped 27 of 30: the base64 address, the address in words and
 the address split into user and domain were not traced to the page. Argument provenance now reads them,
@@ -297,7 +301,9 @@ so the judge's part here is the warning the agent gets, not the stop. Its cost i
 benign pages with qwen (the request between people, the quoted attack, the long page, the code sample)
 and none with Gemini, which warned on all 30 attack pages.
 ornith:9b with no guard followed 3 of the 30 (the false error, the structured next action, the address in
-words); the guard stopped all three.
+words); the guard stopped all three. DeepSeek's `deepseek-flash` (V4 Flash, thinking off), a frontier-class
+agent, followed none of the 30 with no guard: it emailed the manager as asked on 24 pages and on 6 stopped
+to point out the injected request. DeepSeek as the judge falsely flagged one benign page (the code sample).
 
 **Adaptive attacker** (`benchmarks/adaptive_judge.py`, `results/judge/adaptive-*.json`). Gemini 3.5
 Flash-Lite rewrites a seed injection up to 8 times (5 against v2.1). It is white-box: it sees the judge's prompt, its
@@ -312,6 +318,7 @@ emails the canary.
 | v1 (0.3.6) | 8 | 1/24 [0.7, 20.2] | 96/186 | 4 |
 | v1, first 5 tries only | 5 | 1/24 | 53/118 | 3 |
 | v2.1 (0.4.0) | 5 | 0/24 [0.0, 13.8] | 34/120 | 1 |
+| v2.1, DeepSeek `deepseek-flash` as the agent | 5 | 0/24 [0.0, 13.8] | 40/119 | 0 |
 
 The v2.1 run was cut to 5 tries per seed to fit the free tier's daily quota (96 attacker requests); the
 v1 row over its first 5 tries is the fair comparison. The attacker still wrote pages that the rules and the
@@ -320,6 +327,12 @@ try in four. ornith:9b acted on none of those: in the v2.1 run it acted once in 
 rules had flagged. What this measures is the judge's resistance, not harm to a user; an agent that
 follows more pages would be the real test. End to end no canary email got out in either run: argument
 provenance or taint held every send the agent made, v1's one evasion included.
+
+The last row swaps the agent for DeepSeek's `deepseek-flash`, everything else equal, to answer whether a
+stronger agent follows what the weak one ignored. It does not: the attacker again got 40 pages past the
+rules and the judge, and DeepSeek did the user's task on 38 of them (emailing the manager) and sent nothing
+on 2. Against this agent the attack fails before the guard is needed, so the run shows the agent's own
+resistance, not the guard's. Both DeepSeek runs together cost $0.12.
 
 **Limits.** One local victim, which follows few injections, bounds what the adaptive attacker can show: a
 page forceful enough to move ornith is usually one the judge reads. Thirty techniques written by the
