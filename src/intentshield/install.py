@@ -283,8 +283,18 @@ def _strip_toml_block(text: str) -> tuple[str, bool]:
     return (before + "\n" if before else after), True
 
 
+# The text each settings file had when this process read it: a harness (Claude Code rewrites ~/.claude.json
+# all the time) may write the file between our read and our write, and its change must not be overwritten.
+_SEEN: dict[Path, str] = {}
+
+
+class ChangedMeanwhile(OSError):
+    pass
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
+    _SEEN[path.resolve()] = text
     if not text.strip():
         return {}
     try:
@@ -310,7 +320,12 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
             handle.write(text)
         if path.exists():
             os.chmod(tmp, path.stat().st_mode & 0o777)
+        seen = _SEEN.get(path.resolve())
+        if seen is not None and (path.read_text(encoding="utf-8") if path.exists() else "") != seen:
+            raise ChangedMeanwhile(f"{path} changed while IntentShield was editing it (the harness wrote it?); "
+                                   "nothing was written. Run the command again.")
         os.replace(tmp, path)
+        _SEEN[path.resolve()] = text
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
