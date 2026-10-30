@@ -22,7 +22,7 @@ class Stub:
     """Objects to any call or description that mentions "vendor", as a model judging intent would."""
 
     calls: list[tuple[str, dict]] = []
-    errors, last_error = 0, ""
+    errors, last_error, unread = 0, "", 0
 
     @classmethod
     def from_spec(cls, _spec: str, **_kwargs) -> "Stub":
