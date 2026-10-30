@@ -159,6 +159,7 @@ email a benign `.example` canary.
   (`reviewer_address`). On the injection corpus that rule changes no row (recall 2,569/5,095, benign 31/1,365)
   and on 2,000 READMEs it flags none.
 - **Adaptive attacker.** Gemini 3.5 Flash-Lite, shown the judge's prompt, verdict and reason, rewrote 24 seed injections 5 times each against the qwen2.5:7b judge with ornith:9b as the agent. 0 of 24 seeds evaded (95% CI 0 to 13.8%), against 1 of 24 with the first prompt over the same 5 tries. The attacker still got 34 of 120 pages past the rules and the judge; the agent followed none of them, so the result is bounded by a weak agent. Provenance or taint held every send in both runs.
+- **A frontier agent.** With DeepSeek's `deepseek-flash` as the agent, it followed none of the 30 jailbreaks and none of the adaptive attacker's pages, 40 of 119 of which got past the rules and the qwen judge; it did the user's task instead. Against this agent the attacks fail before the guard is needed, so these runs measure the agent, not the guard. As the judge, `deepseek-flash` warned on 30 of 30 jailbreak pages with one false ask in 12, and caught 86.1% of the test split's plain-language injections at 7.4% benign flagged.
 
 ## Residual risks and open items
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- A dropped connection to the judge (the server hanging up mid-response, a reset) now counts as no opinion
+  and is retried, like a timeout. Before, it raised, and in a hook a crash blocks the call, so a network blip
+  at the judge's provider could block a legitimate tool call.
+- `--judge deepseek` (`deepseek-flash`, thinking off; paid per token, `DEEPSEEK_API_KEY`). On the output
+  judge's test split it caught 86.1% of plain-language injections at 7.4% benign flagged, the highest
+  recall measured; as the agent in the judge benchmarks it followed none of 30 jailbreaks and none of 119
+  adaptive pages. The judge benchmarks take `--victim deepseek:<model>` and record whether the hook held the
+  agent's own sends.
+
 ## 0.4.0
 
 A security review of the guard itself: four reviewers, three rounds of fixes, every finding and what is

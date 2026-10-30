@@ -104,4 +104,7 @@ after the security review; copied from `artifacts/judge-v2/`, `artifacts/jailbre
 | `judge/jailbreaks-qwen2.5-7b.json` | the 30 hand-written attacks and 12 benign pages through the hook, without a judge and with qwen2.5:7b, plus whether ornith:9b followed each attack unguarded |
 | `judge/jailbreaks-gemini-flash-lite.json` | the same suite with Gemini 3.5 Flash-Lite as the judge (no victim); one row corrected after the run, as its `correction` field says |
 | `judge/adaptive-v2.1-qwen2.5-7b.json` | the same attacker against the v2.1 prompt, 24 seeds x 5 tries (cut for the free quota); resumed once after a network reset at seed 21 |
+| `judge/jailbreaks-deepseek-flash.json` | the suite with DeepSeek `deepseek-flash` as the judge and as the unguarded agent; each attack row keeps the agent's calls and whether the hook's argument gate held its own send |
+| `judge/adaptive-v2.1-deepseek-agent.json` | the adaptive attacker against the v2.1 qwen judge with `deepseek-flash` as the agent, 24 seeds x 5 tries; resumed once after a dropped connection at seed 6 |
+| `judge/outputs-deepseek-flash-test-v2.1.json` | `deepseek-flash` as the output judge on the whole test split (522 rows) |
 | `judge/adaptive-v1prompt-qwen2.5-7b.json` | the adaptive attacker (Gemini 3.5 Flash-Lite, 24 seeds x 8 tries) against qwen2.5:7b with the first prompt; the victim is ornith:9b |
