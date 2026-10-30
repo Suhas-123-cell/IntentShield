@@ -18,6 +18,12 @@
   0/473 writes, and MCP asks rose from 47/126 to 53/126 because built-in outputs add observed values. On
   this repository's own sessions, which handle attack text, 741/3405 shell calls asked (21.8%): 7 of 32
   sessions read real injection text from the network. Off by default until the default is decided.
+- A refused call now tells the agent not to retry it and to tell the user instead (Codex CLI and Gemini CLI,
+  where an ask is a refusal). In the live built-in tool runs, Gemini CLI retried one refused command up to 75
+  times. The Gemini hook also ends the agent's turn (`continue: false`, which Gemini CLI 0.37 honours in
+  `BeforeTool`) on the third refusal since the user's last prompt; a new prompt resets the count. Codex is not
+  stopped, because its handling of `continue` was not verified. Rerun live with Gemini (3 reps): each refused
+  run took 1 refusal instead of 2 to 75 (9 against 116 in total), harm stayed 0/12, the benign task 3/3.
 - `intentshield doctor`: checks that each harness holds every IntentShield hook, that the hook executable
   exists, that a hosted judge has its key, that the harness has run a hook since the install (the hooks
   now record when each harness last ran one), and which stdio servers are not behind the proxy. Exit 1 on

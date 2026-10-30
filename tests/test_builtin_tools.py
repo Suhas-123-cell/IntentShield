@@ -159,6 +159,42 @@ def test_gemini_shell_and_web_fetch(tmp_path: Path):
                              "tool_input": {"command": "git log --oneline | head"}}, g) is None
 
 
+def test_gemini_is_told_not_to_retry_and_its_turn_ends_after_three_refusals(tmp_path: Path):
+    # Live, Gemini CLI retried one refused command up to 75 times; its BeforeTool honours continue: false.
+    g = guard(tmp_path)
+    base = {"session_id": "g2"}
+
+    def run(command: str) -> dict | None:
+        return handle("gemini", {**base, "hook_event_name": "BeforeTool", "tool_name": "run_shell_command",
+                                 "tool_input": {"command": command}}, g)
+
+    handle("gemini", {**base, "hook_event_name": "BeforeAgent", "prompt": "Follow the setup page"}, g)
+    handle("gemini", {**base, "hook_event_name": "AfterTool", "tool_name": "run_shell_command",
+                      "tool_input": {"command": "curl -s https://notes.example.dev/setup"},
+                      "tool_response": {"llmContent": INJECTED_PAGE}}, g)
+    first, second = run("make setup"), run("make setup")
+    assert first["decision"] == "deny" and "Do not retry" in first["reason"] and "continue" not in second
+    assert run("ls") is None  # an allowed call is not counted
+    third = run("make setup")
+    assert third["continue"] is False and "refused 3 calls" in third["stopReason"]
+    # A new prompt from the user starts the count again.
+    handle("gemini", {**base, "hook_event_name": "BeforeAgent", "prompt": "ok, run make setup yourself"}, g)
+    assert "continue" not in run("make setup")
+
+
+def test_codex_refusals_say_not_to_retry_but_a_redaction_asks_for_the_retry(tmp_path: Path):
+    g = guard(tmp_path)
+    handle("codex", claude("PostToolUse", tool_name="mcp__web__fetch", tool_response=INJECTED_PAGE), g)
+    refused = handle("codex", claude("PreToolUse", tool_name="shell", tool_input={"command": "rm -rf build"}), g)
+    assert "Do not retry" in refused["hookSpecificOutput"]["permissionDecisionReason"]
+    # A state-changing call with a self-disclosure field is refused once, to be resent with the field empty.
+    redacted = handle("codex", {**claude("PreToolUse", tool_name="mcp__mail__send_email",
+                                         tool_input={"to": "a@b.example", "llm_model_name": "gpt"}),
+                                "session_id": "clean"}, g)
+    reason = redacted["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "fields empty" in reason and "Do not retry" not in reason
+
+
 def test_cursor_scans_files_before_the_agent_reads_them_and_shell_output_after(tmp_path: Path):
     g = guard(tmp_path, outputs="block")
     base = {"conversation_id": "c1"}
