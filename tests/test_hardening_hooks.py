@@ -534,3 +534,22 @@ def test_a_credential_hidden_by_unicode_is_still_found():
     assert credentials.find(wide) == {token: "github_token"}
     assert token not in credentials.mask(hidden) and "​" not in credentials.mask(hidden)
     assert credentials.mask("plain​text") == "plain​text"  # nothing found: untouched
+
+
+def test_wrap_does_not_overwrite_a_change_the_harness_made_meanwhile(tmp_path: Path, monkeypatch):
+    path = tmp_path / ".claude.json"
+    path.write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}, "numStartups": 1}))
+    real = install._json_text
+
+    def harness_writes_meanwhile(data):
+        path.write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}, "numStartups": 2}))
+        return real(data)
+
+    monkeypatch.setattr(install, "_json_text", harness_writes_meanwhile)
+    with pytest.raises(install.ChangedMeanwhile, match="changed while IntentShield was editing it"):
+        install.wrap(path, out_dir=tmp_path / "proxies", proxy="/opt/bin/intentshield-mcp")
+    assert json.loads(path.read_text())["numStartups"] == 2  # the harness's write survived
+    monkeypatch.setattr(install, "_json_text", real)
+    install.wrap(path, out_dir=tmp_path / "proxies", proxy="/opt/bin/intentshield-mcp")  # a rerun goes through
+    saved = json.loads(path.read_text())
+    assert saved["numStartups"] == 2 and saved["mcpServers"]["notes"]["command"] == "/opt/bin/intentshield-mcp"
