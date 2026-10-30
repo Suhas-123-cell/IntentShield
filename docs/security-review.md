@@ -17,7 +17,7 @@ Method:
 
 - The reviewers could not edit the repository. Each wrote probe scripts that exercised the real code and reported only what a probe reproduced. A finding the reviewer only read from code is marked plausible in the notes below.
 - All probes used benign canary markers (`*.example` addresses, placeholder tokens). No LLM was called for the judge review; `post_chat` was stubbed.
-- Each fix agent worked in its own worktree. All fixes are merged on the branch `claude/practical-bell-07hasg`. Statuses below were checked against the code and tests on that branch.
+- Each fix agent worked in its own worktree. All fixes are released in 0.4.0. Statuses below were checked against the code and tests of that release.
 - Not in scope: the learned detectors' accuracy (see [detectors.md](detectors.md)), the benchmark harnesses, the dashboard front end beyond one check, model-level attacks on the agent itself, the packaging and publishing workflow, and real Codex or Cursor behaviour (no real harness was run for any hook claim).
 - Reviewer severities are kept where the reviewer gave one. Where not, the rule is: high means a guard decision can be bypassed or silently skipped; medium means weakened evidence or a resource or denial-of-service issue; low means hygiene.
 
@@ -141,7 +141,7 @@ Notes:
 - The recall cost of the false-positive work is 2 rows of 5,095.
 - Path-prefix coverage was tried first and dropped. It made 244 of 13,204 replayed MSB calls newly ask (1.8%), because a directory listing covered every file written in it. Without it, 5 of 13,204 are newly asked.
 - Value extraction costs about 3 to 4 ms per typical output (about 0.7 ms before). Adversarial 1 MB inputs stay under 0.7 s.
-- Test counts as the fix agents reported them, before the merges: 78 new tests for the hooks (737 passed, 2 skipped), 32 for the proxy (690 passed, 2 skipped), and the rules branch reached 787 passed, 1 skipped. The 659-test baseline in the project notes predates these. Only the TTL test was checked to fail on the unfixed code; the others were not run against it.
+- Test counts as the fix agents reported them, before the merges: 78 new tests for the hooks (737 passed, 2 skipped), 32 for the proxy (690 passed, 2 skipped), and the rules branch reached 787 passed, 1 skipped. 0.3.6 had 659 tests; 0.4.0 has 913. Only the TTL test was checked to fail on the unfixed code; the others were not run against it.
 - No fix was measured against a real harness. Hook behaviour was tested through the hook handlers with synthetic events.
 
 ## Attacks on the judge
@@ -162,7 +162,7 @@ email a benign `.example` canary.
 
 ## Residual risks and open items
 
-Things the fix reports list as not done, or that this review found still open on the branch:
+Things the fix reports list as not done, or that this review found still open in 0.4.0:
 
 1. **Codex errors.** `PostToolUseFailure` is not registered for Codex because the event could not be confirmed. A failed tool's error text may reach the model unscanned there. Gemini `AfterTool` and Cursor scan an error field if present; neither was run against a real harness.
 2. **Cursor warnings.** `afterMCPExecution` has no documented reply field, so a warning there reaches no one. The taint still applies to later calls. Separately, Cursor gets an explicit `allow` on every clean call, which may bypass its own prompt.
