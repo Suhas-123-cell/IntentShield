@@ -61,7 +61,7 @@ class Command:
     destinations: set[str] = field(default_factory=set)  # canonical URLs, hosts and emails it reaches
     sends: bool = False          # it carries data to a destination (an upload, a POST, stdin into a network tool)
     secrets: list[str] = field(default_factory=list)     # credential stores read, or commands that print secrets
-    read_only: bool = True       # every part is a known read-only command and nothing is written to a file
+    read_only: bool = True       # every part is a known read-only command or a plain download, and no file is written
     runs_fetched: bool = False   # a network tool's output is piped into a shell or an interpreter
     remote: bool = False         # its output comes from elsewhere: a remote address, or a code host's issues and PRs
 
@@ -134,6 +134,40 @@ def _wget_sends(args: list[str]) -> bool:
     return any(arg.startswith(("--post-", "--body-", "--method=P", "--method=p")) or arg == "--method" for arg in args)
 
 
+# curl options that write a file or read options from one; a short cluster ending in o, O, c, D or K does too.
+_CURL_WRITES = ("--output", "--remote-name", "--cookie-jar", "--dump-header", "--trace", "--libcurl", "--config",
+                "--etag-save", "--hsts", "--alt-svc", "--stderr", "--create-dirs")
+# wget saves a file unless told to print the page: only these options are known not to write one.
+_WGET_PRINTS = frozenset({"-q", "--quiet", "-O-", "-qO-", "-nv", "--no-verbose", "-S", "--server-response",
+                          "--spider"})
+
+
+def _downloads(name: str, args: list[str]) -> bool:
+    """A plain download: a GET or HEAD whose page goes to stdout, carrying no data and writing no file. It
+    changes nothing here, so it counts as read-only; the guard still checks where it goes."""
+    if any("$" in a or "`" in a for a in args):  # an address built at run time may carry data
+        return False
+    if name == "curl":
+        for i, arg in enumerate(args):
+            following = args[i + 1] if i + 1 < len(args) else ""
+            if arg in ("-X", "--request") and following.upper() not in ("GET", "HEAD"):
+                return False
+            if re.fullmatch(r"-(?:X|-request=)(?!GET$|HEAD$).+", arg, re.I):
+                return False
+            if arg in ("-D", "--dump-header") and following == "-":
+                continue
+            if arg.startswith(_CURL_WRITES) or re.fullmatch(r"-[a-zA-Z]*[oOcDK]", arg) or re.match(r"-[oOcDK].", arg):
+                return False
+        return not _curl_sends(args)
+    if name == "wget":
+        options = [a for a in args if a.startswith("-") or a == "-"]
+        printed = any(a in ("-O-", "-qO-", "--spider", "--output-document=-") for a in args) or any(
+            a in ("-O", "-qO", "--output-document") and args[i + 1:i + 2] == ["-"] for i, a in enumerate(args))
+        allowed = _WGET_PRINTS | {"-O", "-qO", "--output-document", "--output-document=-", "-"}
+        return printed and all(a in allowed for a in options) and not _wget_sends(args)
+    return False
+
+
 def _httpie_sends(args: list[str]) -> bool:
     return any(arg.upper() in ("POST", "PUT", "PATCH") or (not arg.startswith("-") and "://" not in arg and
                bool(re.match(r"[\w.-]+(?::=|=|@)", arg))) for arg in args)
@@ -164,7 +198,7 @@ def _segment(argv: list[str], piped_in: bool, found: Command, depth: int) -> tup
                                                                                    "--delete", "--move", "--copy"))
                                                                   for a in args[1:]):
         read_only = len(args) == 1 or all(a.startswith("-") for a in args[1:])
-    if not read_only:
+    if not read_only and not (_downloads(name, args) and not piped_in):
         found.read_only = False
     flag = next((i for i, a in enumerate(args) if re.fullmatch(r"-[a-z]*c", a)), None)  # -c, -lc
     if name in _SHELLS and flag is not None and depth < 3:

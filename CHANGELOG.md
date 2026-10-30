@@ -9,12 +9,14 @@
   reaches, whether it sends data and which secrets it reads (`src/intentshield/shell.py`). A command or
   fetch to an address from an injected output is denied; sending data to an address that came only from a
   tool output asks, as does reading secrets and sending data out; after an injection, commands that are not
-  read-only ask. Fetched pages, search results and remote command output are scanned like MCP results; the
+  read-only ask. A plain download (a `curl` GET or HEAD, or `wget -qO-`, that sends no data and writes no file)
+  counts as read-only, but after an injection it still asks unless every host it reaches was named by the user,
+  because its address can carry data. Before, re-fetching the page the user asked for asked too. Fetched pages, search results and remote command output are scanned like MCP results; the
   user's own files and local command output only warn, because the rules fire on ordinary code there.
   Benign review load (`benchmarks/shell_replay.py`): 0/35 calls on the committed fixture; replaying 40 real
   Claude Code sessions from five projects, 4/1707 shell calls asked (0.2%, 95% CI 0.1-0.6%), 0/326 reads,
   0/473 writes, and MCP asks rose from 47/126 to 53/126 because built-in outputs add observed values. On
-  this repository's own sessions, which handle attack text, 711/3339 shell calls asked (21.3%): 7 of 32
+  this repository's own sessions, which handle attack text, 741/3405 shell calls asked (21.8%): 7 of 32
   sessions read real injection text from the network. Off by default until the default is decided.
 - `intentshield doctor`: checks that each harness holds every IntentShield hook, that the hook executable
   exists, that a hosted judge has its key, that the harness has run a hook since the install (the hooks
