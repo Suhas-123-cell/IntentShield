@@ -173,6 +173,9 @@ class HarnessGuard:
         # An output only the LLM judge thought was an instruction: state-changing calls ask, but nothing
         # is tainted and no credential is denied, since the judge is wrong a few percent of the time.
         self._add_column("soft INTEGER NOT NULL DEFAULT 0")
+        # Calls refused since the user's last prompt: an agent that cannot be asked retries a refused call,
+        # Gemini CLI up to 75 times in the live runs, so the hook ends its turn after a few.
+        self._add_column("refused INTEGER NOT NULL DEFAULT 0")
         # Recipients, URLs, accounts and paths seen in any tool output of the session.
         self.db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
                         "PRIMARY KEY (session, value))")
@@ -309,7 +312,15 @@ class HarnessGuard:
         with self._tx():
             intent, taint = self._load(session)
             self._save(session, f"{intent}\n{text}".strip(), taint)
+            self.db.execute("UPDATE sessions SET refused = 0 WHERE id = ?", (session,))
         return self.tool_hint(text)
+
+    def refused(self, session: str) -> int:
+        """Counts a refused call; returns how many were refused since the user's last prompt."""
+        with self._tx():
+            self.db.execute("INSERT INTO sessions (id, intent, taint, updated, refused) VALUES (?, '', '[]', ?, 1) "
+                            "ON CONFLICT(id) DO UPDATE SET refused = refused + 1", (session, time.time()))
+            return self.db.execute("SELECT refused FROM sessions WHERE id = ?", (session,)).fetchone()[0]
 
     def tool_hint(self, text: str, limit: int = 5) -> str:
         """Ranks the tools the transparent proxies wrote to ``catalog`` against the prompt."""
@@ -631,6 +642,11 @@ _RESOURCE_TOOLS = {"ReadMcpResourceTool": "read_resource", "ReadMcpResource": "r
                    "ReadMcpResourceDirTool": "read_resource_dir", "ReadMcpResourceDir": "read_resource_dir",
                    "ListMcpResourcesTool": "list_resources", "ListMcpResources": "list_resources"}
 
+# Codex CLI and Gemini CLI cannot ask the user, so an ask is a refusal, which agents retry unless told not to.
+NO_RETRY = (" Do not retry this call or a variant of it: tell the user what you wanted to do and why, so they "
+            "can decide.")
+STOP_AFTER = 3  # refusals since the user's last prompt after which the Gemini hook ends the agent's turn
+
 
 # Built-in tools guarded with --builtin-tools (Claude Code, Codex CLI and Gemini CLI names): their kind and
 # the argument naming their target. Codex's shell tool has had several names.
@@ -851,6 +867,8 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
         v.reason = v.context + (" Confirm this call." if harness == "claude"
                                 else " Call the tool again with those fields empty.")
     decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
+    if decision == "deny" and harness == "codex" and v.arguments is None:  # not "call again with fields empty"
+        v.reason += NO_RETRY
     if decision == "ask" and event.get("tool_use_id"):
         guard.asked(session, str(event["tool_use_id"]))
     out: dict[str, Any] = {"hookEventName": "PreToolUse"}
@@ -956,13 +974,23 @@ def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
     if name == "BeforeTool":
         v = guard.call(session, tool, _as_dict(event.get("tool_input")))
         if v.decision != "allow":  # Gemini CLI has no ask; a confirmation request is a denial with a reason
-            return {"decision": "deny", "reason": v.reason}
+            return _gemini_refusal(session, v.reason, guard)
         if v.arguments is not None:
             return {"hookSpecificOutput": {"tool_input": v.arguments, "additionalContext": v.context}}
         return None
     if name == "AfterTool":
         return _gemini_result(session, tool, event, guard)
     return None
+
+
+def _gemini_refusal(session: str, reason: str, guard: HarnessGuard) -> dict[str, Any]:
+    """A refused call. Gemini CLI retries one again and again, so the reason says not to, and from the
+    STOP_AFTER-th refusal since the user's last prompt the reply also ends the agent's turn."""
+    out: dict[str, Any] = {"decision": "deny", "reason": reason + NO_RETRY}
+    if (count := guard.refused(session)) >= STOP_AFTER:
+        out.update({"continue": False, "stopReason": f"IntentShield refused {count} calls since your last prompt "
+                    "and stopped the agent so it does not keep retrying. The last one: " + reason})
+    return out
 
 
 def _gemini_result(session: str, tool: str, event: dict[str, Any], guard: HarnessGuard,
@@ -987,7 +1015,7 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
     if name == "BeforeTool":
         v = _builtin_call(guard, session, tool, arguments)
         # Gemini CLI has no ask; a confirmation request is a denial with a reason
-        return None if v is None or v.decision == "allow" else {"decision": "deny", "reason": v.reason}
+        return None if v is None or v.decision == "allow" else _gemini_refusal(session, v.reason, guard)
     if name == "AfterTool" and _BUILTIN[tool][0] != "write":
         kind, field_name = _BUILTIN[tool]
         target = _builtin_target(kind, field_name, arguments)
