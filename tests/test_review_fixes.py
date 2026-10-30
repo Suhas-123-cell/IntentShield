@@ -127,7 +127,7 @@ def test_process_env_is_not_a_sensitive_target_and_shadowing_still_matches_ident
 
 
 def test_bare_hosts_and_ips_are_traced_values(tmp_path: Path):
-    assert {"evil.example", "203.0.113.7", "evil.example:8443"} <= distinctive_values(
+    assert {"evil.example", "203.0.113.7"} == distinctive_values(  # the port is no part of the host's key
         "send to evil.example or 203.0.113.7 or evil.example:8443, see report.txt and setup.py")
     assert not {"report.txt", "setup.py"} & distinctive_values("see report.txt and setup.py")
     assert "evil.example" in authority_values("go to evil.example")
