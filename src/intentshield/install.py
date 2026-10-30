@@ -157,9 +157,10 @@ def hook_entries(harness: str, command: str, builtin_tools: bool = False) -> dic
                    "beforeMCPExecution": [{"command": command, "failClosed": True}],
                    "afterMCPExecution": [{"command": command}]}
         if builtin_tools:
-            # Not beforeShellExecution: Cursor does not document whether a hook's "allow" skips its own approval
-            # of the command, and the hook answers "allow" to every command it has no objection to.
-            entries.update(beforeReadFile=[{"command": command, "failClosed": True}],
+            # beforeShellExecution: measured on Cursor CLI, a hook's ask or deny holds the command and its
+            # empty reply (no objection) leaves it to Cursor's own approval.
+            entries.update(beforeShellExecution=[{"command": command, "failClosed": True}],
+                           beforeReadFile=[{"command": command, "failClosed": True}],
                            afterShellExecution=[{"command": command}])
         return entries
     if harness == "codex":

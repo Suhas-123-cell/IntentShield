@@ -6,6 +6,8 @@ only ever shown masked (its kind and first four characters).
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 import unicodedata
 from collections.abc import Callable
@@ -73,19 +75,78 @@ def _surface(text: str) -> str:
                    if unicodedata.category(ch) != "Cf" and not "︀" <= ch <= "️")
 
 
+# A run that may be a token in base64 (standard or URL-safe) or hex: long enough to hold the shortest prefixed one.
+_ENCODED = re.compile(r"(?<![A-Za-z0-9+/_\-])[A-Za-z0-9+/_\-]{24,}={0,2}")
+
+
+def _decodings(text: str) -> list[tuple[str, str]]:
+    """(token, decoded) for each base64 or hex run in ``text`` that decodes to printable ASCII."""
+    found = []
+    for token in _ENCODED.findall(text)[:500]:
+        raws = []
+        body = token.rstrip("=")
+        if re.fullmatch(r"[0-9a-fA-F]+", body) and len(body) % 2 == 0:
+            raws.append(bytes.fromhex(body))
+        try:
+            padded = body + "=" * (-len(body) % 4)
+            raws.append(base64.urlsafe_b64decode(padded) if re.search(r"[-_]", body)
+                        else base64.b64decode(padded, validate=True))
+        except (binascii.Error, ValueError):
+            pass
+        for raw in raws:
+            try:
+                decoded = raw.decode("ascii")
+            except UnicodeDecodeError:
+                continue
+            if decoded.isprintable() or decoded.replace("\n", "").isprintable():
+                found.append((token, decoded))
+    return found
+
+
+# Formats without a fixed prefix of their own, which text run together would glue to a neighbouring word.
+_UNPREFIXED = frozenset({"url_credentials", "private_key"})
+
+
+def _match(surface: str, joined: bool = False) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for kind, pattern in _PATTERNS:
+        if joined and kind in _UNPREFIXED:
+            continue
+        for m in pattern.finditer(surface):
+            if kind not in _NO_PLACEHOLDER_CHECK and _MASKED_RUN.search(m[0]):
+                continue  # "ghp_xxxxxxxx...": a placeholder, whatever the prefix
+            if (check := _VALID.get(kind)) is None or check(m):
+                found[m[0]] = kind
+    return found
+
+
 def find(value: Any) -> dict[str, str]:
     """Every credential in the strings of ``value`` (a string or a structure), as {credential: kind}.
-    The text is read as written and again with Unicode tricks undone."""
+    The text is read as written, with Unicode tricks undone, reversed, with its fields and lines run
+    together (a token split in two), and with each base64 or hex run decoded; a credential is returned
+    as it reads once undone."""
     text = leaf_text(value)
     found: dict[str, str] = {}
-    for surface in dict.fromkeys((text, _surface(text))):
-        for kind, pattern in _PATTERNS:
-            for m in pattern.finditer(surface):
-                if kind not in _NO_PLACEHOLDER_CHECK and _MASKED_RUN.search(m[0]):
-                    continue  # "ghp_xxxxxxxx...": a placeholder, whatever the prefix
-                if (check := _VALID.get(kind)) is None or check(m):
-                    found[m[0]] = kind
+    leaves = _strings(value)
+    pairs = ["".join(leaves[i:i + 2]) for i in range(min(len(leaves) - 1, 200))]  # a token split over two fields
+    plain = (text, _surface(text))
+    for surface in dict.fromkeys((*plain, "".join(text.split()), *pairs)):
+        found.update(_match(surface, joined=surface not in plain))
+        for _, decoded in _decodings(surface):
+            found.update(_match(decoded))
+    found.update(_match(_surface(text)[::-1]))
     return found
+
+
+def _strings(value: Any) -> list[str]:
+    """The string values of a structure in order, without its keys."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [s for item in value.values() for s in _strings(item)]
+    if isinstance(value, (list, tuple)):
+        return [s for item in value for s in _strings(item)]
+    return []
 
 
 def masked(credential: str, kind: str) -> str:
@@ -95,6 +156,11 @@ def masked(credential: str, kind: str) -> str:
 def _masked_text(text: str) -> str:
     for credential, kind in sorted(find(text).items(), key=lambda item: -len(item[0])):
         text = text.replace(credential, f"[{masked(credential, kind)}]")
+        text = text.replace(credential[::-1], f"[{masked(credential, kind)}, reversed]")
+    for token, decoded in _decodings(text):  # an encoded credential is cut out as it is written
+        if (inside := _match(decoded)):
+            credential, kind = next(iter(inside.items()))
+            text = text.replace(token, f"[{masked(credential, kind)}, encoded]")
     return text
 
 

@@ -78,11 +78,11 @@ def test_cursor_cannot_rewrite_so_a_leaking_call_is_denied_with_instructions(tmp
     assert reply["permission"] == "deny" and "llm_name" in reply["agent_message"]
     # Resending with the field empty, as the message asks, goes through; a required field cannot be dropped.
     event["tool_input"] = json.dumps({"q": "x", "llm_name": ""})
-    assert handle("cursor", event, g) == {"permission": "allow"}
+    assert handle("cursor", event, g) == {}  # no objection: Cursor's own approval decides
     assert handle("cursor", {"hook_event_name": "afterMCPExecution", "conversation_id": "c1",
                              "mcp_server_name": "pubmed", "tool_name": "search",
                              "result_json": json.dumps({"text": INJECTED})}, g) == {}
-    assert handle("cursor", {**event, "tool_name": "update_record"}, g)["permission"] == "ask"
+    assert handle("cursor", {**event, "tool_name": "update_record"}, g)["permission"] == "deny"  # an ask, refused
 
 
 def test_gemini_guards_only_mcp_tools_and_merges_rewritten_arguments(tmp_path: Path):
@@ -252,7 +252,9 @@ def test_cursor_ask_does_not_drop_a_pending_redaction(tmp_path: Path):
     reply = handle("cursor", event, g)
     assert reply["permission"] == "deny" and "llm_name" in reply["agent_message"]
     event["tool_input"] = json.dumps({"id": "7", "llm_name": ""})
-    assert handle("cursor", event, g)["permission"] == "ask"
+    # Cursor CLI ran allowlisted MCP calls the hook asked about, so an ask is a refusal there.
+    held = handle("cursor", event, g)
+    assert held["permission"] == "deny" and "Do not retry" in held["agent_message"]
 
 
 def test_gemini_turns_ask_into_a_denial_and_block_mode_denies_injected_results(tmp_path: Path):
@@ -395,7 +397,7 @@ def test_cursor_prompt_then_injected_result_then_mutation_is_denied(tmp_path: Pa
     # The session is tainted, so even a write to someone the user did not name asks first.
     asked = handle("cursor", cursor("beforeMCPExecution", mcp_server_name="mail", tool_name="send_email",
                                     tool_input={"to": "me@example.com", "body": "notes"}), g)
-    assert asked["permission"] == "ask"
+    assert asked["permission"] == "deny" and "Do not retry" in asked["agent_message"]
 
 
 def test_a_scan_that_dies_leaves_the_session_flagged(tmp_path: Path, monkeypatch):

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **Cursor:** with `--builtin-tools`, `beforeShellExecution` now checks each shell command before it runs.
+  Measured with `benchmarks/harness_live/cursor_hook_probe.py` on Cursor CLI 2026.10.22: a hook's `ask` or
+  `deny` held a command, and `allow` did not skip Cursor's own approval (finding HK4). The same probe found
+  that an `ask` on an MCP tool Cursor's allowlist approves ran the call, 3 of 3 times, so IntentShield's MCP
+  asks under Cursor are now refusals. A call with no objection gets `{}`, never an empty reply, which a
+  fail-closed Cursor hook treats as a failure.
+- **Local judge:** Ollama's OpenAI-compatible endpoint keeps 4,096 tokens and cuts a longer prompt to about
+  2,050, system prompt first, ignoring `num_ctx` (measured on 0.40); one window of Chinese text was 5,365
+  tokens. The judge now uses the native `/api/chat` with `num_ctx` 8,192.
+- **Judge time budget:** a hook could wait over 2 minutes on a long output (10 s per request, one retry, 6
+  windows). Each check now has a budget (20 s in the hook, 30 s in the proxy); what it leaves unread is
+  counted and said. The in-memory answer cache keys on provider and URL as well as the model.
+- **Output rules** also read the text reversed and in rot13, and reference-style markdown images as inline
+  ones. No new flags on 1,365 benign rows or 79 local READMEs; about 0.5 ms more per text.
+- **Credentials** are found base64- or hex-encoded, reversed, split over two fields or across lines, and masked
+  as written. No new hits on 6,460 corpus rows, 79 READMEs or 12,937 MSB call arguments.
+
 ## 0.4.1
 
 The hooks can now guard the harness's own shell, web and file tools (opt-in), `intentshield doctor` checks

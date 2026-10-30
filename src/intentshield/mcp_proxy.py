@@ -534,7 +534,7 @@ class MCPProxyRuntime:
         # run_id -> recent tool outputs, so a reviewed call can be linked to the text it reused.
         self._outputs: dict[str, list[dict[str, Any]]] = {}
         # A proxy call holds the agent: one short try, then no opinion, never minutes of back-off.
-        self._judge = Judge.from_spec(config.judge, timeout=15, retries=1) if config.judge else None
+        self._judge = Judge.from_spec(config.judge, timeout=15, retries=1, budget=30) if config.judge else None
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
         self._suspect_values: set[str] = set()
