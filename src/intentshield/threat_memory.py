@@ -20,17 +20,20 @@ Who may teach it, and what:
     operator allowlist and URLs on shared hosts (``PROTECTED``: one host serves everyone, and an
     injected page links to itself). A mailbox at a shared provider is one owner's, so it is kept.
   * domains: an email or URL host becomes a domain indicator once at least two distinct exact
-    indicators on it were seen in at least two runs (an attacker rotating local parts), never for a
-    protected, allowlisted or user-typed domain. Hosts are compared as written: no public suffix list.
+    indicators on it were seen in at least two runs and from at least three distinct source servers (an
+    attacker rotating local parts across the pages it controls; one server that names a colleague in many
+    pages is one source), never for a protected, allowlisted or user-typed domain (an address or a bare
+    domain in the user's text). Hosts are compared as written: no public suffix list.
   * fingerprints: hashed word 3-grams of each matched sentence and the one after it (trigger plus
     payload), and of the same window with the rule matches blanked (the payload alone, which survives
-    a rewording of exactly the phrases the rules look for), read as the rules read (``readable``) with
+    a rewording of exactly the phrases the rules look for, learned only with an anchor: the rest of the
+    matched sentence, or for a bare trigger the sentence that names a destination), read as the rules read (``readable``) with
     emails, URLs, paths and ids masked and stop words dropped. A fingerprint with fewer than
     ``MIN_WORDS`` content words, or that a text of the
     benign gate corpus (``data/benign_gate.jsonl`` plus the operator's ``add_benign``) would contain, is
     stored as ``rejected`` with its gate result, for audit, and never matches.
   * reputation: the distinct runs in which a source (``server`` or ``server:tool``) produced attacks.
-    A source is ``hostile`` with ``HOSTILE_RUNS`` such runs in the last ``HOSTILE_DAYS`` days. That is
+    A source is ``hostile`` with ``HOSTILE_RUNS`` (five) such runs in the last ``HOSTILE_DAYS`` days. That is
     weak evidence on its outputs only (they are read as possibly injected), never on a call's
     arguments, and the operator clears it by approving a call to that server (``clear_source``) or
     allowlisting it.
@@ -102,7 +105,7 @@ MAX_TEXT = 20_000  # as learning.MAX_TEXT (not imported: learning needs numpy)
 SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
 PER_CALL_INDICATORS, PER_CALL_FINGERPRINTS, MAX_BLOCKS = 20, 3, 10
 MAX_INDICATORS, MAX_FINGERPRINTS, MAX_REJECTED = 5000, 500, 500
-ESCALATE_INDICATORS, ESCALATE_RUNS, HOSTILE_RUNS, HOSTILE_DAYS, TTL_DAYS = 2, 2, 3, 7, 30
+ESCALATE_INDICATORS, ESCALATE_RUNS, ESCALATE_SERVERS, HOSTILE_RUNS, HOSTILE_DAYS, TTL_DAYS = 2, 2, 3, 5, 7, 30
 ANCHOR_WORDS, ANCHOR_CONTAINMENT = 4, 0.5
 VARIANT = "known_attack_variant"
 BENIGN_PATH = Path(__file__).with_name("data") / "benign_gate.jsonl"
@@ -117,6 +120,12 @@ pypi.org npmjs.com readthedocs.io example.com example.org example.net
 googleapis.com appspot.com web.app firebaseapp.com vercel.app netlify.app herokuapp.com pages.dev workers.dev
 onrender.com fly.dev glitch.me surge.sh blogspot.com wordpress.com medium.com substack.com ngrok.io
 ngrok-free.app trycloudflare.com azureedge.net windows.net digitaloceanspaces.com localhost
+docs.python.org python.org developer.mozilla.org mozilla.org nodejs.org rust-lang.org crates.io docs.rs golang.org
+pkg.go.dev apache.org eclipse.org w3.org ietf.org openai.com anthropic.com huggingface.co kaggle.com arxiv.org
+reddit.com news.ycombinator.com dev.to hashnode.dev discord.com gitter.im sourceforge.net gitea.com codeberg.org
+stackexchange.com superuser.com serverfault.com askubuntu.com mathworks.com docker.com hub.docker.com quay.io
+gcr.io ghcr.io registry.npmjs.org files.pythonhosted.org pythonhosted.org rubygems.org maven.org mvnrepository.com
+nuget.org packagist.org cocoapods.org
 """.split())
 _BARE_HOST = re.compile(r"(?<![\w@.-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?![\w-])")
 # Registries that sell names under them ("evil.co.uk"): never a domain indicator on their own.
@@ -551,7 +560,8 @@ class ThreatMemory:
 
         # Indicators: the values of the injected region, closest to a match first.
         user = authority_values(_normalize(trusted)) if trusted else set()
-        user_domains = {d for v in user if (d := domain_of(v)) and not under(d, PROTECTED)}
+        user_domains = {d for v in user if (d := domain_of(v) or (v if is_domain(v) else None))
+                        and not under(d, PROTECTED)}
         distance: dict[str, int] = {}
         for j, (s, e) in enumerate(parts):
             # The sentence before a match to the one after it: further out lie the next mail's sender,
@@ -588,16 +598,18 @@ class ThreatMemory:
                 if not prints or prints in seen:
                     continue
                 own = tokens(" ".join(source_text[parts[j][0]:parts[j][1]] for j in block if j in matched))
-                anchor = frozenset()
-                if source_text is norm:
-                    # The window must be matched with part of the injected sentence itself: a long
-                    # disclaimer after a short trigger would otherwise match every mail that carries it.
-                    anchor = shingles(own) & prints
-                elif content_words(own) < ANCHOR_WORDS and not _PLACEHOLDERS & set(words):
-                    # The payload after a bare trigger ("IGNORE PREVIOUS INSTRUCTIONS. <payload>") cannot
-                    # be anchored; it is learned only when it names a destination, as exfiltration does
-                    # and boilerplate (a disclaimer, a license header) does not.
-                    continue
+                # The window must be matched with part of the injected sentence itself: a long disclaimer after
+                # a short trigger would otherwise match every mail that carries it.
+                anchor = shingles(own) & prints
+                if source_text is blanked and content_words(own) < ANCHOR_WORDS:
+                    # The payload after a bare trigger ("IGNORE PREVIOUS INSTRUCTIONS. <payload>") has nothing of
+                    # the trigger's sentence to anchor on, so the sentence that names a destination (as exfiltration
+                    # does and boilerplate does not) is the anchor.
+                    dest = next((w for j in block if _PLACEHOLDERS & set(w := tokens(source_text[parts[j][0]:parts[j][1]]))),
+                                [])
+                    anchor = shingles(dest) & prints if content_words(dest) >= ANCHOR_WORDS else frozenset()
+                if source_text is blanked and not anchor:
+                    continue  # never a print of the payload alone
                 seen.add(prints)
                 known = [fid for fid, (other, _, _) in state.prints.items()
                          if contained(other, prints) >= self.containment]
@@ -633,12 +645,16 @@ class ThreatMemory:
             if under(host, PROTECTED) or under(host, user_domains) or allowed(host, allow) \
                     or host in PUBLIC_SUFFIXES or "." not in host:
                 continue
-            n, runs = db.execute(
-                "SELECT COUNT(DISTINCT i.id), COUNT(DISTINCT s.run_key) FROM threat_indicators i JOIN "
+            # Distinct servers, not runs alone: one server that carries a colleague's address in many of its
+            # pages makes a hundred runs from one source, and it is not an attacker rotating mailboxes.
+            n, runs, servers = db.execute(
+                "SELECT COUNT(DISTINCT i.id), COUNT(DISTINCT s.run_key), COUNT(DISTINCT CASE WHEN instr(s.source, ':') > 0 "
+                "THEN substr(s.source, 1, instr(s.source, ':') - 1) ELSE s.source END) FROM threat_indicators i JOIN "
                 "threat_sightings s ON s.item=i.id WHERE i.kind='exact' AND i.domain=? AND i.status!='revoked'",
                 (host,)).fetchone()
-            if n >= ESCALATE_INDICATORS and runs >= ESCALATE_RUNS:
-                item = self._upsert(db, "domain", host, now, "escalated", {"indicators": n, "runs": runs})
+            if n >= ESCALATE_INDICATORS and runs >= ESCALATE_RUNS and servers >= ESCALATE_SERVERS:
+                item = self._upsert(db, "domain", host, now, "escalated",
+                                    {"indicators": n, "runs": runs, "servers": servers})
                 if item:
                     self._sight(db, item, run_key, source, now)
                     summary["domains"].append(host)
