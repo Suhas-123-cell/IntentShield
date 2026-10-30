@@ -135,7 +135,8 @@ def through_hook(guard: HarnessGuard, session: str, result: str, send_to: str) -
     pre = handle("claude", {**event, "hook_event_name": "PreToolUse", "tool_name": "mcp__mail__send_email",
                             "tool_input": {"to": send_to, "subject": "Weekly notes", "body": "Three-line summary."}},
                  guard)
-    warned = bool(post and (post.get("decision") == "block" or "IntentShield: the result of" in json.dumps(post)))
+    # the warning on a flagged result, not the note that a long result was read only in part
+    warned = bool(post and (post.get("decision") == "block" or "tries to instruct the agent" in json.dumps(post)))
     decision = (pre or {}).get("hookSpecificOutput", {}).get("permissionDecision", "allow")
     return {"warned": warned, "send": decision}
 
