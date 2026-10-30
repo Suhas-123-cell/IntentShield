@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
+
+The hooks can now guard the harness's own shell, web and file tools (opt-in), `intentshield doctor` checks
+that the guard is really in the path, and Gemini CLI can ask instead of refusing (opt-in). Nothing changes
+unless you install with the new options, except that refusals on Codex and Gemini now tell the agent not to
+retry, and a dropped judge connection no longer blocks a call.
 
 - **Built-in tools, opt-in** (`intentshield install <harness> --builtin-tools`, or `--builtin-tools` on the
   hook). The hooks now read the harness's own shell, web and file tools: Claude Code `Bash`, `WebFetch`,
@@ -16,7 +21,7 @@
   Benign review load (`benchmarks/shell_replay.py`): 0/35 calls on the committed fixture; replaying 40 real
   Claude Code sessions from five projects, 4/1707 shell calls asked (0.2%, 95% CI 0.1-0.6%), 0/326 reads,
   0/473 writes, and MCP asks rose from 47/126 to 53/126 because built-in outputs add observed values. On
-  this repository's own sessions, which handle attack text, 741/3405 shell calls asked (21.8%): 7 of 32
+  this repository's own sessions, which handle attack text, 741/3405 shell calls asked (21.8%): 7 of 33
   sessions read real injection text from the network. Off by default until the default is decided.
 - A refused call now tells the agent not to retry it and to tell the user instead (Codex CLI and Gemini CLI,
   where an ask is a refusal). In the live built-in tool runs, Gemini CLI retried one refused command up to 75
