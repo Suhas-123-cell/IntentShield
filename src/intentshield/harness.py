@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import sqlite3
@@ -31,6 +32,7 @@ from typing import Any
 from . import credentials, shell
 from .install import server_stem
 from .mcp_inspect import (
+    _parse,
     authority_values,
     distinctive_values,
     leaf_text,
@@ -125,6 +127,8 @@ class HarnessGuard:
         # Gemini CLI: send an ask as an ask instead of a refusal. Measured: a real prompt in interactive 0.66.0;
         # approved by yolo in headless 0.37.1, and a wait with no end in headless 0.66.0. Hence opt-in.
         self.gemini_ask = gemini_ask
+        # The working directory of the event being handled (one per hook process), to read relative paths.
+        self.cwd = ""
         # As the proxy's setting: a value from a tool output always asks on a side-effecting
         # call; this decides it for reads.
         self.sourced_reads = review_output_sourced_arguments
@@ -342,6 +346,18 @@ class HarnessGuard:
         return (f"IntentShield: the MCP tools matching this request by keyword are {', '.join(n for n, _ in ranked)}. "
                 "Start with these. This is a hint, not a permission.")
 
+    def _joined(self, values: set[str]) -> set[str]:
+        """The keys of the relative paths among ``values`` joined to the working directory, so that
+        ``secrets/keys.json`` in a call meets ``/Users/me/proj/secrets/keys.json`` in an output."""
+        if not self.cwd.startswith("/"):
+            return set()
+        return {key for value in values if _parse(value)[0] == "path" and not value.startswith(("/", "~"))
+                for key in distinctive_values(posixpath.normpath(posixpath.join(self.cwd, value)))}
+
+    def _values(self, value: Any) -> set[str]:
+        found = distinctive_values(value)
+        return found | self._joined(found)
+
     def call(self, session: str, tool: str, arguments: dict[str, Any]) -> Verdict:
         intent, taint = self._load(session)
         verdict = Verdict()
@@ -354,8 +370,9 @@ class HarnessGuard:
         injected = scan_output(arguments, trusted=intent)
         if injected:
             return Verdict("deny", f"Arguments carry injected instructions ({', '.join(injected)}).", findings=injected)
-        values = distinctive_values(arguments) - distinctive_values(intent)
-        traced = traced_urls(values, taint, distinctive_values(intent))
+        user = self._values(intent)
+        values = self._values(arguments) - user
+        traced = traced_urls(values, taint, user)
         untrusted = values & taint | {url for url, how in traced.items() if how == "path"}
         if untrusted:
             return Verdict("deny", "An argument value came from a tool output that contained injected "
@@ -381,7 +398,7 @@ class HarnessGuard:
             return verdict
         observed = {row[0] for row in self.db.execute("SELECT value FROM observed WHERE session = ?", (session,))}
         # Observed holds authority values from every output, and every value from flagged ones.
-        sourced = sourced_from(distinctive_values(arguments), observed, distinctive_values(intent)) | {
+        sourced = sourced_from(self._values(arguments), observed, user) | {
             url for url, how in traced.items() if how == "host"}
         if sourced and self.review != "never" and (self.sourced_reads or self.mutates(tool)):
             # The scanners may have missed the output it came from; the user decides.
@@ -569,8 +586,9 @@ class HarnessGuard:
         if any(hit["level"] == "block" for hit in known):  # a trusted pack's block-level rule, not learned
             findings = [hit["name"] for hit in known]
         with self._tx():  # one transaction, not one commit per value
+            seen = authority_values(output)
             self.db.executemany("INSERT OR IGNORE INTO observed VALUES (?, ?)",
-                                [(session, value) for value in authority_values(output)])
+                                [(session, value) for value in seen | self._joined(seen)])
         local_hits, findings = (findings, []) if local else ([], findings)
         if not findings:
             text = leaf_text(output)  # what a model reads: JSON escapes would double the judge's tokens
@@ -598,7 +616,7 @@ class HarnessGuard:
             # the session is not tainted; a judge-only flag also makes state-changing calls ask.
             with self._tx():
                 self.db.executemany("INSERT OR IGNORE INTO observed VALUES (?, ?)",
-                                    [(session, value) for value in distinctive_values(output)])
+                                    [(session, value) for value in self._values(output)])
                 if weak == ["judge"]:
                     self.db.execute("UPDATE sessions SET soft = 1 WHERE id = ?", (session,))
                 self._scan_end(session)
@@ -607,7 +625,7 @@ class HarnessGuard:
             return Verdict("allow", note, context=note, findings=weak or ["semantic_instruction"])
         with self._tx():
             intent, taint = self._load(session)
-            self._save(session, intent, taint | distinctive_values(output), flagged=True)
+            self._save(session, intent, taint | self._values(output), flagged=True)
         self._scan_end(session)
         if taught:  # only built-in rule hits teach it, never a pack's or its own
             self._memory("record_attack", output, findings, source=source, run_key=session,
@@ -800,6 +818,7 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
     """One hook event in, the harness's JSON reply out (None: no opinion)."""
     name = event.get("hook_event_name") or ""
     session = _session_key(event)
+    guard.cwd = str(event.get("cwd") or "")
     guard.touch(session, harness)
     if not name and (denial := _unnamed_call(harness, event)):
         return denial
