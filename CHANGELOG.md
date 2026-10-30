@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.4.0
+
+A security review of the guard itself: four reviewers, three rounds of fixes, every finding and what is
+still open in `docs/security-review.md`. Behaviour changes, so read the list before upgrading.
+
+- **Argument provenance reads canonical values.** An address is the same value in any case, with a
+  `+tag`, as an IDN or punycode domain, defanged (`[at]`, `(at)`, ` at ... dot `, `[.]`, `hxxp`), base64 or
+  hex encoded, or line-wrapped; a URL in either scheme, with a port, userinfo or a trailing dot, with a
+  decimal or hex IP; a path with `~`, `$HOME`, `/Users/me` or `C:\Users\me`; an IBAN with any separator.
+  A bare host in an output covers addresses and URLs on exactly that host. On the reviewer's probe, a
+  quiet output's value now reaches a state-changing call unasked in 9 of 85 cases, down from 71.
+- **Output rules** read tag characters (a run of four or more is a finding in itself), accents and
+  combining marks, markup, letters spaced out, `\xNN`/`\uNNNN` escapes, values without their JSON keys,
+  role markers at line start, forged XML tool calls and HTML image exfiltration. False flags on 2,000 real
+  README files fell from 66 to 27; recall on the injection corpus is unchanged (2,569 of 5,095, from 2,571).
+- **Hooks:** Claude Code's failed-call results (`PostToolUseFailure`) are scanned, and Gemini CLI's and
+  Cursor's error fields. A tainted or flagged session is kept 30 idle days (was 7). An MCP event without
+  an event name is denied. More credential formats and about 40 more write verbs. The catalog's
+  read-only decision is keyed on server and tool. A judge objection on a result makes later
+  state-changing calls ask (it never denies), and the agent gets a fixed sentence instead of the judge's
+  words. The hook says when the judge was unavailable or read only part of a long result.
+- **Proxy and gateway:** a server's cache TTL can no longer hide a changed tool listing (rug pull). Schema
+  keywords (`pattern`, `format`, `$ref`, required names, ...) are scanned; free text in them quarantines
+  the tool. Upstream error results and transparent-mode results get the full inspection, and transparent
+  mode honours `allowed_tools` and `prohibited_tools`. A tool with an invalid name or schema is left out
+  instead of failing the whole connect. Without a judge verdict a description stays withheld. New caps:
+  `max_runs` (50) per session and `max_dry_runs_per_run` (20). Approving one call no longer clears a
+  server's hostile mark unless the approval says `"trust_source": true`. `/control` requests with the
+  token have their own rate-limit bucket.
+- **Threat memory:** a domain is escalated only after 3 distinct source servers, a source turns hostile
+  after 5 runs in 7 days (was 3), about 40 documentation and package hosts are protected, and a domain the
+  user named is protected like an address.
+- **LLM judge:** reads long results in overlapping windows (head, tail and the most suspect middle parts),
+  accepts only its own verdict words (anything else is an error, never "clean", and is not cached), and
+  objects to call arguments too large to read. The output prompt now names text that speaks to a reviewer
+  or claims to be verified, and requests to "whoever reads or summarises" this.
+- **`intentshield scan`** starts servers with a minimal environment and starts a project's own config
+  (`.mcp.json`, ...) only with `--connect-project`; pins are written atomically with a backup.
+- New benchmarks: `benchmarks/judge_jailbreaks.py` (30 hand-written attacks on the judge and 12 benign
+  controls, through the real hook) and `benchmarks/adaptive_judge.py` (an LLM attacker that sees the
+  judge's prompt and verdicts, against a local agent).
+  Through the hook, without a judge, all 30 jailbreak sends are stopped (27 before) and none of the 12 benign
+  ones asked; with Gemini as the judge all 30 results are warned on with no false asks, with qwen2.5:7b
+  at 4 false asks of 12. The adaptive attacker evaded on 0 of 24 seeds (1 of 24 with the old prompt), but
+  got 34 of 120 pages past the qwen judge; the agent followed none of them.
+
 ## 0.3.6
 
 - The LLM judge can read tool results too (`--judge-outputs` for the hooks and `intentshield install`,
