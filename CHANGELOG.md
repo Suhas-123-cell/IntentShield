@@ -22,6 +22,10 @@
   `U=URL; curl -d @x $U` show their destination. On 40 real sessions from other projects, shell asks went from
   4 to 7 of 1,707: each of the three put the user's own site, first seen in a tool output, in a variable, and
   asks as the same command written out would.
+- **Relative paths:** the hooks join relative paths to the event's working directory, so `secrets/keys.json`
+  in a call meets `/Users/me/proj/secrets/keys.json` in an output, while one the user named stays theirs. On
+  40 real sessions from other projects, MCP asks went from 53 to 55 of 126. `benchmarks/shell_replay.py` now
+  passes each transcript's working directory to the hook.
 - **Installer:** `install`, `wrap` and `unwrap` write nothing if the settings file changed after they read it
   (Claude Code rewrites `~/.claude.json` often), so a harness's own write is never overwritten; run again.
 - **Credentials** are found base64- or hex-encoded, reversed, split over two fields or across lines, and masked

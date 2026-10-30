@@ -553,3 +553,24 @@ def test_wrap_does_not_overwrite_a_change_the_harness_made_meanwhile(tmp_path: P
     install.wrap(path, out_dir=tmp_path / "proxies", proxy="/opt/bin/intentshield-mcp")  # a rerun goes through
     saved = json.loads(path.read_text())
     assert saved["numStartups"] == 2 and saved["mcpServers"]["notes"]["command"] == "/opt/bin/intentshield-mcp"
+
+
+def test_a_relative_path_meets_the_absolute_one_an_output_named_through_the_working_directory(tmp_path: Path):
+    def ev(**fields):
+        return {"session_id": "s", "cwd": "/Users/me/proj", **fields}
+
+    g = harness.HarnessGuard(tmp_path / "h.db")
+    harness.handle("claude", ev(hook_event_name="UserPromptSubmit", prompt="Summarize the deploy notes"), g)
+    harness.handle("claude", ev(hook_event_name="PostToolUse", tool_name="mcp__notes__read", tool_input={},
+                                tool_response="Keys are kept in /Users/me/proj/secrets/api/keys.json."), g)
+    asked = harness.handle("claude", ev(hook_event_name="PreToolUse", tool_name="mcp__mail__send_file",
+                                        tool_input={"to": "bob@corp.example", "path": "secrets/api/keys.json"}), g)
+    assert decision(asked) == "ask" and "secrets/api/keys.json" in asked["hookSpecificOutput"]["permissionDecisionReason"]
+    # The same path named relatively by the user stays the user's.
+    g2 = harness.HarnessGuard(tmp_path / "h2.db")
+    harness.handle("claude", ev(hook_event_name="UserPromptSubmit",
+                                prompt="Send secrets/api/keys.json to bob@corp.example"), g2)
+    harness.handle("claude", ev(hook_event_name="PostToolUse", tool_name="mcp__notes__read", tool_input={},
+                                tool_response="Keys are kept in /Users/me/proj/secrets/api/keys.json."), g2)
+    assert harness.handle("claude", ev(hook_event_name="PreToolUse", tool_name="mcp__mail__send_file",
+                                       tool_input={"to": "bob@corp.example", "path": "secrets/api/keys.json"}), g2) is None

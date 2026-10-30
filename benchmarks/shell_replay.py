@@ -137,25 +137,31 @@ class Tally:
 
 
 def replay(sessions: list[dict[str, Any]], tally: Tally, builtin_tools: bool = True) -> None:
-    """Each session: {"events": [(kind, payload)]} with kind prompt | call | result."""
+    """Each session: {"events": [(kind, payload)]} with kind prompt | call | result | cwd (the working
+    directory from then on, which every hook event carries)."""
     for number, session in enumerate(sessions):
         with tempfile.TemporaryDirectory() as tmp:
             guard = HarnessGuard(Path(tmp) / "hooks.db", builtin_tools=builtin_tools)
             sid = f"s{number}"
+            cwd = ""
             for kind, payload in session["events"]:
-                if kind == "prompt":
-                    handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": sid, "prompt": payload}, guard)
+                if kind == "cwd":
+                    cwd = payload
+                elif kind == "prompt":
+                    handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": sid, "prompt": payload,
+                                      "cwd": cwd}, guard)
                 elif kind == "call":
                     tool, arguments, use_id = payload
                     if (tool in _BUILTIN and builtin_tools) or tool.startswith("mcp__"):
                         tally.call(tool, handle("claude", {"hook_event_name": "PreToolUse", "session_id": sid,
                                                            "tool_name": tool, "tool_input": arguments,
-                                                           "tool_use_id": use_id}, guard))
+                                                           "tool_use_id": use_id, "cwd": cwd}, guard))
                 else:
                     tool, arguments, response, use_id = payload
                     if response is not None and (tool in _BUILTIN or tool.startswith("mcp__")):
                         reply = handle("claude", {"hook_event_name": "PostToolUse", "session_id": sid, "tool_name": tool,
-                                          "tool_input": arguments, "tool_response": response, "tool_use_id": use_id},
+                                          "tool_input": arguments, "tool_response": response, "tool_use_id": use_id,
+                                          "cwd": cwd},
                                guard)
                         note = ((reply or {}).get("hookSpecificOutput") or {}).get("additionalContext") or ""
                         if "instruct the agent" in note:
@@ -193,6 +199,7 @@ def transcript_sessions(directories: list[Path]) -> list[dict[str, Any]]:
         for path in sorted(directory.expanduser().glob("*.jsonl")):
             events: list[tuple[str, Any]] = []
             calls: dict[str, tuple[str, dict[str, Any]]] = {}
+            cwd = ""
             for line in path.open(encoding="utf-8", errors="replace"):
                 try:
                     entry = json.loads(line)
@@ -200,6 +207,9 @@ def transcript_sessions(directories: list[Path]) -> list[dict[str, Any]]:
                     continue
                 if entry.get("isSidechain"):
                     continue
+                if entry.get("cwd") and entry["cwd"] != cwd:
+                    cwd = entry["cwd"]
+                    events.append(("cwd", cwd))
                 message = entry.get("message") or {}
                 content = message.get("content")
                 if entry.get("type") == "user" and "toolUseResult" not in entry:
