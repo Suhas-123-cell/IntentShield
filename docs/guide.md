@@ -347,6 +347,17 @@ curl -X POST \
 
 The endpoint is absent when `INTENTSHIELD_CONTROL_TOKEN` is unset. Bind to
 localhost unless you have added TLS and a production authentication layer.
+A `/control` request that carries the control token is rate-limited in its own bucket, so traffic
+to `/mcp` from the same address cannot lock the operator out.
+
+Approving a call does not clear the threat memory's hostile mark on the server whose output the call's
+values came from: one approval is about one call. Send `{"decision":"approve","trust_source":true}`
+to also vouch for that server.
+
+Two config caps bound what one proxy session can do: `max_runs` (default 50) runs per session, after
+which `intentshield_create_run` is refused (HTTP 429 from the REST API), and `max_dry_runs_per_run`
+(default 20) dry runs per run, after which a dry run is blocked with `BLOCK_DRY_RUN_LIMIT`. A dry run
+is logged as a `DRY_RUN` event, so probing the policy shows up in the log.
 
 ### Configure another upstream server
 
