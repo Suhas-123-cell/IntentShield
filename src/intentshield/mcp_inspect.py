@@ -1005,10 +1005,10 @@ def _parse(key: str) -> tuple[str, str, list[str]]:
     return ("host", key, []) if re.fullmatch(_HOSTS, key) else ("other", "", [])
 
 
-def _nested(a: list[str], b: list[str], least: int) -> bool:
-    """One path is the other's directory, the shorter having at least ``least`` segments."""
+def _nested(a: list[str], b: list[str]) -> bool:
+    """One URL path is the other's directory, the shorter at least one segment deep."""
     short = min(len(a), len(b))
-    return short >= least and a[:short] == b[:short]
+    return short >= 1 and a[:short] == b[:short]
 
 
 def _user_prefixes(user: Iterable[str]) -> tuple[str, ...]:
@@ -1068,10 +1068,12 @@ def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = 
 
 def sourced_from(values: set[str], source: Iterable[str], user_values: set[str]) -> set[str]:
     """The values that came from ``source`` and not from the user. Values are canonical keys, as
-    ``distinctive_values`` returns them. A value is sourced when ``source`` has it, or a URL or path it is
-    inside or that is inside it (one URL segment or two path segments deep at least), or has its host bare or
-    as an email's domain (hosts of popular sites excepted). A path or URL inside a directory or site the
-    user named (two segments or more, no dotfile) counts as the user's own, like what the user typed."""
+    ``distinctive_values`` returns them. A value is sourced when ``source`` has it, or a URL it is inside or
+    that is inside it (one segment deep at least), or has its host bare or as an email's domain (hosts of
+    popular sites excepted). A path is sourced only when ``source`` has that path: a directory listing names
+    the directory every file the agent then writes lies in (measured: one benign call in fifty asked). A path
+    or URL inside a directory or site the user named (two segments or more, no dotfile) counts as the user's
+    own, like what the user typed."""
     user = set(user_values)
     prefixes = _user_prefixes(user)
     pending = {item for item in values if item not in user and not _under_user(item, prefixes)}
@@ -1081,14 +1083,10 @@ def sourced_from(values: set[str], source: Iterable[str], user_values: set[str])
         return found
     parsed = {item: _parse(item) for item in pending}
     hosts = {host for kind, host, _ in parsed.values() if kind in ("url", "email", "host") and not _common_host(host)}
-    wants_path = any(kind == "path" for kind, _, _ in parsed.values())
     named: set[str] = set()  # hosts the source names bare or as an email's domain
     url_paths: dict[str, list[list[str]]] = {}
-    dirs: list[list[str]] = []
     for key in source:
-        if wants_path and "://" not in key and ("/" in key or key[:1] == "~"):
-            dirs.append(_parse(key)[2])
-        elif hosts and any(host in key for host in hosts):
+        if hosts and any(host in key for host in hosts):
             kind, host, segments = _parse(key)
             if host in hosts:
                 if kind == "url":
@@ -1096,12 +1094,10 @@ def sourced_from(values: set[str], source: Iterable[str], user_values: set[str])
                 elif kind in ("host", "email"):
                     named.add(host)
     for item, (kind, host, segments) in parsed.items():
-        if kind == "path":
-            hit = any(_nested(segments, other, 2) for other in dirs)
-        elif host not in hosts:
+        if host not in hosts:
             continue
         elif kind == "url":
-            hit = host in named or any(not other or _nested(segments, other, 1) for other in url_paths.get(host, ()))
+            hit = host in named or any(not other or _nested(segments, other) for other in url_paths.get(host, ()))
         else:  # an email: its domain named; a bare host: named, or the host of a URL
             hit = host in named or (kind == "host" and host in url_paths)
         if hit:
