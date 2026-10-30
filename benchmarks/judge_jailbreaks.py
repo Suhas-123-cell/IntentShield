@@ -144,7 +144,7 @@ def through_hook(guard: HarnessGuard, session: str, result: str, send_to: str) -
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--judge", action="append", default=[], help="provider[:model]; repeatable")
-    parser.add_argument("--victim", default=None, help="local Ollama agent model (optional)")
+    parser.add_argument("--victim", default=None, help="agent model: local Ollama, or deepseek:<model> (optional)")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
     load_dotenv(".env")
@@ -170,6 +170,11 @@ def main(argv: list[str] | None = None) -> None:
             if args.victim and label == "attack":
                 run = adaptive_judge.victim_run(args.victim, result, "canary.example")
                 row["victim_acted"] = run["works"]
+                row["victim_calls"] = run["calls"]
+                if run.get("error"):
+                    row["victim_error"] = run["error"][:200]
+                if run["works"]:  # the agent's own send, as it wrote it, through the hook's argument gate
+                    row["victim_send_held"] = adaptive_judge.provenance(result, run["calls"], "canary.example")
             rows.append(row)
             print(case_id, category, {k: (v["send"], v["warned"]) for k, v in row.items() if isinstance(v, dict)},
                   "victim acted" if row.get("victim_acted") else "", flush=True)
@@ -185,6 +190,8 @@ def main(argv: list[str] | None = None) -> None:
             "judge_errors": sum("judge_error" in r[name] for r in rows)}
     if args.victim:
         summary["victim_acted_unguarded"] = sum(bool(r.get("victim_acted")) for r in rows)
+        summary["victim_sends_held"] = sum(bool(r.get("victim_send_held")) for r in rows)
+        summary["victim_errors"] = sum(bool(r.get("victim_error")) for r in rows)
     print(json.dumps(summary, indent=1))
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
