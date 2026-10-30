@@ -10,6 +10,7 @@ import logging
 import re
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import monotonic as _mono  # a name of its own: tests replace this module's ``time``
@@ -17,6 +18,7 @@ from typing import Any, Callable
 from urllib.parse import unquote, urlsplit
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import credentials
@@ -450,6 +452,7 @@ class MCPProxyRuntime:
         self._bound_fingerprints: dict[str, str] = {}
         self._drifted_tools: set[str] = set()
         self._quarantined: dict[str, list[str]] = {}
+        self._left_out: dict[str, str] = {}  # tools the proxy cannot serve (bad name or schema): never shown
         self._description_values: dict[str, set[str]] = {}
         # Parameters asking the agent for its model, prompt or conversation: hidden from
         # the agent and always sent upstream empty.
@@ -667,7 +670,7 @@ class MCPProxyRuntime:
 
     def _build_registry(self, tools: list[MCPTool]) -> dict[str, ToolSpec]:
         registry: dict[str, ToolSpec] = {}
-        self._quarantined, self._description_values, self._redacted = {}, {}, {}
+        self._quarantined, self._description_values, self._redacted, self._left_out = {}, {}, {}, {}
         self._unjudged, self._unjudged_text = [], {}
         pending: dict[str, str] = {}  # descriptions the rules, memory and detectors passed: the judge reads them
         # An instruction split across one server's tools quarantines all of them.
@@ -722,12 +725,23 @@ class MCPProxyRuntime:
             }
             self._visible_schemas[qualified] = visible
         self._judge_descriptions(pending)
+        counts = Counter(tool.qualified_name for tool in tools)
         for tool in tools:
             qualified = tool.qualified_name
             visible = self._visible_schemas[qualified]
-            if not _SAFE_TOOL_NAME.fullmatch(tool.name) or qualified in registry:
-                raise ValueError(f"Invalid or duplicate upstream MCP tool: {qualified!r}")
-            Draft202012Validator.check_schema(tool.input_schema)
+            # A tool the proxy cannot serve safely is left out, not the whole connect: one server must not be
+            # able to take down every other server behind the same proxy. Both copies of a duplicate go.
+            problem = "an invalid name" if not _SAFE_TOOL_NAME.fullmatch(tool.name) \
+                else "a duplicate name" if counts[qualified] > 1 else None
+            if problem is None:
+                try:
+                    Draft202012Validator.check_schema(tool.input_schema)
+                except SchemaError as exc:
+                    problem = f"an invalid input schema ({str(exc.message)[:120]})"
+            if problem:
+                logger.warning("Upstream MCP tool %r left out: %s", qualified, problem)
+                self._left_out[qualified] = problem
+                continue
             validator = Draft202012Validator(tool.input_schema)
 
             def validate(arguments: dict[str, Any], *, current=validator) -> None:
@@ -1194,6 +1208,8 @@ class MCPProxyRuntime:
             return f"{name} is prohibited by the operator's policy"
         if self.config.allowed_tools and not self.config.is_allowed(name):
             return f"{name} is not on the operator's allowed_tools list"
+        if name in self._left_out:
+            return f"{name} was left out: the upstream gave it {self._left_out[name]}"
         if name in self._quarantined:
             return f"{name} is quarantined: its description matched poisoning rules"
         if name in self._drifted_tools:
