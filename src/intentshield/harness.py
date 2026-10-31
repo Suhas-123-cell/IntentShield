@@ -46,6 +46,15 @@ from .mcp_inspect import (
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 ENV_FILE = Path.home() / ".intentshield" / ".env"  # API keys `intentshield install --judge` stored
+# Seconds the hooks skip the judge after it could not be reached or refused the key: each hook is its own
+# process, so without the pause every call would wait out the timeout again while the network is down.
+JUDGE_PAUSE = 300
+# Only failures no tool output can cause: no network or a refused key. A timeout, a rate limit or a reply the
+# judge could not parse may follow from what an output contains, and pausing on those would let one hostile
+# output switch the judge off for the outputs after it.
+_JUDGE_OFFLINE = re.compile(r"^HTTP 40[13]\b|nodename nor servname|Name or service not known|Temporary failure in "
+                            r"name resolution|getaddrinfo failed|Network is unreachable|No route to host|"
+                            r"Connection refused")
 
 
 def load_env_file(path: Path | None = None) -> None:
@@ -119,7 +128,8 @@ class HarnessGuard:
                  classifier: str | None = None, catalog: str | Path | None = None,
                  judge: str | None = None, threats: str | Path | None = None,
                  packs: str | Path | None = None, review_output_sourced_arguments: bool = True,
-                 judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False) -> None:
+                 judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False,
+                 judge_pause: bool = False) -> None:
         if review not in ("tainted", "always", "never") or outputs not in ("warn", "block"):
             raise ValueError(f"unknown review mode {review!r} or outputs mode {outputs!r}")
         self.review, self.outputs = review, outputs
@@ -146,6 +156,8 @@ class HarnessGuard:
             except Exception as exc:  # a corrupt file costs the memory, never the hook
                 print(f"IntentShield threat memory disabled: {type(exc).__name__}: {exc}", file=sys.stderr)
         self.judge, self.judge_missing, self.judge_outputs = None, "", judge_outputs
+        # The hook pauses a failing judge (``JUDGE_PAUSE``); benchmarks and other callers judge every time.
+        self._judge_pause = Path(path).parent / "judge-paused" if judge_pause else None
         if judge:
             from .judge import Judge
             load_env_file()
@@ -416,7 +428,10 @@ class HarnessGuard:
         if verdict.decision == "allow" and self.judge_missing and self.review != "never":
             verdict.context = (verdict.context + " " if verdict.context else "") + \
                 "IntentShield: the LLM judge is configured but has no API key; only the rules checked this call."
-        if verdict.decision == "allow" and self.judge and self.review != "never":
+        if verdict.decision == "allow" and self.judge and self.review != "never" and self._judge_paused():
+            verdict.context = (verdict.context + " " if verdict.context else "") + \
+                "IntentShield: the LLM judge is offline or unavailable; only the rules checked this call."
+        elif verdict.decision == "allow" and self.judge and self.review != "never":
             # Evidence only: an objection asks the user; agreement adds nothing.
             errors = self.judge.errors
             objection = self.judge.call(intent, tool, arguments)
@@ -429,11 +444,31 @@ class HarnessGuard:
                 verdict.user_reason = f"IntentShield's judge: {_show(objection, 400)} Confirm this call."
                 print(f"IntentShield judge objected to {tool}: {_show(objection, 400)}", file=sys.stderr)
             elif self.judge.errors > errors:  # unavailable is not "clean"; say so where someone can see it
-                print(f"IntentShield judge unavailable ({self.judge.last_error}); the rules alone decided.",
-                      file=sys.stderr)
+                print(f"IntentShield judge unavailable ({self.judge.last_error}); the rules alone decided"
+                      + self._pause_judge() + ".", file=sys.stderr)
                 verdict.context = (verdict.context + " " if verdict.context else "") + \
                     "IntentShield: the LLM judge was unavailable for this call; only the rules checked it."
         return verdict
+
+    def _judge_paused(self) -> bool:
+        """True while a recent judge failure has it skipped; it is tried again once the pause ends."""
+        if self._judge_pause is None:
+            return False
+        try:
+            until = float(self._judge_pause.read_text())
+        except (OSError, ValueError):
+            return False
+        return time.time() < until <= time.time() + JUDGE_PAUSE
+
+    def _pause_judge(self) -> str:
+        """Pauses the judge after an offline or refused-key failure; the note for stderr."""
+        if self._judge_pause is None or not _JUDGE_OFFLINE.search(self.judge.last_error or ""):
+            return ""
+        try:
+            self._judge_pause.write_text(str(time.time() + JUDGE_PAUSE))
+        except OSError:  # the pause saves time only; the rules decide either way
+            return ""
+        return f", and the judge is skipped for {JUDGE_PAUSE // 60} minutes"
 
     def _after_injection(self, session: str, taint: set[str]) -> bool:
         return self.review == "always" or (self.review == "tainted" and bool(taint or self._flagged(session)))
@@ -595,14 +630,16 @@ class HarnessGuard:
             weak = local_hits or scan_output_collapsed(output) or list(dict.fromkeys(hit["name"] for hit in known)) or (
                 ["hostile_source"] if self._memory("hostile", source) else [])
             unavailable = ""
-            if not weak and self.judge and self.judge_outputs and not local:
+            if not weak and self.judge and self.judge_outputs and not local and self._judge_paused():
+                unavailable = "IntentShield: the LLM judge is offline or unavailable; only the rules checked this result."
+            elif not weak and self.judge and self.judge_outputs and not local:
                 # Last, as the costliest check: plain-language injections carry no marker a rule can match.
                 errors, unread = self.judge.errors, self.judge.unread
                 if self.judge.output(self._load(session)[0], tool, text):
                     weak = ["judge"]
                 elif self.judge.errors > errors:
                     print(f"IntentShield judge unavailable ({self.judge.last_error}); the rules alone read this "
-                          "result.", file=sys.stderr)
+                          "result" + self._pause_judge() + ".", file=sys.stderr)
                     unavailable = "IntentShield: the LLM judge was unavailable for this result; only the rules checked it."
                 elif skipped := self.judge.unread - unread:  # a long result's least suspect parts went unread
                     print(f"IntentShield judge read only part of the {tool} result ({skipped} parts skipped).",
@@ -883,8 +920,9 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
                   v: Verdict) -> dict[str, Any] | None:
     if v.decision == "allow" and v.arguments is None and not v.context:
         return None  # no opinion: the harness's own permission flow decides
-    if v.decision == "allow" and guard.mutates(tool):
-        # A rewrite must not turn "no opinion" into an explicit allow for a state change.
+    if v.decision == "allow" and v.arguments is not None and guard.mutates(tool):
+        # A rewrite must not turn "no opinion" into an explicit allow for a state change. A note alone
+        # (the judge unavailable) is advice: it goes to the model and the harness's own flow decides.
         v.decision = "ask"
         v.reason = v.context + (" Confirm this call." if harness == "claude"
                                 else " Call the tool again with those fields empty.")
@@ -894,7 +932,7 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
     if decision == "ask" and event.get("tool_use_id"):
         guard.asked(session, str(event["tool_use_id"]))
     out: dict[str, Any] = {"hookEventName": "PreToolUse"}
-    if not (decision == "allow" and harness == "claude"):
+    if not (decision == "allow" and (harness == "claude" or v.arguments is None)):
         # Claude Code applies updatedInput without a decision and keeps its own permission
         # prompt; an explicit allow would skip it for any call that merely got redacted. Its ask
         # prompt is read by the user alone, so it may carry the judge's own words; a deny reason
@@ -1142,7 +1180,7 @@ def main(argv: list[str] | None = None) -> None:
                              catalog=args.catalog, judge=args.judge, threats=threats, packs=args.packs,
                              review_output_sourced_arguments=not args.allow_sourced_reads,
                              judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools,
-                             gemini_ask=args.gemini_ask)
+                             gemini_ask=args.gemini_ask, judge_pause=True)
         reply = handle(args.harness, event, guard)
     except Exception as exc:  # fail closed on calls, open on everything else
         name = event.get("hook_event_name")

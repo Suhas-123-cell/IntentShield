@@ -225,6 +225,10 @@ Still open:
 - A write to a shell startup file (`sort -o ~/.zshrc`, `echo .. > ~/.zshrc`) is silent until a session is flagged, as the Write tool is. `cd evil && git status` runs that repository's configured programs and is read-only.
 - `credentials.find` is still quadratic on long dotted runs when the hook reads a command (rules-13, next group).
 
+### Judge offline (hooks-8)
+
+Fixed. A note that the judge was unavailable or has no key no longer promotes an allowed state-changing call to an ask (Claude Code) or a deny (Codex); only a real argument rewrite does. The audit's probe now gives no permission decision on either harness, just the note. The hook also pauses the judge for 5 minutes after a failure that means no network or a refused key, and only those: a timeout, rate limit or unreadable reply can follow from what an output contains, so they do not pause it. Regression tests: `tests/test_judge_offline.py` (6 of 13 fail on the old code, the rest are controls). Still open: while paused, results that only the judge would have flagged pass with a note; the deterministic checks are unchanged.
+
 ## Responsible disclosure
 
 No third-party product was attacked. Every probe ran against IntentShield's own code, in the project's own checkout or a scratch directory, with benign canary addresses (`*.example`), placeholder tokens and stubbed or absent model calls. The findings concern this project only, and technique classes are named (for example defanged addresses, encoded values, tag characters) without payloads. If a finding is later found to affect a vendor's guard, it will be reported to that vendor before it is described publicly.
