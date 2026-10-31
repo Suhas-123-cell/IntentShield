@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Hooks:** approving a call the hook asked about no longer clears that server's hostile record in the threat
+  memory. The hook asks for reasons unrelated to the server (a redacted field, a credential), so one routine
+  approval cleared it across sessions. The proxy already required an explicit `trust_source` (PX10); the hook now
+  never clears a source.
+
 ## 0.4.2
 
 The fixes of a second self-audit (66 findings: 54 fixed, 10 partly fixed, 2 refuted; see "Second audit" in

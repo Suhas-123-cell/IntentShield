@@ -40,7 +40,7 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 | PX7 | One rate-limit bucket let junk POSTs lock the operator out of `/control/*` | Low-medium | Fixed | `mcp_server.py`, `api.py` (separate buckets by token) |
 | PX8 | `dry_run` was an unlimited, unaudited policy oracle; new runs reset the call budget | Low | Fixed | `service.py`, `mcp_proxy.py` (`max_dry_runs_per_run` 20, `max_runs` 50, `BLOCK_DRY_RUN_LIMIT`, `DRY_RUN` event) |
 | PX9 | The agent-token middleware skipped every path under `/control/` | Low | Fixed | `mcp_server.py` (path under `/control` refused at startup; skip only for registered routes) |
-| PX10 | Approving any call cleared the server's hostile reputation | Low (plausible) | Fixed | `mcp_proxy.py` (`trust_source` flag only); `test_only_an_explicit_operator_flag_clears_a_hostile_server` |
+| PX10 | Approving any call cleared the server's hostile reputation | Low (plausible) | Fixed | `mcp_proxy.py` (`trust_source` flag only); `test_only_an_explicit_operator_flag_clears_a_hostile_server`; the hook path kept the old behaviour until after 0.4.2 (`harness.py`, `test_approving_an_asked_call_in_the_hook_keeps_its_hostile_server`) |
 | PX11 | An upstream schema with a prose `$anchor` or `$dynamicAnchor` made `check_schema` raise, so connect failed for the whole proxy; an invalid or duplicate tool name did the same (found by the fix agent) | Medium | Fixed | `mcp_proxy.py` (commit `ca4f3e3`: such a tool is left out with a warning, both copies of a duplicate, and transparent mode refuses it); `test_a_tool_with_an_invalid_schema_is_left_out_and_the_rest_still_connect` |
 
 ### LLM judge (JG)

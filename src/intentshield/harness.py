@@ -213,9 +213,6 @@ class HarnessGuard:
         # Recipients, URLs, accounts and paths seen in any tool output of the session.
         self.db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
                         "PRIMARY KEY (session, value))")
-        # Calls the hook asked the user about; one that then runs is one the user approved.
-        self.db.execute("CREATE TABLE IF NOT EXISTS asked (session TEXT NOT NULL, use_id TEXT NOT NULL, "
-                        "PRIMARY KEY (session, use_id))")
         # When each harness last ran a hook: `intentshield doctor` tells hooks that never run from quiet ones.
         self.db.execute("CREATE TABLE IF NOT EXISTS harness_events (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
         # ... and in which working directories: a project's settings file is only run for sessions inside it.
@@ -229,7 +226,6 @@ class HarnessGuard:
                         "AND inflight = 0) OR updated < ?", (now - SESSION_TTL, now - FLAGGED_TTL))
         self.db.execute("DELETE FROM observed WHERE session NOT IN (SELECT id FROM sessions)")
         self.db.execute("DELETE FROM harness_dirs WHERE last < ?", (now - FLAGGED_TTL,))
-        self.db.execute("DELETE FROM asked WHERE session NOT IN (SELECT id FROM sessions)")
         self._read_only: dict[tuple[str, str], bool] | None = None
 
     def _read_only_decisions(self) -> dict[tuple[str, str], bool]:
@@ -630,15 +626,6 @@ class HarnessGuard:
         if found and found.sends and (found.destinations - user or not found.destinations):
             return "sends data to an address the user did not name"
         return ""
-
-    def asked(self, session: str, use_id: str) -> None:
-        self.db.execute("INSERT OR IGNORE INTO asked VALUES (?, ?)", (session, use_id))
-
-    def ran(self, session: str, use_id: str, tool: str) -> None:
-        """A call ran. If the hook had asked about it, the user approved a call to that server, so its
-        past attacks no longer make it hostile."""
-        if self.db.execute("DELETE FROM asked WHERE session = ? AND use_id = ?", (session, use_id)).rowcount:
-            self._memory("clear_source", _server_of(tool))
 
     def _memory(self, method: str, *args: Any, **kwargs: Any) -> Any:
         """A threat-memory call that reports and gives up instead of raising: it only adds evidence."""
@@ -1056,8 +1043,6 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
     decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
     if decision == "deny" and harness == "codex" and v.arguments is None:  # not "call again with fields empty"
         v.reason += NO_RETRY
-    if decision == "ask" and event.get("tool_use_id"):
-        guard.asked(session, str(event["tool_use_id"]))
     out: dict[str, Any] = {"hookEventName": "PreToolUse"}
     if not (decision == "allow" and (harness == "claude" or v.arguments is None)):
         # Claude Code applies updatedInput without a decision and keeps its own permission
@@ -1075,8 +1060,6 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
 
 def _claude_result(harness: str, name: str, session: str, tool: str, event: dict[str, Any],
                    guard: HarnessGuard, source: str | None = None, local: bool = False) -> dict[str, Any] | None:
-    if event.get("tool_use_id") and name == "PostToolUse":
-        guard.ran(session, str(event["tool_use_id"]), tool)
     # A tool that returned isError:true arrives as PostToolUseFailure with its text in ``error``, and an
     # attacker controls that text as much as any result: every field that can carry it is scanned.
     fields = ("tool_response", "tool_output")
