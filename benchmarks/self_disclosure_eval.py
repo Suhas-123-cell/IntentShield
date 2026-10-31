@@ -121,7 +121,9 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         if entry["stripped"]:
             flagged.append(entry)
     false_flags = [e for e in flagged if not {"attack", "addition"} & set(e["roles"])]
-    return {"by_role": {r: dict(c) for r, c in sorted(by_role.items())}, "flagged": flagged,
+    distinct = {"schemas": len(result["schemas"]), "parameters": sum(len(e["parameters"]) for e in result["schemas"]),
+                "stripped": sum(len(e["stripped"]) for e in flagged), "schemas_with_a_stripped": len(flagged)}
+    return {"by_role": {r: dict(c) for r, c in sorted(by_role.items())}, "distinct": distinct, "flagged": flagged,
             "false_flags": false_flags, "distinct_schemas": len(result["schemas"])}
 
 
@@ -131,6 +133,11 @@ def report(result: dict[str, Any], summary: dict[str, Any]) -> str:
              "| server role | tools | parameters | stripped |", "|---|---|---|---|"]
     for role, c in summary["by_role"].items():
         lines.append(f"| {role} | {c['tools']} | {c['parameters']} | {c['stripped']} |")
+    d = summary["distinct"]
+    lines += ["", "A schema that appears under two roles is counted in both rows (every `addition` schema is also an "
+              "`attack` schema), so the rows must not be added up. Distinct schemas: "
+              f"{d['schemas']} with {d['parameters']} parameters, of which {d['stripped']} are stripped, on "
+              f"{d['schemas_with_a_stripped']} schemas."]
     lines += ["", "## Every stripped parameter", "", "| server | tool | parameter(s) | role(s) |", "|---|---|---|---|"]
     for e in summary["flagged"]:
         lines.append(f"| {e['server']} | {e['tool']} | {', '.join(e['stripped'])} | {', '.join(e['roles'])} |")

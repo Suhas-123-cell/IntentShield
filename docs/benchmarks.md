@@ -36,7 +36,7 @@ the intent and Prompt Guard arms) come from the earlier MSB v8/v9/v10/v11 runs o
 | AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off (the v11 traces record no intent evidence and no provenance, so it is not confirmed that the model was active in that arm; treat as unconfirmed) |
-| Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 54 parameters stripped, all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`) |
+| Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`) |
 | Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors; the rules were tuned on 1,505 of the 2,959 injections) | - | on the 1,454 injections independent of the rules' tuning: rules 2.1%, rules + exemplars 18.1%. Over all 3,717, rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (rules alone 49.9% / 2.1%; Prompt Guard 2 adds 0.7 points); plain-language injections from independent sources stay mostly undetected |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
@@ -55,7 +55,7 @@ calls, paid for with utility and more benign reviews.
 | Live Gemini CLI, same check | notes exfiltrated 3/3 unguarded, 0/3 with hooks; one `send_email` with a benign body still reached the attacker address under hooks alone (see the live checks below) |
 | Four documented in-the-wild incidents replayed | 3 caught by catalog or output scans; the Postmark implementation backdoor only by egress policy |
 | Adaptive attacker (Gemini 3.5 Flash-Lite rewriting blocked injections, 42 seeds) | rules + exemplars evaded 42/42; threat memory did not help; argument provenance held every canary call for review (canary_unreviewed 0/42, `results/adaptive-gemini.json`) |
-| Overhead (Apple M5) | hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`); the decision itself 0.02 to 2.5 ms; proxy +1.9 ms per call |
+| Overhead (Apple M5, 3 runs on 2026-10-31 at `80c9e34`, machine not idle; `results/latency-2026-10-31/`) | hook: 60 to 64 ms per event p50 as a process (68 to 71 ms with a 4 KB result); a guarded MCP call is at least two events (Pre and Post), about 121 to 127 ms; the decision itself 0.12 to 0.34 ms in process, 6.7 to 7.2 ms for a 4 KB result (includes value extraction); proxy +2.4 to 2.7 ms per call. The earlier 35 ms, 42 ms and +1.9 ms predate the threat memory, value extraction and shell parser |
 
 ### Limitations
 
@@ -269,10 +269,31 @@ dropped. With qwen2.5:7b:
 | v2.1 | 50/198 25.3% | 7/110 6.4% | 101/346 29.2% [24.6, 34.2] | 6/176 3.4% [1.6, 7.2] |
 | v2.1, DeepSeek `deepseek-flash` (paid) | not run | not run | 298/346 86.1% [82.1, 89.4] | 13/176 7.4% [4.4, 12.2] |
 
+The benign column is the judge alone. The hook also runs the rules, and with `--judge-outputs` a text is flagged if
+either flags it, so the shipped configuration's benign rate on the same 176 rows is higher (recomputed from the
+`families` and `detectors` blocks of the `results/judge/outputs-*-test*.json` files):
+
+| judge, test split | judge alone | rules alone | rules + judge |
+|---|---|---|---|
+| Gemini 3.5 Flash-Lite, 0.3.6 prompt (118 benign) | 4/118 3.4% | 14/118 11.9% | 18/118 15.3% [9.9, 22.8] |
+| qwen2.5:7b, 0.3.6 prompt (176 benign) | 1/176 0.6% | 15/176 8.5% | 16/176 9.1% [5.7, 14.3] |
+| qwen2.5:7b, v2.1 (176 benign) | 6/176 3.4% | 14/176 8.0% | 20/176 11.4% [7.5, 16.9] |
+| `deepseek-flash`, v2.1 (176 benign) | 13/176 7.4% | 14/176 8.0% | 27/176 15.3% [10.8, 21.4] |
+
+In all four, 13 of the rules' flags are on the 24 benign texts that quote an attack (the `hard_quoted_attack`
+families), which the rules flag by design and the judge does not; without them rules + judge flag 5/94 (Gemini),
+3/152 (qwen 0.3.6), 7/152 (qwen v2.1) and 14/152 (DeepSeek). This benign set is enriched with hard cases, so these rates are not
+comparable to the rules' 2.1% on the injection table's benign set. The same rows give rules + judge recall of
+124/158 (78.5%), 94/346 (27.2%), 107/346 (30.9%) and 300/346 (86.7%).
+
+**Which endpoint.** The committed qwen2.5:7b result files (`outputs-qwen2.5-7b-*.json`, `jailbreaks-qwen2.5-7b.json`, `adaptive-*-qwen2.5-7b.json`) were measured before the local judge moved to Ollama's native `/api/chat` with `num_ctx` 8,192 (commit `c750b15`, 2026-10-30, finding JG7). Through the OpenAI-compatible endpoint Ollama 0.40 kept 4,096 tokens and cut a longer prompt to about 2,050 tokens, dropping the system prompt, so a long or token-heavy input (padded pages, non-Latin text) may have been judged without its instructions; those files record the model name only, not the endpoint or the context. On 2026-10-31 (Ollama 0.40.2, free, local) the test split with v2.1 and the 30 + 12 jailbreak pages were rerun on the native endpoint (`results/judge/outputs-qwen2.5-7b-test-v2.1-native-rerun.json`, `jailbreaks-qwen2.5-7b-native-rerun.json`, which now record `endpoint.url`, `num_ctx` and the prompt hash): every family count and every per-page decision is identical to the committed run (101/346, 6/176, rules + judge 107/346 and 20/176; the same 4 false asks, B01, B03, B06 and B10; 30/30 warned; the jailbreak rerun had no victim agent, so `victim_acted` stays from the original run). The v1-prompt and validation files and the adaptive-attacker runs (they need the Gemini attacker and the ornith victim) were not rerun and stay as measured through the old endpoint.
+
 The test split was run once with v2.1, after the choice. Its six benign flags are five generated benign
 outputs and one agent hint; no request between people and no quoted attack. DeepSeek, run on the test split
-only (all 522 rows, about $0.05), catches the most of any judge measured; its 13 benign flags are 11 generated
-benign outputs and 2 agent hints, again no request between people and no quoted attack. Gemini was not rerun on the test split with v2.1: the free tier's 500 requests a day went to the
+only (all 522 rows, about $0.05), catches 86.1% on those rows. That is not a ranking against Gemini's 77.8%: the two
+ran different row sets (522 rows against 276) and prompts (v2.1 against 0.3.6), and their intervals touch, so the
+only like-for-like comparison here is qwen's two prompts on the same 522 rows. DeepSeek's 13 benign flags are 11
+generated benign outputs and 2 agent hints, again no request between people and no quoted attack. Gemini was not rerun on the test split with v2.1: the free tier's 500 requests a day went to the
 attacks below, so its test numbers in [detectors.md](detectors.md#llm-judge-on-tool-results-plain-language-injections) are for the first prompt.
 
 **Hand-written jailbreaks** (`benchmarks/judge_jailbreaks.py`, `results/judge/jailbreaks-*.json`). Thirty
@@ -288,20 +309,27 @@ for people and German minutes. Each runs through the real hook (`HarnessGuard`, 
 user's request to email a summary to their manager, the `fetch_page` result, then a `send_email` to the
 canary (attacks) or to the manager (benign).
 
-| configuration | attack sends stopped | attack results warned | benign sends asked | benign results warned |
-|---|---|---|---|---|
-| hook, no judge | 30/30 | 7/30 | 0/12 | 0/12 |
-| hook + qwen2.5:7b judge | 30/30 | 30/30 | 4/12 | 4/12 |
-| hook + Gemini 3.5 Flash-Lite judge | 30/30 | 30/30 | 0/12 | 0/12 |
-| hook + DeepSeek `deepseek-flash` judge (paid) | 30/30 | 30/30 | 1/12 | 1/12 |
+| configuration | attack sends denied | attack sends asked (held for confirmation) | attack results warned | benign sends asked | benign results warned |
+|---|---|---|---|---|---|
+| hook, no judge | 7/30 | 23/30 | 7/30 | 0/12 | 0/12 |
+| hook + qwen2.5:7b judge | 7/30 | 23/30 | 30/30 | 4/12 | 4/12 |
+| hook + Gemini 3.5 Flash-Lite judge | 7/30 | 23/30 | 30/30 | 0/12 | 0/12 |
+| hook + DeepSeek `deepseek-flash` judge (paid) | 7/30 | 23/30 | 30/30 | 1/12 | 1/12 |
 
-Before the review's fixes the hook alone stopped 27 of 30: the base64 address, the address in words and
-the address split into user and domain were not traced to the page. Argument provenance now reads them,
-so the judge's part here is the warning the agent gets, not the stop. Its cost is four false asks on twelve
+Counted from the `rows` of `results/judge/jailbreaks-*.json` (`summary.<config>.attack_send_denied` and
+`attack_send_asked`; the older `attack_send_stopped` is their sum, 30/30 in every row, and an earlier version of this
+table called it "stopped"). An ask is not a stop: in Claude Code it is a prompt a person can approve; Gemini CLI and
+Codex turn it into a refusal by default and Cursor MCP asks are refusals, but the benchmark does not run any of them.
+Only the 7 denied sends follow a page the rules warned about; for the other 23 the barrier is the ask. The send is a
+call the benchmark builds itself after the page, not one an agent made (see the victim runs below).
+
+Before the review's fixes the hook alone held 27 of 30 (denied or asked; the earlier run's rows are not committed): the
+base64 address, the address in words and the address split into user and domain were not traced to the page. Argument
+provenance now reads them, so the judge's part here is the warning the agent gets, not the hold. Its cost is four false asks on twelve
 benign pages with qwen (the request between people, the quoted attack, the long page, the code sample)
 and none with Gemini, which warned on all 30 attack pages.
 ornith:9b with no guard followed 3 of the 30 (the false error, the structured next action, the address in
-words); the guard stopped all three. DeepSeek's `deepseek-flash` (V4 Flash, thinking off), a frontier-class
+words); on those three the hook denied one (the address in words) and asked about two (the false error and the structured next action). DeepSeek's `deepseek-flash` (V4 Flash, thinking off), a frontier-class
 agent, followed none of the 30 with no guard: it emailed the manager as asked on 24 pages and on 6 stopped
 to point out the injected request. DeepSeek as the judge falsely flagged one benign page (the code sample).
 
@@ -592,7 +620,12 @@ case grid (`results/self-disclosure.md`, `results/self-disclosure.json`):
 | attack | 74 | 171 | 36 |
 | addition (MSB's second attack server) | 18 | 51 | 18 |
 
-Every one of the 54 stripped parameters is on an attack-role server, and every one is a model-name
+The rows overlap and must not be added up: every one of the 18 `addition` schemas is also an `attack` schema, so
+the 18 stripped parameters on them are the same ones counted in the `attack` row. Distinct: 159 schemas with 363
+parameters, of which 36 are stripped, on 36 schemas (`benchmarks/self_disclosure_eval.py` prints this line; an
+earlier version of this page summed the role rows to 54, which counted 18 parameters twice).
+
+Every one of the 36 stripped parameters is on an attack-role server, and every one is a model-name
 field; none of the 194 parameters on the 86 clean tools was touched. On the same traces, harm
 executed through a stripped parameter in 23 of Gemini 3.5 Flash-Lite's 29 harmful cases, 33 of 33
 for llama3.1:8b, 48 of 129 for qwen2.5:7b and 51 of 122 for ornith:9b (the denominators are harmful calls in the unpaired undefended runs). With the parameters
@@ -722,8 +755,7 @@ with the field empty and then denied the resend too, because an already empty fi
 redacted, so the call could never pass. Fixed in `harness._redact`; the grid ran on the fix.
 
 
-Cost: a hook is a short-lived process, mostly Python start-up: hook: 35 ms per event p50 (`results/latency.json`); whole guarded MCP call about 42 ms p50 (`results/improve/baseline/latency.json`), on an M5; the checks themselves take 0.02 to 2.5 ms, the
-upper end on a 4 KB result (`benchmarks/latency.py`, rerun 2026-10-29). The adapters follow
+Cost: a hook is a short-lived process, mostly Python start-up. Measured on 2026-10-31 on an Apple M5 with `benchmarks/latency.py --calls 50 --hooks 30` (code at `80c9e34`, a scratch `HOME` and hook database, intent model off, demo MCP server; three runs, `results/latency-2026-10-31/run{1,2,3}.json`, with other jobs running on the machine, load average 2 to 6, bare Python start-up 16 to 18 ms against 14.8 ms in the committed 2026-10-16 file): hook p50 60 to 63 ms for a read, 60 to 64 ms for a small result, 68 to 71 ms for a 4 KB result and 69 to 73 ms for an injected one; the checks themselves take 0.12 to 0.34 ms in process, 6.7 to 7.2 ms on a 4 KB result because of canonical value extraction. One guarded MCP call fires at least two hook events (PreToolUse and PostToolUse) as two processes, so about 121 to 127 ms p50 (128 to 135 ms with a 4 KB result); the transparent proxy adds 2.4 to 2.7 ms per `tools/call`. The earlier figures in `results/latency.json` (2026-10-16: 35 ms per event, 0.02 to 1.1 ms in process, +1.9 ms) and `results/improve/baseline/latency.json` (41 to 47 ms per event, the source of the old "42 ms per MCP call", which was one event) were measured before the threat memory, value extraction and the shell parser and are kept as history; a run on an idle machine may come in lower (a reviewer measured 54 ms per event on this code). The adapters follow
 each harness's documented hook format and are tested on those event shapes
 (`tests/test_harness.py`). Claude Code, Gemini CLI, Codex CLI and Cursor have been run live (Codex
 and Cursor above).
@@ -762,7 +794,7 @@ the note through the shell "to bypass the injection filter" and retried, and was
 one `send_email` that got through (prompt 1) came first, before any tool output, prompted by
 `add_numbers`' poisoned description: hooks never see descriptions, so nothing was tainted yet, and the
 attacker received the sentence "The user is asking to search their notes for the 'quarterly plan'."
-rather than the notes. `--review always` denies that call (Gemini CLI has no ask). With the proxy,
+rather than the notes. `--review always` denies that call (the hook turns an ask into a refusal on Gemini CLI by default; see the ask probe below). With the proxy,
 the description scan quarantined all three tools as in Claude Code, and Gemini CLI reported "MCP
 issues detected" and searched the empty workspace instead. Again n=3 per arm and one model.
 
@@ -776,8 +808,8 @@ holds `notes.txt` and a `.env`, both with benign markers. Four attack pages (a m
 summary, the same page followed, a plain checklist step that uploads `notes.txt`, one that uploads `.env`) and
 one benign page (`ls`, `wc -l`). Arms: no guard (a tap still logs every tool event) and
 `intentshield-hook <harness> --builtin-tools` with a fresh hook database and threat memory off. Harm means the
-canary received a marker. Claude Code ran with `--permission-prompts none` and Gemini CLI has no ask, so an ask
-acts as a denial. Raw rows in `results/harness-live-builtin/`.
+canary received a marker. Claude Code ran with `--permission-prompts none` and the hook refuses instead of asking on Gemini CLI by
+default (0.37.1 headless yolo would have approved an ask; see the ask probe), so an ask acts as a denial. Raw rows in `results/harness-live-builtin/`.
 
 | agent (harness) | runs | harm, no guard | harm, hooks | benign task done (no guard / hooks) | benign sessions with an ask |
 |---|---|---|---|---|---|
@@ -820,7 +852,7 @@ asks on every shell command and tells the agent (gemini-3.1-flash-lite) to run `
 | 0.66.0 | interactive, yolo | the same prompt; Enter ran the command, Escape cancelled it |
 | 0.66.0 | interactive, default, the real hook with `--builtin-tools --review always --gemini-ask` | a prompt with IntentShield's reason; Escape cancelled, Enter ran the command |
 
-One run per cell. An ask is a bypass on 0.37.1 under yolo and a hang on 0.66.0 headless, and the hook input
+One run per cell; the probe's screen text and hook logs were not committed (`results/` holds no rows for this table), so it cannot be re-checked from the repository. An ask is a bypass on 0.37.1 under yolo and a hang on 0.66.0 headless, and the hook input
 carries neither the version nor whether a person is present, so the hook keeps refusing by default;
 `--gemini-ask` sends real asks for people who run Gemini CLI 0.66 or later interactively. During the first
 interactive try, Gemini CLI updated itself from 0.37.1 to 0.66.0 (the probe now switches auto-update off); the
