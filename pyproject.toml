@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "intentshield-mcp"
-version = "0.4.1"
+version = "0.4.2"
 description = "IntentShield for MCP: an offline-first security guardrail against prompt injection in MCP tool calls, with hooks for Claude Code, Codex CLI, Cursor and Gemini CLI and a transparent MCP proxy"
 readme = "README.md"
 license = "Apache-2.0"
