@@ -28,6 +28,7 @@ import re
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -46,7 +47,23 @@ PROVIDERS = {
     # tokens, which would be billed.
     "deepseek": ("https://api.deepseek.com/chat/completions", "DEEPSEEK_API_KEY", "deepseek-flash",
                  {"thinking": {"type": "disabled"}}),
+    # The user's own key, billed to them; no default model, so they name the one they pay for.
+    "openai": ("https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY", None, {}),
+    "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY", None, {}),
+    # Any OpenAI-compatible chat completions endpoint, its URL in INTENTSHIELD_JUDGE_URL.
+    "custom": (None, "INTENTSHIELD_JUDGE_API_KEY", None, {}),
 }
+JUDGE_URL_ENV = "INTENTSHIELD_JUDGE_URL"
+
+
+def checked_judge_url(url: str) -> str:
+    """A custom judge's endpoint: https, or http only to this machine, since the key and what the judge
+    reads (prompts, arguments, results) go there."""
+    parts = urllib.parse.urlsplit(url.strip())
+    local = parts.hostname in ("localhost", "127.0.0.1", "::1")
+    if not parts.hostname or not (parts.scheme == "https" or (parts.scheme == "http" and local)):
+        raise ValueError(f"{JUDGE_URL_ENV} must be an https URL (or http to localhost), not {url!r}")
+    return url.strip()
 
 
 def _ollama_host() -> str:
@@ -253,9 +270,15 @@ class Judge:
             raise ValueError(f"judge provider must be one of {sorted(PROVIDERS)}")
         self.url, env, default, self.extra = PROVIDERS[provider]
         self.provider, self.model = provider, model or default
+        if not self.model:
+            raise ValueError(f"the {provider} judge needs a model: --judge {provider}:<model>")
         if env is None:  # local: no key, any bearer value; the native endpoint, which takes num_ctx
             self.url, self.api_key = _ollama_host() + "/api/chat", api_key or "ollama"
         else:
+            if provider == "custom":
+                if not os.getenv(JUDGE_URL_ENV):
+                    raise ValueError(f"the custom judge needs {JUDGE_URL_ENV}")
+                self.url = checked_judge_url(os.environ[JUDGE_URL_ENV])
             self.api_key = api_key or os.getenv(env)
             if not self.api_key:
                 raise ValueError(f"the {provider} judge needs {env}")
@@ -283,6 +306,8 @@ class Judge:
     def from_spec(cls, spec: str, **kwargs: Any) -> "Judge":
         """``groq`` (the default: ``openai/gpt-oss-120b`` on Groq's free tier), ``gemini``, ``deepseek``
         (paid) or ``ollama`` (local), optionally with a model: ``groq:openai/gpt-oss-20b``, ``ollama:qwen2.5:7b``.
+        With the user's own key and a model they name: ``openai:<model>``, ``openrouter:<model>``, or
+        ``custom:<model>`` for any OpenAI-compatible endpoint in ``INTENTSHIELD_JUDGE_URL``.
         ``on`` or ``default`` means groq."""
         provider, _, model = spec.partition(":")
         if provider in ("on", "default", "true", "1"):
