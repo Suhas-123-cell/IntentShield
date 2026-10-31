@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Shell parser (second audit, hooks-1 to hooks-6 and hooks-15):** a newline separates commands, comments
+  and unbalanced quotes no longer hide a send, variables are read in order, wrappers (`setsid`, `flock`,
+  `busybox`, `env -S`, `bash <(curl ..)`, `printf .. | sh`) and inline code no longer hide the command,
+  curl header, cookie and cluster forms count as sends, and options that run programs or write files are not
+  read-only. Three backstops independent of the parser: only plain syntax is read-only, every address in the
+  raw text (also with escapes decoded and variables taken out) is a destination, and a sender next to one in
+  the same statement sends. Parsing is linear (200,000 characters in 0.06 to 0.12 s, was 45 to 94 s); commands
+  over 100,000 characters are read from the raw text. Benign cost: shell asks on 40 real sessions from other
+  projects went from 7 to 8 of 1,713; in IntentShield's own sessions flagged by injected outputs, from 830 to
+  1,066 of 3,720. Open residuals are listed in `docs/security-review.md`.
 - **Cursor:** with `--builtin-tools`, `beforeShellExecution` now checks each shell command before it runs.
   Measured with `benchmarks/harness_live/cursor_hook_probe.py` on Cursor CLI 2026.10.22: a hook's `ask` or
   `deny` held a command, and `allow` did not skip Cursor's own approval (finding HK4). The same probe found
