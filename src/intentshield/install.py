@@ -25,6 +25,7 @@ import shlex
 import shutil
 import sys
 import tempfile
+import time
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -101,7 +102,8 @@ _KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEE
 def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None = None,
                      ask=getpass.getpass, judge_url: str | None = None) -> Path | None:
     """The key a hosted judge needs, stored in ``~/.intentshield/.env`` (0600) where every hook
-    process reads it. Asks on the terminal when it is neither given nor already set. A custom
+    process reads it. A key that is only exported in this shell is stored too, since a harness started
+    elsewhere would not have it. Asks on the terminal when it is neither given nor set. A custom
     judge's endpoint (``judge_url``) is stored beside it. Returns the file written, or None when
     nothing was needed."""
     provider = judge.partition(":")[0]
@@ -112,14 +114,24 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
         from .judge import JUDGE_URL_ENV, checked_judge_url
         if judge_url:
             _store_env(home, JUDGE_URL_ENV, checked_judge_url(judge_url))
-        elif not (os.getenv(JUDGE_URL_ENV) or _read_env(home).get(JUDGE_URL_ENV)):
-            raise ValueError("--judge custom needs --judge-url <OpenAI-compatible chat completions URL>")
+        elif not _read_env(home).get(JUDGE_URL_ENV):
+            if not os.getenv(JUDGE_URL_ENV):
+                raise ValueError("--judge custom needs --judge-url <OpenAI-compatible chat completions URL>")
+            # Exported in this shell only: stored, and checked now, like the key (a hook does not see this shell).
+            stored_url = _store_env(home, JUDGE_URL_ENV, checked_judge_url(os.environ[JUDGE_URL_ENV]))
+            print(f"{JUDGE_URL_ENV} is set in this shell only; storing it in {stored_url}, which every hook reads")
     elif judge_url:
         raise ValueError("--judge-url is for --judge custom only")
     stored = _read_env(home)
-    if not api_key and (os.getenv(env) or stored.get(env)):
+    if not api_key and stored.get(env):
         return None
     path = _env_path(home)
+    if not api_key and os.getenv(env):
+        # Exported in this shell. A hook runs as a child of the harness, and one started from the Dock or an IDE
+        # does not inherit this shell's variables, so the key is stored where every hook reads it.
+        api_key = os.environ[env]
+        print(f"{env} is set in this shell only; storing it in {path}, which every hook reads "
+              "(a harness started from the Dock or an IDE does not see this shell's variables)")
     if not api_key:
         if ask is getpass.getpass and not sys.stdin.isatty():
             raise ValueError(f"{env} is not set; pass --api-key or export it before `install --judge {provider}`")
@@ -327,15 +339,57 @@ class ChangedMeanwhile(OSError):
     pass
 
 
+def strip_json_comments(text: str) -> str:
+    """``text`` without ``//`` and ``/* */`` comments (outside strings), as Gemini CLI reads its settings; a
+    comment becomes blanks, so the positions in an error message still point at the right place."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch in "\r\n" else " " for ch in text[i:j]))
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _has_comments(path: Path) -> bool:
+    """Gemini CLI reads its settings with comments allowed; every other harness's file is strict JSON."""
+    return path.parent.name == ".gemini"
+
+
+def _parse(text: str, path: Path) -> Any:
+    return json.loads(strip_json_comments(text) if _has_comments(path) else text)
+
+
+_COMMENTED: set[Path] = set()  # files read with comments in them: writing them back drops the comments
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     _SEEN[path.resolve()] = text
     if not text.strip():
         return {}
     try:
-        data = json.loads(text)
+        data = _parse(text, path)
     except json.JSONDecodeError as exc:
         raise json.JSONDecodeError(f"{path} is not valid JSON: {exc.msg}", exc.doc, exc.pos) from None
+    if _has_comments(path) and strip_json_comments(text) != text:
+        _COMMENTED.add(path.resolve())
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a JSON object")
     return data
@@ -349,6 +403,9 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
     if path.is_symlink():  # a dotfiles link: write its target, not a regular file in its place
         path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.resolve() in _COMMENTED and strip_json_comments(text) == text:  # JSON has nowhere to keep them
+        print(f"warning: {path} has comments, which are not kept when it is rewritten; its original text is saved "
+              "and `intentshield uninstall` (or `unwrap`) puts it back.", file=sys.stderr)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -361,6 +418,7 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
                                    "nothing was written. Run the command again.")
         os.replace(tmp, path)
         _SEEN[path.resolve()] = text
+        _COMMENTED.discard(path.resolve())
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -383,14 +441,62 @@ def _keep_original(path: Path, home: Path | None, dry_run: bool) -> None:
         _write(backup, json.dumps({"path": str(path.resolve()), "text": path.read_text(encoding="utf-8")}), False)
 
 
+def _remember_servers(path: Path, servers: dict[str, dict[str, Any]]) -> None:
+    """Add the entries a wrap is about to rewrite (key: JSON of [scope, name]) to the backup, so a later unwrap
+    restores the command and args each had at its latest wrap, not the ones of the first wrap in the file."""
+    backup = _backup_path(path, None)
+    try:
+        saved = json.loads(backup.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if isinstance(saved, dict):
+        saved["servers"] = {**(saved.get("servers") if isinstance(saved.get("servers"), dict) else {}), **servers}
+        _write(backup, json.dumps(saved), False)
+
+
 def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[str, bool]:
     """The file's text with our change undone: its original bytes (True) when the rest is as it was."""
     backup = _backup_path(path, home)
     if backup.exists():
         original = json.loads(backup.read_text(encoding="utf-8"))["text"]
-        if json.loads(original or "{}") == data:
-            return original, True
+        try:
+            if _parse(original or "{}", path) == data:
+                return original, True
+        except json.JSONDecodeError:
+            pass
     return _json_text(data), False
+
+
+def _installs_path(home: Path | None) -> Path:
+    return (home or Path.home()) / ".intentshield" / "installs.json"
+
+
+def installed_at(path: Path, home: Path | None = None) -> float | None:
+    """When ``install`` last changed this settings file's hooks, or None for a file it has no record of (one set up
+    by hand, or by an older version). `doctor` compares it with the last hook run; the file's own modification
+    time moves with every unrelated edit the user or the harness makes."""
+    try:
+        when = json.loads(_installs_path(home).read_text(encoding="utf-8")).get(str(path.resolve()))
+    except (OSError, ValueError, AttributeError):
+        return None
+    return float(when) if isinstance(when, (int, float)) else None
+
+
+def _record_install(path: Path, home: Path | None, when: float | None = None) -> None:
+    """Keeps (or, with ``when`` None, forgets) the time of this install in ``~/.intentshield/installs.json``."""
+    record = _installs_path(home)
+    try:
+        known = json.loads(record.read_text(encoding="utf-8")) if record.exists() else {}
+        if not isinstance(known, dict):
+            known = {}
+        if when is None:
+            known.pop(str(path.resolve()), None)
+        else:
+            known[str(path.resolve())] = when
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps(known, indent=2) + "\n", encoding="utf-8")
+    except (OSError, ValueError):  # evidence for doctor only: it falls back to the file's modification time
+        pass
 
 
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
@@ -413,6 +519,8 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             print(f"already installed: {path}")
             return path
         _write(path, new, dry_run)
+        if not dry_run:
+            _record_install(path, home, time.time())
     else:
         existed = path.exists()
         settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools))
@@ -423,6 +531,8 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             settings.setdefault("version", 1)
         _keep_original(path, home, dry_run)
         _write(path, _json_text(settings), dry_run)
+        if not dry_run:
+            _record_install(path, home, time.time())
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
     if harness == "codex":
         # Measured 2026-10-29 with Codex CLI 0.165: hooks nobody has trusted are skipped, and the
@@ -452,11 +562,13 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
         if not dry_run:
             path.unlink()
             backup.unlink(missing_ok=True)
+            _record_install(path, home)
         print(f"{'would remove' if dry_run else 'removed'} {path} (it held only IntentShield's hooks)")
         return path
     _write(path, text, dry_run)
     if not dry_run:
         backup.unlink(missing_ok=True)
+        _record_install(path, home)
     print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
     return path
 
@@ -491,6 +603,18 @@ def proxy_config(name: str, server: dict[str, Any], out_dir: Path, scope: str = 
             # The hooks read this for tool hints and the operator's read-only decisions, and every
             # proxy reads the others' files for cross-server shadowing.
             "tool_catalog_dir": os.getenv("INTENTSHIELD_HOOK_CATALOG") or str(out_dir.parent / "tools")}
+
+
+_INTERPOLATION = re.compile(r"\$\{|\$[A-Za-z_]|%[A-Za-z_]\w*%")
+
+
+def _interpolated(server: dict[str, Any]) -> str:
+    """"command" or "args" when it holds ``${...}``, ``$VAR`` (Gemini CLI expands it too) or ``%VAR%``, which the
+    client would expand and the proxy's config cannot."""
+    if _INTERPOLATION.search(str(server.get("command", ""))):
+        return "command"
+    args = server.get("args")
+    return "args" if isinstance(args, list) and any(_INTERPOLATION.search(str(a)) for a in args) else ""
 
 
 def _is_wrapped(server: dict[str, Any]) -> bool:
@@ -529,6 +653,8 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
             raise ValueError(f"no such server in {path}: {', '.join(missing)}")
     proxy = proxy or executable(_PROXY)
     wrapped: list[str] = []
+    before: dict[str, dict[str, Any]] = {}
+    skipped = False
     for scope, entries in groups:
         for name, server in entries.items():
             if servers and name not in servers:
@@ -540,22 +666,50 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
                 continue
             if _is_wrapped(server):
                 continue
+            if interpolated := _interpolated(server):
+                # The client expands ${VAR} and ${workspaceFolder} only in the entry it launches, which after
+                # wrapping is the proxy: the server would get the text as written.
+                print(f"skipped {_label(name, scope)}: its command line ({interpolated}) uses ${{...}}, "
+                      "$VAR or %VAR% interpolation, which the client "
+                      "expands only for the program it starts; replace it with the value (or move it to 'env', "
+                      "which is kept) and wrap again")
+                skipped = True
+                continue
             config_path = out_dir / f"{server_stem(_label(name, scope), path)}.json"
             generated = proxy_config(name, server, out_dir, scope)
             from .mcp_proxy import MCPProxyConfig  # the proxy must accept it before the client file changes
             MCPProxyConfig.model_validate(generated)
             _write(config_path, json.dumps(generated, indent=2) + "\n", dry_run)
+            before[json.dumps([scope, name])] = {"command": server["command"],
+                                                 **({"args": server["args"]} if "args" in server else {})}
             entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
             wrapped.append(_label(name, scope))
     if wrapped:
         _keep_original(path, None, dry_run)
+        if not dry_run:
+            _remember_servers(path, before)
         _write(path, _json_text(data), dry_run)
         print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
     elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
         print(f"already wrapped: {path}")
-    else:
+    elif not skipped:
         print(f"nothing to wrap in {path}: no stdio servers")
     return wrapped
+
+
+def _backed_up_server(path: Path, scope: str, name: str) -> dict[str, Any] | None:
+    """The command and args the server had in the copy of the file taken before the first wrap, when that copy has
+    it (it is the only record left once the proxy's generated config is gone)."""
+    try:
+        saved = json.loads(_backup_path(path, None).read_text(encoding="utf-8"))
+        entry = (saved.get("servers") or {}).get(json.dumps([scope, name]))
+        if entry is None:  # a backup from before entries were recorded: the file's text at the first wrap
+            entry = dict(_server_groups(_parse(saved["text"], path)))[scope][name]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    if not isinstance(entry, dict) or not entry.get("command") or _is_wrapped(entry):
+        return None
+    return {"command": entry["command"], **({"args": entry["args"]} if "args" in entry else {})}
 
 
 def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) -> list[str]:
@@ -565,6 +719,7 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
     if not groups:
         raise ValueError(f"{path} has no 'mcpServers' object")
     restored: list[str] = []
+    missing: list[str] = []
     residue: list[Path] = []
     for scope, entries in groups:
         for name, server in entries.items():
@@ -572,8 +727,16 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
                 continue
             args = server.get("args") or []
             config = Path(args[args.index("--config") + 1])
-            generated = json.loads(config.read_text())
-            upstream = generated["upstreams"][0]
+            try:
+                generated = json.loads(config.read_text())
+                upstream = generated["upstreams"][0]
+            except (OSError, ValueError, KeyError, IndexError):
+                generated = {}
+                upstream = _backed_up_server(path, scope, name)
+            if upstream is None:
+                missing.append(f"{_label(name, scope)} (its proxy config {config} is missing or unreadable, and "
+                               f"{_backup_path(path, None)} holds no copy of the entry)")
+                continue
             # The entry's own key order is kept: only command and args are swapped back in place.
             original = {}
             for key, value in server.items():
@@ -598,8 +761,11 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
         kept = [str(p) for p in residue if p.exists()]
         if kept:
             print(f"kept (the proxy's config and audit database; delete them if the server is gone): {', '.join(kept)}")
-    else:
+    elif not missing:
         print(f"nothing to unwrap in {path}")
+    if missing:  # what was written above stays; these entries still start a proxy that cannot find its config
+        raise ValueError("cannot restore " + "; ".join(missing) + f". Edit {path} by hand: put the server's own "
+                         "command and args back, or delete the entry.")
     return restored
 
 

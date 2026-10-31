@@ -1203,6 +1203,18 @@ def _url_root(value: str) -> tuple[str, str] | None:
     return (host, "/".join(segments)) if kind == "url" and value.startswith("https://") and host else None
 
 
+def on_tainted_hosts(values: Iterable[str], tainted: Iterable[str], user: Iterable[str] = ()) -> set[str]:
+    """Addresses among ``values`` on the host of a tainted address, whatever their path: a file that is written
+    with an address from an output that tried to instruct the agent, even another path on that host, is the
+    attacker's. A popular site or a host the user named does not count."""
+    def host_of(value: str) -> str:
+        kind, host, _ = _parse(value)
+        return host if kind in ("url", "host") and host and not _common_host(host) else ""
+    user_hosts = {host_of(v) for v in user} - {""}
+    bad = {host_of(v) for v in tainted} - {""} - user_hosts
+    return {v for v in values if host_of(v) in bad} if bad else set()
+
+
 def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = ()) -> dict[str, str]:
     """URLs among ``values`` built on a tainted URL rather than equal to it: the exfiltration
     step "call this address with the data appended". ``path`` when the URL is on the tainted

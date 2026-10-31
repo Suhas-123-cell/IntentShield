@@ -62,7 +62,7 @@ _READ_ONLY = frozenset({
     "df", "tree", "which", "whereis", "type", "whoami", "id", "uname", "hostname", "date", "cal", "true", "false",
     "test", "[", "basename", "dirname", "realpath", "readlink", "jq", "column", "nl", "od", "xxd", "hexdump",
     "strings", "md5", "md5sum", "shasum", "sha1sum", "sha256sum", "ps", "cd", "pushd", "popd", "sleep", "man",
-    "uptime", "lsof", "history", "tac", "rev", "fold", "fmt", "expand", "seq",
+    "uptime", "lsof", "history", "tac", "rev", "fold", "fmt", "expand", "seq", "find", "sed", "awk",
 })
 _GIT_READ_ONLY = frozenset({"status", "diff", "log", "show", "blame", "rev-parse", "ls-files", "describe",
                             "shortlog", "grep", "ls-tree", "cat-file", "rev-list", "merge-base", "whatchanged"})
@@ -143,8 +143,11 @@ _PLAIN = {0xE000 + k: c for k, c in enumerate(_MARKED)} | {0xE010 + k: c for k, 
 _AS_WRITTEN = {0xE000 + k: c for k, c in enumerate(_MARKED)} | {0xE010 + k: "\\" + c for k, c in enumerate(_MARKED)}
 _SPLIT_OPERATORS = re.compile(r"<\(|>\(|&&|\|\||\|&|;;|<<<|<<|>>|>&|&>>|&>|<&|<>|>\||[<>|&;()]")
 _SUBSTITUTION = re.compile(r"\$\(((?:[^()]|\([^()]*\))*)\)|`([^`]*)`")
-_LOOPBACK = re.compile(r"^(?:localhost|127(?:\.\d+){3}|0\.0\.0\.0|\[?::1\]?|[\w.-]+\.(?:localhost|local|internal))$",
-                       re.I)
+# Only an address that cannot leave this machine. A .local (mDNS) or .internal name, a private address or a cloud
+# metadata host is another machine's, and what it serves or receives is not the user's own. The names a container
+# runtime gives the host it runs on are the exception: they are this machine seen from inside a container.
+_LOOPBACK = re.compile(r"^(?:localhost|[\w.-]+\.localhost|127(?:\.\d+){3}|0\.0\.0\.0|\[?::1\]?|"
+                       r"host\.(?:docker|containers)\.internal)$", re.I)
 
 
 @dataclass
@@ -153,6 +156,7 @@ class Command:
     sends: bool = False          # it carries data to a destination (an upload, a POST, stdin into a network tool)
     secrets: list[str] = field(default_factory=list)     # credential stores read, or commands that print secrets
     read_only: bool = True       # every part is a known read-only command or a plain download, and no file is written
+    ordinary: bool = True        # nothing but read-only, build, test and local version-control commands (no redirect)
     runs_fetched: bool = False   # a network tool's output is piped into a shell or an interpreter
     remote: bool = False         # its output comes from elsewhere: a remote address, or a code host's issues and PRs
     fetches: int = field(default=0, repr=False)  # network commands read so far (a process substitution counts them)
@@ -667,8 +671,16 @@ def _program(argv: list[str]) -> list[str]:
     return argv[i:]
 
 
+# The user part of a URL (http://[::1]@host/): curl connects to the host after the @, whatever comes before it.
+# Bounded, so a long dotted run without a scheme is not scanned once per position.
+_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]{0,30}://)[^/?#\s@]{0,256}@")
+
+
 def network_values(text: str) -> set[str]:
-    return {v for v in distinctive_values(text) if _parse(v)[0] in ("url", "host", "email")}
+    values = distinctive_values(text)
+    if "://" in text and "@" in text and _USERINFO.search(text):
+        values |= distinctive_values(_USERINFO.sub(r"\1", text))
+    return {v for v in values if _parse(v)[0] in ("url", "host", "email")}
 
 
 def _dynamic(text: str, loopvars: frozenset[str] | set[str]) -> bool:
@@ -823,6 +835,148 @@ def _positionals(args: list[str], valued: str = "") -> list[str]:
     return found
 
 
+# ``tool --version`` runs the tool and prints a line: asking is not worth it for these.
+_VERSION_FLAGS = frozenset({"--version", "-V", "--help", "-version"})
+_VERSION_TOOLS = frozenset({"python", "python3", "pip", "pip3", "node", "npm", "npx", "pnpm", "yarn", "deno", "bun", "uv",
+                        "cargo", "rustc", "go", "java", "javac", "ruby", "perl", "php", "gcc", "g++", "clang", "make",
+                        "cmake", "docker", "gh", "ruff", "pytest", "tsc", "mypy", "black", "tox", "brew", "kubectl",
+                        "terraform", "ollama"})
+_FIND_ACTIONS = frozenset({"-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fls", "-fprintf", "-fprint0"})
+# One sed command that only prints: an address, then p, d, q, = ... or a substitution without the w and e flags.
+_SED_ADDRESS = r"(?:(?:\d+|\$|/(?:[^/\\]|\\.)*/I?)(?:,(?:\d+|\$|/(?:[^/\\]|\\.)*/))?!?)?"
+_SED_PRINTS = re.compile(r"\s*" + _SED_ADDRESS + r"\s*(?:[pPdq=nNlgGhHx]|s/(?:[^/\\]|\\.)*/(?:[^/\\]|\\.)*/[gIip0-9]*)\s*")
+_AWK_RISKY = re.compile(r"[>|@]|\bsystem\b|\bgetline\b|\bENVIRON\b|\bclose\b")  # @include and @load are gawk's
+
+
+def _sed_reads_only(args: list[str]) -> bool:
+    """sed that prints text: no -i, no script file, and a script of the simple commands above (``w file`` writes,
+    ``e`` and the ``s///e`` flag run a program)."""
+    scripts, plain, i = [], [], 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("-e", "--expression") and i + 1 < len(args):
+            scripts.append(args[i + 1])
+            i += 2
+            continue
+        if arg.startswith("--expression="):
+            scripts.append(arg.partition("=")[2])
+        elif arg.startswith("-") and len(arg) > 1:
+            if arg not in ("-n", "-E", "-r", "-s", "-u", "-z", "--quiet", "--silent", "--regexp-extended", "--posix",
+                           "--separate", "--null-data", "--unbuffered"):
+                return False
+        else:
+            plain.append(arg)
+        i += 1
+    if not scripts:
+        scripts = plain[:1]
+    return bool(scripts) and all(_SED_PRINTS.fullmatch(part) for text in scripts for part in re.split(r"[;\n]", text))
+
+
+def _awk_reads_only(args: list[str]) -> bool:
+    """awk over text: no program file, include, extension or inline ``-e`` text, and a program that neither writes
+    (``>``, ``|``), runs (``system``, ``getline``) nor reads the environment."""
+    if any(a.startswith(("-f", "-i", "-l", "-E", "-e", "-W", "--file", "--include", "--load", "--exec", "--source"))
+           for a in args if a.startswith("-")):
+        return False
+    program = _positionals(args, "Fv")[:1]
+    return bool(program) and not _AWK_RISKY.search(program[0])
+
+
+# Build, test and local version-control commands: they change files of the project and reach nowhere. They are
+# what a session does all day, so after a result that tried to instruct the agent they are not what the review
+# is for (sends, secrets, persistence and values from that result are, and are read separately).
+_DEV_GIT = frozenset({"add", "commit", "switch", "checkout", "stash", "merge", "tag", "init", "branch", "mv",
+                      "cherry-pick"})  # not rebase: -x and --exec run a command
+_DEV_PROGRAMS = frozenset({"make", "gmake", "ninja", "cmake", "ctest", "pytest", "py.test", "tox", "nox", "jest",
+                           "vitest", "mocha", "rspec", "gradle", "gradlew", "mvn", "mvnw", "tsc", "ruff", "black",
+                           "mypy", "flake8", "pylint", "isort", "prettier", "eslint", "mkdir", "touch"})
+_DEV_SUBCOMMANDS = {"npm": {"test", "t", "run", "run-script", "build"}, "pnpm": {"test", "run", "build", "lint"},
+                    "yarn": {"test", "run", "build", "lint"}, "bun": {"test", "run", "build"},
+                    "cargo": {"build", "test", "check", "clippy", "fmt", "doc", "bench"},  # not run: it runs written code
+                    "go": {"build", "test", "vet", "fmt"}}
+_DEV_MODULES = frozenset({"unittest", "pytest", "mypy", "ruff", "black", "flake8", "pylint", "isort", "compileall"})
+_SHIPS = re.compile(r"install|deploy|publish|release|upload|push|login", re.I)  # a target that sends or installs
+_BUILD_TOOLS = frozenset({"make", "gmake", "ninja", "cmake", "gradle", "gradlew", "mvn", "mvnw"})  # run targets by name
+_RUNS_PROGRAM = re.compile(r"--?(?:exec|vettool|toolexec|exec-path|runner|script-shell|config|init-hook|init-script|"
+                           r"load-plugins|rcfile|override-ini|preload|require|eval|file|makefile|noxfile|settings|"
+                           r"global-settings|settings-file|build-file|toolchains|template|setupfiles\w*)\b", re.I)
+# Short options that load code or a build script from a path, per tool: ``cmake -E env python3 x.py`` runs a program,
+# ``make -f x.mk`` and ``pytest -p plugin`` read code the agent may have written. Matched as a prefix (``-fx.mk``) or,
+# for the letter sets, anywhere in a cluster (``-kf x.mk``).
+_CODE_PREFIXES = {"cmake": ("-E", "-P", "-C"), "ninja": ("-f",), "nox": ("-f",), "gradle": ("-I", "-c", "-b"),
+                  "gradlew": ("-I", "-c", "-b"), "mvn": ("-f", "-s", "-gs", "-t"), "mvnw": ("-f", "-s", "-gs", "-t"),
+                  "pytest": ("-c", "-o"), "py.test": ("-c", "-o"), "bun": ("-r",), "mocha": ("-r",)}
+_CODE_LETTERS = {"make": "f", "gmake": "f"}
+# Where a program word may point and still be the program the tables know: a bare name (found on PATH) or a system
+# directory. ``./bin/pytest`` and ``/tmp/x/git`` are files of the project or a scratch directory, which the agent
+# may have written itself.
+_SYSTEM_BIN = ("/usr/bin/", "/usr/local/bin/", "/opt/homebrew/bin/", "/bin/", "/usr/sbin/", "/sbin/")
+
+
+def _known_program(word: str) -> bool:
+    return "/" not in word or word.startswith(_SYSTEM_BIN)
+
+
+def _loads_code(name: str, args: list[str]) -> bool:
+    """An option of this build or test tool that makes it read code or a build script from a path, or run a program."""
+    args = args[:args.index("--")] if "--" in args else args
+    prefixes, letters = _CODE_PREFIXES.get(name, ()), _CODE_LETTERS.get(name, "")
+    for k, arg in enumerate(args):
+        if arg.startswith("--") or not arg.startswith("-") or len(arg) < 2:
+            continue
+        if prefixes and arg.startswith(prefixes):
+            return True
+        if letters and any(c in letters for c in re.match(r"-([A-Za-z]*)", arg)[1]):
+            return True
+        if name in ("pytest", "py.test") and arg.startswith("-p") and not (
+                arg[2:].startswith("no:") or arg == "-p" and args[k + 1:k + 2] and args[k + 1].startswith("no:")):
+            return True
+    return False
+
+
+def _discards_work(sub: str, rest: list[str]) -> bool:
+    """A git command that throws away uncommitted work or a branch, which git reset --hard and git clean already
+    are not ordinary for: checkout -f or -- PATH, switch --discard-changes, stash drop or clear, branch -D, tag -d."""
+    if sub in ("checkout", "switch"):
+        return any(a in ("-f", "--force", "--discard-changes", "--", ".") or a.startswith("--ours")
+                   or a.startswith("--theirs") or (a.startswith("-") and not a.startswith("--") and "f" in a)
+                   for a in rest)
+    if sub == "stash":
+        return bool(rest) and rest[0] in ("drop", "clear")
+    if sub in ("branch", "tag"):
+        return any(a in ("-d", "-D", "--delete") or a.startswith("--delete")
+                   or (a.startswith("-") and not a.startswith("--") and ("d" in a or "D" in a)) for a in rest)
+    return False
+
+
+def _local_dev(name: str, args: list[str], whole: list[str]) -> bool:
+    """Whether the program is a build, test or local version-control command that changes the project only."""
+    if PurePosixPath(whole[0]).name in ("sudo", "doas") or any(_RUNS_PROGRAM.match(a) for a in args) \
+            or _loads_code(name, args):
+        return False
+    if name == "uv":  # uv run pytest: the program it runs must itself be an ordinary one
+        rest = args[1:]
+        return (args[:1] == ["run"] and bool(rest) and not rest[0].startswith("-") and rest[0] in _DEV_PROGRAMS
+                and _local_dev(rest[0], rest[1:], rest))
+    if name == "bun" and args[:1] == ["run"] and any("/" in a or a.endswith((".ts", ".js", ".mjs", ".tsx")) for a in args[1:2]):
+        return False  # bun run FILE runs that file: only a package script name is ordinary
+    if name == "git":
+        sub, rest, configs = _git_sub(args)
+        if sub == "merge" and any(a.startswith("--strategy") or a.startswith("-s") and not a.startswith("--")
+                                  for a in rest):
+            return False  # -s NAME runs git-merge-NAME from the path
+        return (sub in _DEV_GIT and not configs and not _discards_work(sub, rest)
+                and not any(a.startswith(_GIT_ELSEWHERE) for a in args[:len(args) - len(rest)]))
+    if name in _DEV_SUBCOMMANDS:
+        return bool(args) and args[0] in _DEV_SUBCOMMANDS[name] and not (
+            name in ("npm", "pnpm", "yarn", "bun") and _SHIPS.search(" ".join(args[:2])))  # npm run deploy
+    if name in _INTERPRETERS and name.startswith("python"):
+        return args[:1] == ["-m"] and len(args) > 1 and args[1] in _DEV_MODULES
+    # -DNAME=value only sets a variable (-DCMAKE_BUILD_TYPE=Release is not a release)
+    return name in _DEV_PROGRAMS and not (
+        name in _BUILD_TOOLS and bool(_SHIPS.search(" ".join(x for x in args if not x.startswith("-D")))))
+
+
 def _read_only(name: str, args: list[str]) -> bool:
     """Whether the program, with these arguments, only reads."""
     if name == "git":
@@ -832,10 +986,21 @@ def _read_only(name: str, args: list[str]) -> bool:
         if sub == "branch":  # listing only: any other option changes a branch or the configuration
             return all(a in _GIT_BRANCH_LISTING or a.startswith(_GIT_BRANCH_VALUED) for a in rest)
         return (sub in _GIT_READ_ONLY and not _has_option(rest, _GIT_UNSAFE, "O" if sub == "grep" else ""))
+    if name in _VERSION_TOOLS and len(args) == 1 and args[0] in _VERSION_FLAGS:
+        return True
+    if name in ("npm", "pnpm", "yarn") and args[:1] in (["ls"], ["list"]) \
+            or name in ("pip", "pip3") and args[:1] in (["list"], ["show"], ["freeze"], ["check"]):
+        return True
     if name not in _READ_ONLY:
         return False
     if name in _UNSAFE_OPTIONS and _has_option(args, *_UNSAFE_OPTIONS[name]):
         return False
+    if name == "find":  # -exec runs a program, -delete and -fprint* change files
+        return not any(a in _FIND_ACTIONS for a in args)
+    if name == "sed":
+        return _sed_reads_only(args)
+    if name == "awk":
+        return _awk_reads_only(args)
     if name in ("more", "less") and any(a.startswith("+!") for a in args):  # +!cmd runs a shell command
         return False
     if name == "uniq":  # uniq IN OUT writes OUT
@@ -938,6 +1103,7 @@ def _program_variables(words: list[str], found: Command, depth: int, env: dict[s
             value = m[2].strip()
             if value not in _PLAIN_PROGRAMS:
                 found.read_only = False
+                found.ordinary = False
                 _run_value(value, found, depth, env, loopvars)
 
 
@@ -975,14 +1141,11 @@ def _segment(argv: list[str], piped_in: bool, found: Command, depth: int, env: d
         runs_stdin = True  # bash -s stable
     if any(tuple(a.lower() for a in argv[:len(cmd)]) == cmd for cmd in _SECRET_COMMANDS):
         found.secrets.append(" ".join(argv[:3]))
-    read_only = _read_only(name, args)
-    if name == "find" and any(a in ("-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fls", "-fprintf",
-                                    "-fprint0") for a in args):
-        read_only = False
-    if name == "sed" and any(a.startswith(("-i", "--in-place")) for a in args):
-        read_only = False
+    known = _known_program(argv[0])
+    read_only = known and _read_only(name, args)
     if not read_only and not (_downloads(name, args) and not piped_in):
         found.read_only = False
+        found.ordinary &= known and _local_dev(name, args, whole)
     flag = next((i for i, a in enumerate(args) if re.fullmatch(r"-[a-z]*c", a)), None)  # -c, -lc
     if name in _COMMAND_FLAG and flag is not None and depth < 3:
         rest = args[flag + 1:]
@@ -1066,6 +1229,7 @@ def _code(code: str, found: Command, depth: int = 0) -> None:
         strings = _strings(code)
         if strings is None:  # too ragged to read the strings: read the raw text
             found.read_only = False
+            found.ordinary = False
             _opaque(code, found)
         else:
             for _, _, literal in strings[:2 * _MAX_PARTS]:
@@ -1099,6 +1263,7 @@ def _merge(found: Command, inner: Command) -> None:
     found.sends |= inner.sends
     found.secrets += inner.secrets
     found.read_only &= inner.read_only
+    found.ordinary &= inner.ordinary
     found.runs_fetched |= inner.runs_fetched
     found.remote |= inner.remote
     found.fetches += inner.fetches
@@ -1160,6 +1325,7 @@ def _unreadable(command: str, found: Command, expanded: str = "") -> Command:
     """Whatever it is, it is not known to be read-only, and with a network tool or an address in it, it may send
     data: read from the raw text (and from the text with its variables written out) what can be."""
     found.read_only = False
+    found.ordinary = False
     for match in _DEV_TCP.finditer(command):
         found.destinations |= network_values(match[1])
         found.sends = True
@@ -1441,6 +1607,7 @@ def _backstops(command: str, found: Command) -> None:
     there."""
     if not _plain(command):
         found.read_only = False
+        found.ordinary = False
     variants = _variants(command)
     read = [w for t in variants for w in _sender_windows(t)]
     windows = [w for w, _ in read]
@@ -1525,6 +1692,7 @@ def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset
             if token.startswith((">", "&>")) and token not in (">&",) and target not in ("/dev/null", "/dev/stderr",
                                                                                       "/dev/stdout"):
                 found.read_only = False
+                found.ordinary = False
             target = target.translate(_PLAIN)
             if token.startswith("<") and SECRET.search(target):
                 found.secrets.append(target)
@@ -1573,6 +1741,7 @@ def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset
                 if len(carried) > _MAX_CARRIED or _state.carry < 0:
                     carried, hidden = None, True
                     found.read_only = False
+                    found.ordinary = False
             if token == ")" and groups and groups[-1] is not None:
                 outer, outer_piped, fetches = groups.pop()  # <(...) ends: its place in the command is a file
                 program = _program(outer)

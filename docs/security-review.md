@@ -255,6 +255,39 @@ Still open: the hooks' own sqlite taint list is not capped (0.17 s per hook at 2
 
 Fixed. A note that the judge was unavailable or has no key no longer promotes an allowed state-changing call to an ask (Claude Code) or a deny (Codex); only a real argument rewrite does. The audit's probe now gives no permission decision on either harness, just the note. The hook also pauses the judge for 5 minutes after a failure that means no network or a refused key, and only those: a timeout, rate limit or unreadable reply can follow from what an output contains, so they do not pause it. Regression tests: `tests/test_judge_offline.py` (6 of 13 fail on the old code, the rest are controls). Still open: while paused, results that only the judge would have flagged pass with a note; the deterministic checks are unchanged.
 
+### Hooks, installer and doctor (hooks-7, hooks-9 to hooks-14, hooks-17, hooks-18)
+
+Three fix-and-review rounds; the third review still broke hooks-7, hooks-10 and hooks-12 with variants of the same class, and those were closed before the merge (tests in `tests/test_hooks_audit_review.py`, 44 of 61 fail on the round-3 tree, the rest are controls).
+
+| Finding | Severity | Status |
+|---|---|---|
+| hooks-7: `.local`, `.internal` and metadata names counted as this machine | Medium | Fixed: only literal loopback, `*.localhost` and the container host names are local; a URL whose user part is a loopback address (`http://[::1]@host/`) is read as the host after the `@`, as curl connects to it |
+| hooks-9: one flagged result refused every build, test and commit on Gemini and Codex; `find` was never read-only | Medium | Partly fixed (see below) |
+| hooks-10: persistence points (git config and hooks, direnv, editor tasks, agent instruction files, package-manager config) and Codex `apply_patch` unguarded | Medium | Fixed for the listed class: about 90 path patterns ask on a write after a flag; `apply_patch` is read whether the patch comes as a string or a command list; patch headers are parsed in linear time |
+| hooks-11: doctor passed a hook whose shebang interpreter was gone | Medium | Fixed: dead shebangs, `env` shebangs and shell wrappers that `exec` a missing interpreter fail |
+| hooks-12: doctor's "hooks ran" check used the settings file's mtime and ignored disabled hooks and matchers | Low | Fixed: install time is recorded; `disableAllHooks` (also in the current project's settings) and call or result matchers that match no MCP tool fail |
+| hooks-13: `wrap` copied `${VAR}` and `${workspaceFolder}` literally | Medium | Fixed: such servers are skipped with a message |
+| hooks-14: `unwrap` failed when the generated proxy config was gone | Low | Fixed: it restores from the backup, or says what to edit by hand |
+| hooks-17: Gemini settings with comments were refused | Low | Fixed: comments are stripped (with a warning that they are not kept); no new dependency |
+| hooks-18: `install --judge` did not store a key set only in the shell, and doctor took the shell's environment as proof | Low | Fixed: the key (and a custom judge URL) is stored; doctor warns when the key is in the shell only |
+
+After a flagged result (hooks-9), local build, test and commit commands (`pytest`, `npm test`, `make`, `cargo build`, `git add`, `git commit`) run again; they stay refused when they carry a tainted value, run a named or written script (`python3 x.py`, `go run`, `cargo run`, `bun run FILE`), take an option that loads code (`make -f`, `pytest -p`, `cmake -P`, `--init-hook`, `--rcfile`, `awk -W`), redirect output, or discard work (`git checkout -f` or `-- PATH`, `git switch --discard-changes`, `git stash drop`, `git branch -D`, `git tag -d`). `find`, `sed -n`, `awk` without writes or `system`, and version queries are read-only.
+
+Measured on the author's private Claude Code sessions (not committed, so not re-checkable from the repository), base `80c9e34` against the fix:
+
+- Sessions with no flag, 41 sessions from other projects: shell 8/1713, reads 0/327, writes 0/473 and MCP 55/126 asked on both; all 2642 PreToolUse verdicts identical.
+- The same 1503 distinct real commands replayed one by one in a flagged Gemini session: 1240 refused on base, 984 on the fix (65.5%), 0 newly refused. Most still refused are `cd ..&&`, `VAR=value` prefixes, loops and pipelines into files; only 13 of 95 real `pytest` and 5 of 58 `git commit` commands pass after a flag.
+- 231 distinct real writes in a flagged session: 0 asked on base, 4 on the fix (an `AGENTS.md` twice, a `vite.config.ts`, a CI workflow), all by path rule.
+- The changes after the third review moved no verdict on 7564 distinct real commands and 247 real write paths.
+- Suite 2281 passed, 1 skipped on the merged tree; ruff and the review gate green.
+
+Still open:
+
+- **Write then run:** after a flag, an agent can write a source file that neither names the flagged host nor is a shell script (a test that decodes a host and posts the environment) and run it with `pytest` or `npm test`. Closing this means refusing every edit-and-test loop after a flag; with 65% of real commands already refused there, that was not done.
+- **Known names only:** the code-loading options and persistence paths are lists. An unknown tool option that loads code, or a harness file not on the list, is not covered.
+- **Not covered:** `npx` still asks; `make VAR=` assignments (`SHELL=`) are not read; `pytest --pastebin` is an ordinary test run though it uploads output.
+- **Doctor:** hooks installed by hand or by an older version have no install record and fall back to the file's mtime; `allowManagedHooksOnly` in managed settings is not read.
+
 ## Responsible disclosure
 
 No third-party product was attacked. Every probe ran against IntentShield's own code, in the project's own checkout or a scratch directory, with benign canary addresses (`*.example`), placeholder tokens and stubbed or absent model calls. The findings concern this project only, and technique classes are named (for example defanged addresses, encoded values, tag characters) without payloads. If a finding is later found to affect a vendor's guard, it will be reported to that vendor before it is described publicly.
