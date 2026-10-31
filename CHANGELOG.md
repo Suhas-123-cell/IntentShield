@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Judge with your own key:** `install --judge openai:<model>`, `openrouter:<model>` or `custom:<model> --judge-url <URL>` (any OpenAI-compatible endpoint; https, or http to localhost) asks for the key once and stores it, and the URL, in `~/.intentshield/.env`; Groq's free tier stays the default. `install --judge deepseek`, which the README documented, was refused by the installer and now works. A refused `--judge` spec no longer stores a key first. These judges are not measured.
 - **Shell parser (second audit, hooks-1 to hooks-6 and hooks-15):** a newline separates commands, comments
   and unbalanced quotes no longer hide a send, variables are read in order, wrappers (`setsid`, `flock`,
   `busybox`, `env -S`, `bash <(curl ..)`, `printf .. | sh`) and inline code no longer hide the command,

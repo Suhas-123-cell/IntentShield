@@ -31,7 +31,8 @@ REQUIRED = {"claude": ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToo
             "codex": ("UserPromptSubmit", "PreToolUse", "PostToolUse"),
             "cursor": ("beforeSubmitPrompt", "beforeMCPExecution", "afterMCPExecution"),
             "gemini": ("BeforeAgent", "BeforeTool", "AfterTool")}
-_KEYS = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+_KEYS = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY",
+         "openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", "custom": "INTENTSHIELD_JUDGE_API_KEY"}
 # The oldest Gemini CLI on which a hook's ask was measured to be a prompt (in 0.37.1 yolo mode approved it).
 GEMINI_ASK_TESTED = (0, 66, 0)
 
@@ -124,6 +125,11 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
         if "--judge" in argv:
             provider = argv[argv.index("--judge") + 1].partition(":")[0] if argv.index("--judge") + 1 < len(argv) else ""
             key = _KEYS.get(provider)
+            if provider == "custom" and not os.getenv("INTENTSHIELD_JUDGE_URL") \
+                    and "INTENTSHIELD_JUDGE_URL" not in _stored_keys(home):
+                report.line("FAIL", subject, "the custom judge has no INTENTSHIELD_JUDGE_URL; every call runs on the "
+                                             f"rules alone. Run `intentshield install {harness} --judge custom:<model> "
+                                             "--judge-url <URL>`")
             if key and not os.getenv(key) and key not in _stored_keys(home):
                 report.line("FAIL", subject, f"the {provider} judge has no {key} (neither set nor in "
                                              f"{home / '.intentshield' / '.env'}); every call runs on the rules alone. "

@@ -56,6 +56,13 @@ go to Groq, Google or DeepSeek. `--judge ollama` keeps them local. A judge objec
 state-changing calls ask; it never denies on its own. Measurements and the recommendation are in
 [docs/benchmarks.md](docs/benchmarks.md#mcp-guardrail-layers).
 
+To use your own key and model instead, name the model: `--judge openai:<model>` (`OPENAI_API_KEY`),
+`--judge openrouter:<model>` (`OPENROUTER_API_KEY`), or `--judge custom:<model> --judge-url <URL>` for any
+OpenAI-compatible chat completions endpoint (`INTENTSHIELD_JUDGE_API_KEY`; https, or http to localhost). The
+installer asks for the key once and stores it, with the URL, in `~/.intentshield/.env`; run it again with
+`--api-key` to replace a key. These judges have not been measured, and what the judge reads goes to that
+provider.
+
 ### Scan the MCP servers you already use
 
 ```sh

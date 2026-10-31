@@ -62,7 +62,8 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
 
 
-_JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|on|default)(:[A-Za-z0-9_.:/-]+)?")
+_JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|deepseek|openai|openrouter|custom|on|default)(:[A-Za-z0-9_.:/-]+)?")
+_NEEDS_MODEL = ("openai", "openrouter", "custom")  # the user's own key: they name the model they pay for
 
 
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None,
@@ -76,7 +77,11 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
         command += f" --review {shlex.quote(review)}"
     if judge:
         if not _JUDGE_SPEC.fullmatch(judge):
-            raise ValueError(f"--judge must be ollama[:model], groq[:model] or gemini[:model], not {judge!r}")
+            raise ValueError(f"--judge must be groq, gemini, deepseek or ollama[:model], or openai, openrouter or "
+                             f"custom:<model>, not {judge!r}")
+        provider, _, model = judge.partition(":")
+        if provider in _NEEDS_MODEL and not model:
+            raise ValueError(f"--judge {provider} needs a model: --judge {provider}:<model>")
         command += f" --judge {shlex.quote(judge)}"
         if judge_outputs:
             command += " --judge-outputs"
@@ -89,37 +94,67 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
     return command
 
 
-_KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+_KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY",
+            "openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", "custom": "INTENTSHIELD_JUDGE_API_KEY"}
 
 
 def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None = None,
-                     ask=getpass.getpass) -> Path | None:
+                     ask=getpass.getpass, judge_url: str | None = None) -> Path | None:
     """The key a hosted judge needs, stored in ``~/.intentshield/.env`` (0600) where every hook
-    process reads it. Asks on the terminal when it is neither given nor already set. Returns the
-    file written, or None when nothing was needed."""
+    process reads it. Asks on the terminal when it is neither given nor already set. A custom
+    judge's endpoint (``judge_url``) is stored beside it. Returns the file written, or None when
+    nothing was needed."""
     provider = judge.partition(":")[0]
     env = _KEY_FOR.get(provider)
     if env is None:  # ollama: local, no key
         return None
-    path = (home or Path.home()) / ".intentshield" / ".env"
-    if path.is_symlink():  # the key would land wherever the link points
-        raise ValueError(f"{path} is a symbolic link; replace it with a regular file before storing a key")
-    lines = path.read_text().splitlines() if path.exists() else []
-    stored = {}
-    for line in lines:
-        key, sep, value = line.strip().partition("=")
-        if sep and not key.startswith("#"):
-            stored[key] = value
+    if provider == "custom":
+        from .judge import JUDGE_URL_ENV, checked_judge_url
+        if judge_url:
+            _store_env(home, JUDGE_URL_ENV, checked_judge_url(judge_url))
+        elif not (os.getenv(JUDGE_URL_ENV) or _read_env(home).get(JUDGE_URL_ENV)):
+            raise ValueError("--judge custom needs --judge-url <OpenAI-compatible chat completions URL>")
+    elif judge_url:
+        raise ValueError("--judge-url is for --judge custom only")
+    stored = _read_env(home)
     if not api_key and (os.getenv(env) or stored.get(env)):
         return None
+    path = _env_path(home)
     if not api_key:
         if ask is getpass.getpass and not sys.stdin.isatty():
             raise ValueError(f"{env} is not set; pass --api-key or export it before `install --judge {provider}`")
         api_key = ask(f"{env} for the {provider} judge (stored in {path}, never printed): ").strip()
         if not api_key:
             raise ValueError(f"no {env} given")
+    return _store_env(home, env, api_key)
+
+
+def _env_path(home: Path | None) -> Path:
+    path = (home or Path.home()) / ".intentshield" / ".env"
+    if path.is_symlink():  # the key would land wherever the link points
+        raise ValueError(f"{path} is a symbolic link; replace it with a regular file before storing a key")
+    return path
+
+
+def _read_env(home: Path | None) -> dict[str, str]:
+    path = _env_path(home)
+    stored = {}
+    for line in (path.read_text().splitlines() if path.exists() else []):
+        key, sep, value = line.strip().partition("=")
+        if sep and not key.startswith("#"):
+            stored[key] = value
+    return stored
+
+
+def _store_env(home: Path | None, env: str, value: str) -> Path:
+    """Sets one KEY=value line in ``~/.intentshield/.env`` (0600), every other line as it was."""
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"{env} must be one line")
+    path = _env_path(home)
+    lines = path.read_text().splitlines() if path.exists() else []
+    stored = _read_env(home)
     # Every other line (comments, other keys) stays as it was; only this key's line changes.
-    entry = f"{env}={api_key}"
+    entry = f"{env}={value}"
     replaced = [entry if line.strip().partition("=")[0] == env else line for line in lines]
     lines = replaced if env in stored else [*lines, entry]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -361,12 +396,13 @@ def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[s
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
             judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
-            judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False) -> Path:
+            judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False,
+            judge_url: str | None = None) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched."""
     path = settings_path(harness, scope, home, cwd)
-    if judge and not dry_run:
-        ensure_judge_key(judge, home, api_key, ask)
     command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools, gemini_ask)
+    if judge and not dry_run:  # after the spec is checked, so a refused --judge stores nothing
+        ensure_judge_key(judge, home, api_key, ask, judge_url)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
@@ -578,9 +614,13 @@ def add_subcommands(sub: Any) -> None:
             p.add_argument("--review", choices=("tainted", "always", "never"), default=None,
                            help="pass --review to the hook (Codex and Gemini CLI cannot ask, so 'always' denies)")
             p.add_argument("--judge", nargs="?", const="groq", default=None, metavar="PROVIDER[:MODEL]",
-                           help="turn on the LLM judge: groq (default, asks for GROQ_API_KEY once), gemini, "
-                                "or ollama (local)")
-            p.add_argument("--api-key", default=None, help="the judge's API key, instead of being asked")
+                           help="turn on the LLM judge: groq (default, free tier, asks for GROQ_API_KEY once), "
+                                "gemini, deepseek, ollama (local), or your own key with openai:<model>, "
+                                "openrouter:<model> or custom:<model> (with --judge-url)")
+            p.add_argument("--api-key", default=None,
+                           help="the judge's API key, instead of being asked (replaces a stored one)")
+            p.add_argument("--judge-url", default=None, metavar="URL",
+                           help="with --judge custom:<model>: your OpenAI-compatible chat completions endpoint")
             p.add_argument("--builtin-tools", action="store_true",
                            help="also guard the harness's own shell, file and web tools (Bash, WebFetch, Read, "
                                 "Write...); off by default until its review load is measured")
@@ -609,8 +649,8 @@ def run(args: argparse.Namespace) -> int:
             if args.judge_outputs and not args.judge:
                 raise ValueError("--judge-outputs needs --judge")
             install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
-                    api_key=args.api_key, judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools,
-                    gemini_ask=args.gemini_ask)
+                    api_key=args.api_key, judge_url=args.judge_url, judge_outputs=args.judge_outputs,
+                    builtin_tools=args.builtin_tools, gemini_ask=args.gemini_ask)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":
