@@ -40,9 +40,10 @@ Who may teach it, and what:
     allowlisting it.
 
   Everything learned is ``observed``: it expires ``ttl_days`` after it was last seen and is evicted
-  oldest first beyond the global caps. Per call at most ``PER_CALL_INDICATORS`` indicators and
-  ``PER_CALL_FINGERPRINTS`` fingerprints are learned, and a sighting counts once per run, so one run
-  cannot inflate counts by repeating itself.
+  oldest first beyond the global caps and beyond each server's own quota (``PER_SOURCE_INDICATORS``,
+  ``PER_SOURCE_FINGERPRINTS``: a flood from one source evicts only that source's oldest). Per call at
+  most ``PER_CALL_INDICATORS`` indicators and ``PER_CALL_FINGERPRINTS`` fingerprints are learned, and a
+  sighting counts once per run, so one run cannot inflate counts by repeating itself.
 - the operator: ``confirm``, ``revoke`` (sticky: a revoked value is not learned again), ``allow``
   (allowlist; revokes what it covers), ``import_feed`` (IOCs with provenance, ``confirmed``) and
   ``add_benign`` (extends the gate and revokes fingerprints that now match).
@@ -108,6 +109,7 @@ MAX_TEXT = 20_000  # as learning.MAX_TEXT (not imported: learning needs numpy)
 SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
 PER_CALL_INDICATORS, PER_CALL_FINGERPRINTS, MAX_BLOCKS = 20, 3, 10
 MAX_INDICATORS, MAX_FINGERPRINTS, MAX_REJECTED = 5000, 500, 500
+PER_SOURCE_INDICATORS, PER_SOURCE_FINGERPRINTS = 200, 100  # of one server, under those caps
 ESCALATE_INDICATORS, ESCALATE_RUNS, ESCALATE_SERVERS, HOSTILE_RUNS, HOSTILE_DAYS, TTL_DAYS = 2, 2, 3, 5, 7, 30
 ANCHOR_WORDS, ANCHOR_CONTAINMENT = 4, 0.5
 VARIANT = "known_attack_variant"
@@ -779,17 +781,45 @@ class ThreatMemory:
         db.execute("DELETE FROM threat_sources WHERE seen<?", (cutoff,))
 
     @staticmethod
-    def _caps(db: sqlite3.Connection) -> None:
+    def _evict(db: sqlite3.Connection, table: str, ids: list[str]) -> None:
+        marks = ",".join("?" * len(ids))
+        db.execute(f"DELETE FROM threat_sightings WHERE item IN ({marks})", ids)
+        db.execute(f"DELETE FROM {table} WHERE id IN ({marks})", ids)
+
+    @classmethod
+    def _source_quotas(cls, db: sqlite3.Connection) -> None:
+        """No server keeps more than ``PER_SOURCE_INDICATORS`` indicators (or fingerprints) of its own: past it
+        its oldest go, so one hostile source flooding fresh values evicts its own, not what other sources taught."""
+        for table, source, status, cap in (
+                ("threat_indicators", "COALESCE(json_extract(provenance_json, '$.source'), '')", "observed",
+                 PER_SOURCE_INDICATORS),
+                ("threat_fingerprints", "COALESCE(source, '')", "observed", PER_SOURCE_FINGERPRINTS),
+                ("threat_fingerprints", "COALESCE(source, '')", "rejected", PER_SOURCE_FINGERPRINTS)):
+            # An MCP source is "server:tool", held to the server; a built-in one is "web:host", "read:path" or
+            # "shell:command", held to that site, file or command (not to "web": one hostile site would then
+            # share a quota with every other site).
+            server = (f"CASE WHEN {source} LIKE 'web:%' OR {source} LIKE 'read:%' OR {source} LIKE 'shell:%' THEN {source} "
+                      f"WHEN instr({source}, ':') > 0 THEN substr({source}, 1, instr({source}, ':') - 1) ELSE {source} END")
+            try:
+                heavy = db.execute(f"SELECT {server}, COUNT(*) FROM {table} WHERE status=? GROUP BY 1 HAVING COUNT(*) > ?",
+                                   (status, cap)).fetchall()
+            except sqlite3.OperationalError:  # a SQLite without JSON functions: only the global caps apply
+                return
+            for name, count in heavy:
+                cls._evict(db, table, [r[0] for r in db.execute(
+                    f"SELECT id FROM {table} WHERE status=? AND {server}=? ORDER BY last_seen, rowid LIMIT ?",
+                    (status, name, count - cap))])
+
+    @classmethod
+    def _caps(cls, db: sqlite3.Connection) -> None:
+        cls._source_quotas(db)
         for table, status, cap in (("threat_indicators", "observed", MAX_INDICATORS),
                                    ("threat_fingerprints", "observed", MAX_FINGERPRINTS),
                                    ("threat_fingerprints", "rejected", MAX_REJECTED)):
             extra = db.execute(f"SELECT COUNT(*) FROM {table} WHERE status=?", (status,)).fetchone()[0] - cap
             if extra > 0:
-                old = [r[0] for r in db.execute(f"SELECT id FROM {table} WHERE status=? ORDER BY last_seen, rowid "
-                                                "LIMIT ?", (status, extra))]
-                marks = ",".join("?" * len(old))
-                db.execute(f"DELETE FROM threat_sightings WHERE item IN ({marks})", old)
-                db.execute(f"DELETE FROM {table} WHERE id IN ({marks})", old)
+                cls._evict(db, table, [r[0] for r in db.execute(
+                    f"SELECT id FROM {table} WHERE status=? ORDER BY last_seen, rowid LIMIT ?", (status, extra))])
 
     # --- the operator --------------------------------------------------------------------------
 

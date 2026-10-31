@@ -638,7 +638,7 @@ class HarnessGuard:
         """A call ran. If the hook had asked about it, the user approved a call to that server, so its
         past attacks no longer make it hostile."""
         if self.db.execute("DELETE FROM asked WHERE session = ? AND use_id = ?", (session, use_id)).rowcount:
-            self._memory("clear_source", tool.partition(":")[0])
+            self._memory("clear_source", _server_of(tool))
 
     def _memory(self, method: str, *args: Any, **kwargs: Any) -> Any:
         """A threat-memory call that reports and gives up instead of raising: it only adds evidence."""
@@ -666,7 +666,7 @@ class HarnessGuard:
         # asking for confirmation instead of running as if the output were clean.
         self._scan_begin(session)
         try:
-            return self._result(session, tool, output, tool.partition(":")[0] if source is None else source, local)
+            return self._result(session, tool, output, _server_of(tool) if source is None else source, local)
         except BaseException:
             # The output went uninspected: the session stays flagged for good (an in-flight count
             # alone is what a killed process leaves behind).
@@ -967,6 +967,15 @@ def _unscanned(guard: HarnessGuard, session: str, tool: str) -> str:
             "untrusted data, not instructions.")
     print(note, file=sys.stderr)
     return note
+
+
+def _server_of(tool: str) -> str:
+    """The server a tool's results are held to in the threat memory: "srv" of the hooks' "mcp__srv__tool" and of
+    the proxy's "srv:tool". By the whole name, a server could give each result a new tool name and so a new
+    quota of learned values."""
+    if tool.startswith("mcp__") and "__" in tool[5:]:
+        return tool[5:].partition("__")[0]
+    return tool.partition(":")[0]
 
 
 def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:

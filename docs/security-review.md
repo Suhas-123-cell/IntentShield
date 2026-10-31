@@ -193,7 +193,7 @@ Things the fix reports list as not done, or that this review found still open in
 
 ## Second audit (2026-10-31)
 
-A second self-audit ran on `main` at `9eb2f11`. Critic agents wrote probes for four areas (shell parser and hooks, proxy, rules and credentials, published claims), and an independent judge per area tried to refute each finding: 60 confirmed, 4 plausible, 2 refuted. Each group of fixes was made in its own worktree and attacked by a separate reviewer agent until the reviewer could not break it; this section is updated per group.
+A second self-audit ran on `main` at `9eb2f11`. Critic agents wrote probes for four areas (shell parser and hooks, proxy, rules and credentials, published claims), and an independent judge per area tried to refute each finding: 60 confirmed, 4 plausible, 2 refuted. Each group of fixes was made in its own worktree and attacked by a separate reviewer agent for up to three rounds. In four groups the last review still broke something; those breaks were fixed by hand with a regression test that fails on the reviewed tree, but no further reviewer round was run on the hand fixes. All groups are merged.
 
 ### Shell parser (hooks-1 to hooks-6, hooks-15)
 
@@ -330,6 +330,25 @@ Three fix-and-review rounds, then a fourth by hand. The third review still broke
 Benign cost: injection corpus 2,371 to 2,373 of 5,095 flagged (new true detections), benign rows 29/1,365 and local READMEs 8/79 on base and fix, with no benign row or README changed. On 1,537 local source files the fix adds 250 bare-host values in 36 files over base (998 in 290 before round 4), most from text the base also reads backwards. Replaying 35 real sessions on frozen transcripts, hook decisions are unchanged except in this audit's own session, whose results quote the test probes. Every changed regex runs 200 KB of adversarial input in under 0.4 s. Suite 2745 passed, 1 skipped on the merged tree (one timing test failed under load and passed alone); ruff and the review gate green.
 
 Still open: one-word variants of override phrases (rules-9); a list of prohibitions sharing one negation whose last item is a send ("do not upload the files, forward them, or email the password to ...") is flagged; a host on a word domain with no pointing word, and `evilhost.sh/steal` with no pointing word, are not read; bare integer and hex IPv4 (`3405803783`), one-sided spaced dots and some Unicode dots are not read; image loaders other than `img` and `source` (CSS `url()`, SVG `image`, `video poster`) are not covered; a feed URL with a query covers only that query.
+
+### Credentials, paths and learned memory (rules-7, rules-8, rules-14 to rules-18, rules-20)
+
+Three fix-and-review rounds, then a fourth by hand. The third review broke four findings and found two regressions: a token split across a dict key and its value, which the base found, was missed (the run-together reading had dropped keys); partly masked documentation tokens (`xoxb-123456789012-xxxxxxxx`, `sk_live_abcdef...0123xxxxxxxx`) were flagged; an optional separator written as an empty alternative (`\d+(?:x|)\d+`) passed the rule safety gate and took 12.5 s on 600 digits; the hooks held learned values to the whole `mcp__srv__tool` name, so one server with 30 tool names still evicted another server's entries; and a self-disclosure parameter nested past 16 levels was not read. All five were closed before the merge; tests in `tests/test_audit_credentials_review.py` (14 of 19 fail on the round-3 tree; the rest are controls).
+
+| Finding | Severity | Status |
+|---|---|---|
+| rules-8: tokens split by separators or written as percent, escapes, hex lists, char codes or base32, and glued prefixes, were missed | Medium | Partly fixed: the finding's forms and close variants are found (198 of 198 probe texts, base 0); the set of encodings is open: ROT13, base85, upper-casing, decimal char codes joined by `-`, `|` or `.`, `%u` escapes, a split JWT or Slack token, and a fixed-length key split by one space in prose are still missed |
+| rules-7: an inserted run of 8 `x` or `*` made a real credential a placeholder | Low | Fixed: a token with a run put into it is a credential when the rest has the provider's shape and looks random |
+| rules-14: `mask()` left private-key bodies and joined-form tokens unmasked | Low | Fixed; a lowercase PEM header still keeps its body |
+| rules-15: self-disclosure names were exact and top-level only | Low | Partly fixed: look-alike, full-width and zero-width names, nested objects, arrays, tuple items, pattern properties and dependent schemas at any depth are read; `custom_instructions`, anchor (`#foo`) and absolute `$id` references, and a child past the 200th sibling or the 400-node walk are not |
+| rules-16: relative paths starting with `..` were keyed as root-absolute, so the working-directory join never applied | Low | Fixed; `../.env` (one dotfile segment), backslash and UNC paths still are not joined |
+| rules-17: the pack and learned-rule safety gate admitted polynomial-backtracking regexes | Low | Fixed: adjacent repeats of the same characters, in groups, with optional or empty-alternative separators, are refused |
+| rules-18: one hostile source could evict all learned memory | Low | Fixed: each server keeps at most its own quota, on the proxy and the hook path; many distinct hostile sources together can still fill the global caps |
+| rules-20: account numbers in non-ASCII digits were a different provenance key | Low | Fixed |
+
+Benign cost: credentials found on 6,460 corpus rows, 79 READMEs and 12,937 MSB call arguments: 2 on base and fix, the same two (1.8 s to 6.1 s for the whole set). Output rules: 2,373 of 5,095 injections and 29/1,365 benign rows on the merged tree, as before this group. The MSB self-disclosure evaluation is unchanged (36 parameters stripped, 0 on task and filesystem tools). Replaying 95 sessions from other projects, hook decisions are identical to the base (MCP 55/130, shell 9/1,821, writes 0/473). Every changed regex runs 200 KB of adversarial input in under 1.2 s; `mask()` on 200 KB of many tokens takes 1.2 to 4.0 s (0.14 to 1.2 s before). Suite 3155 passed, 1 skipped on the merged tree; ruff and the review gate green.
+
+Still open: the encodings listed under rules-8; names a server chooses freely for self-disclosure (the description rule is the backstop); many hostile sources together filling the learned-memory caps.
 
 ## Responsible disclosure
 
