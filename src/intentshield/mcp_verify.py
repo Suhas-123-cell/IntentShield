@@ -17,11 +17,10 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from jsonschema import Draft202012Validator
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import get_default_environment
 
-from .mcp_proxy import MCPProxyConfig
+from .mcp_proxy import MCPProxyConfig, SchemaTooCostly, schema_errors
 from .mcp_server import create_proxy_mcp_server
 from .mcp_upstream import _credential_shaped_name
 
@@ -348,7 +347,7 @@ def _synthesize_arguments(schema: dict[str, Any]) -> dict[str, Any] | None:
         value = _schema_value(schema)
         if not isinstance(value, dict):
             return None
-        if list(Draft202012Validator(schema).iter_errors(value)):
+        if schema_errors(schema, value):
             return None
         return value
     except (TypeError, ValueError, OverflowError):
@@ -449,7 +448,10 @@ async def _behavior_checks(
                     patterns = config.allowed_destinations_by_tool.get(name, [])
                     if patterns:
                         arguments[destination_field] = _glob_example(patterns[0])
-                if list(Draft202012Validator(tool["schema"]).iter_errors(arguments)):
+                try:
+                    if schema_errors(tool["schema"], arguments):
+                        continue
+                except SchemaTooCostly:
                     continue
                 candidates.append((tool, arguments))
 

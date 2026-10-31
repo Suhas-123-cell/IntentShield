@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import fnmatch
 import itertools
 import json
@@ -17,7 +18,7 @@ from time import monotonic as _mono  # a name of its own: tests replace this mod
 from typing import Any, Callable
 from urllib.parse import unquote, urlsplit
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, validators
 from jsonschema.exceptions import SchemaError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -26,6 +27,7 @@ from .judge import Judge
 from .mcp_inspect import (
     authority_values,
     distinctive_values,
+    host_suffixes,
     leaf_text,
     readable,
     scan_description,
@@ -221,10 +223,78 @@ class MCPProxyConfig(BaseModel):
         return self._matches(name, self.read_only_tools)
 
 
+# What a session remembers of flagged outputs: values of one output are capped, and each set keeps the newest
+# MAX_TAINTED, oldest out (like ``_observed``). Every call's rule check walks these sets under the lock the event
+# loop also takes: 50,000 values cost 34 ms a call, 500,000 cost 450 ms, and one 2 MB page of distinct URLs added
+# 60,000. A flagged output carries dozens of values, not thousands. Dropping a value is not safe by itself: a page
+# can bury the address it sends data to under thousands of others. So a cap that drops anything sets
+# ``_taint_incomplete``, and from then on a call carrying a value the user did not give is blocked, as one built
+# on a tainted value is (the taint of that session can no longer say which values are clean).
+MAX_TAINTED = 20_000
+MAX_OUTPUT_TAINT = 2_000
+
+
+class _RecentSet(set):
+    """A set that keeps the newest ``limit`` values, oldest out; a value seen again counts as new. Add with
+    ``update`` (``|=`` and ``add`` would skip the bound)."""
+
+    def __init__(self, limit: int = MAX_TAINTED) -> None:
+        super().__init__()
+        self.limit = limit
+        self.evicted = False  # a value went out to make room: the set no longer holds everything it was given
+        self._order: dict[str, None] = {}
+
+    def update(self, *others: Any) -> None:
+        for values in others:
+            for value in values:
+                self._order.pop(value, None)
+                self._order[value] = None
+                self.add(value)
+        for stale in list(itertools.islice(self._order, max(0, len(self._order) - self.limit))):
+            del self._order[stale]
+            self.discard(stale)
+            self.evicted = True
+
+
+def _newest(values: set[str], limit: int = MAX_OUTPUT_TAINT) -> set[str]:
+    """At most ``limit`` of one output's values (the first in sorted order: a set has no other)."""
+    return values if len(values) <= limit else set(sorted(values)[:limit])
+
+
+# Dicts and lists nested deeper than this in an input schema are not a schema anyone wrote: the tool is left
+# out. The libraries that read one (jsonschema, json, pydantic) recurse, and a 100-level schema of 3 KB
+# raised RecursionError out of connect() for every server behind the proxy.
+MAX_SCHEMA_DEPTH = 64
+
+
+def _too_deep(value: Any, limit: int = MAX_SCHEMA_DEPTH) -> bool:
+    """Whether dicts and lists nest more than ``limit`` levels deep. Iterative: it is the guard."""
+    stack = [(value, 1)]
+    while stack:
+        node, depth = stack.pop()
+        children = node.values() if isinstance(node, dict) else node if isinstance(node, list) else ()
+        if children and depth > limit:
+            return True
+        stack.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
+    return False
+
+
+_NESTED_FIELDS = {"input_schema": "an input schema", "output_schema": "an output schema",
+                  "annotations": "annotations", "meta": "metadata"}
+
+
+def _too_deep_field(tool: MCPTool) -> str | None:
+    """The first of the tool's structured fields (input and output schema, annotations, meta) that nests deeper
+    than ``MAX_SCHEMA_DEPTH``, or None. Each is the upstream's to write, and each is read by something that
+    recurses: the hash below, the size count, the validator, the scanners."""
+    return next((name for name in _NESTED_FIELDS if _too_deep(getattr(tool, name))), None)
+
+
 def _fingerprint(tool: MCPTool) -> str:
+    fields = {"title", "description", "input_schema", "output_schema", "annotations"}
+    # A field too deep to hash stays out of the fingerprint: the tool is left out and blocked anyway.
     return stable_hash(tool.model_dump(
-        mode="json", include={"title", "description", "input_schema", "output_schema", "annotations"}
-    ))
+        mode="json", include={name for name in fields if not _too_deep(getattr(tool, name))}))
 
 
 class RunLimitError(ValueError):
@@ -322,6 +392,131 @@ def _public_schema(schema: dict[str, Any], annotations: bool = False) -> dict[st
     return result
 
 
+# Keywords whose value maps names to schemas (the keys are names, not keywords), and the keywords whose value is
+# data the validator compares with, not a schema.
+_NAME_MAPS = frozenset({"properties", "$defs", "definitions", "dependentSchemas", "dependencies", "patternProperties"})
+_DATA_KEYWORDS = frozenset({"enum", "const"})
+_REF_KEYWORDS = frozenset({"$ref", "$dynamicRef"})
+
+
+def _holds_pattern(value: Any) -> bool:
+    """Whether a dict anywhere in ``value`` has a ``pattern`` or ``patternProperties`` key. Iterative."""
+    stack = [value]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if "pattern" in node or "patternProperties" in node:
+                return True
+            stack.extend(child for child in node.values() if isinstance(child, (dict, list)))
+        elif isinstance(node, list):
+            stack.extend(child for child in node if isinstance(child, (dict, list)))
+    return False
+
+
+def _without_patterns(schema: dict[str, Any], *, strip_data: bool = False) -> dict[str, Any]:
+    """A copy of ``schema`` for the validator without the regexes the upstream wrote: ``pattern`` and
+    ``patternProperties``, at every depth of the document. Python's ``re`` backtracks without limit, so a pattern
+    like ``^(a+)+$`` run on a 45-character argument hangs the worker for hours, and the argument is the agent's.
+    The walk reads the whole document, not only the places a schema keyword puts a sub-schema: a ``$ref`` can
+    point at any of it (``#/x-lib/p``). The upstream still checks its own patterns; the gateway checks structure.
+    Which names count as additional is ``patternProperties``' to say, so ``additionalProperties`` and
+    ``unevaluatedProperties`` go with it. ``enum`` and ``const`` are compared, not read as schemas, and are left
+    whole unless one of them holds a ``pattern`` key and the document has a ``$ref`` anywhere: a ``$ref`` may name
+    the place by any spelling (``#/x/%65num/0``, ``#/x%2Fenum%2F0``), and reading the spelling is how the first
+    version missed it, so it is not read at all. Data with a ``pattern`` key in it is rare, and stripping it from
+    data costs only that key. Iterative, and the result shares nothing mutable with ``schema``."""
+    root: dict[str, Any] = {}
+    stack: list[tuple[Any, Any, bool]] = [(schema, root, False)]  # source, its copy, keys are names
+    has_ref = holds_pattern = False
+
+    def copy(value: Any, names: bool = False) -> Any:
+        container = {} if isinstance(value, dict) else [] if isinstance(value, list) else None
+        if container is not None:
+            stack.append((value, container, names))
+        return value if container is None else container
+
+    while stack:
+        source, target, names = stack.pop()
+        if isinstance(source, list):
+            target.extend(copy(item) for item in source)
+            continue
+        for key, value in source.items():
+            if not names:
+                if (key == "pattern" and isinstance(value, str)) or (key == "patternProperties" and isinstance(value, dict)):
+                    continue
+                if key in _REF_KEYWORDS:
+                    has_ref = True
+                if key in _DATA_KEYWORDS and not strip_data:
+                    holds_pattern = holds_pattern or _holds_pattern(value)
+                    target[key] = value  # shared, never written to
+                    continue
+            target[key] = copy(value, not names and key in _NAME_MAPS)
+        if not names and isinstance(source.get("patternProperties"), dict):
+            target.pop("additionalProperties", None)
+            target.pop("unevaluatedProperties", None)
+    if has_ref and holds_pattern and not strip_data:
+        return _without_patterns(schema, strip_data=True)
+    return root
+
+
+class SchemaTooCostly(ValueError):
+    """Checking the arguments would take more reference resolutions than the arguments can need."""
+
+
+# A ``$ref`` chain where every level refers twice to the next (2 KB of schema, 20 levels) makes a valid
+# argument take over 8 s to check and 40 levels never finish, with no regex in it. Every ``$ref`` the validator
+# resolves is counted: the allowance is a base plus a few per node of the argument, so a big argument with a
+# ``$ref`` per item is fine and an expansion the argument does not call for is refused.
+REF_BASE_ALLOWANCE, REF_PER_NODE = 10_000, 20
+_ref_budget: contextvars.ContextVar[list[int] | None] = contextvars.ContextVar("intentshield_ref_budget", default=None)
+
+
+def _counted(keyword: Callable[..., Any]) -> Callable[..., Any]:
+    def run(validator: Any, value: Any, instance: Any, schema: Any) -> Any:
+        budget = _ref_budget.get()
+        if budget is not None:
+            budget[0] -= 1
+            if budget[0] < 0:
+                raise SchemaTooCostly("the input schema refers to itself more often than the arguments call for")
+        yield from keyword(validator, value, instance, schema)
+
+    return run
+
+
+_BoundedValidator = validators.extend(Draft202012Validator, {
+    key: _counted(Draft202012Validator.VALIDATORS[key]) for key in _REF_KEYWORDS
+})
+
+
+def _nodes(value: Any) -> int:
+    count, stack = 0, [value]
+    while stack:
+        node = stack.pop()
+        count += 1
+        if isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return count
+
+
+def schema_errors(schema: dict[str, Any], instance: Any) -> list[Any]:
+    """The validation errors of ``instance`` against ``schema`` (patterns removed), in bounded work.
+    Raises ``SchemaTooCostly`` for a reference expansion or loop the instance does not call for."""
+    validator = _BoundedValidator(_without_patterns(schema))
+    return _bounded_errors(validator, instance)
+
+
+def _bounded_errors(validator: Any, instance: Any) -> list[Any]:
+    token = _ref_budget.set([REF_BASE_ALLOWANCE + REF_PER_NODE * _nodes(instance)])
+    try:
+        return list(validator.iter_errors(instance))
+    except RecursionError:
+        raise SchemaTooCostly("the input schema refers to itself without end") from None
+    finally:
+        _ref_budget.reset(token)
+
+
 _SPLIT_WORDS = re.compile(r"([a-z])([A-Z])")
 _NAME_SEPARATORS = re.compile(r"[_\-./#$:~%+]+")
 
@@ -370,11 +565,18 @@ def _exposed_text(schema: Any) -> tuple[str, list[str]]:
     return "\n".join(part for part in parts if part), flags
 
 
-_URL_TEXT = re.compile(r"[a-z][a-z0-9+.-]*://[^\s\"'<>\\^`{|}]+", re.I)
-_MAILBOX = re.compile(r"([\w.%+-]+)@((?:[\w-]+\.)+[^\W\d_]{2,24})(?![\w-])")
+# The scheme and the local part are bounded (RFC 5321 allows 64 characters of local part): unbounded,
+# every start inside a long run of word characters rescans the run, so a hostile result with one
+# injection marker and 200 KB of "a" would hang the inspection that flagged it.
+_URL_TEXT = re.compile(r"[a-z][a-z0-9+.-]{0,31}://[^\s\"'<>\\^`{|}]+", re.I)
+_MAILBOX = re.compile(r"([\w.%+-]{1,64})@((?:[\w-]+\.)+[^\W\d_]{2,24})(?![\w-])")
 _BARE_HOST = re.compile(r"(?<![\w@./:\\-])((?:[\w-]+\.)+[^\W\d_]{2,24})(?![\w-])")
 _AT = re.compile(r"\s*[\[(]\s*at\s*[\])]\s*", re.I)
 _DOT = re.compile(r"\s*[\[(]\s*dot\s*[\])]\s*", re.I)
+# Every whitespace run is read as one space before the two above: their leading whitespace restarts from each
+# character of a long run (200,000 spaces took 212 s, in an argument the agent chooses), and nothing else here
+# tells a run of whitespace from a single space.
+_SPACES = re.compile(r"\s+")
 # Not hosts: file names that end like a domain, and the mail providers every user has.
 _FILE_SUFFIXES = frozenset("txt md py js ts json yaml yml csv pdf png jpg jpeg gif html htm css log xml sh rb go rs "
                            "java docx xlsx pptx zip tar gz toml ini cfg conf env sql db lock".split())
@@ -394,7 +596,7 @@ def _network_values(value: Any) -> tuple[set[str], set[str]]:
     """Host names and mailboxes (``local@domain``, +tag dropped) in a value or text, canonicalised:
     the comparison the exact-string taint set cannot make (a bare host, another path or sub-address
     on a tainted host, a case or IDNA spelling of it)."""
-    text = _DOT.sub(".", _AT.sub("@", readable(leaf_text(value))))
+    text = _DOT.sub(".", _AT.sub("@", _SPACES.sub(" ", readable(leaf_text(value)))))
     hosts: set[str] = set()
     boxes: set[str] = set()
     for match in _URL_TEXT.finditer(text):
@@ -416,8 +618,7 @@ def _network_values(value: Any) -> tuple[set[str], set[str]]:
 def _host_overlap(hosts: set[str], known: set[str]) -> bool:
     """Whether a host is one of ``known`` or a subdomain of one."""
     for host in hosts:
-        labels = host.split(".")
-        if any(".".join(labels[i:]) in known for i in range(len(labels) - 1)):
+        if any(suffix in known for suffix in host_suffixes(host)):
             return True
     return False
 
@@ -453,6 +654,7 @@ class MCPProxyRuntime:
         self._drifted_tools: set[str] = set()
         self._quarantined: dict[str, list[str]] = {}
         self._left_out: dict[str, str] = {}  # tools the proxy cannot serve (bad name or schema): never shown
+        self._failed_upstreams: dict[str, str] = {}  # servers that could not list their tools: none of theirs served
         self._description_values: dict[str, set[str]] = {}
         # Parameters asking the agent for its model, prompt or conversation: hidden from
         # the agent and always sent upstream empty.
@@ -463,11 +665,11 @@ class MCPProxyRuntime:
         # Distinctive values from outputs that carried injection text. Kept for the whole
         # session, not per run: the agent opens runs itself, so a fresh run must not wash
         # a value clean.
-        self._tainted: set[str] = set()
+        self._tainted: set[str] = _RecentSet()
         # Hosts and mailboxes of those outputs, canonicalised (see ``_network_values``): a read that only
         # reuses the host of an injected address is still the injection's.
-        self._tainted_hosts: set[str] = set()
-        self._tainted_boxes: set[str] = set()
+        self._tainted_hosts: set[str] = _RecentSet()
+        self._tainted_boxes: set[str] = _RecentSet()
         self._runs = 0
         self._transparent_run: str | None = None
         self._judge_errors_seen = 0
@@ -537,7 +739,8 @@ class MCPProxyRuntime:
         self._judge = Judge.from_spec(config.judge, timeout=15, retries=1, budget=30) if config.judge else None
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
-        self._suspect_values: set[str] = set()
+        self._suspect_values: set[str] = _RecentSet()
+        self._taint_incomplete = False  # a cap dropped tainted values: see MAX_TAINTED
         self._memory: Any = None
         if config.threat_memory:
             from .rule_packs import PackSet
@@ -591,6 +794,10 @@ class MCPProxyRuntime:
             self.service.storage.add_event(
                 self._ensure_system_run(), "MCP_TOOLS_QUARANTINED", {"tools": self._quarantined}
             )
+        if self._failed_upstreams:
+            self.service.storage.add_event(
+                self._ensure_system_run(), "MCP_UPSTREAMS_LEFT_OUT", {"upstreams": self._failed_upstreams}
+            )
         if self._unjudged:
             logger.warning("judge budget spent before every description was read",
                            extra={"unjudged": len(self._unjudged)})
@@ -638,15 +845,34 @@ class MCPProxyRuntime:
             raise RuntimeError(f"Failed to close {len(errors)} upstream MCP connection(s)") from errors[0]
 
     async def _list_all_tools(self) -> list[MCPTool]:
-        pages = await asyncio.gather(
-            *(upstream.list_tools() for upstream in self.upstreams.values())
+        """Every upstream's tools. An upstream that cannot list its tools (an error, a catalog over its limits, a
+        reply the SDK cannot parse) is left out with a warning and its name in ``_failed_upstreams``: one server
+        must not take down every other server behind the same proxy. When none can, the first error is raised."""
+        # Each listing gets the upstream's operation timeout, not its 300 s read timeout: the SDK drops a reply it
+        # cannot parse (a schema nested past its limit) and the listing then waits the read timeout out.
+        results = await asyncio.gather(
+            *(asyncio.wait_for(upstream.list_tools(), getattr(getattr(upstream, "config", None), "timeout_seconds", None))
+              for upstream in self.upstreams.values()), return_exceptions=True
         )
+        pages: list[list[MCPTool]] = []
+        self._failed_upstreams = {}
+        for server_id, result in zip(self.upstreams, results):
+            if not isinstance(result, Exception):
+                if isinstance(result, BaseException):  # a cancellation is not an upstream's failure
+                    raise result
+                pages.append(result)
+                continue
+            logger.warning("Upstream MCP server %r left out: it could not list its tools (%s: %s)",
+                           server_id, type(result).__name__, str(result)[:200])
+            self._failed_upstreams[server_id] = f"{type(result).__name__}: {str(result)[:200]}"
+        if not pages and results:
+            raise next(result for result in results if isinstance(result, Exception))
         tools = [tool for page in pages for tool in page]
         if len(tools) > self.config.max_total_tools:
             raise ValueError("Combined MCP catalog exceeds max_total_tools")
         total_schema_bytes = sum(
             len(json.dumps(tool.input_schema, separators=(",", ":")).encode())
-            for tool in tools
+            for tool in tools if _too_deep_field(tool) is None
         )
         if total_schema_bytes > self.config.max_total_schema_bytes:
             raise ValueError("Combined MCP catalog exceeds max_total_schema_bytes")
@@ -672,6 +898,14 @@ class MCPProxyRuntime:
         registry: dict[str, ToolSpec] = {}
         self._quarantined, self._description_values, self._redacted, self._left_out = {}, {}, {}, {}
         self._unjudged, self._unjudged_text = [], {}
+        # Before anything reads a schema: every reader of one recurses.
+        for tool in tools:
+            if deep := _too_deep_field(tool):
+                what = _NESTED_FIELDS[deep]
+                logger.warning("Upstream MCP tool %r left out: %s nested over %d levels",
+                               tool.qualified_name, what, MAX_SCHEMA_DEPTH)
+                self._left_out[tool.qualified_name] = f"{what} nested over {MAX_SCHEMA_DEPTH} levels"
+        tools = [tool for tool in tools if tool.qualified_name not in self._left_out]
         pending: dict[str, str] = {}  # descriptions the rules, memory and detectors passed: the judge reads them
         # An instruction split across one server's tools quarantines all of them.
         for server_id in dict.fromkeys(tool.server_id for tool in tools):
@@ -742,10 +976,10 @@ class MCPProxyRuntime:
                 logger.warning("Upstream MCP tool %r left out: %s", qualified, problem)
                 self._left_out[qualified] = problem
                 continue
-            validator = Draft202012Validator(tool.input_schema)
+            validator = _BoundedValidator(_without_patterns(tool.input_schema))
 
             def validate(arguments: dict[str, Any], *, current=validator) -> None:
-                errors = sorted(current.iter_errors(arguments), key=lambda item: list(item.path))
+                errors = sorted(_bounded_errors(current, arguments), key=lambda item: list(item.path))
                 if errors:
                     path = ".".join(str(part) for part in errors[0].path) or "arguments"
                     raise ValueError(f"{path}: {errors[0].message}")
@@ -824,12 +1058,14 @@ class MCPProxyRuntime:
         # The intent exempts what it names from detection and provenance. An intent that
         # repeats a value or instruction from a flagged output is the injection speaking.
         named = distinctive_values(user_intent)
-        named_hosts = _network_values(user_intent)[0] if self._tainted_hosts else set()
+        watching = bool(self._tainted_hosts or self._taint_incomplete)
+        named_hosts, named_boxes = _network_values(user_intent) if watching else (set(), set())
         event: tuple[str, dict[str, Any]] | None = None
         with self._lock:  # decided under the lock, written after it and off the event loop
             flagged = self._tainted | self._suspect_values
             if (named & flagged or (self._injection_seen and scan_output(user_intent))
-                    or _host_overlap(named_hosts, self._tainted_hosts)):
+                    or _host_overlap(named_hosts, self._tainted_hosts)
+                    or (self._taint_incomplete and (named or named_hosts or named_boxes))):
                 self._untrusted_intents.add(run_id)
                 event = ("MCP_INTENT_FROM_OUTPUT", {})
             elif not self.config.trusted_intent and (learned := named & self._observed.keys()):
@@ -866,9 +1102,12 @@ class MCPProxyRuntime:
         # Rug pull: any change to schema, description, title or annotations
         # after connect fails closed, not only schema changes.
         current = {tool.qualified_name: _fingerprint(tool) for tool in discovered}
+        # An upstream that could not list this time says nothing about its tools: they are neither drifted nor
+        # cleared (a blip must not retire them for the session; the next listing that works is compared).
+        silent = {tool.qualified_name for tool in self._tools if tool.server_id in self._failed_upstreams}
         changed = {
             name for name in set(current) | set(self._bound_fingerprints)
-            if current.get(name) != self._bound_fingerprints.get(name)
+            if name not in silent and current.get(name) != self._bound_fingerprints.get(name)
         }
         with self._lock:
             newly_drifted = changed - self._drifted_tools
@@ -919,7 +1158,7 @@ class MCPProxyRuntime:
         # or from another tool's description.
         users_own = distinctive_values(user_intent) - self._intent_from_outputs.get(run_id, set())
         values = distinctive_values(call.arguments) - users_own
-        if values & self._tainted:
+        if values & self._tainted or (values and self._taint_incomplete):
             return ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE
         # A URL built on a tainted one: the injected address with the data appended.
         traced = traced_urls(values, self._tainted, users_own)
@@ -929,7 +1168,8 @@ class MCPProxyRuntime:
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         # The host or mailbox of an injected address in another spelling (a bare host, a +tag, another
         # case, another path): not the same string, so not in ``_tainted``, but the same destination.
-        if (self._tainted_hosts or self._tainted_boxes) and self._reuses_tainted_host(user_intent, call):
+        if (self._tainted_hosts or self._tainted_boxes or self._taint_incomplete) and self._reuses_tainted_host(
+                user_intent, call):
             return ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE
         if not values:
             return self._known_reason(known) or self._suspect_tools.get(call.tool_name)
@@ -956,6 +1196,11 @@ class MCPProxyRuntime:
             return False
         users_hosts, users_boxes = _network_values(user_intent)
         fresh = {h for h in hosts if h not in users_hosts and not _host_overlap({h}, users_hosts)}
+        # After a cap dropped tainted values the sets cannot say which hosts are clean (a host that is no
+        # distinctive value, a bare or internationalised one, is not caught by the value rule either): one the user
+        # did not give is not trusted.
+        if self._taint_incomplete and (fresh or boxes - users_boxes):
+            return True
         return bool((boxes - users_boxes) & self._tainted_boxes or _host_overlap(fresh, self._tainted_hosts))
 
     def _known_threat(self, user_intent: str, call: ToolCall) -> str | None:
@@ -1125,9 +1370,11 @@ class MCPProxyRuntime:
                 del self._observed[stale]
             if findings:
                 self._injection_seen = True
-                self._tainted.update(values)
-                self._tainted_hosts |= hosts
-                self._tainted_boxes |= boxes
+                for taint, found in ((self._tainted, values), (self._tainted_hosts, hosts),
+                                     (self._tainted_boxes, boxes)):
+                    self._taint_incomplete = self._taint_incomplete or len(found) > MAX_OUTPUT_TAINT
+                    taint.update(_newest(found))
+                    self._taint_incomplete = self._taint_incomplete or taint.evicted
         collapsed = [] if findings else scan_output_collapsed(upstream)
         detector = None if findings else (
             "line_split_rules" if collapsed
@@ -1143,7 +1390,9 @@ class MCPProxyRuntime:
                     del self._outputs[stale]
             if detector:
                 self._injection_seen = True
-                self._suspect_values.update(values)
+                self._taint_incomplete = self._taint_incomplete or len(values) > MAX_OUTPUT_TAINT
+                self._suspect_values.update(_newest(values))
+                self._taint_incomplete = self._taint_incomplete or self._suspect_values.evicted
         if not findings:
             if detector:
                 self._service().storage.add_event(run_id, "MCP_OUTPUT_SUSPECTED",

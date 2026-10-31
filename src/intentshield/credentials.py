@@ -42,7 +42,13 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("private_key", re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----")),
     ("age_key", re.compile(r"\bAGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}")),
-    ("url_credentials", re.compile(r"\b[A-Za-z][A-Za-z0-9+.\-]*://([^\s/:@]+):([^\s/@]+)@[^\s/?#]+")),
+    # The scheme is bounded where a word boundary lets a match start inside a run: unbounded, every start in a
+    # long dotted or hyphenated run rescans the run. A longer scheme can only start at the first
+    # letter after a word boundary in its run, which the second form tries once per run. The user may be empty
+    # (redis://:password@host).
+    ("url_credentials", re.compile(
+        r"(?:\b[A-Za-z][A-Za-z0-9+.\-]{0,31}|(?<![A-Za-z0-9+.\-])(?:(?:[0-9][A-Za-z0-9]*)?[+.\-])*[A-Za-z][A-Za-z0-9+.\-]{32,})"
+        r"://([^\s/:@]*):([^\s/@]+)@[^\s/?#]+")),
 )
 
 
