@@ -113,7 +113,7 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 | Detection and provenance | 15 | 6 | 6 | 2 | 1 |
 | Total | 49 (+1) | 30 | 14 | 5 | 1 |
 
-The reviewers also recorded what they checked and found sound: approval fingerprints and one-time consumption, constant-time token compares, DNS-rebinding, Origin and CSRF checks, refusal of remote binding, no redirect following upstream, result scanning of every content type, 0600 database files, parallel hook processes without lost taint, and no ReDoS on 1 MB adversarial input.
+The reviewers also recorded what they checked and found sound: approval fingerprints and one-time consumption, constant-time token compares, DNS-rebinding, Origin and CSRF checks, refusal of remote binding, no redirect following upstream, result scanning of every content type, 0600 database files, parallel hook processes without lost taint, and no ReDoS on the 1 MB adversarial inputs they tried. That last check was too narrow: the second audit (below) found quadratic paths in the shell parser, the output rules, value extraction and credential matching, where a 200,000-character input took from seconds to minutes.
 
 ## Measured effect of the fixes
 
@@ -185,6 +185,45 @@ Things the fix reports list as not done, or that this review found still open in
 18. **Operator labelling.** `learn=benign` on a quiet injection teaches it as data when the regression set does not contain the wording (RP15).
 19. **Verification gaps.** Hook and proxy fixes were tested with synthetic events, not live Claude Code, Codex, Gemini or Cursor runs. The reviewers' own repro scripts were not re-run after the fixes.
 20. **Built-in tools (after 0.4.0, opt-in).** `--builtin-tools` reads shell, web and file tools, but: the event shapes come from the harnesses' docs and Claude Code's transcripts, and only Claude Code's `Bash` and Gemini CLI's `run_shell_command` events have been seen in live hook runs (2026-10-30, `results/harness-live-builtin/`; with the hooks, Gemini's uploads reached the canary in 0/11 runs against 12/12 unguarded; Haiku and DeepSeek attempted none); Codex's shell tool name and argument shape are guessed (several are accepted); Cursor's `beforeShellExecution` is wired after 0.4.1: measured, a hook's `ask` or `deny` held the command and its empty reply left it to Cursor's approval; live with the real hook, an upload a page asked for was held 3 times. Cursor's unguarded arm still needs a valid run. The shell parser is best effort: after 0.4.1 it reads `eval` and variables the command assigns itself (`C="curl ..."; $C`, `U=URL; curl -d @x $U`), which on 40 real sessions from other projects raised shell asks from 4 to 7 of 1,707 (all three put the user's own site, seen first in a tool output, in a variable); aliases, variables set elsewhere, scripts on disk, and data sent by a program that is not a known network tool (a compiled binary, `git` with a configured remote) are not read. A local file or command output with injected text only warns: a malicious file in a cloned repository does not flag the session. A here-document or `-c` program counts as network code only when it names a known client library. Gemini CLI has a `BeforeTool` `ask` decision, but the hook still refuses there, so Gemini users get a refusal, not a prompt. Measured with a stub hook that always asks (`benchmarks/harness_live/gemini_ask_probe.py`, 2026-10-30): on 0.37.1 headless yolo the asked command ran; on 0.66.0 headless yolo it did not run but the CLI waited for an answer until killed; on 0.66.0 interactive, default or yolo, it was a real prompt (Enter ran the command, Escape cancelled it); headless default mode does not offer the shell tool. The hook input names neither the version nor whether a person is there, so the hook cannot pick ask safely on its own; `--gemini-ask` turns it on for those who run Gemini CLI 0.66 or later interactively, and `doctor` checks the version (not whether a run is headless). After an injection, a plain download (a `curl` GET or HEAD, `wget -qO-`) to a host the user named passes: its path and query can still carry data to that host.
+
+## Second audit (2026-10-31)
+
+A second self-audit ran on `main` at `9eb2f11`. Critic agents wrote probes for four areas (shell parser and hooks, proxy, rules and credentials, published claims), and an independent judge per area tried to refute each finding: 60 confirmed, 4 plausible, 2 refuted. Each group of fixes was made in its own worktree and attacked by a separate reviewer agent until the reviewer could not break it; this section is updated per group.
+
+### Shell parser (hooks-1 to hooks-6, hooks-15)
+
+| Finding | Severity | Status |
+|---|---|---|
+| hooks-1: a newline was not a command separator, so lines after the first were not read | High | Fixed |
+| hooks-2: a variable assigned twice was read with its last value everywhere | Medium | Fixed, with residuals |
+| hooks-3: an apostrophe in a trailing comment made the command unreadable and dropped the send flag | Medium | Fixed |
+| hooks-4: programs that run programs or write files were read-only (`fd -x`, `rg --pre`, `git grep -O`, `--output`, `sort -o`, `xxd -r`, `uniq in out`) | Medium | Fixed, with a policy residual |
+| hooks-5: wrappers and indirection hid the command (`setsid`, `flock`, `busybox`, `env -S`, `bash <(curl ..)`, `printf .. \| sh`, inline code) | Medium | Fixed, with residuals |
+| hooks-6: headers, cookies, `rsync://`, `git -C .. push`, curl option clusters and GETs with data were not seen as sends | Medium | Fixed, with residuals |
+| hooks-15: quadratic regexes: a 200,000-character command took 45 to 94 s | Low | Fixed |
+
+How the parser now fails: besides the full reading, three backstops are independent of it and linear in the length.
+
+- **Read-only needs plain syntax.** A command is read-only only if the parser says so and its raw text is plain: no here-document, substitution, process substitution, `$'..'`, braces, redirect other than to `/dev/null` or `2>&1`, assignment, control flow or line continuation. Read-only matters only after an injection and for the plain-download rule.
+- **Every address in the raw text is a destination.** The text is read as written, with escapes decoded (`\n`, octal, `\x`), with `$NAME` and `${NAME}` taken out (or as their default), and with the values the command assigns written in. A command that is not read-only and holds a sender and a non-local address in the same statement (split at newline, `;`, `&&`, `||` and a lone `&`, not at `|`) is taken to send. A sender that begins its statement and takes no variable, substitution or file (`git push origin main`) does not pick up links elsewhere in the command, such as in a commit message.
+- **Size cap.** A command over 100,000 characters, or with more than 10,000 operator characters, is read from the raw text only and is never read-only; `user@host` remotes and `curl .. | sh` are still read there.
+
+Measured (benign cost, same transcripts for base and fix):
+
+- Parse time for 200,000 characters: 0.06 to 0.12 s (base 45.8 s for a hex run and 94.2 s for a run of one letter); every shape the reviewers tried stayed under 0.4 s. The 25-command fixture parses in 0.003 s (base 0.0015 s).
+- `benchmarks/shell_replay.py` fixture: 0/25 asked on base and fix.
+- 40 real sessions from six other projects: shell asks 7/1713 on base and 8/1713 on the fix, 0 denied; reads 0/327, writes 0/473 and MCP 55/126 unchanged. The added ask is a real `curl -d` to the user's own site with the URL in a variable assigned twice. A GET loop whose variable is reassigned now asks too, and a loop over a literal list no longer does.
+- IntentShield's own sessions, which handle injection payloads and are flagged by outputs (8 of 34 sessions): shell asks went from 830/3720 (22.3%) to 1066/3721 (28.6%) and denies from 7 to 30. Most of the rise is read-only commands that are not plain syntax, which now ask after an injection, and test-editing scripts that hold attack commands as string data, which now count as sending to the attacker host their text names. Outputs flagged by an injection rule went from 8 to 17, because more of those scripts count as reaching a remote address.
+- Tests: the suite went from 973 to 1812 passed, almost all new parser cases. The reviewers ran about 40,000 random scripts against real bash 3.2 and zsh and about 2,200 curl option clusters against a local server; none ran a canary while the parse called it read-only, and no send that reached the server went unseen, except `-b a=b` (an inline cookie, not a file).
+
+Still open:
+
+- A host that is not literally in the text (`${u%xx}`, brace expansion, curl `[..]` globbing, `$(echo host)`, `awk -v h=$H`) or a program name split from its arguments (`cmd='curl'`) is not matched against an output's host in a session with no injection; after an injection the command asks.
+- Loop variables over dynamic lists (`for f in $(cat key); do curl ../$f; done`) are treated as static; a session with no injection allows the send to an output's host (base did too).
+- Client libraries not in the call list (`telnetlib`, `xmlrpc`, node `got`), DNS lookups of a name holding data, `mail a@host < f`, `redis-cli -h host`, ruby `%x()`, php `implode`, and aliases are not read as sends.
+- An address followed by call syntax (`'URL'.strip()`) is read with the suffix attached and does not match the output's URL; the match is path-sensitive (another path on the same host is not matched).
+- A write to a shell startup file (`sort -o ~/.zshrc`, `echo .. > ~/.zshrc`) is silent until a session is flagged, as the Write tool is. `cd evil && git status` runs that repository's configured programs and is read-only.
+- `credentials.find` is still quadratic on long dotted runs when the hook reads a command (rules-13, next group).
 
 ## Responsible disclosure
 
