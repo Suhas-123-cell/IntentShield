@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.2
+
+The fixes of a second self-audit (66 findings: 54 fixed, 10 partly fixed, 2 refuted; see "Second audit" in
+`docs/security-review.md`), the limits closed after 0.4.1, and a judge that can use your own key. One change to
+check before upgrading: a control or agent token set only in a `.env` found by searching (such as a checkout's own)
+now stops the gateway from starting; export it or put it in `~/.intentshield/.env`.
 
 - **Credentials, paths and learned memory (second audit, rules-7, rules-8, rules-14 to rules-18, rules-20):** tokens split by separators or written as percent, escapes, hex lists, char codes or base32, glued to a word, or split across a key and its value are found (other encodings still are not); an inserted `xxxxxxxx` no longer hides a real token, while a documentation token masked after a few characters stays a placeholder; `mask()` covers private-key bodies and joined tokens; self-disclosure parameters are read in any spelling and nesting; `../` paths join the working directory; the rule safety gate refuses polynomial-backtracking patterns; one server, whatever its tool names, can no longer evict what other servers taught the threat memory; account numbers in other digit scripts match. Credentials found on 19,476 benign texts unchanged (2); hook decisions on 95 real sessions unchanged.
 - **Detection rules (second audit, rules-1, rules-3 to rules-6, rules-9, rules-10, rules-12):** textbook override phrases flag (one-word variants of the closed list still pass); a negation exempts only a verb it governs, so "do not hesitate to send the password to ..." and "do not send a reply, send the password to ..." flag; feed and pack indicators match every spelling of a call's URL, address and host, including indicators with a port; `image_exfiltration` reads any case and more forms; bare hosts are read on every country code, internationalized domains and common longer domains, and on other root-zone domains after a word that points at a destination; IDN, ideographic-dot, octal and IPv6 hosts are read; tenant names on multi-tenant platforms trace and are learned, never the platform. Injection corpus 2,373 of 5,095 flagged (was 2,371), benign 29/1,365 and READMEs 8/79 unchanged; source code that says "backwards compatible" or `reversed(` is no longer read backwards for values.

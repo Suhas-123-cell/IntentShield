@@ -313,8 +313,8 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
   Codex CLI sends an equivalent event was not verified.
 - Argument provenance matches canonical values (an address in any case, with a `+tag`, defanged as
   `[at]`, base64-encoded; a URL in either scheme or with a port; `~` for the home directory). It does not
-  cover an account number split across a page. Two limits were closed after 0.4.1 and are on `main` only
-  (`CHANGELOG.md`, Unreleased): a host an output names, bare or as an email's domain, now covers its subdomains
+  cover an account number split across a page. Two limits were closed in 0.4.2
+  (`CHANGELOG.md`): a host an output names, bare or as an email's domain, now covers its subdomains
   (except under popular sites and registry suffixes such as `co.uk`), and the hooks join a relative path to the
   event's working directory so it meets the absolute path an output named. The proxy has no working directory and
   still does not match a relative path against an absolute one.

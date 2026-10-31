@@ -17,7 +17,7 @@ Method:
 
 - The reviewers could not edit the repository. Each wrote probe scripts that exercised the real code and reported only what a probe reproduced. A finding the reviewer only read from code is marked plausible in the notes below.
 - All probes used benign canary markers (`*.example` addresses, placeholder tokens). No LLM was called for the judge review; `post_chat` was stubbed.
-- Each fix agent worked in its own worktree. The fixes of the first round are in 0.4.0 and the statuses below were checked against the code and tests of that release. Rows whose text says "after 0.4.1" (JG7, JG11 and HK4 as a whole, and parts of other rows) are later changes that are on `main` only: they are under "Unreleased" in `CHANGELOG.md` and in no tagged release (`pyproject.toml` is at 0.4.1).
+- Each fix agent worked in its own worktree. The fixes of the first round are in 0.4.0 and the statuses below were checked against the code and tests of that release. Rows whose text says "after 0.4.1" (JG7, JG11 and HK4 as a whole, and parts of other rows) are later changes, released in 0.4.2 (see `CHANGELOG.md`).
 - Not in scope: the learned detectors' accuracy (see [detectors.md](detectors.md)), the benchmark harnesses, the dashboard front end beyond one check, model-level attacks on the agent itself, the packaging and publishing workflow, and real Codex or Cursor behaviour (no real harness was run for any hook claim).
 - Reviewer severities are kept where the reviewer gave one. Where not, the rule is: high means a guard decision can be bypassed or silently skipped; medium means weakened evidence or a resource or denial-of-service issue; low means hygiene.
 
@@ -105,7 +105,7 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 
 ### Table counts
 
-Counted from the Status column of the rows above (`tests/test_security_review_counts.py` fails when this table and the rows disagree). "Fixed after 0.4.1" rows are fixed on `main` and unreleased.
+Counted from the Status column of the rows above (`tests/test_security_review_counts.py` fails when this table and the rows disagree). "Fixed after 0.4.1" rows were fixed after that release and are in 0.4.2.
 
 | Area | Reviewed | Fixed | Fixed after 0.4.1 | Partly fixed | Open | Unverified |
 |---|---|---|---|---|---|---|
@@ -193,7 +193,7 @@ Things the fix reports list as not done, or that this review found still open in
 
 ## Second audit (2026-10-31)
 
-A second self-audit ran on `main` at `9eb2f11`. Critic agents wrote probes for four areas (shell parser and hooks, proxy, rules and credentials, published claims), and an independent judge per area tried to refute each finding: 60 confirmed, 4 plausible, 2 refuted. Each group of fixes was made in its own worktree and attacked by a separate reviewer agent for up to three rounds. In four groups the last review still broke something; those breaks were fixed by hand with a regression test that fails on the reviewed tree, but no further reviewer round was run on the hand fixes. All groups are merged.
+A second self-audit ran on `main` at `9eb2f11`. Critic agents wrote probes for four areas (shell parser and hooks, proxy, rules and credentials, published claims), and an independent judge per area tried to refute each finding: 60 confirmed, 4 plausible, 2 refuted. Each group of fixes was made in its own worktree and attacked by a separate reviewer agent for up to three rounds. In four groups the last review still broke something; those breaks were fixed by hand with a regression test that fails on the reviewed tree, but no further reviewer round was run on the hand fixes. All groups are merged and released in 0.4.2.
 
 ### Shell parser (hooks-1 to hooks-6, hooks-15)
 
