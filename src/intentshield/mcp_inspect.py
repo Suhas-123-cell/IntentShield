@@ -937,24 +937,98 @@ _SELF_FIELD_TEXT = re.compile(
     r"\b(?:llm|model|ai|assistant|agent)\b[^.\n]{0,40}?\b(?:that|which|who)\s+(?:is\s+)?"
     r"(?:calls?|calling|invok\w+|uses?|using)\s+this\s+tool\b|"
     r"\byour\s+(?:own\s+)?(?:model(?:\s+name)?|system\s+prompt|instructions|conversation(?:\s+history)?|"
-    r"chat\s+history|previous\s+messages)\b", _I)
+    r"chat\s+history|previous\s+messages)\b|"
+    r"\b(?:system\s+prompt|instructions)\s+(?:you\s+(?:were|are|have\s+been)\s+(?:given|using|following)|given\s+to\s+you)\b|"
+    r"\b(?:conversation|chat|discussion)\s+so\s+far\b|"
+    r"\beverything\s+the\s+user\s+(?:has\s+)?(?:said|written|told\s+you)\b|"
+    r"\b(?:what|which)\s+(?:model|llm)\s+(?:are\s+you|is\s+this)\b|"
+    r"\b(?:the\s+)?(?:assistant|agent|ai)(?:'s|\u2019s)\s+(?:own\s+)?(?:system\s+prompt|instructions)\b|"
+    r"\b(?:history|log|transcript)\s+of\s+(?:the|this|our|your)\s+(?:chat|conversation)\b", _I)
+# A name read as words ("sys_prompt", "agentSystemPrompt", "history_of_chat"): who speaks, and what is asked of it.
+_SELF_PROMPT_OWNER = frozenset({"system", "sys", "developer"})
+_SELF_PROMPT_KIND = frozenset({"prompt", "prompts", "instruction", "instructions", "message", "messages", "msg"})
+_SELF_CHAT = frozenset({"conversation", "chat", "dialogue", "dialog"})
+_SELF_CHAT_KIND = frozenset({"history", "log", "logs", "transcript", "context", "summary"})
+_SELF_CHAT_ELDER = frozenset({"previous", "prior", "earlier", "full", "entire", "whole", "complete"})
+_SELF_NAME_FILLER = frozenset({"text", "content", "body", "string", "str", "value"})
+
+
+def _self_name(name: Any) -> bool:
+    # "systemPrompt", "system-prompt", "system.prompt" and "System Prompt" all ask the same.
+    name = _normalize(str(name))  # full-width, zero-width and look-alike letters read as the plain name
+    snake = re.sub(r"[\s.\-]+", "_", re.sub(r"([a-z])([A-Z])", r"\1_\2", name).strip())
+    snake = re.sub(r"(?i)(?<![a-z])(sys|system)(prompt|msg|message)(?![a-z])", r"\1_\2", snake)  # "sysprompt", "systemprompt"
+    if _SELF_FIELD_NAME.match(snake):
+        return True
+    parts = [w for w in snake.lower().split("_") if w]
+    while len(parts) > 1 and parts[-1] in _SELF_NAME_FILLER:
+        parts.pop()  # "system_prompt_text" asks what "system_prompt" asks
+    words, last = set(parts), parts[-1] if parts else ""
+    return bool(words & _SELF_PROMPT_OWNER and last in _SELF_PROMPT_KIND
+                or "agent" in words and last in {"prompt", "instruction", "instructions"}
+                or words & _SELF_CHAT and last in (_SELF_CHAT | _SELF_CHAT_KIND) and words & (_SELF_CHAT_KIND | _SELF_CHAT_ELDER)
+                or words & {"previous", "prior", "earlier"} and last in {"messages", "conversation"}
+                or "your" in words and last in {"instructions", "prompt"} and len(parts) == 2)
+
+
+def _self_text(spec: Any) -> bool:
+    return isinstance(spec, dict) and bool(_SELF_FIELD_TEXT.search(
+        _normalize(" ".join(str(spec.get(k, "")) for k in ("title", "description")))))
+
+
+_SCHEMA_CHILDREN = ("items", "additionalProperties", "unevaluatedProperties", "unevaluatedItems", "not", "if", "then",
+                    "else", "contains", "propertyNames")
+_SCHEMA_LISTS = ("allOf", "anyOf", "oneOf", "prefixItems", "items")  # "items" is a list in draft-07 tuples
+_SELF_SCHEMA_MAPS = ("patternProperties", "dependentSchemas", "dependencies")  # $defs are reached by their $ref
+
+
+def _asks_about_itself(spec: Any, root: dict[str, Any]) -> bool:
+    """Whether ``spec`` or anything nested in it (properties, items, allOf/anyOf/oneOf, a local ``$ref``) is a
+    self-disclosure parameter by name or description. Bounded: a hostile schema may be deep, wide or circular."""
+    stack: list[Any] = [spec]
+    visited = 0
+    while stack and visited < 400:
+        node = stack.pop()
+        visited += 1
+        if not isinstance(node, dict):  # no depth bound: the 400 nodes bound a deep schema as well
+            continue
+        if _self_text(node):
+            return True
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/"):
+            target: Any = root
+            for part in unquote(ref[2:]).split("/")[:8]:
+                target = target.get(part.replace("~1", "/").replace("~0", "~")) if isinstance(target, dict) else None
+            stack.append(target)
+        props = node.get("properties")
+        if isinstance(props, dict):
+            for i, (name, child) in enumerate(props.items()):
+                if i >= 5000:  # a name is read whatever its place; only the children walked are bounded
+                    break
+                if _self_name(name):
+                    return True
+                if i < 200:
+                    stack.append(child)
+        for key in _SELF_SCHEMA_MAPS:
+            mapping = node.get(key)
+            if isinstance(mapping, dict):
+                stack.extend(list(mapping.values())[:50])
+        stack.extend(node.get(key) for key in _SCHEMA_CHILDREN)
+        for key in _SCHEMA_LISTS:
+            if isinstance(node.get(key), list):
+                stack.extend(node[key][:50])
+    return False
 
 
 def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
     """Top-level parameters that ask the calling agent about itself: its model, system
-    prompt or conversation. No tool needs these to do its job; they are a leak channel."""
+    prompt or conversation, named or described so, or holding such a parameter in an object,
+    array or ``$ref`` (the whole parameter is then the one named). No tool needs these to do
+    its job; they are a leak channel."""
     properties = schema.get("properties") if isinstance(schema, dict) else None
     if not isinstance(properties, dict):
         return set()
-    found = set()
-    for name, spec in properties.items():
-        # "systemPrompt", "system-prompt", "system.prompt" and "System Prompt" all ask the same.
-        snake = re.sub(r"[\s.\-]+", "_", re.sub(r"([a-z])([A-Z])", r"\1_\2", str(name)).strip())
-        text = _normalize(" ".join(str(spec.get(k, "")) for k in ("title", "description"))) \
-            if isinstance(spec, dict) else ""
-        if _SELF_FIELD_NAME.match(snake) or _SELF_FIELD_TEXT.search(text):
-            found.add(name)
-    return found
+    return {name for name, spec in properties.items() if _self_name(name) or _asks_about_itself(spec, schema)}
 
 
 def _values_text(value: Any) -> str:
@@ -1022,13 +1096,13 @@ _HOME = r"(?:~|\$\{?home\}?|%userprofile%)"
 _VALUE_PATTERNS = (
     re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),         # email
     re.compile(r"(?<![\w+.\-])[a-z][a-z0-9+.\-]*://[^\s\"'<>)]+", _I),  # URL: https, ftp, s3, file, ...
-    re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"),                  # IBAN
+    re.compile(r"\b[A-Z]{2}\d{2}[A-Z\d]{10,30}\b"),                  # IBAN
     re.compile(r"\b\d[\d\- ]{6,}\d\b"),                               # account / card / phone
     # path, absolute or relative; "~", "$HOME" and "%USERPROFILE%" start one; doubled slashes are one
     re.compile(rf"(?<![\w.\-~/$%])(?!//)(?:{_HOME}|[\w.\-]+)?/+[\w.\-]+(?:/+[\w.\-]+)+", _I),
     re.compile(r"(?<![A-Za-z0-9_\-])(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{8,}\b"),  # id/key
-    # IBAN as printed, in groups of four ("DE89 3704 0044 ..."), in either case, groups split by space, dot or dash.
-    re.compile(r"\b[A-Za-z]{2}\d{2}(?:[ .\-][A-Za-z0-9]{4}){2,7}(?:[ .\-]\d{1,4})?\b"),
+    # IBAN as printed, in groups of four ("DE89 3704 0044 ..."), either case, groups split by space, dot or dash.
+    re.compile(r"\b[A-Za-z]{2}\d{2}(?:[ .\-][A-Za-z\d]{4}){2,7}(?:[ .\-]\d{1,4})?\b"),
     # A bare host, IPv4 address or host:port with no scheme ("evil.example", "203.0.113.7:8443"): a read tool's
     # target is a destination too. Not when a path follows: that is a URL without its scheme (below). A full stop
     # that ends the sentence ("domain: evil.example.") still ends the host.
@@ -1043,7 +1117,7 @@ _EXTRA_PATTERNS = (
     # An IPv6 address, bracketed with or without a port, or bare ("2001:db8::1"); ``_canon`` drops what is no address.
     ("host6", re.compile(r"(?<![\w:.\-/%@])\[[0-9a-f:.]{2,45}\](?::\d{2,5})?", _I)),
     ("host6", re.compile(r"(?<![\w:.\-/%@\[])(?=[0-9a-f.]*:[0-9a-f.]*:)[0-9a-f:.]{5,45}(?![\w:.\-/%\]])", _I)),
-    ("iban", re.compile(r"\b[a-z]{2}\d{2}[a-z0-9]{10,30}\b")),                               # lowercase: checksum below
+    ("iban", re.compile(r"\b[a-z]{2}\d{2}[a-z\d]{10,30}\b")),                               # lowercase: checksum below
     ("number", re.compile(r"\b\d{4}(?:\.\d{4}){2,}\b")),                                      # 1234.5678.9012
 )
 # A two-label name on a top-level domain that is also a file extension or a word of code ("evilhost.sh", "x.cc"), or a
@@ -1158,13 +1232,17 @@ def _host_key(host: str) -> str:
 
 def _canon_path(path: str) -> str:
     """A path as one key: no ``file:``, forward slashes, lowercase, ``~`` for ``$HOME`` and for any home
-    directory (``/Users/x``, ``/home/x``, ``C:\\Users\\x``), dots and doubled slashes resolved, no trailing slash."""
+    directory (``/Users/x``, ``/home/x``, ``C:\\Users\\x``), dots and doubled slashes resolved, no trailing slash.
+    A relative path keeps the ``..`` it starts with."""
     path = path.lower().replace("\\", "/")
     path = re.sub(r"^/?[a-z]:(?=/)", "", re.sub(r"^file:/*", "/", path))
     path = re.sub(rf"^{_HOME}(?=/|$)", "~", path)
-    rooted = path.startswith(("/", "~"))
-    path = posixpath.normpath("/" + path.lstrip("/") if not path.startswith("~") else "/" + path)
-    path = path[1:] if path.startswith("/~") or not rooted else path
+    if path.startswith(("/", "~")):
+        path = posixpath.normpath("/" + path.lstrip("/") if not path.startswith("~") else "/" + path)
+        path = path[1:] if path.startswith("/~") else path
+    else:  # relative: a leading ".." stays, it is not the root's parent ("../x/y" is not "/x/y")
+        path = posixpath.normpath(path) if path else ""
+        path = "" if path == "." else path
     if (own := _home_dir()) and (path == own or path.startswith(own + "/")):
         path = "~" + path[len(own):]
     return re.sub(r"^/(?:users|home)/[^/]+(?=/|$)|^/root(?=/|$)", "~", path)
@@ -1201,8 +1279,16 @@ def _iban_valid(compact: str) -> bool:
     return int("".join(str(int(ch, 36)) for ch in moved)) % 97 == 1
 
 
+def _ascii_digits(text: str) -> str:
+    """Every Unicode decimal digit (Arabic-Indic, Devanagari, ...) as its ASCII digit: the model that reads an
+    account number in one script writes it in another."""
+    return "".join(str(unicodedata.decimal(ch)) if ch.isdecimal() and not ch.isascii() else ch for ch in text)
+
+
 def _canon(kind: str, match: str) -> str | None:
-    match = unicodedata.normalize("NFKC", match).strip(".,;:")
+    match = unicodedata.normalize("NFKC", match)
+    # A path may start with dots ("./x/y", "../x/y"): only its end can be a sentence's full stop.
+    match = match.lstrip(",;:").rstrip(".,;:") if kind == "path" else match.strip(".,;:")
     if kind == "email":
         return _canon_email(match)
     if kind == "url":
@@ -1214,6 +1300,7 @@ def _canon(kind: str, match: str) -> str | None:
     if kind == "host6":
         address = _v6(match.strip("[]").partition("]")[0])
         return None if address is None or len(match) < 6 else address if "." in address else f"[{address}]"
+    match = _ascii_digits(match)
     if kind == "iban":
         compact = re.sub(r"[\s.\-]", "", match).lower()
         # Printed in capitals or in groups it is an IBAN by its shape; a lowercase run is any word with

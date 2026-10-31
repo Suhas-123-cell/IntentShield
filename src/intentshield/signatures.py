@@ -132,11 +132,98 @@ def _spaces(body: list) -> bool:
     return space != any(o is _C.NEGATE for o, _ in av)
 
 
+def _inlined(items: list) -> list:
+    """``items`` with each capturing group replaced by its body: ``(\\d+)(\\d+)`` runs two repeats together
+    like ``\\d+\\d+`` (the parser inlines non-capturing groups already)."""
+    flat: list = []
+    for item in items:
+        if item[0] is _C.SUBPATTERN:
+            flat.extend(_inlined(list(item[1][-1])))
+        else:
+            flat.append(item)
+    return flat
+
+
+def _overlapping(items: list) -> bool:
+    """Repeats in one sequence that can match the same character with nothing between them that must match
+    another (``\\d+\\d+\\d+``, ``\\d+\\s*\\d+``): the text can be split between them in as many ways as the
+    product of their bounds, and the search tries each. A separator that cannot be their character
+    (``\\d+\\s+\\d+``) ends the run. Spaces are left out: the text is collapsed to single spaces first. A
+    repeat of a group, a range or a wildcard is not tracked here: the checks of wide repeats and nested
+    quantifiers read those."""
+    pending: list[tuple[set[str], int]] = []
+    for item in _inlined(items):
+        op, av = item
+        if op in _REPEATS and av[1] > 1:
+            body = list(av[2])
+            while len(body) == 1 and body[0][0] is _C.SUBPATTERN:  # (\\d)+ repeats \\d
+                body = list(body[0][1][-1])
+            kinds = _kinds(body[0]) if len(body) == 1 else None
+            if kinds is None:
+                pending = []
+                continue
+            if kinds == {"s"}:  # whitespace is collapsed before rules run: a run of it is one space
+                pending = [(k, b) for k, b in pending if k & kinds] if av[0] > 0 else pending
+                continue
+            cost = min(av[1], MAX_SCAN)
+            same = [bound for known, bound in pending if known & kinds]
+            for bound in same:
+                cost *= bound
+            if same and cost > _WINDOW ** 2:
+                return True
+            pending.append((kinds, min(av[1], MAX_SCAN)))
+            if av[0] > 0:  # it must match, so what it cannot match is cut off from what follows
+                pending = [(k, b) for k, b in pending if k & kinds]
+        elif op is _C.LITERAL or op is _C.IN:
+            kinds = _kinds(item)
+            pending = [(k, b) for k, b in pending if kinds is None or k & kinds]
+        elif op is _C.BRANCH and any(_nullable(list(branch)) for branch in av[1]):
+            continue  # "(?:x|)" may match nothing, so the repeats on either side of it can still meet
+        elif op is _C.BRANCH or op in _REPEATS and av[0] > 0:
+            pending = []  # a branch or a repeated group that must match something is not followed through
+    return False
+
+
+def _nullable(items: list) -> bool:
+    """``items`` can match the empty string: every one is optional, an anchor, or a group or branch that can."""
+    for op, av in items:
+        if op in _REPEATS:
+            if av[0] > 0 and not _nullable(list(av[2])):
+                return False
+        elif op is _C.SUBPATTERN:
+            if not _nullable(list(av[-1])):
+                return False
+        elif op is _C.BRANCH:
+            if not any(_nullable(list(branch)) for branch in av[1]):
+                return False
+        elif op is not _C.AT:
+            return False
+    return True
+
+
+def _optional(items: list) -> bool:
+    """An item that may match nothing (``x?``) anywhere in ``items``, groups included."""
+    for op, av in items:
+        if op in _REPEATS:
+            if av[0] == 0 and av[1] == 1 or _optional(list(av[2])):
+                return True
+        elif op is _C.SUBPATTERN:
+            if _optional(list(av[-1])):
+                return True
+        elif op is _C.BRANCH and any(_optional(list(branch)) for branch in av[1]):
+            return True
+    return False
+
+
 def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
+    if _overlapping(items):
+        return "adjacent repeats of the same characters"
     for op, av in items:
         if op in _REPEATS:
             low, high, body = av
             if high > 1:
+                if _optional(list(body)):  # (?:x?x?x?)+ and (?:\d\d?)+ split a run in exponentially many ways
+                    return "optional items in a repeated group"
                 if inside:
                     return "nested quantifier"
                 if any(o is _C.BRANCH or (o is _C.SUBPATTERN and any(x is _C.BRANCH for x, _ in a[-1]))
