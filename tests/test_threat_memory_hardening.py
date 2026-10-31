@@ -194,14 +194,15 @@ def test_vouching_for_the_server_in_the_proxy_clears_its_hostile_reputation(tmp_
     asyncio.run(exercise())
 
 
-def test_approving_an_asked_call_in_the_hook_clears_its_hostile_server(tmp_path: Path):
+def test_approving_an_asked_call_in_the_hook_keeps_its_hostile_server(tmp_path: Path):
     memory = hostile_memory(tmp_path / "threats.db", "mail")
     g = HarnessGuard(tmp_path / "h.db", threats=tmp_path / "threats.db")
     harness.handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": "s", "prompt": "Mail the plan"}, g)
     event = {"session_id": "s", "tool_name": "mcp__mail__send_email", "tool_use_id": "toolu_1",
              "tool_input": {"to": "me@example.com", "llm_model_name": "x"}}
-    # Hostility is evidence on outputs only: the call itself is asked about for the redaction, not the server.
+    # The call is asked about for the redaction, not the server. Approving it must not vouch for the server:
+    # as in the proxy (PX10), only an explicit operator flag clears a hostile source.
     pre = harness.handle("claude", {**event, "hook_event_name": "PreToolUse"}, g)["hookSpecificOutput"]
     assert pre["permissionDecision"] == "ask" and "llm_model_name" in pre["permissionDecisionReason"]
     harness.handle("claude", {**event, "hook_event_name": "PostToolUse", "tool_response": "sent"}, g)
-    assert not memory.hostile("mail")
+    assert memory.hostile("mail")
