@@ -125,13 +125,14 @@ All of these only ever escalate.
 ### 3.6 Engineering
 - Tests: 474 pass, 1 skipped; 475 with the HTTP end-to-end test ✓ (2026-10-28; 253/254 on 2026-10-20).
 - Overhead (`benchmarks/latency.py`, `artifacts/latency.json`, demo MCP server, intent model off,
-  2026-10-16) ✓:
-  - **hook:** 35 ms per event at the median, p95 under 37 ms, on read, write, small, 4 KB and
-    injected results. Bare Python start-up is 15 ms and imports take about 20 ms. The decision
-    itself, timed in-process, is 0.02–0.1 ms, and 1.1 ms on a 4 KB result. A
-    persistent hook process would remove almost all of it.
-  - **transparent proxy:** 2.4 ms per `tools/call` against 0.5 ms direct (+1.9 ms, p95 2.5 ms over
-    200 calls). Session start-up (spawn to `list_tools`) is 522 ms against 247 ms direct.
+  re-measured 2026-10-31 on current code, three runs, `results/latency-2026-10-31/`; the 2026-10-16
+  run gave 35 ms and +1.9 ms on a quieter machine and older code) ✓:
+  - **hook:** 60 to 63 ms per event at the median as a process on read and small results, 68 to 71 ms
+    on a 4 KB result. Bare Python start-up is 15 to 18 ms. The decision itself, timed in-process, is
+    0.12 to 0.34 ms, and 6.7 to 7.2 ms on a 4 KB result. A persistent hook process would remove
+    almost all of it.
+  - **transparent proxy:** about 3 ms per `tools/call` against 0.6 ms direct (+2.4 to 2.7 ms).
+    Session start-up (spawn to `list_tools`) is 567 to 603 ms against 266 to 286 ms direct.
   - Both are small next to one model step (seconds on local 7–9B models).
 - **Install and configuration per harness** ✓. Each hook is `intentshield-hook <harness>`, and the
   example configs are in `configs/harness/`.

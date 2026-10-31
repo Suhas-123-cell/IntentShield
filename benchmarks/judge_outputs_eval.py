@@ -25,6 +25,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from adaptive_judge import judge_endpoint  # noqa: E402
+
 from intentshield.evaluation import wilson  # noqa: E402
 from intentshield.judge import Judge  # noqa: E402
 from intentshield.mcp_inspect import scan_output  # noqa: E402
@@ -73,8 +75,8 @@ def main(argv: list[str] | None = None) -> None:
             families[family][name] += value
         tally[row["label"]]["n"] += 1
         families[family]["n"] += 1
-    report = {"judge": f"{judge.provider}:{judge.model}", "split": args.split, "rows": len(sample),
-              "judge_errors": judge.errors, "user_request": "not given",
+    report = {"judge": f"{judge.provider}:{judge.model}", "endpoint": judge_endpoint(judge), "split": args.split,
+              "rows": len(sample), "judge_errors": judge.errors, "user_request": "not given",
               "detectors": {label: {name: {"flagged": counts[name], "n": counts["n"],
                                            "rate": counts[name] / counts["n"], "ci95": wilson(counts[name], counts["n"])}
                                     for name in ("rules", "judge", "rules+judge")}

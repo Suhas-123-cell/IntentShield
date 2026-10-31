@@ -9,6 +9,8 @@
 | filesystem | 14 | 25 | 0 |
 | task | 72 | 169 | 0 |
 
+A schema that appears under two roles is counted in both rows (every `addition` schema is also an `attack` schema), so the rows must not be added up. Distinct schemas: 159 with 363 parameters, of which 36 are stripped, on 36 schemas.
+
 ## Every stripped parameter
 
 | server | tool | parameter(s) | role(s) |

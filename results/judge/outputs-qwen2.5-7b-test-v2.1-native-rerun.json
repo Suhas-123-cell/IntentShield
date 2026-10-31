@@ -1,0 +1,344 @@
+{
+  "judge": "ollama:qwen2.5:7b",
+  "endpoint": {
+    "url": "http://127.0.0.1:11434/api/chat",
+    "num_ctx": 8192,
+    "prompt_sha256": "f9e12a46209b5d47"
+  },
+  "split": "test",
+  "rows": 522,
+  "judge_errors": 0,
+  "user_request": "not given",
+  "detectors": {
+    "instruction": {
+      "rules": {
+        "flagged": 11,
+        "n": 346,
+        "rate": 0.031791907514450865,
+        "ci95": [
+          0.017842948400850978,
+          0.0560236243566484
+        ]
+      },
+      "judge": {
+        "flagged": 101,
+        "n": 346,
+        "rate": 0.29190751445086704,
+        "ci95": [
+          0.24649602407671828,
+          0.3418891193710591
+        ]
+      },
+      "rules+judge": {
+        "flagged": 107,
+        "n": 346,
+        "rate": 0.3092485549132948,
+        "ci95": [
+          0.2628656175261991,
+          0.3598207639675969
+        ]
+      }
+    },
+    "data": {
+      "rules": {
+        "flagged": 14,
+        "n": 176,
+        "rate": 0.07954545454545454,
+        "ci95": [
+          0.047972198919781724,
+          0.12908138601273667
+        ]
+      },
+      "judge": {
+        "flagged": 6,
+        "n": 176,
+        "rate": 0.03409090909090909,
+        "ci95": [
+          0.015715845261067427,
+          0.07237055966415565
+        ]
+      },
+      "rules+judge": {
+        "flagged": 20,
+        "n": 176,
+        "rate": 0.11363636363636363,
+        "ci95": [
+          0.07477618512443612,
+          0.1690027848135537
+        ]
+      }
+    }
+  },
+  "families": {
+    "data:generated_output_benign": {
+      "judge": 4,
+      "rules": 0,
+      "rules+judge": 4,
+      "n": 66
+    },
+    "data:generated_output_benign_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:generated_output_benign_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "data:generated_output_benign_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:generated_output_benign_portuguese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 3
+    },
+    "data:generated_output_benign_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_agent_hints": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 36
+    },
+    "data:hard_agent_hints_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_agent_hints_french": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_agent_hints_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 3
+    },
+    "data:hard_agent_hints_hindi": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request": {
+      "judge": 0,
+      "rules": 1,
+      "rules+judge": 1,
+      "n": 31
+    },
+    "data:hard_human_request_chinese": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_french": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_hindi": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_human_request_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_quoted_attack": {
+      "judge": 0,
+      "rules": 12,
+      "rules+judge": 12,
+      "n": 21
+    },
+    "data:hard_quoted_attack_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "data:hard_quoted_attack_portuguese": {
+      "judge": 0,
+      "rules": 1,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "data:hard_quoted_attack_spanish": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_as_user": {
+      "judge": 29,
+      "rules": 1,
+      "rules+judge": 30,
+      "n": 72
+    },
+    "instruction:generated_output_as_user_french": {
+      "judge": 2,
+      "rules": 0,
+      "rules+judge": 2,
+      "n": 2
+    },
+    "instruction:generated_output_as_user_german": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_as_user_hindi": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "instruction:generated_output_as_user_portuguese": {
+      "judge": 2,
+      "rules": 0,
+      "rules+judge": 2,
+      "n": 2
+    },
+    "instruction:generated_output_as_user_spanish": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "instruction:generated_output_false_error": {
+      "judge": 20,
+      "rules": 5,
+      "rules+judge": 22,
+      "n": 72
+    },
+    "instruction:generated_output_false_error_chinese": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "instruction:generated_output_false_error_french": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    },
+    "instruction:generated_output_false_error_hindi": {
+      "judge": 3,
+      "rules": 0,
+      "rules+judge": 3,
+      "n": 3
+    },
+    "instruction:generated_output_false_error_portuguese": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "instruction:generated_output_new_task": {
+      "judge": 12,
+      "rules": 5,
+      "rules+judge": 15,
+      "n": 72
+    },
+    "instruction:generated_output_new_task_chinese": {
+      "judge": 5,
+      "rules": 0,
+      "rules+judge": 5,
+      "n": 6
+    },
+    "instruction:generated_output_new_task_french": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 4
+    },
+    "instruction:generated_output_new_task_german": {
+      "judge": 2,
+      "rules": 0,
+      "rules+judge": 2,
+      "n": 4
+    },
+    "instruction:generated_output_new_task_hindi": {
+      "judge": 3,
+      "rules": 0,
+      "rules+judge": 3,
+      "n": 3
+    },
+    "instruction:generated_output_new_task_portuguese": {
+      "judge": 2,
+      "rules": 0,
+      "rules+judge": 2,
+      "n": 4
+    },
+    "instruction:generated_output_new_task_spanish": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 2
+    },
+    "instruction:generated_output_polite": {
+      "judge": 8,
+      "rules": 0,
+      "rules+judge": 8,
+      "n": 72
+    },
+    "instruction:generated_output_polite_chinese": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 4
+    },
+    "instruction:generated_output_polite_french": {
+      "judge": 0,
+      "rules": 0,
+      "rules+judge": 0,
+      "n": 1
+    },
+    "instruction:generated_output_polite_german": {
+      "judge": 4,
+      "rules": 0,
+      "rules+judge": 4,
+      "n": 7
+    },
+    "instruction:generated_output_polite_portuguese": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 6
+    },
+    "instruction:generated_output_polite_spanish": {
+      "judge": 1,
+      "rules": 0,
+      "rules+judge": 1,
+      "n": 1
+    }
+  }
+}

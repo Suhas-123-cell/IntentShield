@@ -12,7 +12,9 @@
    "benign_send_asked": 0,
    "benign": 12,
    "benign_result_warned": 0,
-   "judge_errors": 0
+   "judge_errors": 0,
+   "attack_send_denied": 7,
+   "attack_send_asked": 23
   },
   "hook+ollama:qwen2.5:7b": {
    "attack_send_stopped": 30,
@@ -21,7 +23,9 @@
    "benign_send_asked": 4,
    "benign": 12,
    "benign_result_warned": 4,
-   "judge_errors": 0
+   "judge_errors": 0,
+   "attack_send_denied": 7,
+   "attack_send_asked": 23
   },
   "victim_acted_unguarded": 3
  },

@@ -268,7 +268,7 @@ measured well enough to defend:
    parameter that asks the agent for its model name, system prompt or conversation is removed before
    the agent sees the tool, and any value sent for it is dropped. The measurement
    (`benchmarks/self_disclosure_eval.py`, `results/self-disclosure.md`): on the 159 distinct tool
-   schemas the four MSB agents were shown, 54 parameters stripped, all on attack-role servers, 0 of
+   schemas the four MSB agents were shown, 36 parameters stripped (an earlier 54 counted 18 twice), all on attack-role servers, 0 of
    194 on the 86 clean tools; and harm executed through such a parameter in 23/29 (Gemini 3.5
    Flash-Lite), 33/33 (llama3.1:8b), 48/129 (qwen2.5:7b) and 51/122 (ornith:9b) harmful calls in the unpaired undefended runs. The
    finding that goes with it: for the capable agents in the sample (Gemini, Claude Haiku live), what a
@@ -518,7 +518,7 @@ strength, each with where the evidence is and what it does not show.
    model, system prompt or conversation by adding a parameter that asks for it; capable agents fill
    it in because the schema asked. IntentShield removes such parameters from the schema before the
    agent sees the tool. None of the seven guards surveyed on 2026-10-29 (§12.1) does this. Measured on every tool schema the four
-   MSB agents actually saw (159 schemas, 756 cases): 54 parameters stripped, all on attack-role
+   MSB agents actually saw (159 schemas, 756 cases): 36 parameters stripped (an earlier 54 counted 18 twice), all on attack-role
    servers, 0 of 194 on the 86 clean tools; undefended harm went through such a parameter in 23 of
    29 Gemini cases and 33 of 33 llama cases. Evidence: `results/self-disclosure.md`,
    `benchmarks/self_disclosure_eval.py`. Limit: one benchmark's catalogs, and a renamed parameter

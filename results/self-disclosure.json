@@ -3024,6 +3024,12 @@
         "stripped": 0
       }
     },
+    "distinct": {
+      "schemas": 159,
+      "parameters": 363,
+      "stripped": 36,
+      "schemas_with_a_stripped": 36
+    },
     "flagged": [
       {
         "server": "Office-Word-MCP-Server",
