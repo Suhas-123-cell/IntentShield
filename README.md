@@ -53,7 +53,9 @@ the rules pass, which is what catches plain-language injections; it costs one re
 day, so use it with `--judge gemini` or `--judge ollama`. What the judge reads leaves your machine with a
 hosted judge: the user's prompt, call arguments, tool descriptions and, with `--judge-outputs`, tool results
 go to Groq, Google or DeepSeek. `--judge ollama` keeps them local. A judge objection on a result makes later
-state-changing calls ask; it never denies on its own. Measurements and the recommendation are in
+state-changing calls ask; it never denies on its own. When the judge cannot be reached (no network) or its key is
+refused, the rules alone decide, with no extra ask or refusal, and the hooks skip the judge for 5 minutes before
+trying again, so an offline session does not wait on it at every call. Measurements and the recommendation are in
 [docs/benchmarks.md](docs/benchmarks.md#mcp-guardrail-layers).
 
 To use your own key and model instead, name the model: `--judge openai:<model>` (`OPENAI_API_KEY`),
