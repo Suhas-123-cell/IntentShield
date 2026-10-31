@@ -121,6 +121,19 @@ class Verdict:
     findings: list[str] = field(default_factory=list)
 
 
+# The intent a session keeps, in characters: every hook of the session reads and scans all of it, at about 0.3 s
+# per MB, so a long session of large pastes slowed each call. Past the limit the prompts in the middle go, oldest
+# first: the first ``INTENT_HEAD`` characters (the task the session began with) and the rest of the limit, the
+# newest, stay. About 80 pasted prompts of 2.6 KB, or thousands of typed ones, fit.
+INTENT_LIMIT = 200_000
+INTENT_HEAD = 20_000
+
+
+def _window(intent: str) -> str:
+    return intent if len(intent) <= INTENT_LIMIT else \
+        f"{intent[:INTENT_HEAD]}\n{intent[INTENT_HEAD - INTENT_LIMIT:]}"
+
+
 class HarnessGuard:
     """Per-session intent and taint, shared by every hook process of one harness session."""
 
@@ -278,7 +291,7 @@ class HarnessGuard:
 
     def _load(self, session: str) -> tuple[str, set[str]]:
         row = self.db.execute("SELECT intent, taint FROM sessions WHERE id = ?", (session,)).fetchone()
-        return (row[0], set(json.loads(row[1]))) if row else ("", set())
+        return (_window(row[0]), set(json.loads(row[1]))) if row else ("", set())
 
     def touch(self, session: str, harness: str = "") -> None:
         """A hook event of the session: it is live, whatever the event was, so its TTL starts over."""
@@ -330,7 +343,7 @@ class HarnessGuard:
         note naming the MCP tools that match the prompt, or an empty string."""
         with self._tx():
             intent, taint = self._load(session)
-            self._save(session, f"{intent}\n{text}".strip(), taint)
+            self._save(session, _window(f"{intent}\n{text}".strip()), taint)
             self.db.execute("UPDATE sessions SET refused = 0 WHERE id = ?", (session,))
         return self.tool_hint(text)
 

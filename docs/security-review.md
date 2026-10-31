@@ -223,7 +223,28 @@ Still open:
 - Client libraries not in the call list (`telnetlib`, `xmlrpc`, node `got`), DNS lookups of a name holding data, `mail a@host < f`, `redis-cli -h host`, ruby `%x()`, php `implode`, and aliases are not read as sends.
 - An address followed by call syntax (`'URL'.strip()`) is read with the suffix attached and does not match the output's URL; the match is path-sensitive (another path on the same host is not matched).
 - A write to a shell startup file (`sort -o ~/.zshrc`, `echo .. > ~/.zshrc`) is silent until a session is flagged, as the Write tool is. `cd evil && git status` runs that repository's configured programs and is read-only.
-- `credentials.find` is still quadratic on long dotted runs when the hook reads a command (rules-13, next group).
+- `credentials.find` was still quadratic on long dotted runs when the hook read a command; fixed with rules-13 below.
+
+### Denial of service (proxy-2, rules-2, rules-13, proxy-1, rules-11, proxy-3, hooks-16, proxy-10)
+
+All eight fixed after four fix-and-review rounds. In each round an independent reviewer re-ran the probes and tried variants of the same class; the last review found one more quadratic rule (`role_marker` on a system tag followed by whitespace), fixed before the merge with a regex that accepts exactly the same strings (0 differences in 300,000 random strings).
+
+| Finding | Before | After |
+|---|---|---|
+| proxy-2, `_network_values` | 8.9 s at 40 KB; 212 s on whitespace runs | 0.01-0.17 s at 200 KB, linear to 800 KB |
+| rules-2, `image_exfiltration` and the same class in `hidden_directive`, `role_marker`, the description send rule | 25 s at 200 KB; 114 s on `<` + 40,000 spaces | under 0.8 s at 200 KB (60 shapes); a linear matcher, so a padded URL is still caught |
+| rules-13, URL credentials | 6.8 s at 100 KB; about 20 s through `guard.shell` | 0.08 s; 0.24 s through `guard.shell`; `redis://:pw@host` found |
+| proxy-1, deep tool schema | `connect()` RecursionError for every server | the tool (input or output schema, annotations, meta over 64 levels) is left out; an upstream that cannot list its tools is left out, the others connect |
+| rules-11, deep output | RecursionError at about 700 levels; a deny became an ask with no taint | iterative: findings, taint and deny kept at 100,000 levels |
+| proxy-3, upstream `pattern` | catastrophic backtracking hung a call for hours | upstream regexes are not run (also inside enum/const behind a percent-encoded `$ref`); a `$ref` chain that doubles at each level is refused |
+| hooks-16, session intent | 0.26 s per hook at 1 MB | 0.05 s: the first 20 KB and the newest 180 KB are kept |
+| proxy-10, tainted sets | 490 ms per call at 500,000 values | 13.7 ms: 20,000 per set, 2,000 per output; any drop flags the session, and a call carrying a host or value the user did not give is then reviewed or blocked |
+
+Detection is unchanged: injections flagged 2371/5095, benign rows 29/1365 and READMEs 8/79 on base and fix with identical hit lists; `credentials.find` identical on 19,476 texts (corpus, READMEs, MSB call arguments) apart from the empty-user URLs; `_network_values` identical on 66,518 texts. Suite 1919 passed, ruff and the review gate green. Regression tests: `tests/test_dos_limits.py` (62 of the 77 reviewer-checked tests fail or hang on the old code; the rest are positive controls).
+
+Behaviour changes: the gateway no longer enforces an upstream's own `pattern` rules (the upstream validates them); a mailbox local part over 64 characters is read as its last 64, and the description send rule no longer fires on a dotted local part over 64 characters (not deliverable under RFC 5321); a single prompt over 180 KB can lose its own opening instruction (toward more asks); a page with more than 2,000 distinct values flags the rest of the session's calls that carry values the user did not give.
+
+Still open: the hooks' own sqlite taint list is not capped (0.17 s per hook at 200,000 values, as before); validation of very large `enum` or `uniqueItems` arrays is quadratic (46 s at 20,000 x 20,000; the agent has to send the array itself); one upstream listing over 2,000 tools still fails `connect()`; non-ASCII dotted text is linear but slow (1-3 s through a hook at 200 KB).
 
 ### Judge offline (hooks-8)
 
