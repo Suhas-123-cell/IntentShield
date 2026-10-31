@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from . import credentials, shell
+from .hostlists import NEEDS_SUBDOMAIN
 from .install import server_stem
 from .mcp_inspect import (
     _parse,
@@ -391,6 +392,17 @@ class HarnessGuard:
         found = distinctive_values(value)
         return found | self._joined(found)
 
+    def _not_files(self, values: set[str]) -> set[str]:
+        """``values`` without the bare names that are files in the working directory. A name on a top-level domain
+        that is also a file extension or a word of code ("app.test.py", "setup.cfg.sh") is read as a host when a
+        label stands before the registered name, and a file that is there is a file: reading it is not a call to a
+        host an injected output named."""
+        if not self.cwd.startswith("/"):
+            return values
+        return {v for v in values if not (
+            _parse(v)[0] == "host" and "/" not in v and v.rpartition(".")[2] in NEEDS_SUBDOMAIN
+            and os.path.isfile(os.path.join(self.cwd, v)))}
+
     def call(self, session: str, tool: str, arguments: dict[str, Any]) -> Verdict:
         intent, taint = self._load(session)
         verdict = Verdict()
@@ -404,7 +416,7 @@ class HarnessGuard:
         if injected:
             return Verdict("deny", f"Arguments carry injected instructions ({', '.join(injected)}).", findings=injected)
         user = self._values(intent)
-        values = self._values(arguments) - user
+        values = self._not_files(self._values(arguments) - user)
         traced = traced_urls(values, taint, user)
         untrusted = values & taint | {url for url, how in traced.items() if how == "path"}
         if untrusted:
@@ -431,7 +443,7 @@ class HarnessGuard:
             return verdict
         observed = {row[0] for row in self.db.execute("SELECT value FROM observed WHERE session = ?", (session,))}
         # Observed holds authority values from every output, and every value from flagged ones.
-        sourced = sourced_from(self._values(arguments), observed, user) | {
+        sourced = sourced_from(self._not_files(self._values(arguments)), observed, user) | {
             url for url, how in traced.items() if how == "host"}
         if sourced and self.review != "never" and (self.sourced_reads or self.mutates(tool)):
             # The scanners may have missed the output it came from; the user decides.
