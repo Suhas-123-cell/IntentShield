@@ -103,7 +103,8 @@ class ToolSpec:
 
     @property
     def public_schema(self) -> dict[str, Any]:
-        return self.public_schema_override or self.schema
+        # an empty override (a withheld schema with nothing left) is still the override, not the raw schema
+        return self.public_schema_override if self.public_schema_override is not None else self.schema
 
     def parse_arguments(self, arguments: dict[str, Any]) -> BaseModel:
         if self.argument_validator is not None:

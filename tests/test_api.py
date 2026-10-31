@@ -204,6 +204,7 @@ def test_create_app_loads_the_working_directory_env_file(tmp_path: Path, monkeyp
     import dotenv
 
     monkeypatch.setattr("intentshield.api.load_dotenv", dotenv.load_dotenv)
+    monkeypatch.setattr("intentshield.envfile.find_dotenv", dotenv.find_dotenv)
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text("INTENTSHIELD_DOTENV_PROBE=loaded\n")
     monkeypatch.delenv("INTENTSHIELD_DOTENV_PROBE", raising=False)

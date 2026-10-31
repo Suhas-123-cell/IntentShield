@@ -186,7 +186,11 @@ def test_failure_report_never_echoes_configured_secret(tmp_path: Path, capsys) -
     assert json.loads(output)["status"] == "FAIL"
 
 
-def test_stdio_wire_mode_launches_real_downstream_subprocess(tmp_path: Path) -> None:
+def test_stdio_wire_mode_launches_real_downstream_subprocess(tmp_path: Path, monkeypatch) -> None:
+    # The child is a real process: exported (empty) tokens keep a developer's checkout .env from supplying them,
+    # which the gateway refuses to start on.
+    monkeypatch.setenv("INTENTSHIELD_CONTROL_TOKEN", "")
+    monkeypatch.setenv("INTENTSHIELD_AGENT_TOKEN", "")
     report = asyncio.run(
         verify_mcp(_write_config(tmp_path), verification_mode="stdio_wire")
     )

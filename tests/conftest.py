@@ -26,6 +26,7 @@ def _isolate_environment(monkeypatch, tmp_path):
     monkeypatch.setattr("intentshield.harness.ENV_FILE", home / ".intentshield" / ".env")
     # A locally trained classifier would change decisions; tests run the deterministic agents.
     monkeypatch.setenv("INTENTSHIELD_INTENT_MODEL_DIR", "tests/no-intent-model")
+    monkeypatch.setattr("intentshield.envfile.find_dotenv", lambda *a, **k: "")  # no developer .env, not even to name
     for module in ("api", "mcp_server", "mcp_verify"):
         monkeypatch.setattr(f"intentshield.{module}.load_dotenv", lambda *a, **k: False)
 

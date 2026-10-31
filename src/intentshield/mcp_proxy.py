@@ -13,6 +13,7 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from time import monotonic as _mono  # a name of its own: tests replace this module's ``time``
 from typing import Any, Callable
@@ -315,6 +316,7 @@ def _marker(findings: list[str], what: str = "result") -> str:
 
 
 _JUDGE_WORKERS = 4
+_JUDGE_RETRY_SECONDS = 60
 
 
 _SCHEMA_ANNOTATIONS = {
@@ -351,6 +353,71 @@ _FORMATS = frozenset({
     "relative-json-pointer", "regex", "int32", "int64", "float", "double", "byte", "binary", "password",
 })
 MAX_PATTERN = 512
+
+
+_JSON_TYPES = frozenset({"object", "array", "string", "number", "integer", "boolean", "null"})
+# A short identifier: two or three joined words at most (the longest of 383 parameter names in 159 recorded MSB
+# tool schemas is 20 characters). A longer one (or one cut into many words) can carry a sentence,
+# in a form an agent reads as one, so a tool the judge has not read shows no such parameter.
+_PARAMETER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{0,23}")
+_MAX_NAME_SEPARATORS = 2
+
+
+def _skeleton_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Types and parameter names only, for a tool whose description the judge has not read: an enum value, a
+    ``const``, a default, a format, a ``$ref`` or a parameter name that is a sentence is text the judge was to read
+    with the description, and the agent must not get it first. Names that look like identifiers stay, so the tool
+    stays usable; a schema that leans on ``$ref`` loses that part."""
+    result: dict[str, Any] = {}
+    kind = schema.get("type")
+    if isinstance(kind, str) and kind in _JSON_TYPES:
+        result["type"] = kind
+    elif isinstance(kind, list) and (kept := [k for k in kind if isinstance(k, str) and k in _JSON_TYPES]):
+        result["type"] = kept
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        result["properties"] = {name: _skeleton_schema(child) if isinstance(child, dict) else {}
+                                for name, child in properties.items()
+                                if isinstance(name, str) and _PARAMETER_NAME.fullmatch(name)
+                                and sum(name.count(c) for c in "_.-") <= _MAX_NAME_SEPARATORS}
+        if isinstance(schema.get("required"), list):
+            result["required"] = [n for n in schema["required"] if isinstance(n, str) and n in result["properties"]]
+    if isinstance(schema.get("items"), dict):
+        result["items"] = _skeleton_schema(schema["items"])
+    for key in ("anyOf", "oneOf", "allOf"):
+        if isinstance(schema.get(key), list):
+            result[key] = [_skeleton_schema(child) for child in schema[key] if isinstance(child, dict)]
+    return result
+
+
+def _withheld_schema(schema: dict[str, Any], *, flagged: bool) -> dict[str, Any]:
+    """What the agent sees of a tool's parameters while its description is withheld: nothing for a tool the judge,
+    classifier or memory flagged, the skeleton for one not read yet."""
+    return {"type": "object"} if flagged else (_skeleton_schema(_public_schema(schema)) or {"type": "object"})
+
+
+def _exceeds_bytes(value: Any, limit: int) -> bool:
+    """Whether ``value`` (JSON data, models allowed) is certainly over ``limit`` bytes once dumped: a lower bound
+    from the strings' lengths, one per other node, stopping at the limit. It copies nothing."""
+    total, stack = 0, [value]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            total += len(node)
+        elif isinstance(node, dict):
+            total += len(node)
+            stack.extend(node.keys())
+            stack.extend(node.values())
+        elif isinstance(node, (list, tuple)):
+            total += len(node)
+            stack.extend(node)
+        elif isinstance(node, BaseModel):
+            stack.extend(node.__dict__.values())
+        else:
+            total += 1
+        if total > limit:
+            return True
+    return False
 
 
 def _public_schema(schema: dict[str, Any], annotations: bool = False) -> dict[str, Any]:
@@ -674,6 +741,7 @@ class MCPProxyRuntime:
         self._transparent_run: str | None = None
         self._judge_errors_seen = 0
         self._judge_error_logged = float("-inf")
+        self._judge_retry_at = float("-inf")  # earliest next pass over descriptions the judge failed to read
         self._judging = threading.Lock()
         self._pending_judge_error: tuple[int, str] | None = None
         # Runs whose intent repeats a flagged output; the agent wrote that intent, not the user.
@@ -799,7 +867,7 @@ class MCPProxyRuntime:
                 self._ensure_system_run(), "MCP_UPSTREAMS_LEFT_OUT", {"upstreams": self._failed_upstreams}
             )
         if self._unjudged:
-            logger.warning("judge budget spent before every description was read",
+            logger.warning("the judge did not read every description (its budget ran out or it was unavailable)",
                            extra={"unjudged": len(self._unjudged)})
             self.service.storage.add_event(
                 self._ensure_system_run(), "MCP_JUDGE_BUDGET_SPENT", {"tools": self._unjudged}
@@ -1012,7 +1080,7 @@ class MCPProxyRuntime:
                     if qualified in self._quarantined
                     else tool.description
                     if self.config.expose_upstream_descriptions and tool.description
-                    and qualified not in self._suspect_tools
+                    and qualified not in self._suspect_tools and qualified not in self._unjudged
                     else f"Guarded MCP tool {qualified}; upstream description withheld as untrusted."
                 ),
                 args_model=MCPArguments,
@@ -1020,7 +1088,8 @@ class MCPProxyRuntime:
                 destination_field=self.config.destination_fields.get(qualified),
                 executor=execute,
                 schema_override=tool.input_schema,
-                public_schema_override=_public_schema(visible),
+                public_schema_override=_withheld_schema(visible, flagged=qualified in self._suspect_tools)
+                if qualified in self._suspect_tools or qualified in self._unjudged else _public_schema(visible),
                 argument_validator=validate,
                 upstream_id=tool.server_id,
                 upstream_tool_name=tool.name,
@@ -1036,9 +1105,14 @@ class MCPProxyRuntime:
         return registry
 
     def _bounded(self, result: MCPCallResult) -> dict[str, Any]:
-        normalized = result.model_dump(mode="json")
+        """The result as JSON, or a refusal. The limit holds back delivery: the SDK has read the whole reply by
+        now, so what is spared here is the copies (the dump and its JSON text) a hostile size would multiply."""
         if len(result.content) > self.config.max_result_content_blocks:
             raise MCPRemoteToolError("Upstream MCP result exceeded the content-block limit")
+        if _exceeds_bytes((result.content, result.structured_content, result.meta, result.error),
+                          self.config.max_result_bytes):
+            raise MCPRemoteToolError("Upstream MCP result exceeded the byte limit")
+        normalized = result.model_dump(mode="json")
         if len(json.dumps(normalized, separators=(",", ":")).encode()) > self.config.max_result_bytes:
             raise MCPRemoteToolError("Upstream MCP result exceeded the byte limit")
         return normalized
@@ -1087,10 +1161,15 @@ class MCPProxyRuntime:
             item["quarantined"] = item["name"] in self._quarantined
             if item["quarantined"]:  # the schema is where the poison was found: it goes no further
                 item["schema"] = {"type": "object"}
+            elif item["name"] in self._suspect_tools or item["name"] in self._unjudged:  # as its description is
+                item["schema"] = _withheld_schema(self._visible_schemas[item["name"]],
+                                                  flagged=item["name"] in self._suspect_tools)
             item["poisoning_findings"] = self._quarantined.get(item["name"], [])
             item["redacted_fields"] = sorted(self._redacted.get(item["name"], ()))
             item["classifier_flagged"] = self._suspect_tools.get(item["name"]) == ReasonCode.REVIEW_CLASSIFIER_FLAGGED
             item["judge_flagged"] = self._suspect_tools.get(item["name"]) == ReasonCode.REVIEW_JUDGE_FLAGGED
+            item["judge_status"] = "unreviewed" if item["name"] in self._unjudged else \
+                "off" if self._judge is None else "reviewed"
             if item["name"] in self._unjudged:  # not read by the judge yet: no free text until it is
                 item["description"] = f"Guarded MCP tool {item['name']}; upstream description not yet reviewed."
             elif item["name"] in self._suspect_tools:  # flagged after the spec was built
@@ -1118,7 +1197,7 @@ class MCPProxyRuntime:
                 "MCP_CATALOG_DRIFT",
                 {"tools": sorted(newly_drifted)},
             )
-        if self._unjudged and self._judge:  # the descriptions the connect budget did not reach
+        if self._unjudged and self._judge and _mono() >= self._judge_retry_at:  # the ones the judge did not read
             await asyncio.to_thread(self._judge_pending)
 
     def _pre_policy_check(self, run_id: str, user_intent: str, call: ToolCall) -> ReasonCode | None:
@@ -1271,8 +1350,13 @@ class MCPProxyRuntime:
         def read(name: str, text: str) -> None:
             try:
                 verdicts[name] = judge.tool(name, text)
+                # An answer the judge could not get (down, rate-limited, no verdict) is no reading: the tool stays
+                # unjudged and the next pass asks again. Judges that keep no per-call count have no way to say.
+                if getattr(judge, "call_stats", lambda: (0, 0))()[0] and not verdicts[name]:
+                    unreached.append(name)
             except Exception as exc:
                 verdicts[name] = None
+                unreached.append(name)
                 self._judge_failed(exc)
             finally:
                 slots.release()
@@ -1289,8 +1373,31 @@ class MCPProxyRuntime:
             self._suspect_tools.update({name: ReasonCode.REVIEW_JUDGE_FLAGGED for name, flagged in verdicts.items()
                                         if flagged})
             self._unjudged = unreached
+            self._sync_registry_views()
+            # A judge that failed is asked again later, not by every call: each pass waits on it.
+            self._judge_retry_at = _mono() + _JUDGE_RETRY_SECONDS if any(name in verdicts for name in unreached) \
+                else float("-inf")
             self._unjudged_text = {name: pending[name] for name in unreached}
         self._note_judge_errors()
+
+    def _sync_registry_views(self) -> None:
+        """Bring the registry's public schemas and descriptions (what the model gateway shows) in line with the
+        judge's latest verdicts: a tool flagged or read after connect must not keep what it showed before."""
+        if self.service is None:
+            return
+        by_name = {tool.qualified_name: tool for tool in self._tools}
+        for name, spec in list(self.service.registry.items()):
+            tool, visible = by_name.get(name), self._visible_schemas.get(name)
+            if tool is None or visible is None or name in self._quarantined:
+                continue
+            withheld = name in self._suspect_tools or name in self._unjudged
+            schema = _withheld_schema(visible, flagged=name in self._suspect_tools) if withheld \
+                else _public_schema(visible)
+            description = tool.description if (self.config.expose_upstream_descriptions and tool.description
+                                               and not withheld) \
+                else f"Guarded MCP tool {name}; upstream description withheld as untrusted."
+            if schema != spec.public_schema_override or description != spec.description:
+                self.service.registry[name] = replace(spec, public_schema_override=schema, description=description)
 
     def _judge_pending(self) -> None:
         """Another pass over the descriptions an earlier one did not reach (each list and call asks)."""
@@ -1318,7 +1425,9 @@ class MCPProxyRuntime:
             flagged = None
             self._judge_failed(exc)
         self._note_judge_errors(run_id)
-        skipped = int(getattr(self._judge, "unread", 0) or 0) - unread
+        # This call's own count (same thread): the shared total also moves with every other result being judged.
+        stats = getattr(self._judge, "call_stats", None)
+        skipped = stats()[1] if stats else int(getattr(self._judge, "unread", 0) or 0) - unread
         if not flagged and skipped > 0:  # a long result's least suspect parts went unread: say so in the log
             self._service().storage.add_event(run_id, "MCP_JUDGE_PARTIAL", {"tool_name": tool, "skipped": skipped})
         return "judge" if flagged else None
@@ -1449,7 +1558,7 @@ class MCPProxyRuntime:
             visible = self._visible_schemas[name]
             if name in self._suspect_tools or name in self._unjudged:  # a flagged or unread tool keeps no free text
                 shown.append((tool.model_copy(update={"description": withheld, "title": None}),
-                              _public_schema(visible)))
+                              _withheld_schema(visible, flagged=name in self._suspect_tools)))
             else:
                 shown.append((tool, _public_schema(visible, annotations=True)))
         return shown
@@ -1469,19 +1578,24 @@ class MCPProxyRuntime:
             return f"{name} changed after connect (possible rug pull) and is blocked"
         return None
 
-    async def hidden_tools(self) -> list[tuple[MCPTool, str]]:
+    async def hidden_tools(self, *, refresh: bool = True) -> list[tuple[MCPTool, str]]:
         """Tools ``transparent_tools`` leaves out, with the reason a call to one is refused.
         A drifted tool stays blocked for the rest of the session, even if the upstream
-        later restores it: the fingerprint is bound once at connect and never re-bound."""
-        await self._refresh_catalog()
+        later restores it: the fingerprint is bound once at connect and never re-bound.
+        ``refresh=False`` for a caller that listed an instant ago, in the same call."""
+        if refresh:
+            await self._refresh_catalog()
         return [(tool, reason) for tool in self._tools if (reason := self._blocked_reason(tool.qualified_name))]
 
-    async def forward(self, name: str, arguments: dict[str, Any]) -> tuple[MCPCallResult, list[str]]:
+    async def forward(self, name: str, arguments: dict[str, Any], *,
+                      refresh: bool = True) -> tuple[MCPCallResult, list[str]]:
         """Transparent mode: call an upstream tool on the catalog layer's terms only. The
         intent-bound call policy runs in the harness hooks, which see the user's prompt. The result gets
         the gateway's inspection (rules, tracked values, detectors, judge); what it finds comes back as
-        the second item, for the warning in front of the result."""
-        await self._refresh_catalog()
+        the second item, for the warning in front of the result. A caller that has just listed the tools
+        (``transparent_tools``) passes ``refresh=False``: one catalog listing per call, not two."""
+        if refresh:
+            await self._refresh_catalog()
         if reason := self._blocked_reason(name):
             raise MCPRemoteToolError(reason)
         tool = next((t for t in self._tools if t.qualified_name == name), None)
