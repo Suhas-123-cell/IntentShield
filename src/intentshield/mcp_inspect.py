@@ -10,6 +10,7 @@ import binascii
 import codecs
 import functools
 import html
+import ipaddress
 import json
 import math
 import posixpath
@@ -20,6 +21,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 from urllib.parse import unquote, urlsplit
+
+from .hostlists import COMMON_FIRST_PARTY, NEEDS_SUBDOMAIN, TLDS, bare_tld, shared_host
 
 _I = re.I
 _TAG_MARK = "\ue000hidden-tags\ue000"  # what ``_normalize`` leaves where a run of Unicode tag characters was
@@ -49,34 +52,34 @@ _OVERRIDE_TRANSLATED = _as_read(r"(?=[^\W\d_])(?:\b(?:" + "|".join((
     r"(?:ignorier(?:e|en|t)?|vergiss|vergessen|missachte(?:n|t)?)\s+(?:sie\s+|du\s+)?(?:bitte\s+)?"
     r"(?:alle\s+|s(?:ä|ae)mtliche\s+)?(?:die\s+|deine\s+|ihre\s+|meine\s+)?(?:vorherigen|vorigen|bisherigen|"
     r"fr(?:ü|ue)heren|obigen|vorangegangenen|vorhergehenden|urspr(?:ü|ue)nglichen)\s+"
-    r"(?:anweisungen|instruktionen|befehle|vorgaben|anfragen)\b",
+    r"(?:anweisungen|instruktionen|befehle|vorgaben|anfragen|regeln|richtlinien)\b",
     r"(?:alle\s+|s(?:ä|ae)mtliche\s+)?(?:vorherigen|vorigen|bisherigen|fr(?:ü|ue)heren|obigen|vorangegangenen)\s+"
-    r"(?:anweisungen|instruktionen|befehle|vorgaben)\s+(?:ignorieren|vergessen|missachten)\b",
+    r"(?:anweisungen|instruktionen|befehle|vorgaben|regeln|richtlinien)\s+(?:ignorieren|vergessen|missachten)\b",
     r"(?:ignora|ignore|ignoren|ignorar|olvida|olvide|olviden|olvidar|descarta|descarte|omite|omita|"
     r"haz\s+caso\s+omiso\s+(?:a|de)|haga\s+caso\s+omiso\s+(?:a|de))\s+(?:todas\s+)?(?:las\s+|tus\s+|sus\s+)?"
-    r"(?:(?:anteriores|previas)\s+(?:instrucciones|indicaciones|(?:ó|o)rdenes)|"
-    r"(?:instrucciones|indicaciones|(?:ó|o)rdenes)\s+(?:anteriores|previas|originales|de\s+arriba))",
+    r"(?:(?:anteriores|previas)\s+(?:instrucciones|indicaciones|(?:ó|o)rdenes|reglas|directrices)|"
+    r"(?:instrucciones|indicaciones|(?:ó|o)rdenes|reglas|directrices)\s+(?:anteriores|previas|originales|de\s+arriba))",
     r"(?:ignore[zr]?|oublie[zr]?|fais\s+abstraction\s+de|faites\s+abstraction\s+de)\s+(?:toutes\s+)?"
-    r"(?:les\s+|tes\s+|vos\s+|des\s+)?(?:(?:pr(?:é|e)c(?:é|e)dentes|anciennes)\s+(?:instructions|consignes|directives)|"
-    r"(?:instructions|consignes|directives)\s+(?:pr(?:é|e)c(?:é|e)dentes|ant(?:é|e)rieures|ci-dessus|initiales))",
+    r"(?:les\s+|tes\s+|vos\s+|des\s+)?(?:(?:pr(?:é|e)c(?:é|e)dentes|anciennes)\s+(?:instructions|consignes|directives|r(?:è|e)gles)|"
+    r"(?:instructions|consignes|directives|r(?:è|e)gles)\s+(?:pr(?:é|e)c(?:é|e)dentes|ant(?:é|e)rieures|ci-dessus|initiales))",
     r"(?:ignore|ignora|ignorem|ignorar|esque(?:ç|c)a|esque(?:ç|c)am|esque(?:ç|c)er|desconsidere|desconsidera|"
     r"desconsiderar)\s+(?:todas\s+)?(?:as\s+|suas\s+|tuas\s+)?(?:(?:anteriores|pr(?:é|e)vias)\s+"
-    r"(?:instru(?:ç|c)(?:õ|o)es|orienta(?:ç|c)(?:õ|o)es|ordens)|(?:instru(?:ç|c)(?:õ|o)es|orienta(?:ç|c)(?:õ|o)es|"
-    r"ordens)\s+(?:anteriores|pr(?:é|e)vias|acima|originais))",
+    r"(?:instru(?:ç|c)(?:õ|o)es|orienta(?:ç|c)(?:õ|o)es|ordens|regras|diretrizes)|(?:instru(?:ç|c)(?:õ|o)es|orienta(?:ç|c)(?:õ|o)es|"
+    r"ordens|regras|diretrizes)\s+(?:anteriores|pr(?:é|e)vias|acima|originais))",
     r"(?:ignora|ignori|ignorate|ignorare|dimentica|dimentichi|dimenticate|dimenticare)\s+(?:tutte\s+)?(?:le\s+)?"
-    r"(?:precedenti\s+(?:istruzioni|indicazioni)|(?:istruzioni|indicazioni)\s+(?:precedenti|sopra|iniziali|originali))",
+    r"(?:precedenti\s+(?:istruzioni|indicazioni|regole)|(?:istruzioni|indicazioni|regole)\s+(?:precedenti|sopra|iniziali|originali))",
     r"(?:negeer|vergeet)\s+(?:alle\s+)?(?:de\s+|je\s+|uw\s+)?(?:eerdere|vorige|voorgaande|bovenstaande|"
-    r"oorspronkelijke)\s+(?:instructies|opdrachten|aanwijzingen)\b",
+    r"oorspronkelijke)\s+(?:instructies|opdrachten|aanwijzingen|regels|richtlijnen)\b",
 )) + ")|" + "|".join((
     r"(?:(?:проигнорируй|игнорируй|забудь)(?:те)?|не\s+обращай(?:те)?\s+внимания\s+на)\s+(?:все\s+)?(?:свои\s+|мои\s+)?"
-    r"(?:предыдущие|прежние|прошлые|вышеуказанные|изначальные|исходные)\s+(?:инструкции|указания|команды)",
+    r"(?:предыдущие|прежние|прошлые|вышеуказанные|изначальные|исходные)\s+(?:инструкции|указания|команды|правила)",
     r"(?:忽略|无视|無視|忘记|忘記|忘掉|忽视|忽視|不要理会|不要理會|不理会|不理會)[^。！？\n]{0,6}?"
-    r"(?:之前|以前|先前|上面|上述|前面|此前|以上|原来|原來|原先)[^。！？\n]{0,6}?(?:指令|指示|命令)",
-    r"(?:以前|前|上記|これまで|今まで|先ほど|先程|最初)の[^。！？\n]{0,8}?(?:指示|命令|指令)[^。！？\n]{0,6}?"
+    r"(?:之前|以前|先前|上面|上述|前面|此前|以上|原来|原來|原先)[^。！？\n]{0,6}?(?:指令|指示|命令|规则|規則|规定|規定|准则|準則|提示词|提示詞)",
+    r"(?:以前|前|上記|これまで|今まで|先ほど|先程|最初)の[^。！？\n]{0,8}?(?:指示|命令|指令|ルール|規則|ガイドライン|プロンプト)[^。！？\n]{0,6}?"
     r"(?:無視し(?:て|ろ)|無視せよ|忘れ(?:て|ろ|なさい))",
-    r"(?:이전|앞|위|기존|지금까지|원래)(?:의|에서)?\s*(?:모든\s*)?(?:지시|지침|명령|지시사항)[^.\n]{0,8}?"
+    r"(?:이전|앞|위|기존|지금까지|원래)(?:의|에서)?\s*(?:모든\s*)?(?:지시|지침|명령|지시사항|규칙|프롬프트)[^.\n]{0,8}?"
     r"(?:무시하(?:고|세요|십시오|라)|무시해|잊어|잊으세요)",
-    r"(?:सभी\s+)?(?:पिछले|पहले\s+के|ऊपर\s+के|पूर्व)\s+(?:सभी\s+|सारे\s+)?(?:निर्देशों|निर्देश|आदेशों|आदेश)\s*"
+    r"(?:सभी\s+)?(?:पिछले|पहले\s+के|ऊपर\s+के|पूर्व)\s+(?:सभी\s+|सारे\s+)?(?:निर्देशों|निर्देश|आदेशों|आदेश|नियमों|नियम)\s*"
     r"(?:को\s+)?(?:अनदेखा|नज़?रअंदाज|भूल)",
 )) + ")")
 # "New task:" and "new instructions:" in the same languages.
@@ -107,37 +110,53 @@ def _one_typo(word: str, target: str) -> bool:
 class _WithTypos:
     """The English override, plus the same phrase with one typo in one of its three words while the
     other two are spelled right ("Ignore your previous iunstructions" is how AgentDojo writes it). Every
-    pattern starts at a literal word, and text with none of those words is skipped by a substring test."""
+    pattern starts at a literal word, and text with none of those words is skipped by a substring test.
+    Beyond "instructions" a typo needs a word long enough that one edit does not make another word ("above"
+    to "about", "rules" to "rubles"): the noun at least six letters or a known misspelling, the adjective at
+    least seven, and a verb in another tense ("ignored", "forgot") is not a typo of it."""
 
-    _VERBS, _WHICH, _NOUNS = ("ignore", "disregard", "forget"), ("previous", "prior", "above", "earlier", "original"), \
-        ("instructions", "instruction")
+    _VERBS, _WHICH = ("ignore", "disregard", "forget"), ("previous", "prior", "above", "earlier", "original", "preceding")
+    _NOUNS = ("instructions", "instruction", "prompts", "guidelines", "directives", "directions", "commands", "rules")
+    _LONG_WHICH = tuple(word for word in _WHICH if len(word) >= 7)
+    _MISSPELT = frozenset(("rulez", "ruls", "ruels", "rulse", "rukes", "prompst", "promtps"))
+    _TENSES = frozenset(("ignores", "ignored", "ignoring", "disregards", "disregarded", "disregarding", "forgets",
+                         "forgot", "forgotten", "forgetting", "forgave", "forgive"))
 
     def __init__(self, english: str) -> None:
         self.english = re.compile(english, _I)
         # A typo in the second or the third word, found from the verb; one in the verb, from the two words
         # after it (the verb is then read back from the text before them).
         self.after_verb = re.compile(rf"\b(?:{'|'.join(self._VERBS)})\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?"
-                                     r"([a-z]{4,9})\s+([a-z]{10,13})\b", _I)
-        self.tail = re.compile(rf"\b(?:{'|'.join(self._WHICH)})\s+instructions?\b", _I)
+                                     r"([a-z]{4,9})\s+([a-z]{4,13})\b", _I)
+        self.tail = re.compile(rf"\b(?:{'|'.join(self._WHICH)})\s+(?:{'|'.join(self._NOUNS)})\b", _I)
         self.verb_before = re.compile(r"\b([a-z]{5,10})\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?\Z", _I)
+        self.gate = ("instruction", "prompt", "guideline", "directive", "direction", "command", "rule") + self._VERBS
 
     def finditer(self, text: str) -> Iterator[re.Match[str]]:
         yield from self.english.finditer(text)
-        if "instruction" not in (low := text.lower()) and not any(verb in low for verb in self._VERBS):
+        low = text.lower()
+        if not any(word in low for word in self.gate):
             return  # every candidate needs one of them spelled right: a plain substring test skips most text
         for match in self.after_verb.finditer(text):
             which, noun = match[1].lower(), match[2].lower()
-            if (which in self._WHICH and self._typo(noun, self._NOUNS)) or (
-                    noun in self._NOUNS and self._typo(which, self._WHICH)):
+            if (which in self._WHICH and self._noun_typo(noun)) or (
+                    noun in self._NOUNS and self._which_typo(which, noun.startswith("instruction"))):
                 yield match
         for match in self.tail.finditer(text):
             before = self.verb_before.search(text, max(0, match.start() - 40), match.start())
-            if before and self._typo(before[1].lower(), self._VERBS):
+            plain = match[0].lower().rstrip().split()[-1].startswith("instruction")
+            verb = before[1].lower() if before else ""
+            if verb and (plain or verb not in self._TENSES) and any(
+                    _one_typo(verb, target) for target in self._VERBS if verb != target):
                 yield match
 
-    @staticmethod
-    def _typo(word: str, words: tuple[str, ...]) -> bool:
-        return word not in words and any(_one_typo(word, target) for target in words)
+    def _noun_typo(self, word: str) -> bool:
+        return word in self._MISSPELT or (word not in self._NOUNS and any(
+            _one_typo(word, target) for target in self._NOUNS if len(target) >= 6))
+
+    def _which_typo(self, word: str, plain: bool) -> bool:
+        return word not in self._WHICH and any(
+            _one_typo(word, target) for target in (self._WHICH if plain else self._LONG_WHICH))
 
 
 class _Translated:
@@ -163,13 +182,58 @@ class _Translated:
         yield from self.translated.finditer(text)
 
 
+_OV_DET = r"(?:(?:all|any|every|each)\s+(?:of\s+)?)?(?:(?:the|your|my|these|those)\s+)?"
+# "previous system prompts": a word for "before", then "system" or "user's", or "system"/"user's" alone before the noun.
+_OV_ADJ = (r"(?:(?:previous|prior|preceding|earlier|above|original|initial|former)\s+(?:(?:and|or|&)\s+"
+           r"(?:following|subsequent|future|later|next)\s+)?(?:(?:system|user'?s?)\s+)?|"
+           r"(?:system|user'?s?)\s+)")
+# The first nouns end without a word boundary: injected text is often glued ("instructionsand do"). "Messages" are not
+# here: "forget previous messages" and "ignore any earlier messages from this sender" are ordinary.
+_OV_ORDERS = (r"(?:instructions?|requests?|quer(?:y|ies)|(?:prompts?|guidelines?|directions?|directives?|commands?|orders?|"
+              r"rules?|context|task)\b)")
+# "ignore ... the instructions above": no adjective before the noun, so it needs the "above".
+_OV_AFTER = (r"(?:above|given\s+above|(?:provided|written|stated|mentioned)\s+(?:above|earlier)|"
+             r"(?:previously|earlier)\s+given|from\s+(?:above|earlier)|"
+             r"before\s+th(?:is|at)|you\s+(?:were|have\s+been|had\s+been)\s+given)\b")
+# What ends the sentence or starts the next one after "everything above", so "everything above this line" is not one.
+_OV_STOP = r"(?=\s*(?:$|[.,;:!?)\n\"']|(?:and|then|instead|now|but)\b))"
+_OV_STRONG_VERBS = r"ignore|disregard|forget|neglect|discard|(?:do\s+not|don'?t|stop|no\s+longer)\s+(?:follow|obey)(?:ing)?"
+_OV_WEAK_VERBS = r"override|overwrite|cancel|skip|bypass|supersede|void|abandon|dismiss|drop"
+_OV_STRONG, _OV_WEAK = f"(?:{_OV_STRONG_VERBS})", f"(?:{_OV_WEAK_VERBS})"
+# "Ignore all previous instructions" and its textbook variants: other verbs ("override", "discard"), other nouns
+# ("prompts", "rules", "context"), "all of the", "preceding", "everything above" and "the instructions above". Every
+# alternative starts at a verb and goes word by word, so a long run of one word or of spaces scans once.
+_OVERRIDE_ENGLISH = (
+    r"\b(?:" + _OV_STRONG + r"\s+" + _OV_DET + _OV_ADJ + _OV_ORDERS + r"|"
+    + _OV_WEAK + r"\s+" + _OV_DET + _OV_ADJ
+    + r"(?:instructions?|(?:prompts?|guidelines?|directions?|directives?|commands?)\b)|"
+    r"(?:ignore|disregard|forget|neglect|discard|override|overwrite|bypass)\s+" + _OV_DET
+    + r"(?:instructions?|prompts?|guidelines?|directions?|directives?|commands?|rules?|context|constraints?|restrictions?)\s+"
+    + _OV_AFTER + r"|"
+    + _OV_STRONG + r"\s+(?:(?:all|any)\s+(?:of\s+)?)?your\s+(?:instructions?|prompts?|guidelines?|directives?|rules|"
+    r"programming|system\s+prompt)\b|"
+    r"(?:ignore|disregard|forget|neglect|discard)\s+(?:everything|anything|all|what(?:ever)?)\s+(?:above" + _OV_STOP
+    + r"|before\s+th(?:is|at)" + _OV_STOP + r"|so\s+far|(?:you(?:'ve|\s+have|\s+were|\s+had)\s+)?(?:been\s+)?"
+    r"(?:told|said|read|given)\s+(?:above|before|earlier|so\s+far|previously)|"
+    r"(?:i|we)\s+(?:told|said|gave|wrote|sent)(?:\s+you)?\s+(?:above|before|earlier|previously)|"
+    r"that\s+(?:came|was\s+(?:said|written))\s+(?:before|above|earlier)|(?:the\s+)?(?:text|content|words)\s+above" + _OV_STOP
+    + r")\b|"
+    r"(?:ignore|disregard|forget|neglect)\s+the\s+above\s+(?:and|instead|then)\b|"
+    # "pay no attention to the previous instructions"; "ignore all safety instructions", "disregard your safety rules"
+    r"pay\s+no\s+(?:attention|heed)\s+to\s+" + _OV_DET + _OV_ADJ + _OV_ORDERS + r"|"
+    r"(?:ignore|disregard|forget|neglect|discard)\s+(?:(?:all|any|every)\s+(?:of\s+)?)?(?:your|all|any|every)\s+"
+    r"(?:safety|security|ethical|moral|content)\s+(?:instructions?|guidelines?|rules?|restrictions?|polic(?:y|ies)|"
+    r"filters?|protocols?|constraints?)\b|"
+    # "your new instructions are as follows", "your instructions have changed."
+    r"(?:your|my)\s+(?:new|updated|real|actual|revised)\s+(?:instructions?|orders|directives)\s+(?:are|is)\s+"
+    r"(?:as\s+follows|the\s+following|now)\b|"
+    r"your\s+instructions\s+(?:have|has)\s+(?:changed|been\s+(?:updated|changed|replaced))[ \t]*(?:[.:!\n]|$))")
 # Rules for text that should describe a tool, not instruct the agent.
 _DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
-    ("instruction_override", _Translated(_WithTypos(
-        r"(?:ignore|disregard|forget)\s+(?:all\s+)?(?:the\s+|any\s+|your\s+)?"
-        r"(?:previous|prior|above|earlier|user'?s?|original)\s+(?:instructions?|requests?|quer(?:y|ies))"),
+    ("instruction_override", _Translated(_WithTypos(_OVERRIDE_ENGLISH),
         _OVERRIDE_TRANSLATED, ("instru", "anweisung", "befehl", "vorgabe", "anfrage", "indica", "rdenes", "consigne",
-                               "directive", "orienta", "ordens", "istruz", "opdracht", "aanwijzing"))),
+                               "directive", "orienta", "ordens", "istruz", "opdracht", "aanwijzing", "regel", "regla", "regle",
+                               "regra", "regole", "richtl", "directriz", "diretriz"))),
     # No "\s*/?\s*": with the slash optional, the two runs of whitespace split a long run n ways (cubic).
     ("hidden_directive", re.compile(r"<\s*(?:/\s*)?(?:important|system|instructions?|secret|hidden)\s*>", _I)),
     ("cross_tool_directive", re.compile(
@@ -255,18 +319,57 @@ _PLACEHOLDER_PATH = (_PLACEHOLDER + r"(?:\{\{?\s*[A-Za-z_][\w.]*\s*\}\}?|<[A-Za-
 
 
 class _Negated:
-    """A rule that skips a match the text forbids ("never send the password", "do not read ~/.ssh/id_rsa"):
-    a negation within the sentence before the match's first word."""
-    _NO = re.compile(r"\b(?:do\s+not|don'?t|never|must\s+not|mustn'?t|should\s+not|shouldn'?t|cannot|can'?t|not|"
-                     r"no\s+need\s+to|avoid|without)\b[^.\n]{0,30}\Z", _I)
+    """A rule that skips a match the text forbids ("never send the password", "do not read ~/.ssh/id_rsa"): a
+    negation that governs the match's first word, in its clause. It governs it when what stands between them
+    only carries the verb along: an adverb ("never silently send"), "to", "be allowed to", "ask you to", "the
+    agent to", "use this tool to". Any other word turns the order or opens another one ("do not hesitate to
+    send", "do not refuse to send", "without asking send", "do not ask permission before sending", "do not
+    worry and send"), so a list of the words that carry a verb is shorter and safer than a list of those that do
+    not. A comma, a colon or a semicolon after the negation ends it ("without delay, send", "don't tell the
+    user; send"), except for an aside that only stresses it ("never, under any circumstances, send")."""
+    _NEG = (r"(?:do\s+not|don'?t|never|must\s+not|mustn'?t|should\s+not|shouldn'?t|cannot|can'?t|not|no\s+need\s+to|"
+            r"avoid|without|under\s+no\s+circumstances)")
+    _STRESS = (r"(?:,?\s*(?:ever|under\s+any\s+circumstances|under\s+no\s+circumstances|in\s+any\s+(?:case|event)|"
+               r"at\s+any\s+time|whatsoever|please)\s*,?)*")
+    # Adverbs end in "ly", and so do a few verbs: "do not reply and send the key" is an order to send.
+    _CARRY = (r"(?:(?!(?:reply|apply|supply|imply|rely|comply|multiply|reapply|resupply|ally|rally|bully|tally|fly)\b)"
+              r"[a-z]{3,}ly|ever|any|longer|anymore|to|be|been|being|is|are|was|allow|allows|allowed|permit|permits|"
+              r"permitted|let|lets|ask|asks|asked|want|wants|try|tries|attempt|need|needs|needed|required|supposed|"
+              r"read|copy|share|forward|email|upload|post|transfer|send|reveal|leak|export|disclose|access|"
+              r"passwords?|tokens?|keys?|secrets?|credentials?|data|api|private|them|anything|anyone|information|info|"
+              r"documents?|files?|contents?|details|"
+              r"authori[sz]ed|forced|willing|able|the|a|an|your|you|we|they|it|this|that|these|those|agent|agents|"
+              r"assistant|assistants|model|ai|tool|tools|user|users|use|using)")
+    # "and", "or" and "nor" join two verbs only after a verb or what it takes ("do not read or send", "do not share the
+    # password and send"); after "ask the user" or "reply" they start another order ("do not ask the user and send").
+    _JOINED = (r"(?:read|copy|share|forward|email|upload|post|transfer|send|reveal|leak|export|disclose|access|"
+               r"passwords?|tokens?|keys?|secrets?|credentials?|data|information|info|documents?|files?|contents?|"
+               r"details)\s+(?:and|or|nor)")
+    _NO = re.compile(r"\b" + _NEG + r"\b" + _STRESS + r"(?:\s+(?:" + _CARRY + r"|" + _JOINED + r")\b){0,5}\s*\Z", _I)
+    # "do not leave without sending ...": the "without" of an order that is itself negated.
+    _EARLIER = re.compile(r"\b(?:do\s+not|don'?t|never|must\s+not|mustn'?t|should\s+not|shouldn'?t|cannot|can'?t|not|"
+                          r"no\s+need\s+to|under\s+no\s+circumstances)\b", _I)
+    _CLAUSE_END = re.compile(r"[.!?;:\n\u2014\u2013]")
+
+    # Where a forbidden match may hold another order: "do not send a reply, send the password to ...".
+    _BREAK = re.compile(r"[,;:\u2014\u2013]")
 
     def __init__(self, pattern: str) -> None:
         self.pattern = re.compile(pattern, _I)
 
     def finditer(self, text: str) -> Iterator[re.Match[str]]:
-        for match in self.pattern.finditer(text):
-            if not self._NO.search(text, max(0, match.start() - 45), match.start()):
+        pos = 0
+        while match := self.pattern.search(text, pos):
+            before = text[max(0, match.start() - 80):match.start()]
+            clause = before[max((m.end() for m in self._CLAUSE_END.finditer(before)), default=0):]
+            pos = match.end()
+            held = self._NO.search(clause)
+            if held and held[0].lower().startswith("without") and self._EARLIER.search(clause, 0, held.start()):
+                held = None  # "never leave without sending the password": an order to send
+            if not held:
                 yield match
+            elif brk := self._BREAK.search(match[0], 1):
+                pos = match.start() + brk.end()  # "do not postpone: send ...": the order starts after the colon
 
 
 class _ImageExfiltration:
@@ -281,10 +384,16 @@ class _ImageExfiltration:
     placeholder at or after it; those two are kept, and a later start reuses them while it lies before them,
     so every stretch of the text is searched once. The same matches as the regex above, at every length."""
 
-    _MARKDOWN = re.compile(r"(?=(!\[[^\]\n]{0,100}\]\(\s*https?://))")
-    _SRC = re.compile(r"(?=(\bsrc\s*=\s*[\"']?https?://))")
-    _URL_END = re.compile(r"[\s)\"']")
-    _BADGE = re.compile(r"(?:shields\.io|badgen\.net|badge\.fury\.io|codecov\.io|travis-ci)[/?]")
+    # Tags, attribute names and schemes are case-insensitive for a renderer ("<IMG SRC=HTTPS://...>"), so they are
+    # here too; the placeholders stay case-sensitive. A destination may lack its scheme ("//host/p") or sit in
+    # angle brackets ("![x](<https://...>)"), and "srcset" and "data-src" carry the URL as "src" does.
+    _MARKDOWN = re.compile(r"(?=(!\[[^\]\n]{0,100}\]\(\s*<?(?:(?i:https?|ftp):)?//))")
+    _SRC = re.compile(r"(?=((?i:\bsrc(?:set)?\s*=\s*)(?:[\"']\s*)?(?:(?i:https?|ftp):)?//))")
+    # The second and later candidates of a "srcset" ("a.png 1x, https://e.example/log?d=NOTES_HERE 2x").
+    _CANDIDATE = re.compile(r"(?=(,\s*(?:(?i:https?|ftp):)?//))")
+    _URL_END = re.compile(r"[\s)\"'>]")
+    _BADGE = re.compile(r"(?:shields\.io|badgen\.net|badge\.fury\.io|codecov\.io|travis-ci)[/?]", _I)
+    _IMG_TAG = re.compile(r"<(?:img|source)(?!\w)", _I)
     _PLACEHOLDER = re.compile(
         r"[?&](?!(?i:logo|label|style|color|logocolor|labelcolor|v|ver|version|ref|branch|tag)=)[\w\-]+="
         r"(?:" + _PLACEHOLDER_QUERY + r")|/(?:" + _PLACEHOLDER_PATH + r")")
@@ -309,19 +418,31 @@ class _ImageExfiltration:
     def _tag_before(text: str, at: int) -> int | None:
         """The first ``<img`` that ``src`` at ``at`` can belong to: at most 200 characters before it, with no
         ``>`` between, and ``img`` ending at a word boundary."""
-        end, first = at, None
-        while (i := text.rfind("<img", max(0, at - 204), end)) >= 0 and ">" not in text[i + 4:at]:
-            following = text[i + 4:i + 5]
-            if not (following.isalnum() or following == "_"):
-                first = i
-            end = i + 3
+        first = None
+        for tag in reversed([m for m in _ImageExfiltration._IMG_TAG.finditer(text, max(0, at - 204), at + 1)
+                             if m.end() <= at]):  # the one more character is what "img" must not run into
+            if ">" in text[tag.end():at]:
+                break
+            first = tag.start()
         return first
 
+    @staticmethod
+    def _srcset_tag(text: str, at: int) -> int | None:
+        """The ``<img`` or ``<source`` whose ``srcset`` attribute holds the comma at ``at``: the last ``<`` within a
+        thousand characters, no ``>`` after it, and the word "srcset" between."""
+        lt = text.rfind("<", max(0, at - 1000), at)
+        if lt < 0 or ">" in text[lt:at] or not _ImageExfiltration._IMG_TAG.match(text, lt):
+            return None
+        return lt if "srcset" in text[lt:at].lower() else None
+
     def finditer(self, text: str) -> Iterator[Any]:
-        if "http" not in text or ("![" not in text and "<img" not in text):
+        if "//" not in text or ("![" not in text and not self._IMG_TAG.search(text)):
             return
         starts = [(m.end(1), m.start()) for m in self._MARKDOWN.finditer(text)]
         starts += [(m.end(1), tag) for m in self._SRC.finditer(text) if (tag := self._tag_before(text, m.start())) is not None]
+        if "srcset" in text.lower():
+            starts += [(m.end(1), tag) for m in self._CANDIDATE.finditer(text)
+                       if (tag := self._srcset_tag(text, m.start())) is not None]
         starts.sort()
         infinity = len(text) + 1
         url_end = badge_at = placeholder_at = -1  # each valid for the starts up to it, which come in order
@@ -467,6 +588,12 @@ def _untag(match: re.Match[str]) -> str:
     return f" {''.join(chr(ord(ch) - 0xE0000) for ch in match[0])} " + (_TAG_MARK if len(match[0]) >= 4 else "")
 
 
+# The dots of a host in a script that has its own ("evil。example", "evil｡example"; NFKC leaves U+3002) and the middle
+# dot: read as "." where they stand between the parts of a Latin-script name, not in CJK text, where "。" ends a sentence.
+_DOTS = re.compile(r"(?<=[A-Za-z0-9\-\u00c0-\u024f\u0370-\u03ff\u0400-\u04ff])\u3002(?=[A-Za-z0-9/:?#\s]|\Z)|"
+                   r"(?<=[A-Za-z0-9])\u00b7(?=[A-Za-z0-9])")
+
+
 def _normalize(text: str) -> str:
     """What an LLM reads, not what the bytes say: fold width variants, write out tag characters, drop invisible
     characters (zero-width spaces, joiners, bidi marks, variation selectors), map look-alikes.
@@ -474,7 +601,7 @@ def _normalize(text: str) -> str:
     if text.isascii():  # most tool text: nothing to fold, drop or map
         return text
     text = _IGNORABLE.sub("", _TAGS.sub(_untag, unicodedata.normalize("NFKC", text)))
-    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES)
+    return _DOTS.sub(".", "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_CONFUSABLES))
 
 
 _BASE64 = re.compile(r"[A-Za-z0-9+/_\-]{16,}={0,2}")
@@ -880,10 +1007,15 @@ def scan_output_collapsed(value: Any, trusted: str = "") -> list[str]:
     return [f"collapsed_{name}" for name in _scan(leaf_text(value), _OUTPUT_RULES, trusted, collapse=True)]
 
 
-# Known top-level domains for bare hosts ("evil.example"): a file name ("report.txt", "build.sh") is not one.
+# Top-level domains of the dotted-word spellings of an address ("audit [at] canary dot example"): few, since "dot" and
+# "at" are words. A bare host in text ("evil.example") is read against the whole root zone (``hostlists.TLDS``) instead.
 _TLD = (r"com|net|org|io|dev|ai|app|co|uk|de|fr|jp|cn|ru|in|au|ca|us|eu|info|biz|me|xyz|cloud|tech|site|online|store|"
         r"gov|edu|mil|int|example|test|invalid|local|internal|localhost|top|click|live|space|link|network|email|pw|tk")
-_HOSTS = rf"(?:(?:[a-z0-9-]+\.)+(?:{_TLD})|(?:\d{{1,3}}\.){{3}}\d{{1,3}})"
+# A bare host: letters and digits of any script (an internationalized name), then a top-level domain, or an IPv4
+# address as dotted decimal, octal or hex parts. Whether the last label is a real top-level domain is ``_real_host``'s.
+_LABEL = r"[^\W_](?:[^\W_]|-){0,62}"
+_OCTET = r"(?:0x[0-9a-f]{1,8}|0\d{1,10}|\d{1,3})"
+_HOSTS = rf"(?:(?:{_LABEL}\.)+[^\W\d_](?:[^\W_]|-){{1,62}}|(?:{_OCTET}\.){{3}}{_OCTET})"
 _HOME = r"(?:~|\$\{?home\}?|%userprofile%)"
 # The lookbehinds start a match only where a run begins; without them findall retries
 # from every character of a long run and the scan goes quadratic. Indices 0 to 5 are the threat memory's masks.
@@ -900,7 +1032,7 @@ _VALUE_PATTERNS = (
     # A bare host, IPv4 address or host:port with no scheme ("evil.example", "203.0.113.7:8443"): a read tool's
     # target is a destination too. Not when a path follows: that is a URL without its scheme (below). A full stop
     # that ends the sentence ("domain: evil.example.") still ends the host.
-    re.compile(rf"(?<![\w@.\-/]){_HOSTS}(?::\d{{2,5}})?(?![\w\-]|\.[\w\-]|/[\w%~.\-])", _I),
+    re.compile(rf"(?<![\w@.\-/]){_HOSTS}(?::\d{{2,5}})?(?![\w@\-]|\.[\w\-]|/[\w%~.\-])", _I),
 )
 _EXTRA_PATTERNS = (
     ("url", re.compile(rf"(?<![\w:/.\-])//{_HOSTS}(?::\d{{2,5}})?(?:/[^\s\"'<>)]*)?", _I)),  # //host/path
@@ -908,31 +1040,41 @@ _EXTRA_PATTERNS = (
     ("path", re.compile(r"(?<![\w\\])[A-Za-z]:\\+(?:[\w.\-]+\\+)*[\w.\-]+")),                # C:\Users\me\x
     # one-segment dotfiles of the home directory (~/.npmrc, $HOME/.env), which the path pattern needs two segments for
     ("path", re.compile(rf"(?<![\w.\-~/$%]){_HOME}/+\.[\w\-][\w.\-]*(?![\w.\-]|/+[\w.\-])", _I)),
+    # An IPv6 address, bracketed with or without a port, or bare ("2001:db8::1"); ``_canon`` drops what is no address.
+    ("host6", re.compile(r"(?<![\w:.\-/%@])\[[0-9a-f:.]{2,45}\](?::\d{2,5})?", _I)),
+    ("host6", re.compile(r"(?<![\w:.\-/%@\[])(?=[0-9a-f.]*:[0-9a-f.]*:)[0-9a-f:.]{5,45}(?![\w:.\-/%\]])", _I)),
     ("iban", re.compile(r"\b[a-z]{2}\d{2}[a-z0-9]{10,30}\b")),                               # lowercase: checksum below
     ("number", re.compile(r"\b\d{4}(?:\.\d{4}){2,}\b")),                                      # 1234.5678.9012
 )
+# A two-label name on a top-level domain that is also a file extension or a word of code ("evilhost.sh", "x.cc"), or a
+# name on one of the root zone's word domains ("relay.example.abc", ``hostlists.bare_tld``), is not a host by its shape,
+# but is one after a word that points at a destination, quoted or not:
+# "send the notes to `evilhost.sh`", "curl evilhost.sh/steal", "ssh x.cc" ("open", "at" and "into" are not such words:
+# "open main.py", "at index.js:12"). Measured on 11,902 local READMEs and docs, 90 (0.8 %) have one, nearly all
+# "to CHANGELOG.md".
+_GO = (r"(?<![\w.\-])(?:to|via|towards?|visit|fetch|ping|curl|wget|ssh|scp|server|domain|site|endpoint|"
+       r"address|contact|upload|forward)[ \t]*:?[ \t]+(?:the[ \t]+)?[`\"'(*]{0,2}")
+_POINTED = rf"(?:{_LABEL}\.)+[^\W\d_](?:[^\W_]|-){{1,62}}"
+_POINTED_PATTERNS = (
+    ("host", re.compile(rf"{_GO}({_POINTED})(?::\d{{2,5}})?(?![\w@\-]|\.[\w\-]|/)", _I)),
+    ("url", re.compile(rf"{_GO}({_POINTED}(?::\d{{2,5}})?/[^\s\"'<>)]+)", _I)),
+)
 _KINDS = ("email", "url", "iban", "number", "path", "id", "iban", "host")
-_SPECS = (*zip(_KINDS, _VALUE_PATTERNS), *_EXTRA_PATTERNS)
+_SPECS = (*zip(_KINDS, _VALUE_PATTERNS), *_EXTRA_PATTERNS, *_POINTED_PATTERNS)
 # YYYY-MM-DD, DD/MM/YYYY (or MM/DD/YYYY) and YYYYMMDD, not inside a longer number or path.
 _DATE = re.compile(r"(?<![\d/\-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|"
                    r"(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(?![\d/\-])")
 _PLAIN_WORDS = re.compile(r"[a-z]+(?:/[a-z]+)+")  # "read/write/execute": words, not a relative path
 _SECRET_WORDS = frozenset({"secret", "secrets", "credentials", "keys", "passwords", "tokens", "ssh"})
 _WEB_SCHEMES = frozenset({"http", "https", "ws", "wss"})
-# Hosts a document mentions in passing: seeing one says nothing about a call to another address on it.
-_COMMON_HOSTS = frozenset("""
-gmail.com googlemail.com outlook.com hotmail.com live.com msn.com yahoo.com icloud.com me.com aol.com proton.me
-protonmail.com gmx.com gmx.net mail.com yandex.com zoho.com fastmail.com qq.com 163.com
-github.com githubusercontent.com github.io gitlab.com bitbucket.org google.com googleapis.com microsoft.com
-office.com sharepoint.com dropbox.com notion.so slack.com atlassian.net amazonaws.com cloudfront.net
-wikipedia.org stackoverflow.com pypi.org npmjs.com npmjs.org readthedocs.io python.org mozilla.org nodejs.org
-rust-lang.org crates.io golang.org pkg.go.dev apache.org w3.org ietf.org json.org youtube.com twitter.com x.com
-linkedin.com facebook.com apple.com medium.com example.com example.org example.net localhost
-""".split())
+# Hosts a document mentions in passing (``hostlists.COMMON_FIRST_PARTY``, and the bare suffix of a platform that rents out
+# names): seeing one says nothing about a call to another address on it. A name under such a platform's suffix
+# ("evil.github.io") is one tenant's own site, and is not common.
+_COMMON_HOSTS = COMMON_FIRST_PARTY
 
 
 def _common_host(host: str) -> bool:
-    return any(host == known or host.endswith("." + known) for known in _COMMON_HOSTS)
+    return shared_host(host)
 
 
 # Second-level labels of country registries ("co.uk", "com.au"): a name under one is not one site.
@@ -960,24 +1102,52 @@ def _home_dir() -> str:
     return str(Path.home()).lower().rstrip("/")
 
 
-def _idna(host: str) -> str:
-    host = host.lower().strip(".")
-    if host.isascii():
-        return host
+_IDEOGRAPHIC_STOPS = str.maketrans("\u3002\uff0e\uff61", "...")
+
+
+def _label(label: str) -> str:
+    folded = unicodedata.normalize("NFKC", label).lower()
+    if folded.isascii():
+        return folded
     try:
-        return host.encode("idna").decode("ascii")
+        return "xn--" + folded.encode("punycode").decode("ascii")
     except UnicodeError:
+        return folded
+
+
+@functools.lru_cache(maxsize=4096)
+def _idna(host: str) -> str:
+    """A host as its punycode (``xn--``) form, label by label (NFKC, lowercase, then punycode: the ``idna`` codec's
+    nameprep costs twice as much). No name has more than 253 characters, and a longer run of labels is not
+    encoded."""
+    host = host.translate(_IDEOGRAPHIC_STOPS).lower().strip(".")
+    if host.isascii() or len(host) > 253:
         return host
+    return ".".join(map(_label, host.split(".")))
 
 
 _NUMERIC_HOST = re.compile(r"(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){0,3}")
+
+
+def _v6(text: str) -> str | None:
+    """An IPv6 address as one key (compressed, lowercase; an IPv4-mapped one as the IPv4 address), None if it is none."""
+    try:
+        address = ipaddress.IPv6Address(text.partition("%")[0])
+    except ValueError:
+        return None
+    return str(address.ipv4_mapped) if address.ipv4_mapped else address.compressed
 
 
 def _host_key(host: str) -> str:
     """A host as one key: lowercase, IDNA, no trailing dot, port or userinfo; an address written as one
     number or in hex or octal parts ("3405803783", "0xcb007107") as a dotted quad."""
     host = host.rpartition("@")[2]
-    host = host[1:host.index("]")] if host.startswith("[") and "]" in host else host.partition(":")[0]
+    if host.startswith("[") and "]" in host:
+        host = host[1:host.index("]")]
+    elif host.count(":") < 2:  # not a bare IPv6 address
+        host = host.partition(":")[0]
+    if ":" in host:
+        return _v6(host) or host
     if _NUMERIC_HOST.fullmatch(host := host.lower().rstrip(".")):
         try:
             return socket.inet_ntoa(socket.inet_aton(host))
@@ -1041,6 +1211,9 @@ def _canon(kind: str, match: str) -> str | None:
         return _canon_path(match)
     if kind == "host":
         return _host_key(match)
+    if kind == "host6":
+        address = _v6(match.strip("[]").partition("]")[0])
+        return None if address is None or len(match) < 6 else address if "." in address else f"[{address}]"
     if kind == "iban":
         compact = re.sub(r"[\s.\-]", "", match).lower()
         # Printed in capitals or in groups it is an IBAN by its shape; a lowercase run is any word with
@@ -1092,6 +1265,9 @@ _BRACKETED = (  # (the brackets around it, what it reads as): "[:]", "(dot)", "{
     (re.compile(r"[\[({<]\s*(?:\.|dot)\s*[\])}>]", _I), "."),
     (re.compile(r"[\[({<]\s*(?:@|at)\s*[\])}>]", _I), "@"),
 )
+# "evil . example": a host written with blanks around its dots, read as one only when it ends in a real top-level domain.
+_SPACED_HOST = re.compile(r"(?<![\w.@\-])((?:[^\W_][\w-]{0,62}\.){0,8}[^\W_][\w-]{0,62})[ \t]+\.[ \t]+"
+                          r"([^\W\d_][\w-]{1,62})(?![\w-])")
 _DOT_BEFORE_TLD = re.compile(rf"dot(?=\s+(?:{_TLD})\b)", _I)
 
 
@@ -1106,6 +1282,7 @@ def _defang(text: str) -> str:
     out = _SPELLED.sub(lambda m: f"{m[1]}@{_DOT_WORD.sub('.', m[2])}" if _TLD_END.search(m[2]) else m[0], out)
     out = _replace_between_blanks(_DOT_BEFORE_TLD, ".", out, leading=1)
     out = _SPACED.sub(lambda m: f"{m[1]}@{_DOT_SPACED.sub('.', m[2])}" if _TLD_END.search(m[2]) else m[0], out)
+    out = _SPACED_HOST.sub(lambda m: f"{m[1]}.{m[2]}" if _real_host(f"{m[1]}.{m[2]}".lower()) else m[0], out)
     out = re.sub(rf"(@[\w-]+(?:\.[\w-]+)*),((?:{_TLD})\b)", r"\1.\2", out, flags=_I)
     out = re.sub(r"(@[\w.-]*\.)[ \t]*\n[ \t]*([a-z][\w-]*)", r"\1\2", out, flags=_I)
     return out if out != text else ""
@@ -1127,7 +1304,9 @@ def _decoded_values(text: str) -> list[str]:
             found.append(decoded)
     if re.search(r"\brot-?13\b", text, _I):
         found.append(codecs.decode(text, "rot13"))
-    if re.search(r"\b(?:backwards?|reversed?)\b", text, _I):
+    # Not reversed(x), x.reverse(), reverse=True, 'reverse', row-reverse or "backwards compatible", which is how the
+    # word appears in source code.
+    if re.search(r"(?<![.\w'\"\-])(?:backwards?|reversed?)\b(?![(=_'\"\-]|[ -]compat)", text, _I):
         found.append(text[::-1])
     return found
 
@@ -1139,6 +1318,27 @@ def _value_text(text: str) -> str:
     seen = _read(text)
     views = [seen] if text.isascii() else [text, seen]
     return "\n".join(views + [view for view in (_defang(seen), *_decoded_values(seen)) if view])
+
+
+# The patterns that read a host without a scheme in front of it.
+_BARE = frozenset({_VALUE_PATTERNS[7], _EXTRA_PATTERNS[0][1], _EXTRA_PATTERNS[1][1]})
+_POINTED_ONLY = frozenset(pattern for _, pattern in _POINTED_PATTERNS)
+
+
+def _real_host(host: str) -> bool:
+    """A name ending in a top-level domain of the root zone, or an address: not "report.txt" or "a.b.c". The
+    domains that are also file extensions or words of code ("build.sh", "main.py", "item.name") need a label before the
+    registered name."""
+    if host.startswith("[") or not host or host.replace(".", "").isdigit():
+        return True
+    tld = _idna(host).rpartition(".")[2]
+    return bare_tld(tld) and (tld not in NEEDS_SUBDOMAIN or host.count(".") >= 2) and not _suffix_only(host)
+
+
+def _suffix_only(host: str) -> bool:
+    """A registry's own second level under a country code ("co.uk", "org.nz"), which names no site."""
+    first, _, tld = host.partition(".")
+    return len(tld) == 2 and first in ("co", "com", "org", "net", "ac", "gov", "edu", "or", "ne", "go")
 
 
 def distinctive_values(value: Any, authority: bool = False) -> set[str]:
@@ -1154,8 +1354,11 @@ def distinctive_values(value: Any, authority: bool = False) -> set[str]:
         if authority and kind == "id":
             continue
         for match in pattern.findall(undated if pattern is _VALUE_PATTERNS[3] else text):
-            if len(match.strip(".,;:\\")) >= 6 and (key := _canon(kind, match)) and len(key) >= 3 \
-                    and not _ordinary(key):
+            # A host is as short as "z.io"; every other value is at least six characters.
+            if (len(match.strip(".,;:\\")) >= 6 or kind == "host") and (key := _canon(kind, match)) \
+                    and len(key) >= 3 and not _ordinary(key) \
+                    and not (pattern in _BARE and not _real_host(_parse(key)[1])) \
+                    and not (pattern in _POINTED_ONLY and _idna(_parse(key)[1]).rpartition(".")[2] not in TLDS):
                 found.add(key)
     return found
 
@@ -1176,7 +1379,7 @@ def _parse(key: str) -> tuple[str, str, list[str]]:
         return "path", "", [part for part in key.split("/") if part]
     if "@" in key:
         return "email", key.rpartition("@")[2], []
-    return ("host", key, []) if re.fullmatch(_HOSTS, key) else ("other", "", [])
+    return ("host", key, []) if re.fullmatch(_HOSTS, key) or re.fullmatch(r"\[[0-9a-f:]+\]", key) else ("other", "", [])
 
 
 def _nested(a: list[str], b: list[str]) -> bool:

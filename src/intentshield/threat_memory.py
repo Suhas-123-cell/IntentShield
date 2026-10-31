@@ -17,8 +17,9 @@ Who may teach it, and what:
   the other mails of an inbox are not learned). From it come:
 
   * indicators: emails, URLs, accounts and paths (``authority_values``) minus what the user typed, the
-    operator allowlist and URLs on shared hosts (``PROTECTED``: one host serves everyone, and an
-    injected page links to itself). A mailbox at a shared provider is one owner's, so it is kept.
+    operator allowlist and URLs on shared hosts (``hostlists.PROTECTED``: one host serves everyone, and an
+    injected page links to itself; a tenant's own name on a platform that rents them out, as
+    ``evil.workers.dev``, is not shared). A mailbox at a shared provider is one owner's, so it is kept.
   * domains: an email or URL host becomes a domain indicator once at least two distinct exact
     indicators on it were seen in at least two runs and from at least three distinct source servers (an
     attacker rotating local parts across the pages it controls; one server that names a colleague in many
@@ -72,6 +73,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -89,6 +91,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 from urllib.parse import urlsplit
 
+from .hostlists import PROTECTED_FIRST_PARTY, shared_host
 from .mcp_inspect import (
     _DESCRIPTION_RULES,
     _OUTPUT_RULES,
@@ -109,24 +112,10 @@ ESCALATE_INDICATORS, ESCALATE_RUNS, ESCALATE_SERVERS, HOSTILE_RUNS, HOSTILE_DAYS
 ANCHOR_WORDS, ANCHOR_CONTAINMENT = 4, 0.5
 VARIANT = "known_attack_variant"
 BENIGN_PATH = Path(__file__).with_name("data") / "benign_gate.jsonl"
-# Shared infrastructure: never learned as a domain, and URLs on it are not learned at all.
-PROTECTED = frozenset("""
-gmail.com googlemail.com outlook.com hotmail.com live.com msn.com yahoo.com icloud.com me.com aol.com
-proton.me protonmail.com gmx.com gmx.net mail.com yandex.com zoho.com fastmail.com
-github.com githubusercontent.com github.io gitlab.com bitbucket.org google.com googleusercontent.com
-microsoft.com office.com sharepoint.com dropbox.com box.com notion.so slack.com atlassian.net
-amazonaws.com cloudfront.net azurewebsites.net pastebin.com wikipedia.org stackoverflow.com
-pypi.org npmjs.com readthedocs.io example.com example.org example.net
-googleapis.com appspot.com web.app firebaseapp.com vercel.app netlify.app herokuapp.com pages.dev workers.dev
-onrender.com fly.dev glitch.me surge.sh blogspot.com wordpress.com medium.com substack.com ngrok.io
-ngrok-free.app trycloudflare.com azureedge.net windows.net digitaloceanspaces.com localhost
-docs.python.org python.org developer.mozilla.org mozilla.org nodejs.org rust-lang.org crates.io docs.rs golang.org
-pkg.go.dev apache.org eclipse.org w3.org ietf.org openai.com anthropic.com huggingface.co kaggle.com arxiv.org
-reddit.com news.ycombinator.com dev.to hashnode.dev discord.com gitter.im sourceforge.net gitea.com codeberg.org
-stackexchange.com superuser.com serverfault.com askubuntu.com mathworks.com docker.com hub.docker.com quay.io
-gcr.io ghcr.io registry.npmjs.org files.pythonhosted.org pythonhosted.org rubygems.org maven.org mvnrepository.com
-nuget.org packagist.org cocoapods.org
-""".split())
+# Shared infrastructure (``hostlists.PROTECTED``): never learned as a domain, and URLs on a first-party site are not
+# learned at all. A platform that rents out names (``workers.dev``, ``ngrok.io``, ``github.io``) is shared only as a
+# whole: its bare suffix is never a domain indicator, but a tenant's own name under it (``evil.workers.dev``) is one
+# owner's, and its URLs are learned like any other site's.
 _BARE_HOST = re.compile(r"(?<![\w@.-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?![\w-])")
 # Registries that sell names under them ("evil.co.uk"): never a domain indicator on their own.
 PUBLIC_SUFFIXES = frozenset("""
@@ -196,11 +185,19 @@ def window(text: str) -> str:
 
 
 def canonical(value: Any) -> str:
-    return _normalize(value[:2048]).strip().strip(".,;:\"'<>()[]{}").lower() if isinstance(value, str) else ""
+    if not isinstance(value, str):
+        return ""
+    value = _normalize(value[:2048]).strip().strip(".,;:\"'<>(){}").lower()
+    # a bracketed IPv6 address keeps its brackets when a port follows ("[2001:db8::5]:8080")
+    return value if re.fullmatch(r"\[[0-9a-f:.]+\]:\d{1,5}", value) else value.strip("[]")
+
+
+_IPV4 = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}")
+_IPV6 = re.compile(r"[0-9a-f:]{2,39}(?:\.\d{1,3}){0,3}")
 
 
 def domain_of(value: str) -> str | None:
-    """The host an email or URL points at, without ``www.``; None for accounts and paths."""
+    """The host an email, URL, bare host or IPv4 address points at, without ``www.``; None for accounts and paths."""
     if "://" in value:
         try:
             host = urlsplit(value).hostname or ""
@@ -208,14 +205,65 @@ def domain_of(value: str) -> str | None:
             return None
     elif "@" in value and "/" not in value:
         host = value.rpartition("@")[2]
+    elif "/" not in value and "@" not in value:
+        host = value  # a bare host, as ``authority_values`` returns one
     else:
         return None
-    host = host.strip(".").lower().removeprefix("www.")
-    return host if _HOST.fullmatch(host) else None
+    host = host.strip(".").lower().removeprefix("www.").strip("[]")
+    return host if _HOST.fullmatch(host) or is_ip(host) else None
+
+
+def is_ip(host: str) -> bool:
+    """An IPv4 address, or an IPv6 one in its compressed or full form (what a URL's brackets hold)."""
+    if _IPV4.fullmatch(host):
+        return True
+    if ":" in host and _IPV6.fullmatch(host):
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return False
+        return True
+    return False
 
 
 def is_domain(value: str) -> bool:
-    return bool(_HOST.fullmatch(value)) and "@" not in value
+    return (bool(_HOST.fullmatch(value)) or is_ip(value)) and "@" not in value
+
+
+def exact_forms(value: str) -> list[str]:
+    """The exact indicators a call's value may be listed as: itself, its URL without the query and the fragment (an
+    endpoint is the same endpoint with another query), and either without a leading ``www.``."""
+    forms = [value]
+    if "://" in value:
+        stem = value.partition("#")[0].partition("?")[0].rstrip("/")
+        forms += [stem] if stem != value else []
+    return forms + [bare for form in forms if (bare := _without_www(form)) != form]
+
+
+def _without_www(value: str) -> str:
+    return re.sub(r"^([a-z][a-z0-9+.\-]*://)www\.", r"\1", value, count=1)
+
+
+def shared(host: str | None) -> bool:
+    """``host`` is shared infrastructure: a first-party site in ``PROTECTED`` (or a name under one), or the bare suffix
+    of a platform that rents out names. A tenant's name under that suffix is not."""
+    return shared_host(host, PROTECTED_FIRST_PARTY)
+
+
+def host_keys(host: str) -> list[str]:
+    """The domain indicators that cover ``host``: itself and each parent but the last label alone; an address
+    only itself (its "parents" are not domains)."""
+    if is_ip(host):
+        return [host]
+    parts = host.split(".")
+    return [".".join(parts[i:]) for i in range(len(parts) - 1)]
+
+
+def indicator_keys(value: str) -> list[str]:
+    """The keys an exact indicator is stored under: as written, and as ``authority_values`` reads the same
+    value in a call (https for http, no port, no trailing slash, no "+tag"), which is the form that is looked up."""
+    keys = [value, *sorted(authority_values(value) - {value})[:4]]
+    return keys + [bare for key in keys if (bare := _without_www(key)) not in keys]
 
 
 def under(host: str | None, domains: Iterable[str]) -> str | None:
@@ -464,12 +512,16 @@ class ThreatMemory:
         checked = {v for v in self.values_of(values) - trusted if not allowed(v, state.allow)}
         wanted: dict[tuple[str, str], list[str]] = {}
         for value in checked:
-            wanted.setdefault(("exact", value), []).append(value)
+            for form in exact_forms(value):
+                wanted.setdefault(("exact", form), []).append(value)
             host = domain_of(value)
             if host and not under(host, trusted_domains):
-                parts = host.split(".")
-                for i in range(len(parts) - 1):
-                    wanted.setdefault(("domain", ".".join(parts[i:])), []).append(value)
+                for key in host_keys(host):
+                    wanted.setdefault(("domain", key), []).append(value)
+                # an exact host indicator: an address imported before they were domains, or a host with a port
+                # ("c2.example:8080", stored also as "c2.example"), which a call's canonical value has dropped
+                for form in (host, f"[{host}]") if ":" in host else (host,):
+                    wanted.setdefault(("exact", form), []).append(value)
         rows: list[sqlite3.Row] = []
         keys = sorted({value for _, value in wanted})
         try:
@@ -561,7 +613,7 @@ class ThreatMemory:
         # Indicators: the values of the injected region, closest to a match first.
         user = authority_values(_normalize(trusted)) if trusted else set()
         user_domains = {d for v in user if (d := domain_of(v) or (v if is_domain(v) else None))
-                        and not under(d, PROTECTED)}
+                        and not shared(d)}
         distance: dict[str, int] = {}
         for j, (s, e) in enumerate(parts):
             # The sentence before a match to the one after it: further out lie the next mail's sender,
@@ -573,7 +625,7 @@ class ThreatMemory:
         urls = [v for v in distance if "://" in v]
         values = [v for v in sorted(sourced_from(set(distance), set(distance), user), key=lambda v: (distance[v], v))
                   if not allowed(v, state.allow) and not under(domain_of(v), user_domains)
-                  and not ("://" in v and under(domain_of(v), PROTECTED))
+                  and not ("://" in v and shared(domain_of(v)))
                   and not (v.startswith("/") and any(v in url for url in urls))][:PER_CALL_INDICATORS]
 
         # Fingerprints: each matched sentence plus the one after it; overlapping windows merge.
@@ -642,7 +694,7 @@ class ThreatMemory:
     def _escalate(self, db: sqlite3.Connection, summary: dict[str, Any], run_key: str, source: str, now: float,
                   user_domains: set[str], allow: frozenset[str]) -> None:
         for host in sorted({d for v in summary["indicators"] if (d := domain_of(v))}):
-            if under(host, PROTECTED) or under(host, user_domains) or allowed(host, allow) \
+            if shared(host) or under(host, user_domains) or allowed(host, allow) \
                     or host in PUBLIC_SUFFIXES or "." not in host:
                 continue
             # Distinct servers, not runs alone: one server that carries a colleague's address in many of its
@@ -752,8 +804,22 @@ class ThreatMemory:
                 now = self.clock()
                 db.execute(f"UPDATE {table} SET status=?, last_seen=?, decided_at=? WHERE id=?",
                            (status, now, now, item_id))
+                if table == "threat_indicators":  # the other keys of a feed indicator follow it
+                    group = json.loads(row["provenance_json"]).get("group")
+                    for other in self._group(db, group):
+                        db.execute("UPDATE threat_indicators SET status=?, last_seen=?, decided_at=? WHERE id=?",
+                                   (status, now, now, other))
                 return {**self._public(dict(row)), "status": status}
         raise KeyError(item_id)
+
+    @staticmethod
+    def _group(db: sqlite3.Connection, group: Any) -> list[str]:
+        """The ids of the rows ``import_feed`` made for one indicator."""
+        if not isinstance(group, str):
+            return []
+        return [r["id"] for r in db.execute("SELECT id, provenance_json FROM threat_indicators WHERE kind='exact' "
+                                            "AND provenance_json LIKE ?", (f'%"group": {json.dumps(group)}%',))
+                if json.loads(r["provenance_json"]).get("group") == group]
 
     def confirm(self, item_id: str) -> dict[str, Any]:
         """Confirmed entries give ``block`` and never expire."""
@@ -771,8 +837,10 @@ class ThreatMemory:
         with self._write() as db:
             db.execute("INSERT OR IGNORE INTO threat_allowlist VALUES (?,?)", (value, self.clock()))
             self._clear_source(db, value)  # a server, too
-            rows = db.execute("SELECT id, value, domain FROM threat_indicators WHERE status!='revoked'").fetchall()
+            rows = db.execute("SELECT id, value, domain, provenance_json FROM threat_indicators "
+                              "WHERE status!='revoked'").fetchall()
             covered = [r["id"] for r in rows if r["value"] == value or
+                       json.loads(r["provenance_json"]).get("group") == value or
                        (is_domain(value) and under(r["domain"] or "", {value}))]
             db.executemany("UPDATE threat_indicators SET status='revoked', decided_at=? WHERE id=?",
                            [(self.clock(), i) for i in covered])
@@ -810,7 +878,7 @@ class ThreatMemory:
                 reason = ("not a value" if not value or " " in value or kind not in ("exact", "domain") else
                           "not confirmed at its origin" if item.get("status") in ("observed", "revoked", "rejected") else
                           "allowlisted" if allowed(value, state.allow) else
-                          "protected shared domain" if kind == "domain" and under(value, PROTECTED) else None)
+                          "protected shared domain" if kind == "domain" and shared(value) else None)
                 if reason:
                     skipped.append({"value": str(item.get("value") if isinstance(item, dict) else item)[:200],
                                     "reason": reason})
@@ -818,8 +886,14 @@ class ThreatMemory:
                 value = value.removeprefix("www.") if kind == "domain" else value
                 provenance = {k: v if isinstance(v, (int, float)) else str(v)[:500] for k, v in item.items()
                               if k not in ("value", "kind", "status") and isinstance(v, (str, int, float))}
-                if self._upsert(db, kind, value, now, origin, provenance | {"feed": name}, "confirmed"):
+                # An exact indicator is also stored as a call's value for it reads: a feed's "http://x.example/a/"
+                # would otherwise never meet the "https://x.example/a" a call to it is looked up as.
+                keys = indicator_keys(value) if kind == "exact" else [value]
+                if self._upsert(db, kind, value, now, origin, provenance | {"feed": name, "group": value}, "confirmed"):
                     imported.append(value)
+                    for key in keys[1:]:
+                        self._upsert(db, kind, key, now, origin, provenance | {"feed": name, "group": value,
+                                                                              "alias_of": value}, "confirmed")
                 else:
                     skipped.append({"value": value, "reason": "revoked by the operator"})
             for item in texts[:1000]:
@@ -883,6 +957,8 @@ class ThreatMemory:
         indicators = []
         for row in self._read("SELECT * FROM threat_indicators WHERE status!='revoked' ORDER BY first_seen"):
             row = self._public(row)
+            if row["provenance"].get("alias_of"):
+                continue  # a spelling of the one before it
             indicators.append({**{k: v for k, v in row["provenance"].items() if isinstance(v, (str, int, float))},
                                "value": row["value"], "kind": row["kind"], "status": row["status"],
                                "origin": row["origin"], "runs": row["runs"], "first_seen": row["first_seen"],

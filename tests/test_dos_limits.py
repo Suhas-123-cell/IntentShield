@@ -166,14 +166,15 @@ def test_image_exfiltration_matches_the_unbounded_regex_it_replaces():
     from intentshield.mcp_inspect import _OUTPUT_RULES, _PLACEHOLDER_PATH, _PLACEHOLDER_QUERY
 
     original = re.compile(
-        r"(?:!\[[^\]\n]{0,100}\]\(\s*|<img\b[^>]{0,200}?\bsrc\s*=\s*[\"']?)"
-        r"https?://(?![^\s)\"']*?(?:shields\.io|badgen\.net|badge\.fury\.io|codecov\.io|travis-ci)[/?])"
-        r"(?:[^\s)\"']*?[?&](?!(?i:logo|label|style|color|logocolor|labelcolor|v|ver|version|ref|branch|tag)=)[\w\-]+="
-        r"(?:" + _PLACEHOLDER_QUERY + r")|[^\s)\"']*?/(?:" + _PLACEHOLDER_PATH + r"))")
+        r"(?:!\[[^\]\n]{0,100}\]\(\s*<?|<(?i:img)\b[^>]{0,200}?(?i:\bsrc(?:set)?\s*=\s*)[\"']?)"
+        r"(?:(?i:https?:))?//(?![^\s)\"'>]*?(?i:shields\.io|badgen\.net|badge\.fury\.io|codecov\.io|travis-ci)[/?])"
+        r"(?:[^\s)\"'>]*?[?&](?!(?i:logo|label|style|color|logocolor|labelcolor|v|ver|version|ref|branch|tag)=)[\w\-]+="
+        r"(?:" + _PLACEHOLDER_QUERY + r")|[^\s)\"'>]*?/(?:" + _PLACEHOLDER_PATH + r"))")
     rule = dict(_OUTPUT_RULES)["image_exfiltration"]
     tokens = ["![a](https://", "<img src=https://", "<img x src='http://", "![](http://", "/p", "?q=", "&d=",
               "NOTES_HERE", "{summary}", "/{x}", "shields.io/", "?", "a", " ", ")", ">", "\n", "x.example", "<data>",
-              "label=", "<img ", "![", "](", "src=", "HTTP://", "<imgx src=http://"]
+              "label=", "<img ", "![", "](", "src=", "HTTP://", "<imgx src=http://", "<IMG SRC=//", "![a](<https://",
+              "srcset='https://", "//", "SHIELDS.IO/"]
     rng = random.Random(11)
     flagged = 0
     for _ in range(30_000):
@@ -813,7 +814,10 @@ def test_a_cap_that_drops_a_bare_tainted_host_still_stops_a_read_of_it(tmp_path,
             assert shield._taint_incomplete is (fillers > 2_000)
             result = await shield.evaluate_and_execute(run_id, call(catalog, "web:read_page", value=value))
             assert result.decision is not Decision.ALLOW
-            assert ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE in result.reason_codes
+            # A bare internationalised host is a distinctive value since the host extraction was widened (a read of
+            # it is then blocked like one of an ASCII host); the host scan alone asks.
+            assert {ReasonCode.REVIEW_UNTRUSTED_ARGUMENT_SOURCE, ReasonCode.BLOCK_UNTRUSTED_ARGUMENT_SOURCE} \
+                & set(result.reason_codes)
             # A host the user named stays theirs while the taint is complete.
             own = await shield.create_run("Read https://docs.partner.example/a and the page")
             fine = await shield.evaluate_and_execute(own, call(catalog, "web:read_page", value="docs.partner.example"))

@@ -14,7 +14,7 @@ Every entry is gated before it is loaded, and a rejected entry is reported with 
 loaded: a regex must pass ``signatures.safety_problem`` (bounded length, no nested quantifiers,
 lookarounds or backreferences, enough literal letters, no addresses or numbers) and match no benign
 gate text; a fingerprint must be specific (``threat_memory.MIN_WORDS``) and contained in no benign
-text; a domain indicator may not name shared infrastructure (``threat_memory.PROTECTED``).
+text; a domain indicator may not name shared infrastructure (``hostlists.PROTECTED``, tenant platforms bare).
 
 Packs only add evidence. The format has no way to remove or relax a built-in rule, allowlist a value
 or authorize a call; fields that try (``allowlist``, ``disable``, ...) are reported and ignored, the
@@ -65,15 +65,18 @@ from .signatures import safety_problem
 from .threat_memory import (
     MAX_TEXT,
     MAX_WORDS,
-    PROTECTED,
     ThreatMatch,
     ThreatMemory,
     benign_corpus,
     benign_shingles,
     canonical,
     domain_of,
+    exact_forms,
     gate,
+    host_keys,
+    indicator_keys,
     is_domain,
+    shared,
     shingles,
     text_shingles,
     tokens,
@@ -265,12 +268,16 @@ def compile_pack(pack: Any, verified_by: str | None) -> LoadedPack:
         kind = entry.get("kind") or ("domain" if is_domain(value) else "exact")
         reason = ("not a value" if not value or " " in value or kind not in ("exact", "domain")
                   else "domain indicators need a host name" if kind == "domain" and not is_domain(value)
-                  else "protected shared domain" if kind == "domain" and under(value, PROTECTED) else None)
+                  else "protected shared domain" if kind == "domain" and shared(value) else None)
         if reason:
             rejected.append({"indicator": str(entry.get("value"))[:200], "reason": reason})
             continue
         value = value.removeprefix("www.") if kind == "domain" else value
-        (domains if kind == "domain" else exact)[value] = (str(entry.get("id") or value)[:64], level_of(entry, "block"))
+        # An exact indicator is stored as written and as a call's value for it reads ("http://x.example/a/" meets
+        # "https://x.example/a"), see ``indicator_keys``.
+        for key in [value] if kind == "domain" else indicator_keys(value):
+            (domains if kind == "domain" else exact)[key] = (str(entry.get("id") or value)[:64],
+                                                              level_of(entry, "block"))
 
     prints = []
     for i, entry in enumerate(entries["fingerprints"][:MAX_FINGERPRINTS]):
@@ -408,11 +415,12 @@ class PackSet:
         self.refresh()
         matches = []
         for value in values:
-            found = [(self._exact.get(value), "exact", value)]
+            found = [(self._exact.get(form), "exact", form) for form in exact_forms(value)]
             host = domain_of(value)
             if host and not under(host, trusted_domains):
-                parts = host.split(".")
-                found += [(self._domains.get(d), "domain", d) for d in (".".join(parts[i:]) for i in range(len(parts) - 1))]
+                found += [(self._domains.get(d), "domain", d) for d in host_keys(host)]
+                # an address, or a host:port indicator ("c2.example:8080", "[2001:db8::5]:8080")
+                found += [(self._exact.get(form), "exact", form) for form in (host, f"[{host}]")]
             for entry, kind, indicator in found:
                 if entry:
                     pack, item, level = entry
