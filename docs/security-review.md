@@ -288,6 +288,30 @@ Still open:
 - **Not covered:** `npx` still asks; `make VAR=` assignments (`SHELL=`) are not read; `pytest --pastebin` is an ordinary test run though it uploads output.
 - **Doctor:** hooks installed by hand or by an older version have no install record and fall back to the file's mtime; `allowManagedHooksOnly` in managed settings is not read.
 
+### Proxy (proxy-4 to proxy-9, proxy-11 to proxy-15)
+
+Three fix-and-review rounds. The third review still broke proxy-5 (an unread tool whose skeleton schema came out empty showed its raw schema in the gateway view) and proxy-13 (a server named `a|x` lost its pin when `a` started), and found a regression in proxy-4 (words joined by digits inside a junk run were dropped from what the judge reads). All three were closed before the merge; tests in `tests/test_audit_proxy_review.py` (5 of 5 fail on the round-3 tree).
+
+| Finding | Severity | Status |
+|---|---|---|
+| proxy-5: a withheld description still went out through enum, const, default and property names | Medium | Fixed: a flagged tool shows `{"type": "object"}` in all three views; a tool the judge has not read shows types and short identifier names only |
+| proxy-6: `scan` skipped the user's own servers when the directory had a project entry | Medium | Fixed; a scan that started nothing exits 2 |
+| proxy-4: the output judge read only 6 windows, chosen predictably, and stripped blobs with the words inside them | Low | Partly fixed: windows mix the start, the end, cue windows and random ones, and the readable words inside a blob are kept for the judge; results over 6 windows are still only partly read |
+| proxy-7: an approved read whose upstream failed left the approval consumed and stuck | Low | Fixed: a terminal BLOCK |
+| proxy-8: a judge outage at connect left every description "clean" for the session | Low | Fixed: those tools stay unreviewed (withheld) and are read again at most once a minute |
+| proxy-9: `create_app` took the proxy config and tokens from a `.env` in the working directory | Low | Fixed: a searched `.env` cannot set the config, tokens, data paths, model or pack locations, or proxy and loader variables; a token found only there stops the start |
+| proxy-11: `max_result_bytes` was enforced after the whole result was copied | Low | Partly fixed: refused before copying (200 MB result: +200 MB peak, was +600 MB); the transport still buffers the result |
+| proxy-12: the judge's unread and error counters were process-wide | Low | Fixed: per call |
+| proxy-13: `scan --update-pins` deleted the baselines of servers that did not start | Low | Fixed; pins also cover annotations and the schema |
+| proxy-14: a malformed `Retry-After` raised in `post_chat` | Low | Fixed: the default backoff, capped at 120 s |
+| proxy-15: every call listed the upstream's tools twice | Low | Partly fixed: once (0.51 s instead of 1.01 s with a 0.5 s listing); a stalled listing still holds a call up to the timeout |
+
+Benign cost: 0 of 383 parameter names in the 159 distinct recorded MSB tool schemas are dropped from an unread tool's skeleton; with the judge off or passing, every view is byte-identical to the base. Of 801 strings of 400 or more characters in committed results, 6 change under blob stripping. Random 100 KB base64 gives a note under 1,000 characters. Suite 2326 passed, 1 skipped on the merged tree; ruff and the review gate green.
+
+Behaviour changes: while the judge is down or rate-limited at connect, tools are shown without descriptions and with a skeleton schema until it answers, so a parameter name over 24 characters is not shown; the retry runs inside a user's `tools/list` or call once a minute and can stall it up to the judge's budget. A control or agent token set only in a `.env` found by searching (for example the checkout's own) now stops the gateway from starting, where it used to start; export it or put it in `~/.intentshield/.env`. `scan` exits 2 when every server failed or was skipped. A schema or annotation change alone is now a rug pull.
+
+Still open: output-judge verdicts on results over 6 windows vary between runs (random windows); an instruction in leetspeak or alternating case inside a junk run is not kept for the judge; property names are never read by the judge, so a long sentence-like name on a tool it passed is shown; some loader variables (`BASH_ENV`, `JAVA_TOOL_OPTIONS`, `GIT_SSH`, `DOCKER_HOST` and others) can still come from a searched `.env`.
+
 ## Responsible disclosure
 
 No third-party product was attacked. Every probe ran against IntentShield's own code, in the project's own checkout or a scratch directory, with benign canary addresses (`*.example`), placeholder tokens and stubbed or absent model calls. The findings concern this project only, and technique classes are named (for example defanged addresses, encoded values, tag characters) without payloads. If a finding is later found to affect a vendor's guard, it will be reported to that vendor before it is described publicly.

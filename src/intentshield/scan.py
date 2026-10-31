@@ -141,8 +141,9 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
         groups = [data.get(key)] if key else [data.get("mcpServers"), data.get("servers")]
         if client == "claude-code" and path.name == ".claude.json":
             # Claude Code's local scope: the servers it starts in this project.
-            project = (data.get("projects") or {}).get(str(cwd))
-            groups.append(project.get("mcpServers") if isinstance(project, dict) else None)
+            # (the user's own entries in their private file: not a repository's choice, so ``project`` stays as is)
+            local = (data.get("projects") or {}).get(str(cwd))
+            groups.append(local.get("mcpServers") if isinstance(local, dict) else None)
         for group in groups:
             for name, entry in (group or {}).items() if isinstance(group, dict) else ():
                 if isinstance(entry, dict):
@@ -233,6 +234,14 @@ def _roles(tool: dict[str, Any]) -> set[str]:
     return roles
 
 
+def tool_digest(tool: dict[str, Any], text: str) -> str:
+    """The pin of a tool: its readable text plus its annotations and canonical schema, so a flipped
+    ``readOnlyHint`` or a changed enum is a rug pull too. ``v2:`` marks it from the older text-only pin."""
+    blob = json.dumps([text, tool.get("annotations") or {}, tool.get("input_schema")], sort_keys=True,
+                      separators=(",", ":"), default=str)
+    return "v2:" + hashlib.sha256(blob.encode()).hexdigest()
+
+
 def _tool_findings(servers: list[Server], pins: dict[str, str]) -> list[Finding]:
     findings: list[Finding] = []
     by_client: dict[str, list[Server]] = {}
@@ -260,9 +269,14 @@ def _tool_findings(servers: list[Server], pins: dict[str, str]) -> list[Finding]
                     findings.append(Finding("self_disclosure", server.path, server.name,
                                             f"parameters: {', '.join(sorted(fields))}", tool["name"]))
                 key = f"{client}|{server.path}|{server.name}|{tool['name']}"
-                digest = hashlib.sha256(text.encode()).hexdigest()
+                # The pin covers what the agent can read and what it can send: text, annotations, schema structure.
+                digest = tool_digest(tool, text)
+                known = pins.setdefault(key, digest)
+                if known != digest and not known.startswith("v2:") and \
+                        known == hashlib.sha256(text.encode()).hexdigest():
+                    pins[key] = known = digest  # a pin of the text alone, unchanged: moved to the fuller digest
                 # A changed tool keeps its old hash, so it is reported on every scan until accepted.
-                if pins.setdefault(key, digest) != digest:
+                if known != digest:
                     findings.append(Finding("rug_pull", server.path, server.name,
                                             "changed since the last scan; read it, then accept it with "
                                             "--update-pins", tool["name"]))
@@ -370,8 +384,10 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
             lines.append(f"{f.level.upper():7} {f.rule}: {f.server}{':' + f.tool if f.tool else ''}: {f.message}")
     errors = sum(f.level == ERROR for f in findings)
     warnings = sum(f.level == WARNING for f in findings)
-    lines.append(f"{len(servers)} server(s) checked: {errors} error(s), {warnings} warning(s)" if servers
-                 else "no MCP configs found")
+    left = sum(1 for s in servers if s.error or (s.skipped and connected))
+    lines.append((f"{len(servers)} server(s) checked: " if not left else
+                  f"{len(servers) - left} of {len(servers)} server(s) checked, {left} not scanned: ")
+                 + f"{errors} error(s), {warnings} warning(s)" if servers else "no MCP configs found")
     return "\n".join(lines)
 
 
@@ -432,7 +448,8 @@ def save_pins(path: Path, pins: dict[str, str]) -> None:
 def run(args: argparse.Namespace) -> int:
     home, cwd = Path.home(), Path.cwd()
     servers = discover(home, cwd, args.files or None)
-    pins = load_pins(args.pins) if not args.no_pins and not args.update_pins else {}
+    saved = load_pins(args.pins) if not args.no_pins else {}
+    pins: dict[str, str] = {} if args.update_pins else saved
     findings = scan(servers, connect=not args.no_connect, timeout=args.timeout, pins=pins,
                     connect_project=args.connect_project)
     skipped = [s for s in servers if s.skipped and not args.no_connect]
@@ -440,6 +457,17 @@ def run(args: argparse.Namespace) -> int:
         print("intentshield scan: not started (config in the current directory; --connect-project starts them): "
               + ", ".join(f"{s.name} ({s.path})" for s in skipped), file=sys.stderr)
     if not args.no_pins and not args.no_connect and any(s.tools for s in servers):
+        if args.update_pins:
+            # Accept what was seen: a server that did not start (or was skipped) keeps its baseline, and a server
+            # that did start keeps only the tools it lists now.
+            # A key is client|path|name|tool and a name may hold "|": a key belongs to the server with the longest
+            # matching prefix, so the baseline of server "a|x" is not taken for one of server "a".
+            prefixes = {f"{s.client}|{s.path}|{s.name}|": not s.error and not s.skipped for s in servers}
+
+            def owner_started(key: str) -> bool:
+                owner = max((p for p in prefixes if key.startswith(p)), key=len, default=None)
+                return owner is not None and prefixes[owner]
+            pins = {**{k: v for k, v in saved.items() if not owner_started(k)}, **pins}
         save_pins(args.pins, pins)
     if args.format == "json":
         print(json.dumps({"servers": [{"client": s.client, "config": str(s.path), "name": s.name,
@@ -450,4 +478,7 @@ def run(args: argparse.Namespace) -> int:
         print(json.dumps(sarif(findings), indent=2))
     else:
         print(report(servers, findings, home, connected=not args.no_connect))
-    return 1 if any(f.level == ERROR for f in findings) else 0
+    if any(f.level == ERROR for f in findings):
+        return 1
+    # Servers were found but none was started or read: a green exit would say they were checked.
+    return 2 if servers and not args.no_connect and all(s.error or s.skipped for s in servers) else 0

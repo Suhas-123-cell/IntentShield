@@ -7,12 +7,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, AsyncIterator
 
-from dotenv import find_dotenv, load_dotenv
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .envfile import load_environment, require_tokens
 from .mcp_proxy import MCPProxyConfig, MCPProxyRuntime, RunLimitError
 from .model_gateway import ModelGateway, ModelProviderError
 from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, ToolCall
@@ -29,7 +30,10 @@ def create_app(
     control_token: str | None = None,
     agent_token: str | None = None,
 ) -> FastAPI:
-    load_dotenv(find_dotenv(usecwd=True))  # the .env of the directory the operator runs in, not the package's
+    # the operator's directory, minus what only the user may set; a token that only that file held stops the start
+    refused = load_environment(load_dotenv, usecwd=True)
+    require_tokens(refused, tuple(name for name, given in (("INTENTSHIELD_CONTROL_TOKEN", control_token),
+                                                           ("INTENTSHIELD_AGENT_TOKEN", agent_token)) if not given))
     proxy_path = proxy_config or os.getenv("INTENTSHIELD_PROXY_CONFIG")
     approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN", "")).strip()
     # Optional: when set, proposing calls and reading runs (which hold executed tool results)

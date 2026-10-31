@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import get_default_environment
 
+from .envfile import load_environment
 from .mcp_proxy import MCPProxyConfig, SchemaTooCostly, schema_errors
 from .mcp_server import create_proxy_mcp_server
 from .mcp_upstream import _credential_shaped_name
@@ -535,6 +536,8 @@ async def verify_mcp(
         names = {name for upstream in config.upstream_configs
                  for name in (*upstream.env_from_env.values(), *upstream.headers_from_env.values())}
         names |= {"GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} if config.judge or config.prompt_guard else set()
+        # the proxy's own tokens as exported here: a token only a searched .env holds stops the child
+        names |= {"INTENTSHIELD_CONTROL_TOKEN", "INTENTSHIELD_AGENT_TOKEN"}
         target = StdioServerParameters(
             env={**get_default_environment(), **{name: os.environ[name] for name in names if name in os.environ}},
             command=sys.executable,
@@ -743,7 +746,7 @@ def demo_config(directory: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    load_dotenv()
+    load_environment(load_dotenv)
     parser = argparse.ArgumentParser(
         description="Verify a real upstream MCP server through IntentShield without tool execution"
     )

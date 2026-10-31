@@ -507,7 +507,17 @@ class IntentShieldService:
                 assessment,
             )
         else:
-            result = self.evaluate_and_execute(approval["run_id"], run["user_intent"], call)
+            try:
+                result = self.evaluate_and_execute(approval["run_id"], run["user_intent"], call)
+            except Exception as exc:
+                # The approval is spent by now: leave the operator and the polling agent a terminal answer, not
+                # a ``ready: false`` that never changes. The agent asks again and a human decides again.
+                logger.warning("approved call failed", extra={"run_id": approval["run_id"], "error": type(exc).__name__})
+                self.storage.add_event(approval["run_id"], "APPROVED_EXECUTION_FAILED", {
+                    "approval_id": approval_id, "tool_name": call.tool_name,
+                    "error": f"{type(exc).__name__}: {exc}"[:500]})
+                signals, assessment = self._security_assessment(run["user_intent"], call)
+                result = self._blocked(approval["run_id"], call, ReasonCode.BLOCK_EXECUTION_FAILED, signals, assessment)
         self.storage.save_approval_result(
             approval_id, result.model_dump(mode="json")
         )

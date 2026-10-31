@@ -32,6 +32,7 @@ from typing import Any, Literal, Protocol
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
+from .envfile import load_environment, require_tokens
 from .logs import configure_logging
 from .mcp_upstream import MCPUpstreamError
 from .models import GatewayResult, ToolCall
@@ -431,13 +432,15 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
     async def call_tool(ctx: Any, params: Any) -> Any:
         if config.tool_routing and params.name == find.name:
             return await find_tools(ctx, dict(params.arguments or {}))
+        # One listing of the upstream's tools per call: the drift check is that listing, and the calls below
+        # read what it found.
         names = {exposed(tool): tool.qualified_name for tool, _ in await runtime.transparent_tools()}
         try:
             if params.name not in names:
-                reasons = {exposed(tool): reason for tool, reason in await runtime.hidden_tools()}
+                reasons = {exposed(tool): reason for tool, reason in await runtime.hidden_tools(refresh=False)}
                 raise MCPRemoteToolError(reasons.get(params.name)
                                          or f"Tool {params.name} is not available through IntentShield")
-            result, findings = await runtime.forward(names[params.name], dict(params.arguments or {}))
+            result, findings = await runtime.forward(names[params.name], dict(params.arguments or {}), refresh=False)
         except MCPRemoteToolError as exc:
             return types.CallToolResult(content=[types.TextContent(type="text", text=str(exc))], is_error=True)
         except MCPUpstreamError as exc:  # the upstream died or broke protocol: one bounded line, no traceback
@@ -681,7 +684,17 @@ def run_mcp_server(
 
 
 def main(argv: list[str] | None = None) -> None:
-    load_dotenv()
+    pre = argparse.ArgumentParser(add_help=False)  # the token variable's name is chosen by the user, so it is read first
+    pre.add_argument("--control-token-env", default="INTENTSHIELD_CONTROL_TOKEN")
+    pre.add_argument("--config")
+    known = pre.parse_known_args(argv)[0]
+    token_env = known.control_token_env
+    refused = load_environment(load_dotenv, extra=frozenset({token_env}))
+    if known.config:  # the guarded proxy reads the tokens: one that only a repository's .env held leaves it open
+        try:
+            require_tokens(refused, (token_env, "INTENTSHIELD_AGENT_TOKEN"))
+        except ValueError as exc:
+            raise SystemExit(f"intentshield: {exc}") from exc
     configure_logging()
     parser = argparse.ArgumentParser(description="Run the IntentShield MCP gateway")
     parser.add_argument(
