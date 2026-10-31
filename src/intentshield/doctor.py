@@ -85,18 +85,113 @@ def _stored_keys(home: Path) -> set[str]:
     return {line.partition("=")[0].strip() for line in lines if "=" in line and line.partition("=")[2].strip()}
 
 
-def _last_runs(db: Path) -> dict[str, float] | None:
+class Runs:
+    """When the hooks ran, from their own database: per harness, and per working directory (a project's settings
+    file is only run for sessions inside that project)."""
+
+    def __init__(self, events: dict[str, float], dirs: list[tuple[str, str, float]]) -> None:
+        self.events, self.dirs = events, dirs
+
+    def last(self, harness: str, project: Path | None = None) -> float | None:
+        """The latest hook run of the harness, inside ``project`` for a project's settings file. A database that
+        has no per-directory rows yet (older hooks) answers for the harness as a whole."""
+        if project is not None and any(h == harness for h, _, _ in self.dirs):
+            root = str(project).rstrip("/") + "/"
+            return max((t for h, cwd, t in self.dirs if h == harness and (cwd + "/").startswith(root)), default=None)
+        return self.events.get(harness)
+
+
+def _last_runs(db: Path) -> Runs | None:
     """When each harness last ran a hook, from the hooks' own database; None when it cannot tell."""
     if not db.exists():
-        return {}
+        return Runs({}, [])
     try:
         with closing(sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)) as conn:
-            return dict(conn.execute("SELECT harness, last FROM harness_events").fetchall())
+            events = dict(conn.execute("SELECT harness, last FROM harness_events").fetchall())
+            try:
+                dirs = conn.execute("SELECT harness, cwd, last FROM harness_dirs").fetchall()
+            except sqlite3.Error:  # written by hooks of an earlier version
+                dirs = []
+            return Runs(events, dirs)
     except sqlite3.Error:  # a database from before the hooks recorded runs
         return None
 
 
-def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, float] | None, home: Path) -> bool:
+_EXEC_LINE = re.compile(r"(?:^|[\s;'\"])exec'?\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))")
+
+
+def _dead_interpreter(program: str) -> str:
+    """Why a hook executable cannot start though the file is there: a script whose ``#!`` line names an interpreter
+    that is gone (a venv built on a Python that was upgraded or removed). Such a hook exits 126, which Codex and
+    Gemini CLI treat as a hook that failed, not as a refusal, so the call runs unguarded."""
+    try:
+        with open(program, "rb") as handle:
+            head = handle.read(4096)
+    except OSError:
+        return ""
+    first = head.split(b"\n", 1)[0].rstrip(b"\r")
+    if not first.startswith(b"#!"):
+        return ""
+    words = first[2:].decode("utf-8", "replace").split()
+    if not words:
+        return ""
+    interpreter = words[0]
+    if os.path.basename(interpreter) == "env":  # #!/usr/bin/env python3: found on the PATH the harness has
+        names = [w for w in words[1:] if not w.startswith("-") and "=" not in w]
+        return "" if not names or shutil.which(names[0]) else f"{names[0]} (not on PATH)"
+    if not (os.path.isfile(interpreter) and os.access(interpreter, os.X_OK)):
+        return interpreter
+    if os.path.basename(interpreter) in ("sh", "bash", "dash", "zsh"):
+        # pip and uv write a shell shebang that execs the real interpreter when the venv path is long or has a
+        # space: a #!/bin/sh line, then a line like  exec "/path with space/bin/python" "$0" "$@"
+        for line in head.decode("utf-8", "replace").splitlines()[1:8]:
+            if line.lstrip().startswith("#"):
+                continue
+            m = _EXEC_LINE.search(line)
+            target = m and next(g for g in m.groups() if g)
+            if target and target.startswith("/") and not (os.path.isfile(target) and os.access(target, os.X_OK)):
+                return target
+    return ""
+
+
+def _disabled(harness: str, path: Path, home: Path, cwd: Path | None = None) -> str:
+    """Why Claude Code runs no hooks though the file has them: ``disableAllHooks`` (or ``allowManagedHooksOnly``)
+    in this settings file, its ``.local`` sibling, the user's, or the current project's (which switches off the
+    user's hooks for sessions there)."""
+    if harness != "claude":
+        return ""
+    project = [cwd / ".claude" / "settings.json", cwd / ".claude" / "settings.local.json"] if cwd else []
+    for candidate in dict.fromkeys([path, path.with_name("settings.local.json"), home / ".claude" / "settings.json",
+                                    home / ".claude" / "settings.local.json", *project]):
+        try:
+            data = install._parse(candidate.read_text(encoding="utf-8"), candidate)
+        except (OSError, ValueError):
+            continue
+        for key in ("disableAllHooks", "allowManagedHooksOnly"):
+            if isinstance(data, dict) and data.get(key) is True:
+                return f"{key} is true in {candidate}"
+    return ""
+
+
+# Tool names the harness gives an MCP tool: a hook whose matcher does not match one guards no MCP call.
+_MCP_NAME = {"claude": "mcp__server__tool", "codex": "mcp__server__tool", "gemini": "mcp_server_tool"}
+_CALL_EVENT = {"claude": "PreToolUse", "codex": "PreToolUse", "gemini": "BeforeTool"}
+_RESULT_EVENT = {"claude": "PostToolUse", "codex": "PostToolUse", "gemini": "AfterTool"}
+
+
+def _covers_mcp(harness: str, matcher: str) -> bool:
+    """Whether a matcher sends MCP tools to the hook: it matches an MCP tool name, or one of its alternatives is
+    narrowed to some servers (``mcp__github__.*``) and so starts with the MCP prefix."""
+    try:
+        if re.search(matcher, _MCP_NAME[harness]) is not None:
+            return True
+    except re.error:
+        return True
+    return any(re.match(r"\^?\(*(?:\?:)?mcp_", alt.strip()) for alt in matcher.split("|"))
+
+
+def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, home: Path,
+                   project: Path | None = None, cwd: Path | None = None) -> bool:
     """Checks one settings file; False when it holds none of our hooks."""
     subject = f"{harness} ({path})"
     try:
@@ -106,6 +201,7 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
         return True
     if not hooks:
         return False
+    problems_before = report.problems
     missing = [event for event in REQUIRED[harness] if event not in hooks]
     if missing:
         report.line("FAIL", subject, f"no IntentShield hook for {', '.join(missing)}; run `intentshield install {harness}`")
@@ -117,6 +213,11 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
             if not (os.path.isfile(program) and os.access(program, os.X_OK)):
                 report.line("FAIL", subject, f"the hook executable {program} does not exist (a deleted environment?); "
                                              f"run `intentshield install {harness}` again from the one you use")
+            elif dead := _dead_interpreter(program):
+                report.line("FAIL", subject, f"the hook executable {program} starts with #!{dead}, which does not "
+                                             "exist (an environment whose Python was removed or upgraded?): it exits "
+                                             "126 and the harness runs the call unguarded or blocks every MCP call; "
+                                             f"run `intentshield install {harness}` again from the environment you use")
         else:
             where = shutil.which(program)
             report.line("FAIL", subject, f"the hook command names {program!r} without a path"
@@ -125,15 +226,22 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
         if "--judge" in argv:
             provider = argv[argv.index("--judge") + 1].partition(":")[0] if argv.index("--judge") + 1 < len(argv) else ""
             key = _KEYS.get(provider)
-            if provider == "custom" and not os.getenv("INTENTSHIELD_JUDGE_URL") \
-                    and "INTENTSHIELD_JUDGE_URL" not in _stored_keys(home):
-                report.line("FAIL", subject, "the custom judge has no INTENTSHIELD_JUDGE_URL; every call runs on the "
-                                             f"rules alone. Run `intentshield install {harness} --judge custom:<model> "
-                                             "--judge-url <URL>`")
-            if key and not os.getenv(key) and key not in _stored_keys(home):
-                report.line("FAIL", subject, f"the {provider} judge has no {key} (neither set nor in "
-                                             f"{home / '.intentshield' / '.env'}); every call runs on the rules alone. "
-                                             f"Run `intentshield install {harness} --judge {provider}`")
+            stored = _stored_keys(home)
+            # The hook is a child of the harness: what this shell exports is not proof that the hook sees it.
+            if provider == "custom" and "INTENTSHIELD_JUDGE_URL" not in stored:
+                report.line("warn" if os.getenv("INTENTSHIELD_JUDGE_URL") else "FAIL", subject,
+                            "the custom judge has no INTENTSHIELD_JUDGE_URL in "
+                            f"{home / '.intentshield' / '.env'}"
+                            + (" (it is set in this shell only, which a harness started elsewhere does not inherit)"
+                               if os.getenv("INTENTSHIELD_JUDGE_URL") else "; every call runs on the rules alone")
+                            + f". Run `intentshield install {harness} --judge custom:<model> --judge-url <URL>`")
+            if key and key not in stored:
+                report.line("warn" if os.getenv(key) else "FAIL", subject,
+                            f"the {provider} judge has no {key} in {home / '.intentshield' / '.env'}"
+                            + (" (it is set in this shell only, which a harness started from the Dock or an IDE "
+                               "does not inherit, so the hook may run on the rules alone)" if os.getenv(key) else
+                               "; every call runs on the rules alone")
+                            + f". Run `intentshield install {harness} --judge {provider}` to store it")
         if "--builtin-tools" in argv and harness == "claude":
             matchers = [h.get("matcher") or "" for h in hooks.get("PreToolUse", [])]
             if not any("Bash" in m for m in matchers):
@@ -141,8 +249,18 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
                                              "Bash; run `intentshield install claude --builtin-tools` again")
         if "--gemini-ask" in argv and harness == "gemini":
             _check_gemini_ask(report, subject)
-    installed = path.stat().st_mtime
-    last = (runs or {}).get(harness)
+    if why := _disabled(harness, path, home, cwd):
+        report.line("FAIL", subject, f"the hooks are installed but switched off: {why}")
+    for event, what in ((_CALL_EVENT.get(harness), "call is checked"),
+                        (_RESULT_EVENT.get(harness), "result is scanned or tainted")):
+        for handler in hooks.get(event, []):
+            matcher = handler.get("matcher")
+            if matcher is not None and not _covers_mcp(harness, matcher):
+                report.line("FAIL", subject, f"the {event} matcher {matcher!r} does not match MCP tools, so no MCP "
+                                             f"{what}; run `intentshield install {harness}` again")
+    # When install last changed the hooks (not the file's modification time, which every unrelated edit moves).
+    installed = install.installed_at(path, home) or path.stat().st_mtime
+    last = runs.last(harness, project) if runs is not None else None
     if runs is None:
         report.line("warn", subject, "the hook database predates run records; cannot tell whether the hooks run")
     elif last is None or last < installed:
@@ -150,7 +268,7 @@ def _check_harness(report: Report, harness: str, path: Path, runs: dict[str, flo
                 if harness == "codex" else f" Start {harness} once; if this stays, the harness is not running them.")
         report.line("FAIL", subject, "installed, but no hook has run since "
                     f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(installed))}.{hint}")
-    elif not missing:
+    elif report.problems == problems_before:
         report.line("ok", subject, f"hooks installed; last ran {time.strftime('%Y-%m-%d %H:%M', time.localtime(last))}")
     return True
 
@@ -186,8 +304,12 @@ def _check_servers(report: Report, path: Path) -> None:
                 args = server.get("args") or []
                 config = args[args.index("--config") + 1] if "--config" in args[:-1] else ""
                 if not config or not Path(config).exists():
-                    report.line("FAIL", f"{path}", f"{label} runs the proxy with a missing config {config!r}; "
-                                                   f"run `intentshield unwrap` and `wrap` on {path}")
+                    backup = install._backup_path(path, None)
+                    how = (f"`intentshield unwrap {path}` restores it from {backup}"
+                           if install._backed_up_server(path, scope, name) else
+                           f"no copy of the original entry is kept, so edit {path} by hand (put the server's own "
+                           "command and args back) or delete the entry")
+                    report.line("FAIL", f"{path}", f"{label} runs the proxy with a missing config {config!r}; {how}")
             else:
                 bare.append(label)
     if bare:
@@ -207,7 +329,9 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
         if harness != "codex":
             paths.append(install.settings_path(harness, "project", home, cwd))
         for path in dict.fromkeys(paths):
-            if path.exists() and _check_harness(report, harness, path, runs, home):
+            # a project's settings file (cwd/.claude/settings.json) is run for sessions inside that project only
+            project = path.parent.parent if path != paths[0] else None
+            if path.exists() and _check_harness(report, harness, path, runs, home, project, cwd):
                 guarded.append(harness)
     for harness in install.HARNESSES:
         if harness not in guarded:

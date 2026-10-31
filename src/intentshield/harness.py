@@ -36,6 +36,7 @@ from .mcp_inspect import (
     authority_values,
     distinctive_values,
     leaf_text,
+    on_tainted_hosts,
     rank_tools,
     scan_output,
     scan_output_collapsed,
@@ -216,6 +217,9 @@ class HarnessGuard:
                         "PRIMARY KEY (session, use_id))")
         # When each harness last ran a hook: `intentshield doctor` tells hooks that never run from quiet ones.
         self.db.execute("CREATE TABLE IF NOT EXISTS harness_events (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
+        # ... and in which working directories: a project's settings file is only run for sessions inside it.
+        self.db.execute("CREATE TABLE IF NOT EXISTS harness_dirs (harness TEXT NOT NULL, cwd TEXT NOT NULL, "
+                        "last REAL NOT NULL, PRIMARY KEY (harness, cwd))")
         # Prompts are the user's words: keep them only while a session can still be live. Every hook event
         # renews a session (``touch``), and one that holds taint or a flag outlives a clean one: forgetting
         # it would let a resumed session act as if nothing had happened.
@@ -223,6 +227,7 @@ class HarnessGuard:
         self.db.execute("DELETE FROM sessions WHERE (updated < ? AND taint = '[]' AND flagged = 0 AND soft = 0 "
                         "AND inflight = 0) OR updated < ?", (now - SESSION_TTL, now - FLAGGED_TTL))
         self.db.execute("DELETE FROM observed WHERE session NOT IN (SELECT id FROM sessions)")
+        self.db.execute("DELETE FROM harness_dirs WHERE last < ?", (now - FLAGGED_TTL,))
         self.db.execute("DELETE FROM asked WHERE session NOT IN (SELECT id FROM sessions)")
         self._read_only: dict[tuple[str, str], bool] | None = None
 
@@ -300,6 +305,9 @@ class HarnessGuard:
         if harness:
             self.db.execute("INSERT INTO harness_events VALUES (?, ?) ON CONFLICT(harness) DO UPDATE SET "
                             "last = excluded.last", (harness, now))
+            if self.cwd:
+                self.db.execute("INSERT INTO harness_dirs VALUES (?, ?, ?) ON CONFLICT(harness, cwd) DO UPDATE SET "
+                                "last = excluded.last", (harness, self.cwd, now))
 
     def flag(self, session: str) -> None:
         """Marks the session as if an output had tried to instruct the agent: a result nobody could read."""
@@ -537,11 +545,20 @@ class HarnessGuard:
                 return Verdict("ask", f"The command reads secrets ({secrets}). {self._flag_reason(session, taint)}")
             # A download counts as read-only, but its address can carry data: only hosts the user named pass.
             named = {shell.host(v) for v in user}
-            if not found.read_only or any(shell.host(d) not in named for d in destinations):
+            unnamed = any(shell.host(d) not in named for d in destinations)
+            if unnamed or not (found.read_only or self._ordinary(found, command, intent, taint)):
                 return Verdict("ask", self._flag_reason(session, taint))
         if outbound:  # the judge reads only commands that send data somewhere the user did not name
             return self._judged(Verdict(), intent, tool, {"command": command})
         return Verdict()
+
+    def _ordinary(self, found: shell.Command, command: str, intent: str, taint: set[str]) -> bool:
+        """A build, test or local version-control command that may run after an output tried to instruct the
+        agent: Codex and Gemini cannot ask, so refusing every one stops the session's ordinary work. It still asks
+        under ``--review always``, for a path that sets up code later sessions run, and when the command carries a
+        value from that output."""
+        return (found.ordinary and self.review != "always" and not _PERSISTENT_IN_COMMAND.search(command)
+                and not distinctive_values(command) & taint - distinctive_values(intent))
 
     def fetch(self, session: str, tool: str, target: str) -> Verdict:
         """A web fetch by a built-in tool. Fetching a page an output linked to is how agents browse, so only an
@@ -577,9 +594,30 @@ class HarnessGuard:
         if write and (carried := distinctive_values(content) & taint - distinctive_values(intent)):
             return Verdict("ask", "The new content carries a value from a tool output that contained injected "
                                   f"instructions: {', '.join(_show(v) for v in sorted(carried)[:3])}. {reason}")
+        if write and (reached := self._written_reach(path, content, intent, taint)):
+            return Verdict("ask", f"The new content {reached}. {reason}")
         if write and self.review == "always":
             return Verdict("ask", reason)
         return Verdict()
+
+    @staticmethod
+    def _written_reach(path: str, content: Any, intent: str, taint: set[str]) -> str:
+        """What a file's new text does that an output which tried to instruct the agent could want: it names a host
+        that output named, or it is a shell script that sends data out. A build or test command runs such a file
+        later, where the shell check never sees it. Only a shell script is read as shell: source code and notes that
+        post to an API or show a curl command are ordinary files."""
+        user = distinctive_values(intent)
+        if hosts := on_tainted_hosts(shell.network_values(leaf_text(content)), taint, user):
+            shown = ", ".join(_show(v) for v in sorted(hosts)[:3])
+            return f"names a host a tool output that contained injected instructions named: {shown}"
+        text = leaf_text(content)[:200_000]
+        package = path.replace("\\", "/").rpartition("/")[2] == "package.json"
+        if package:  # its scripts are shell lines that npm runs
+            text = "\n".join(m for m in _JSON_STRING.findall(text)[:500] if " " in m)
+        found = shell.parse(text) if text.strip() and (package or _shell_script(path, text)) else None
+        if found and found.sends and (found.destinations - user or not found.destinations):
+            return "sends data to an address the user did not name"
+        return ""
 
     def asked(self, session: str, use_id: str) -> None:
         self.db.execute("INSERT OR IGNORE INTO asked VALUES (?, ?)", (session, use_id))
@@ -729,18 +767,62 @@ _BUILTIN = {
     "Read": ("read", "file_path"), "read_file": ("read", "file_path"), "read_many_files": ("read", "include"),
     "Write": ("write", "file_path"), "write_file": ("write", "file_path"), "Edit": ("write", "file_path"),
     "MultiEdit": ("write", "file_path"), "replace": ("write", "file_path"), "NotebookEdit": ("write", "notebook_path"),
+    "apply_patch": ("patch", "input"),  # Codex CLI's edit tool: the argument is a patch naming its files
 }
-# Where a write sets up code or settings that later sessions run with: shell startup files, SSH access,
-# git hooks, autostart entries and the harnesses' own settings (the hooks themselves live there).
-_PERSISTENT = re.compile(
-    r"(?:^|/)(?:\.(?:bash|zsh|ksh)rc|\.(?:bash_)?profile|\.zprofile|\.zshenv|\.zlogin|\.bash_login|"
-    r"\.config/fish/config\.fish|\.ssh/(?:authorized_keys|config)|\.git/hooks/|\.claude/settings[\w.]*\.json|"
-    r"\.codex/config\.toml|\.gemini/settings\.json|\.cursor/hooks\.json|\.mcp\.json|library/launchagents/|"
-    r"\.config/autostart/|\.config/systemd/user/|crontab)", re.I)
+# The header's path is read to the end of the line and trimmed afterwards: a lazy ``(.+?)\s*$`` is quadratic on a
+# long run of spaces, and a hook that times out fails open.
+_PATCH_FILE = re.compile(r"^[ \t]*\*\*\* (?:(?:Update|Add|Delete) File|Move to): ([^\r\n]*)|^\+\+\+ (?:b/)?(\S+)", re.M)
+# Where a write sets up code or settings that later sessions run with: shell startup files and aliases, SSH access,
+# git configuration and hooks (core.fsmonitor, hooksPath), direnv, autostart entries, programs on the user's PATH, the
+# harnesses' settings, hooks, commands and agents (the hooks themselves live there), the instruction files agents
+# read at the start of every session, editor tasks and package-manager configuration.
+_PERSISTENT_PATHS = (
+    r"\.(?:bash|zsh|ksh)rc|\.(?:bash_)?profile|\.zprofile|\.zshenv|\.zlogin|\.bash_login|\.bash_logout|"
+    r"\.bash_aliases|\.config/fish/config\.fish|\.ssh/(?:authorized_keys|config)|\.git/(?:hooks/|config(?![\w.-]))|"
+    r"\.gitconfig|\.config/git/|\.githooks/|\.husky/|\.pre-commit-config\.yaml|\.envrc|\.oh-my-zsh/custom/|"
+    r"\.local/bin/|\.claude/(?:settings[\w.]*\.json|hooks/|commands/|agents/|skills/)|\.codex/config\.toml|"
+    r"\.gemini/settings\.json|\.cursor/(?:hooks\.json|rules/)|\.cursorrules|\.mcp\.json|"
+    r"\.vscode/(?:tasks|launch|settings)\.json|(?:claude|agents|gemini)\.md(?![\w-])|pip\.conf|\.pip/|"
+    r"library/launch(?:agents|daemons)/|\.config/autostart/|\.config/systemd/user/|crontab|"
+    r"\.windsurfrules|\.clinerules|copilot-instructions\.md|claude\.local\.md|agents\.override\.md|\.vimrc|"
+    r"\.tmux\.conf|\.config/fish/conf\.d/|\.aws/(?:config|credentials)|\.git/modules/|"
+    r"\.gemini/(?:commands|extensions)/|\.claude/(?:output-styles|rules)/|/etc/cron|/var/spool/cron"
+)
+# Files a build or test command reads and runs without being told to: written after a flagged result, they run the
+# next time make, pytest, cargo or a CI job does. Only as a path (a command may name them: git add Makefile).
+_BUILD_FILES = (r"(?:gnu)?makefile|justfile|conftest\.py|noxfile\.py|tox\.ini|build\.rs|rakefile|cmakelists\.txt|"
+                r"\.github/workflows/|\.gitlab-ci\.yml|\.devcontainer/|pytest\.ini|setup\.py|setup\.cfg|"
+                r"(?:jest|vitest|vite|webpack|rollup|babel|eslint|playwright|karma)\.config\.[cm]?[jt]s|"
+                r"(?:build|settings)\.gradle(?:\.kts)?|pom\.xml|gulpfile\.[cm]?js|gruntfile\.[cm]?js")
+# More places a write sets up code later sessions or the user's tools run. Only as a path: a command may name
+# them (git add .npmrc) and /usr/local/bin/git is the program, not a write to that directory.
+_WRITE_ONLY_PATHS = (
+    r"\.claude\.json$|claude_desktop_config\.json|\.cargo/config|\.yarnrc|\.npmrc|\.aider\.conf|"
+    r"\.idea/runconfigurations/|(?:users|home)/[^/]+/bin/|usr/local/bin/|opt/homebrew/bin/|"
+    r"site-packages/[^/]*\.pth|\.config/starship\.toml|\.zlogout|\.git/config\.worktree|"
+    r"code/user/(?:tasks|settings)\.json|\.config/(?:helix|nvim|zed|alacritty)/|\.codex/prompts/|\.windsurf/|"
+    r"\.t?cshrc|\.xinitrc|\.xprofile|\.config/environment\.d/|\.zsh/|\.github/actions/|\.circleci/|jenkinsfile|"
+    r"lefthook\.ya?ml|\.pre-commit-hooks\.yaml|taskfile\.ya?ml|\.?pylintrc|mypy\.ini|\.flake8|\.coveragerc|"
+    r"\.mocharc|\.rspec|gemfile|\.(?:eslintrc|prettierrc|babelrc)\.[cm]?js|(?:prettier|next|nuxt|svelte|astro|"
+    r"tailwind|postcss)\.config\.[cm]?[jt]s"
+)
+_PERSISTENT = re.compile(r"(?:^|/)(?:" + _PERSISTENT_PATHS + "|" + _BUILD_FILES + "|" + _WRITE_ONLY_PATHS + ")", re.I)
+# The same inside a command line, where a path follows a space, a quote or an operator, not only a slash.
+_PERSISTENT_IN_COMMAND = re.compile(r"(?:^|[/\s'\"=:<>])(?:" + _PERSISTENT_PATHS + ")", re.I)
 # Fields of a built-in result that describe it rather than carry what the tool read.
 _RESULT_META = frozenset({"url", "filePath", "file_path", "durationMs", "durationSeconds", "code", "codeText", "bytes",
                           "query", "interrupted", "isImage", "numLines", "startLine", "totalLines", "type",
                           "returnCodeInterpretation", "noOutputExpected", "backgroundTaskId", "returnDisplay"})
+
+
+_JSON_STRING = re.compile(r'"[\w:.-]+"\s*:\s*"((?:[^"\\\n]|\\.)*)"')
+_SHELL_FILE = re.compile(r"\.(?:sh|bash|zsh|ksh|command|bats)$", re.I)
+_SHELL_SHEBANG = re.compile(r"#![ \t]*(?:\S*/)?(?:env[ \t]+(?:-S[ \t]+)?)?(?:ba|z|da|k|a)?sh\b")
+
+
+def _shell_script(path: str, text: str) -> bool:
+    """A file a shell runs: a shell extension or a shell shebang."""
+    return bool(_SHELL_FILE.search(path)) or bool(_SHELL_SHEBANG.match(text))
 
 
 def _builtin_target(kind: str, field_name: str, arguments: dict[str, Any]) -> str:
@@ -799,6 +881,17 @@ def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[
         return guard.fetch(session, label, target)
     if kind in ("read", "write"):
         return guard.file(session, label, target, _builtin_content(arguments), write=kind == "write")
+    if kind == "patch":  # every file it names is a write, of what the patch adds
+        values = [arguments.get(k) for k in (field_name, "command", "patch", "diff")]
+        # Codex may pass the command as a list: ["apply_patch", "*** Begin Patch ..."]
+        patch = "\n".join(str(x) for v in values for x in (v if isinstance(v, list) else [v]) if isinstance(x, str))
+        added = "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
+        paths = [(a or b).strip() for a, b in _PATCH_FILE.findall(patch)] or [""]
+        # One database read per file would make a huge patch slow: the path rules are plain patterns, so only the
+        # files they fire on, and one of the rest (for what the patch adds), go to the guard.
+        special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)]
+        verdicts = [guard.file(session, label, path, added, write=True) for path in special[:8] + paths[:1]]
+        return next((v for v in verdicts if v.decision != "allow"), verdicts[0])
     return None
 
 
@@ -916,7 +1009,7 @@ def _claude_builtin(harness: str, name: str, session: str, event: dict[str, Any]
     if name == "PreToolUse":
         v = _builtin_call(guard, session, tool, arguments)
         return None if v is None else _claude_reply(harness, session, f"builtin:{tool}", event, guard, v)
-    if name in _CLAUDE_RESULT_EVENTS and _BUILTIN[tool][0] != "write":
+    if name in _CLAUDE_RESULT_EVENTS and _BUILTIN[tool][0] not in ("write", "patch"):
         kind, field_name = _BUILTIN[tool]
         target = _builtin_target(kind, field_name, arguments)
         return _claude_result(harness, name, session, f"builtin:{tool}", event, guard, _builtin_source(kind, target),
@@ -1117,7 +1210,7 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
     if name == "BeforeTool":
         v = _builtin_call(guard, session, tool, arguments)
         return None if v is None or v.decision == "allow" else _gemini_decision(session, v, guard)
-    if name == "AfterTool" and _BUILTIN[tool][0] != "write":
+    if name == "AfterTool" and _BUILTIN[tool][0] not in ("write", "patch"):
         kind, field_name = _BUILTIN[tool]
         target = _builtin_target(kind, field_name, arguments)
         return _gemini_result(session, f"builtin:{tool}", event, guard, _builtin_source(kind, target),
