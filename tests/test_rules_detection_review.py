@@ -9,6 +9,7 @@ import re
 import time
 
 import pytest
+from timelimits import limit
 
 from intentshield import hostlists
 from intentshield.harness import HarnessGuard
@@ -104,7 +105,7 @@ def test_the_comma_break_stays_linear():
     text = "do not send a reply, " * 10_000 + "x"
     start = time.perf_counter()
     scan_output(text)
-    assert time.perf_counter() - start < 2.0
+    assert time.perf_counter() - start < limit(2.0)
 
 
 # --- rules-12: an indicator with a port covers calls to its host --------------------------------------------------

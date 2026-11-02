@@ -7,11 +7,11 @@ characters takes, which is what these tests are for.
 Every address is a reserved example name; nothing here is run."""
 from __future__ import annotations
 
-import os
 import random
 import time
 
 import pytest
+from timelimits import limit
 
 from intentshield.shell import parse
 
@@ -21,13 +21,10 @@ TOKENS = ["\\", "'", '"', "$(", "`", "<<", "${", "$((", "(", ")", "{", "}", "$["
           "printf '", "&", "||"]
 
 
-LIMIT = 3.0 if os.environ.get("CI") else 1.0  # GitHub Actions sets CI
-
-
-def _timed(command: str, limit: float = LIMIT) -> None:
+def _timed(command: str, seconds: float = 1.0) -> None:
     start = time.perf_counter()
     parse(command)
-    assert time.perf_counter() - start < limit, command[:40]
+    assert time.perf_counter() - start < limit(seconds), command[:40]
 
 
 @pytest.mark.parametrize("shape", [

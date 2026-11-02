@@ -5,6 +5,8 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from timelimits import limit
+
 from intentshield.mcp_inspect import distinctive_values, scan_description, scan_output, self_disclosure_fields
 from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime
 from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstreamConfig
@@ -160,7 +162,7 @@ def test_value_extraction_stays_linear_on_long_runs():
     start = time.perf_counter()
     for text in ("a1" * 100_000, "a-" * 100_000, "ab." * 70_000):
         distinctive_values(text)
-    assert time.perf_counter() - start < 2  # the unanchored patterns took minutes here
+    assert time.perf_counter() - start < limit(2)  # the unanchored patterns took minutes here
 
 
 def test_per_tool_destination_lists_reject_catch_all_patterns():
