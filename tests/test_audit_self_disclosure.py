@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 
 import pytest
+from timelimits import limit
 
 from intentshield.mcp_inspect import self_disclosure_fields
 
@@ -81,7 +82,7 @@ def test_a_hostile_schema_is_read_in_bounded_time():
     started = time.perf_counter()
     for schema in ({"properties": {"deep": deep}}, {"properties": {"wide": wide}}, circular):
         assert self_disclosure_fields(schema) == set()
-    assert time.perf_counter() - started < 1.0
+    assert time.perf_counter() - started < limit(1.0)
 
 
 def _wrap(inner):

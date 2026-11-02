@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield import threat_memory
 from intentshield.mcp_inspect import authority_values, scan_output
@@ -349,7 +350,7 @@ def test_check_text_is_fast_with_hundreds_of_fingerprints(memory):
     sample = sample[:4096]
     memory.check_text(sample)
     best = min(_timed(memory.check_text, sample) for _ in range(20))
-    assert best < 0.005
+    assert best < limit(0.005)
 
 
 def _timed(fn, *args) -> float:

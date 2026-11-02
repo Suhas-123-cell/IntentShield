@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield.harness import HarnessGuard, handle
 from intentshield.shell import _plain, _read, parse
@@ -435,7 +436,7 @@ def test_variables_that_would_grow_without_bound_are_not_written_out():
     for command in (levels, quadratic, unused, "A=" + "x" * 50_000 + ";echo " + "$A " * 30_000):
         start = time.perf_counter()
         parse(command)
-        assert time.perf_counter() - start < 1.0, command[:30]
+        assert time.perf_counter() - start < limit(1.0), command[:30]
     # a command that grows past the limit and sends is still read as one that sends
     assert parse("A=" + "x" * 8000 + ";echo " + "$A " * 8000 + "; " + SEND).sends
 
@@ -598,7 +599,7 @@ def test_a_guard_reads_what_the_reviewer_hid_after_a_quoted_operator_a_shift_or_
 def test_a_command_with_many_here_documents_is_read_as_unreadable_without_a_quadratic_scan():
     start = time.perf_counter()
     found = parse("<<A " * 5000 + "\nA\n")
-    assert time.perf_counter() - start < 2.0
+    assert time.perf_counter() - start < limit(2.0)
     assert not found.read_only
 
 
@@ -818,7 +819,7 @@ def test_a_command_with_many_unclosed_braces_parses_fast():
     for command in ("echo " + "${" * 90_000, "echo " + "${ " * 60_000, "echo " + "${x:-" * 40_000):
         start = time.perf_counter()
         assert parse(command).read_only is False
-        assert time.perf_counter() - start < 2.0, command[:20]
+        assert time.perf_counter() - start < limit(2.0), command[:20]
 
 
 def test_a_guard_reads_what_a_reviewer_hid_in_round_four(tmp_path: Path):
@@ -986,7 +987,7 @@ def test_parsing_a_long_command_is_linear():
         for command in (f"echo {run} | xxd -r -p > f", f"curl -s https://x.example.dev/{run}", run, f"echo '{run}'"):
             start = time.perf_counter()
             parse(command)
-            assert time.perf_counter() - start < 1.0, command[:20]
+            assert time.perf_counter() - start < limit(1.0), command[:20]
 
 
 # --- round six: the raw text read as a shell or a program would read it, statements, options -----------------

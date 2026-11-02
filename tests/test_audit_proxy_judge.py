@@ -6,6 +6,7 @@ import io
 import urllib.error
 
 import pytest
+from timelimits import limit
 
 from intentshield import judge as judge_module
 
@@ -69,7 +70,7 @@ def test_strip_blobs_leaves_prose_padding_and_short_tokens_and_is_linear():
     near = ("Abcdefghijklmnop0123456789" * 15)[:399]
     started = time.perf_counter()
     assert strip((near + " ") * 500) == (near + " ") * 500  # runs just under the floor, 200 KB of them
-    assert time.perf_counter() - started < 1.0
+    assert time.perf_counter() - started < limit(1.0)
 
 
 def test_decoy_windows_cannot_take_every_place_from_a_quiet_instruction():

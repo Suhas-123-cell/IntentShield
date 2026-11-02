@@ -6,15 +6,16 @@ from __future__ import annotations
 import time
 
 import pytest
+from timelimits import limit
 
 from intentshield.mcp_inspect import scan_description, scan_output
 
 
-def within(limit: float, fn, *args):
+def within(seconds: float, fn, *args):
     start = time.perf_counter()
     result = fn(*args)
     elapsed = time.perf_counter() - start
-    assert elapsed < limit, f"{elapsed:.1f}s"
+    assert elapsed < limit(seconds), f"{elapsed:.1f}s"
     return result
 
 

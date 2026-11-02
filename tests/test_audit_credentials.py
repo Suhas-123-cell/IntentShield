@@ -7,6 +7,7 @@ import codecs
 import time
 
 import pytest
+from timelimits import limit
 
 from intentshield import credentials
 
@@ -107,7 +108,7 @@ def test_find_stays_fast_on_hostile_text():
                  "12 12 12 12 12 12 12 1 " * 8_000):
         started = time.perf_counter()
         credentials.find(text)
-        assert time.perf_counter() - started < 1.5, text[:12]
+        assert time.perf_counter() - started < limit(1.5), text[:12]
 
 
 PEM = ("-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n"
@@ -224,7 +225,7 @@ def test_mask_of_clean_text_is_as_fast_as_find():
     text = "the quick brown fox, jumps over: the lazy dog. " * 4_000
     started = time.perf_counter()
     assert credentials.mask(text) == text
-    assert time.perf_counter() - started < 1.0
+    assert time.perf_counter() - started < limit(1.0)
 
 
 @pytest.mark.parametrize("text", ["*" * 25_000, "***\n" * 20_000, "* " * 40_000, "password: " + "*" * 20_000,
@@ -232,7 +233,7 @@ def test_mask_of_clean_text_is_as_fast_as_find():
 def test_find_stays_fast_on_a_row_of_asterisks(text):
     started = time.perf_counter()
     credentials.find(text)
-    assert time.perf_counter() - started < 1.5, text[:12]
+    assert time.perf_counter() - started < limit(1.5), text[:12]
 
 
 GLUE_TOKENS = {
