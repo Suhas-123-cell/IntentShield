@@ -140,7 +140,7 @@ anything and never relax a built-in rule.
   proxy and hook process, so what one session caught, the next session knows. Only rule-confirmed text
   teaches it, never its own matches; values the user typed are never learned or held against them;
   fingerprints that a benign gate corpus would contain are rejected; learned entries expire after 30
-  days. A server with attacks in 3 distinct runs within 7 days is hostile: its outputs are read as possibly
+  days. A server with attacks in 5 distinct runs within 7 days is hostile: its outputs are read as possibly
   injected (weak evidence, never on a call's arguments) until the operator approves a call to it or
   allowlists it. What it learned on its own only asks (`REVIEW_KNOWN_THREAT`, a hook "ask"); an entry the operator
   confirms, or one from an imported feed or a trusted pack, blocks (`BLOCK_KNOWN_THREAT`). The file
@@ -503,7 +503,8 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   A hook that crashes denies the call; for Claude Code the example config adds
   `"onFailure": "block"` so a hook that is missing, times out or exits with another code
   denies it too. MCP resource reads (`ReadMcpResourceTool`) are scanned like tool results.
-  Built-in tools (shell, file edits) are left to the harness.
+  Built-in tools (shell, file and web tools) are left to the harness unless the hook is installed with
+  `--builtin-tools`; see [Built-in tools and the dangerous-command rules](#built-in-tools-and-the-dangerous-command-rules).
 - **Transparent proxy** (`intentshield-mcp --transparent --config <file>`, stdio only)
   wraps each MCP server the harness launches. It shows the upstream's own tools, hides
   any whose description matches poisoning rules or that changed after connect (rug pull),
@@ -535,6 +536,50 @@ them. By hand, the entry looks like this:
 Servers reached over HTTP (`"url"`) are not launched by the client, so `wrap` leaves them alone;
 guard those with the [gateway](#real-mcp-proxy).
 
+### Built-in tools and the dangerous-command rules
+
+By default the hooks check MCP calls only. `intentshield install <harness> --builtin-tools` also sends the
+harness's own tools to the hook (the per-harness list is in the README's
+[built-in tools row](../README.md#what-each-layer-sees-and-stops)); run the command again to change it, and
+install without the flag to go back. `--builtin-tools` has been in the PyPI releases since 0.4.1. The session
+rules it applies to a shell command, fetch or file access (an address that came from an injected output, data
+sent to an address the user did not name, secrets read and sent out, what may run after an output tried to
+instruct the agent) are the ones in that row. After an injection a read-only command, and an ordinary local
+build, test or version-control command such as `pytest` or `git commit`, still run; `rm`, `sed -i`,
+`pip install` and a download from a host the user did not name ask.
+
+**Dangerous-command rules (on `main`, not yet in a PyPI release).** With `--builtin-tools` the hook also runs
+`src/intentshield/dangerous.py` on every shell command, file read and file write that the session rules allow.
+They read the call's text alone, parsed safely (`shlex` stages, wrappers such as `sudo` and `env`, `bash -c`,
+`$(...)`, here-documents, never executed), with linear-time patterns. They are **text rules and opt-in**, not a
+sandbox:
+
+| decision | what it covers |
+|---|---|
+| deny | recursive delete, `chmod` or `chown` of root or a system directory; writes to a block device, `mkfs`, `wipefs`; a fork bomb; force-push or deletion of a shared branch; a read of an SSH private key, a cloud credential file, `~/.netrc` or a keychain; a sensitive file sent to a network destination; a reverse shell; a write to `authorized_keys` or sudoers |
+| ask | hook bypass (`--no-verify`, `git commit -n`, `core.hooksPath`); other force-pushes; `git reset --hard`; `curl ... \| sh` (a deny when run with `sudo` or over plain HTTP); a read of `.env` or a cloud token; an upload of a file to a host the user did not name; a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow; `chmod 777`; a non-recursive `chmod` or `chown` on a system path |
+
+A command the user typed in their prompt, or a path they named, turns a deny into an ask. `--review never`
+drops the asks of these rules and keeps the denies. A command built at run time from pieces (`$(printf ...)`,
+a variable set in an earlier call), an interpreter script file and a language one-liner that wraps the real
+action are not seen.
+
+What the study measured about them (`docs/hook-fidelity-study.md` section 6e, rows in
+`results/hook-fidelity/detect/fresh/`): on a fresh set of 214 built-in shell, read, write and edit calls (104
+harmful, 110 benign; one author, offline decisions, no model in the loop), the hook with `--builtin-tools` and
+**without** the rules let through 96/104 harmful calls (92%). With the rules it let through 28/104 (27%, Wilson
+[19, 36]): 41 were asked and 35 denied, and 5/110 benign calls were asked, none denied. That is evidence that the
+rules work on the six categories they were written from, which are the six the set samples: it was built by
+the same model family that wrote the rules, the rules were not tested outside those categories (the test that
+was planned did not run, section 6f), and the comparison with two other guards is mixed. `safety-net` let through
+44/85 harmful calls on its shell scope and `knox` 44/73 on its scope, where IntentShield let through 25/85 and
+18/73, but **on denies alone IntentShield trails `safety-net` (24/85 against 41/85) and ties `knox` (28/73
+against 29/73)**. Its remaining misses are discovery-only commands, cloud-CLI destruction (`aws s3 rb --force`,
+`kubectl delete namespace kube-system`), `node -e` and `python3 -c` one-liners, reads of an instance-metadata
+address or a Kubernetes service-account token, and a few others listed in section 6e. An ask is a prompt only
+in an interactive Claude Code session; on a headless build it is a refusal, so those benign asks cost a refused
+call. None of this makes the hook a substitute for the harness's own permission rules.
+
 ### Point the model at the right tool
 
 Two optional features cut the tokens spent on tools the task does not need. Both rank
@@ -565,6 +610,214 @@ tools, about 470 characters of descriptions), so routing pays off with many serv
 connected: the 45 catalogs together are about 75k characters, roughly 19k tokens sent with
 every request. A malicious server can still word its descriptions to be ranked first; the
 300-character cap limits keyword stuffing, it does not stop it.
+
+## When the guard blocks or asks about something legitimate
+
+A false positive costs a refused call or a prompt, and a guard that is turned off for that reason protects
+nothing, so this section says what each harness shows, how to approve, which settings exist and how to read the
+reason. The messages quoted here come from the code and from runs under a temporary home directory.
+
+**What you see.** A hook answers allow, ask or deny. The table is the README's per-harness table with what the
+user actually sees (the README table has the hook configuration):
+
+| harness | an ask | a deny |
+|---|---|---|
+| Claude Code | in an interactive session, Claude Code's own permission prompt, with the hook's reason as its text; you answer yes or no there. In a headless run (`claude -p`) nobody can answer: on `main` (not yet in a PyPI release) the hook sends the ask as a refusal that says so, and Claude Code 2.1.85 and later refuses an ask nobody answers by itself | the call does not run; the model is shown the reason |
+| Codex CLI | never a prompt: Codex runs a call its hook asked about, so an ask is sent as a refusal that tells the agent not to retry | the same refusal |
+| Cursor | an MCP call: a refusal (Cursor ran an allowlisted MCP call its hook asked about). A shell command with `--builtin-tools`: Cursor's own approval prompt | `permission: deny`, with the reason as the user message |
+| Gemini CLI | by default a refusal. With `install gemini --gemini-ask` (Gemini CLI 0.66 or later, interactive, shell commands only) a prompt; an MCP ask is always refused. After the third refusal since your last prompt the hook also ends the agent's turn, so it stops retrying | the same refusal |
+
+A refusal carries the sentence "Do not retry this call or a variant of it: tell the user what you wanted to do
+and why, so they can decide", so a well-behaved agent reports back instead of looping.
+
+**How to approve.** On Claude Code (and on Cursor for a shell command) answer the prompt. The hooks have no
+approval queue of their own: a hook never approves a call, so a refused call does not run until something
+changes. What you can change, narrowest first:
+
+1. **Name the value in your own prompt.** An address, URL, account or path you typed is trusted; one that appeared
+   only in a tool result is not. If the reason says "An argument value came from a tool output, not from the
+   user", repeat the recipient or URL in your next prompt and ask again.
+2. **Start a new session.** The taint and the flagged state belong to one session; a new session starts clean.
+   What the threat memory learned (below) survives.
+3. **Allow the value or server in the threat memory.** `intentshield-threats list` shows what it holds,
+   `intentshield-threats revoke <id>` forgets an entry (it is not learned again), `intentshield-threats allow
+   <address, domain or server>` allowlists it and revokes what it covers, and `intentshield-threats benign
+   "<text>"` records an output text as benign when a rule or fingerprint fired on it. Something the memory
+   learned on its own only asks; `confirm <id>` is what makes an entry block. Turn the memory off with
+   `--no-threat-memory` on the hook command or `INTENTSHIELD_THREAT_MEMORY=0`.
+4. **Change `--review`.** It decides when a state-changing MCP call asks: `intentshield install <harness> --review
+   always|tainted|never` writes it into the hook command (the default is `tainted`: ask once an output tried to
+   instruct the agent or a value came from an output), and the hook reads `INTENTSHIELD_HOOK_REVIEW` when the flag
+   is absent. `always` asks about every state-changing call (a refusal on Codex and Gemini). `never` removes every
+   ask, including the asks for values from tool outputs, for credentials the user did not give, for a judge's
+   objection and for the dangerous-command rules; it keeps the denies (injected instructions in the arguments, a
+   value from an injected output, a known attack, the dangerous-command denies). It is not a way to approve one
+   call; use it only where a refusal costs more than the ask protects. Reads whose argument came from an output
+   can be let through on their own with `INTENTSHIELD_HOOK_SOURCED_READS=allow` (or `--allow-sourced-reads` on the
+   hook command; `install` has no flag for it) while writes still ask.
+5. **Remove a layer.** Run `intentshield install <harness>` again without `--judge`, `--builtin-tools` or
+   `--gemini-ask` to drop what caused the prompt. `intentshield uninstall <harness>` (add `--scope project` for the
+   project's settings file) removes only IntentShield's hook entries and leaves every other setting; the file is
+   deleted only when it held nothing else. `intentshield unwrap <mcp.json>` restores the servers `wrap` rewrote
+   (`--server NAME` for one) and keeps their proxy configs and audit databases. All four commands accept
+   `--dry-run` to print the result. On `main`, `install --no-translate` (or `INTENTSHIELD_HOOK_TRANSLATE=off`) goes
+   back to the hook as it was before the verdict translation: no deadline, no fail-closed launcher, and asks sent
+   as the harness table above lists them.
+
+For the gateway and the transparent proxy the approval is a human decision through the control endpoint, see
+[Human approval for mutations](#human-approval-for-mutations). A tool the proxy hid because its description
+changed after connect stays hidden for the rest of that session; restart the client after you have looked at the
+change. For `intentshield scan`, `--update-pins` accepts the tools as they are.
+
+**How to read a reason.** The reason is the text of the refusal or of the prompt. These are the ones you will meet
+(each is the message the hook prints, with the call's own values in place of the angle brackets):
+
+| the reason starts | what it means |
+|---|---|
+| `Arguments carry injected instructions (instruction_override).` | deny: the call's own arguments contain text the rules read as an instruction to the agent; the name in brackets is the rule |
+| `An argument value came from a tool output that contained injected instructions, not from the user: <values>.` | deny: a value in the call (at most three are shown) came from a result the scan flagged |
+| `An argument value came from a tool output, not from the user: <values>. Confirm this call.` | ask: the address, URL, account or path appears in an earlier result and not in your prompts; see "name the value" above |
+| `A tool output in this session tried to instruct the agent; confirm this call.` | ask: a result in this session was flagged and the call changes state |
+| `An argument carries a credential the user did not give (<masked>)` | ask, or deny once the session is flagged: a token or key you did not type is leaving |
+| `An argument matches an earlier attack (<value>); confirm this call.` / `An argument matches a known attack` | threat memory: a learned value asks, an operator-confirmed or imported one denies |
+| `IntentShield's LLM judge found this call inconsistent with your request; confirm with the user.` | ask from the optional judge, which never denies on its own; Claude Code's prompt shows the judge's own words to you and not to the agent |
+| `IntentShield: <reason>` | a dangerous-command rule (on `main`), for example `IntentShield: git commit -n skips the repository's pre-commit hooks.`; `(the user typed this command, so confirm it)` marks a deny softened to an ask |
+| `... (IntentShield wanted the user to confirm this call, but <why>; so it is refused and the user can allow it.)` | an ask that was sent as a refusal (on `main`); `<why>` says whether it was a headless run, a harness that does not honour an ask, or an unmeasured build |
+| `[IntentShield read this session as <mode>: <how> [ancestry: <source>]]` | on `main`, what the mode detector read (`interactive`, `headless`, `yolo` or `unknown`) and which source decided; "the harness process was not found among the ancestors: assumed headless" explains an unexpected refusal in a session you were attending |
+| `IntentShield did not finish checking this call within 30 s ...` | the hook's own deadline (on `main`) answered before the harness's timeout, which every harness measured lets the call run |
+| `IntentShield hook did not run (exit code <n>); this call is refused.` | the fail-closed launcher (on `main`): the hook could not start or crashed; run `intentshield doctor` |
+
+If the reading is wrong for your session, `INTENTSHIELD_HARNESS_MODE=interactive|headless|yolo` and
+`INTENTSHIELD_HARNESS_VERSION=X.Y.Z` override it, and the hook says on stderr that it was overridden. A project's
+settings can set them for a session, so do not set them for a repository you do not trust.
+
+## Wrapping a third-party hook
+
+On `main`, not yet in a PyPI release. `intentshield wrap-hook` runs any hook command under the same fail-closed
+launcher, deadline and version-keyed verdict translation that `install` writes for IntentShield's own hook. It
+exists because the hook-fidelity study found that the harnesses let a call run when a hook crashes, is slow or
+prints nothing, and that a guard's `ask` is dropped, run or hung on some builds
+([study](hook-fidelity-study.md), [mitigation](hook-fidelity-mitigation.md)). The harness runs the shim in place
+of the guard; the shim pipes the harness's event to the guard and sends the harness one reply in its own shape.
+
+```sh
+intentshield wrap-hook --harness claude|codex|gemini|cursor [--version X.Y.Z] [--mode interactive|headless|yolo] \
+    [--deadline SECONDS] [--hook-timeout SECONDS] [--on-empty deny|allow] [--gemini-ask] -- <guard command ...>
+```
+
+A hook entry that ran `pnpm dlx block-no-verify` becomes
+
+```text
+intentshield wrap-hook --harness claude --hook-timeout 5 -- pnpm dlx block-no-verify || { rc=$?; [ "$rc" -eq 2 ] || echo "IntentShield hook did not run (exit code $rc); this call is refused." >&2; exit 2; }
+```
+
+The trailing `|| { ... }` is the launcher, which refuses the call when the shim itself cannot start;
+`intentshield.wrap_hook.wrapped_command()` builds the exact string. **There is no installer for third-party
+entries**: you edit the entry by hand, and `--hook-timeout` has to repeat the timeout the entry gives the hook
+(the shim keeps its deadline under it; without it a shorter shipped timeout fires first). What the shim does with
+the guard's reply:
+
+| the guard does | the shim sends |
+|---|---|
+| exit 2, with or without text on stderr | a deny with a reason (a bare exit 2 is not a refusal on every build: Codex 0.166.0 ran the call) |
+| any other non-zero exit, cannot be started, still running at the deadline (30 s by default) | a deny that says so |
+| exit 0 with a deny or block verdict | a deny in the harness's own shape |
+| exit 0 with `ask` | an ask only where this build, in this mode, is measured to enforce one; otherwise a deny that says what the guard wanted |
+| exit 0 with JSON that names no verdict, or an explicit allow | the guard's bytes unchanged, so a rewrite or note still arrives |
+| exit 0 with a verdict word it does not know, text that is not a JSON object, or more than 1 MB | a deny |
+| exit 0 with nothing on stdout | `--on-empty deny` (the default): a deny; `--on-empty allow`: the call runs |
+
+The last row is the cost. Most guards print nothing for an allow, so the default blocks every guard that signals
+allow by silence, and `--on-empty allow` lets through the guard that failed before it decided, which also
+prints nothing. Only events that check a call are translated; others pass to the guard unchanged. The version
+comes from `--version` or the record `install` and `doctor` keep, and the mode from the process tree unless
+`--mode` or `INTENTSHIELD_HARNESS_MODE` says.
+
+What was measured: headless, macOS, a stub model, one or two runs per cell. On the 12 (build, cell) pairs where
+the shipped verdict of one of six captured third-party guards did not survive, the same bytes behind the shim
+were blocked in 12/12, and IntentShield's own installed hook in 11/11 pairs with a result. Nine of the 12 are the
+`|| exit 2` launcher alone (launcher-only reproduced the 5 that were launched), and a hook that denies everything
+scores the same on every survival cell. So this shows that verdict delivery can be repaired by a thin wrapper,
+not that the wrapped guard is better, and nothing was measured about a guard's detection. See
+`results/hook-fidelity/compare/README.md`.
+
+### What `install` writes on `main`
+
+`intentshield install` runs `<harness> --version` and records it in `~/.intentshield/harness-versions.json`, then
+writes two things into the hooks that check a call (Claude Code, Codex and Gemini; Cursor keeps `failClosed`): the
+hook's own deadline (`--deadline`, 30 s by default, so a slow judge or database answers with a refusal before the
+harness's timeout, which every harness measured treats as permission to run the call) and the launcher above
+(a hook that cannot start, with exit 126 or 127, becomes exit 2 with a reason). The launcher is for POSIX shells
+and is left out on Windows. `--no-translate`, or `INTENTSHIELD_HOOK_TRANSLATE=off` at run time, writes the hook as
+it was before: verdicts are sent as the guard made them, with no deadline and no launcher. `intentshield doctor`
+warns about a call hook installed without them.
+
+## Troubleshooting
+
+**`intentshield doctor`** checks every harness's user and project settings file, then the MCP configs it finds
+(Claude Code, Cursor and Gemini CLI). A line is `ok`, `warn`, `FAIL` or `--` (no IntentShield hooks for that
+harness); it exits 1 when any line is `FAIL`, and `warn` lines do not change the exit code. Apart from recording
+each harness's version it only reads. Messages from a run against a fresh install:
+
+- `FAIL <harness> (<file>): installed, but no hook has run since <time>.` Right after `install` this is expected:
+  start the harness once. If it stays, the harness is not running the hooks. For Codex the line adds: "Codex skips
+  hooks nobody has trusted: start `codex` and approve the IntentShield hooks."
+- `FAIL ... no IntentShield hook for <events>; run intentshield install <harness>`, and `FAIL ... the hook
+  executable <path> does not exist` (a deleted environment): run `install` again from the environment you use.
+  `FAIL ... starts with #!<interpreter>, which does not exist` is a virtual environment whose Python was removed or
+  upgraded; with the launcher the line is a `warn`, because the launcher refuses the call, but results and prompts
+  go unchecked.
+- `FAIL ... the hooks are installed but switched off: disableAllHooks is true in <file>` (Claude Code).
+- `FAIL ... the <event> matcher ... does not match MCP tools`, and the same for `Bash` with `--builtin-tools`:
+  `install` again.
+- `FAIL ... the groq judge has no GROQ_API_KEY in ~/.intentshield/.env` (and the same for the other judges): the
+  hook runs on the rules alone. A key exported only in your shell is a `warn`, because a harness started from the
+  Dock or an IDE does not inherit it. `install <harness> --judge groq` stores it.
+- `warn <file>: <n> stdio server(s) not behind the transparent proxy, so their tool descriptions go unchecked:
+  <names>. Run intentshield wrap <file>`. And `FAIL ... runs the proxy with a missing config`: `unwrap` restores
+  the entry from the copy `wrap` kept, or edit it by hand.
+- On `main`, `warn` lines state what was measured for the detected version, for example "Claude Code 2.1.322: a
+  hook that prints nothing or malformed JSON allows the call, with or without `onFailure: block`", or, for Codex,
+  "a hook's ask, an empty reply, malformed JSON, exit 1, 126, 127 and a timeout all let the call run". They are
+  facts about the harness, not faults in your install. "version unknown" means the harness was not on `PATH`
+  when `install` or `doctor` ran; until it is recorded, every ask is sent as a refusal.
+
+**Codex hooks not yet trusted.** Codex runs a new hook only after you trust it once, and until then it skips it
+without a word in the session. Start `codex` interactively and approve the IntentShield hooks when it asks;
+`install codex` prints the same reminder, and `doctor` reports `no hook has run` until it happens. A live run
+with the hooks installed but not trusted was unguarded (the notes reached the attacker in 3/3 runs,
+`results/harness-live-codex/`). `codex exec --dangerously-bypass-hook-trust` is measured not to run hooks through
+Codex 0.140.0 (it does from 0.141.0), so do not rely on it for an older build.
+
+**Gemini CLI waits for ever on an ask.** That is the headless case: with `install gemini --gemini-ask`, a headless
+run (`gemini -p`) waits for an answer that never comes from Gemini CLI 0.38.0 on (measured to 0.66.0), and 0.37 in
+yolo mode ran the call. `--gemini-ask` is for interactive sessions only. On `main` the hook sends a refusal when it can
+tell the run is headless, and `doctor` warns whenever the flag is on. If a session hangs, interrupt it and run
+`intentshield install gemini` again without `--gemini-ask`. If the hook cannot read the mode it refuses the ask;
+`INTENTSHIELD_HARNESS_MODE=interactive` restores the prompt in a session you know has a person.
+
+**A wrapped server does not see your shell's environment.** `wrap` starts each server through the proxy, which
+gives it the variables the entry's `env` names plus basics such as `PATH` and `HOME`, not the rest of your
+environment (a proxy setting, `AWS_*`, `SSH_AUTH_SOCK`, a token you exported). Name each variable the server
+needs in the entry's `env`; a literal value there stays in the client's file and is passed on by name, and an
+empty value is not forwarded. `wrap` skips an entry whose command line uses `${...}`, `$VAR` or `%VAR%`
+interpolation, because the client expands those only for the program it starts: replace it with the value (or
+move it to `env`) and wrap again. `intentshield scan` starts servers with the same reduced environment, so a
+server that needs a variable can fail to list its tools there, and the finding is `not_scanned`. `scan` starts the
+servers of a config the repository chose only with `--connect-project`; a file you name on the command line is
+treated as yours and is started.
+
+**The judge is offline.** The judge is evidence only. When it cannot be reached (no network, or its key is
+refused) the rules alone decide, with no extra ask or refusal; the agent is told "the LLM judge is offline or
+unavailable; only the rules checked this call", stderr says why, and the hooks skip the judge for 5 minutes before
+trying again, so an offline session does not wait on it at every call. A judge with no stored key says so in the
+same note and in `doctor`. A timeout, a rate limit or a reply it could not parse does not start the 5-minute pause.
+With a local judge (`--judge ollama`), an Ollama server that is not running ("Connection refused") starts the same
+pause.
+
+**Every ask is refused, or a hook seems slow.** Check the `[IntentShield read this session as ...]` note first (see
+above). A refusal that names a 30 s deadline means the judge or the database was slow; a hosted judge on a free
+tier can be. Each hook is a process of about 60 ms (README, Overhead); a much longer time is the judge.
 
 ## API
 

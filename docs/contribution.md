@@ -627,13 +627,16 @@ This section supersedes the §7 routes with the measured state; the verdicts abo
 more (runs plus app-server starts: 141 in the gap lane, 54 in the integration) in round 4, all against a local stub model, $0, no real model, no DeepSeek.
 
 **What was done.** Route 2 in a narrower form: instead of channel coverage across four to six harnesses with live models, the question "does a
-harness enforce the verdict a third-party PreToolUse-style hook returns?" was measured on Claude Code (23 builds), Codex CLI (17 sampled builds)
-and Gemini CLI (28 builds), headless, macOS, one scripted call per run, per mode, per hook reply and per trust state, with raw committed rows,
+harness enforce the verdict a third-party PreToolUse-style hook returns?" was measured on Claude Code (23 sampled builds), Codex CLI (17 sampled builds)
+and Gemini CLI (28 sampled builds), headless, macOS, one scripted call per run, per mode, per hook reply and per trust state, with raw committed rows,
 liveness controls, a pre-registered kill criterion and critic re-launches (20 to 28 cells per lane, all reproduced). Cursor CLI could not be
 measured (free-plan limit) and is counted nowhere.
 
 **Measured state.**
-- A parsed `deny` was enforced wherever the hook ran, on every build and mode tested. No unenforced deny was found.
+- A parsed `deny` was enforced wherever the hook ran, on every build and mode tested. No unenforced deny was found. The hook did not run in three
+  cases: Codex hooks nobody had trusted (skipped without a signal), a Claude Code hook scoped with the `mcp__.*` matcher on `ReadMcpResourceTool`
+  resource reads, and Gemini CLI before 0.26.0 (hooks opt-in). The build counts are sampled releases, so a boundary such as "from 2.1.85" lies
+  between two measured builds (bisected to adjacent releases only for Claude Code's `ask` and Codex's trust-flag boundary).
 - An `ask` with no human: denied by Claude Code from 2.1.85 (the change lies between the adjacent patch releases 2.1.84 and 2.1.85), ignored by
   Codex (documented as unsupported), silently run (0.24.5 to 0.37.2) or hung to the cap (0.38.0 to 0.66.0) on Gemini, under yolo and with the
   shell allow-listed.
@@ -653,7 +656,7 @@ measured (free-plan limit) and is counted nowhere.
 - Software-engineering lens (ICSE, FSE, ASE research track): **reject**. No stated RQs, stub not agent, one OS, headless only, a near-tautological
   mitigation evaluation, "the novelty is thinner than the effort". Accepts a tool or demonstration track, an MSR or ESEM data showcase, or an
   industry or AIware workshop paper.
-- Artifact lens: **minor revision**. Everything regenerates from the committed rows; 20 count and wording errors, fixed in round 4.
+- Artifact lens: **minor revision**. The tables regenerate from the committed rows, but guard decisions and launches need the corpus clones and release installs, which are not committed; 20 count and wording errors, fixed in round 4.
 - Mitigation critic: the arithmetic reproduces (28 of 28 re-launched outcomes match) but the evaluation could not falsify the design; "a modest
   engineering contribution over the corpus, not a research one".
 
@@ -665,6 +668,12 @@ per-vendor documentation-feedback packet (drafts kept out of the repository, not
 section 15 lists what it would need, with costs: an attacker-reachable trigger, model-in-the-loop agreement, interactive controls, a second OS,
 bisected boundaries and a determinism test, independent coding, a completed disclosure cycle. The contribution claim of `§5` is unchanged: the
 guard's detection layer is not a research result; the hook-fidelity matrix is a measurement of the harnesses, not of IntentShield.
+
+**What the public repository cannot show.** The study cites commits and branches of its development branch (for example `25b62ad`, "fixtures
+committed before any guard ran"); that branch was squash-merged, so those hashes are not in `main`'s history and the pre-registration order cannot be
+checked from the public history alone. Vendor documentation pages are cited by source URL and sha256, not redistributed
+(`results/hook-fidelity/vendor-archive/*/README.md`). The fresh detection set's labels come from one model family, the one that wrote the rules. The
+pty lane's 61 raw `transcript-head.bin` captures are not committed. See the study's section 10.
 
 **Product effect.** The study's findings changed shipped behaviour (installs write a deadline and a fail-closed launcher by default; an ask that is
 not positively interactive becomes a deny with a reason; `doctor` prints the measured fail-open conditions). That needs a human review before a
