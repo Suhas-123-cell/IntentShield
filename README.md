@@ -3,11 +3,13 @@
 **What:** an offline-first guardrail between an AI agent and its MCP tools. Every proposed tool call is normalized, checked by a deterministic policy, audited, and answered **ALLOW**, **REVIEW** or **BLOCK** before any side effect.<br>
 **For:** anyone running Claude Code, Codex CLI, Cursor or Gemini CLI against MCP servers who wants tool calls checked locally; the core needs no API key.<br>
 **Headline:** on 220 held-out MSB attack cases (218/220/216 paired per local agent), harmful actions executed fell from 15–59% unguarded to 0.0%, and the gateway left no harmful call waiting in the human's review queue (the hooks left 5/2/3 cases on qwen/llama/ornith). That is not unique: a trivial guard that holds every state-changing call for a human also reaches 0.0%, though it leaves up to 19% of cases in the queue. The cost is 8–14 points of task completion and, on all 4 agents, more benign calls held for review. Read the [caveats](#results) before quoting it.<br>
-**Not covered by default:** the harness's built-in shell and file tools (only MCP calls are checked unless you install with `--builtin-tools`, which is opt-in and best effort); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss (the optional LLM judge with `--judge-outputs` reads them; see [Results](#results)); injections in other languages, where the rules read only "ignore the previous instructions" and "new task:" (in 11 languages); and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI runs the hooks only after you trust them once in Codex (until then it is unguarded); Cursor has been run live twice with its `auto` model: in the MCP run its model refused the attack even unguarded, so that run shows the hooks work, not that they stop an attack; in the opt-in built-in-tools run (1 repetition, guarded arm only, no valid unguarded arm) it tried the upload on one page and the hook asked about it 3 times, harm 0/4, which is one run and not a rate. See [Limitations](#limitations).
+**Not covered by default:** the harness's built-in shell and file tools, HTTP (`url`) MCP servers under `wrap`, plain-language injections with no instruction marker, and most non-English injections. Details are under [Limitations](#limitations).
 
 [![CI](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml/badge.svg)](https://github.com/Suhas-123-cell/IntentShield/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/intentshield-mcp)](https://pypi.org/project/intentshield-mcp/)
 [![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
+
+![IntentShield blocking an injected MCP call](https://raw.githubusercontent.com/Suhas-123-cell/IntentShield/main/docs/demo.gif)
 
 ## Install
 
@@ -88,9 +90,7 @@ needed and nothing leaves the machine. Servers in a project's own config (`.mcp.
 `.vscode/mcp.json`, ...) are commands the repository chose, so they are checked as configs but started
 only with `--connect-project`.
 
-![IntentShield blocking an injected MCP call](https://raw.githubusercontent.com/Suhas-123-cell/IntentShield/main/docs/demo.gif)
-
-## Quickstart
+## Quickstart from a clone
 
 Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/). No API key or model download.
 
@@ -273,6 +273,7 @@ Other headline numbers (details and caveats in [docs/benchmarks.md](docs/benchma
 
 ### Limitations
 
+- Not covered by default: the harness's built-in shell and file tools (only MCP calls are checked unless you install with `--builtin-tools`, which is opt-in and best effort); HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway); injections written in plain language with no instruction marker, which the rules mostly miss (the optional LLM judge with `--judge-outputs` reads them; see [Results](#results)); injections in other languages, where the rules read only "ignore the previous instructions" and "new task:" (in 11 languages); and the learned detectors' PyTorch path, which CI does not exercise. Codex CLI runs the hooks only after you trust them once in Codex (until then it is unguarded); Cursor has been run live twice with its `auto` model: in the MCP run its model refused the attack even unguarded, so that run shows the hooks work, not that they stop an attack; in the opt-in built-in-tools run (1 repetition, guarded arm only, no valid unguarded arm) it tried the upload on one page and the hook asked about it 3 times, harm 0/4, which is one run and not a rate.
 - Single runs at temperature 0; 20 draws per MSB attack template, so Wilson intervals are too narrow and the
   cluster bootstrap is the one to cite.
 - Local 7 to 9B agents, plus one hosted model on 99 cases. No frontier-model AgentDojo run.

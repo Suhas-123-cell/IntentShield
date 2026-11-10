@@ -16,3 +16,9 @@
 - [related-work.md](related-work.md): literature survey and the adaptivity plan.
 - [coverage-study.md](coverage-study.md): which MCP channels a hook-scoped guard sees versus a proxy, measured with benign markers.
 - [icse27-demo/](icse27-demo/): demo-track paper source and video script.
+
+## Paths under `artifacts/`
+
+Several of these documents cite files under `artifacts/` (raw run logs, dataset checkouts, trained
+models). That directory is local working space and is not in the repository. The evidence the tables
+rest on is committed under [`results/`](../results/README.md), which also says how each file was produced.
