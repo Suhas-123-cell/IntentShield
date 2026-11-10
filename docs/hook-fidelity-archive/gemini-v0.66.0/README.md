@@ -14,3 +14,8 @@ that `benchmarks/hook_fidelity/signoffs.json` points at (sha256 recorded there).
 | `tools-mcp-server.md` | `docs/tools/mcp-server.md` |
 
 The documents describe v0.66.0 only. Behaviour of earlier releases is measured by the sweep, not read from these files.
+
+## Licence
+
+These files are copyright Google LLC and are redistributed under the Apache License, Version 2.0, the licence of
+`google-gemini/gemini-cli` (the text is in this repository's `LICENSE`, which is the same licence). They are unmodified.
