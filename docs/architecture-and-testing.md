@@ -579,7 +579,7 @@ Results and their caveats are in the README, and the raw outputs the papers cite
 
 **16. Completion checklist and practical limits**
 
-For a thorough test of the current implementation, collect these results: all 475 automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
+For a thorough test of the current implementation, collect these results: all automated tests; offline UI read/injection/approve/reject/negation; verifier PASS for single, multi, stdio, HTTP and mixed configs; all manual walkthrough PASS lines; explicit real-web read/review/approval; live Gemini read/mutation/preflight/no-action behavior; real local classifier predictions and fresh held-out evaluation; hook replies for each harness and a transparent-proxy session; audit persistence and clean Ctrl-C shutdown.
 
 For capacity testing, record latency and error/denial counts while increasing concurrent synthetic reads in a disposable database. Analyzer slots are shared and bounded; Gemini has a separate concurrency bound. Existing tests prove selected atomic races, not a sustained load limit or production service-level target. Check that every blocked/review response has `executed=false` and that mutation counts match approved operations.
 
