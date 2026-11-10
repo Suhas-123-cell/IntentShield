@@ -1,9 +1,12 @@
 # Archived Claude Code documents (retrieved 2026-11-01)
 
-Fetched with `curl -L https://code.claude.com/docs/en/<page>.md` on 2026-11-01 by the r3-claude lane; no edit. They are the
-vendor documents that `benchmarks/hook_fidelity/signoffs.json` cites for the Claude Code config items. The docs carry no
-version number except where a sentence says "requires v2.1.xxx"; the claude-help files are the `--help` text of the
-installed releases (`claude --help` under an isolated HOME, no login), which pins flag names per version.
+The seven documentation pages below were fetched with `curl -L https://code.claude.com/docs/en/<page>.md` on 2026-11-01
+by the r3-claude lane and read unedited. They are the vendor documents that `benchmarks/hook_fidelity/signoffs.json`
+cites for the Claude Code config items. The page texts are not redistributed here: they are Anthropic's documentation,
+with no licence that allows a copy. To check a quotation, fetch the page and compare; the hashes are of the files the
+study read, so a page that has changed since will not match. The docs carry no version number except where a sentence
+says "requires v2.1.xxx". The claude-help files, which are kept, are the `--help` text of the installed releases
+(`claude --help` under an isolated HOME, no login), which pins flag names per version.
 
 | file | source | sha256 |
 |---|---|---|

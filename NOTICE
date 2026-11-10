@@ -1,0 +1,13 @@
+IntentShield
+Copyright 2026 Maddali Suhas Choudary
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This repository includes third-party material:
+
+- docs/hook-fidelity-archive/gemini-v0.66.0/: unmodified documentation files from google-gemini/gemini-cli at tag
+  v0.66.0, copyright Google LLC, Apache License 2.0.
+- results/msb/cases.jsonl, results/injection/ and results/mcptox/: case text and strings derived from the MSB,
+  MCPTox, InjecAgent and AgentDojo benchmarks, which remain under their authors' terms; see results/README.md.
+- results/hook-fidelity/: the recorded output of third-party command-line tools (Claude Code, Codex CLI, Gemini CLI
+  and the hook guards named in docs/hook-fidelity-corpus.md) run for measurement.
