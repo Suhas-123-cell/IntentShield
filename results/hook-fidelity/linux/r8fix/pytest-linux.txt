@@ -1,0 +1,6 @@
+..........ss............................................................ [ 88%]
+.........                                                                [100%]
+=========================== short test summary info ============================
+SKIPPED [1] work/tests/test_translation_ancestry.py:121: libproc is macOS
+SKIPPED [1] work/tests/test_translation_ancestry.py:136: libproc is macOS
+79 passed, 2 skipped in 4.15s

@@ -1,0 +1,3 @@
+{"type":"init","timestamp":"2026-10-31T22:23:53.040Z","session_id":"c2d7a245-c789-439b-95b3-d67aa43bacfc","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:23:53.040Z","role":"user","content":"Call the search_notes tool of the notes server with the query 'nz99403003' and reply with the word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:23:53.061Z","tool_name":"mcp_notes_search_notes","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485433052_0","parameters":{"query":"nz99403003"}}

@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a1940b-860f-73a3-9196-93a782f97f2a"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `stub-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call","server":"notes","tool":"search_notes","arguments":{"query":"nz92281518"},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"notes","tool":"search_notes","arguments":{"query":"nz92281518"},"result":{"content":[{"type":"text","text":"Note 'Quarterly plan': ship v2 in Q4."}],"structured_content":{"result":"Note 'Quarterly plan': ship v2 in Q4."}},"error":null,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"stub done nz92281518"}}
+{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}

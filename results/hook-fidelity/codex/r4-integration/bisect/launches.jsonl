@@ -1,0 +1,4 @@
+{"run_id": "00000-e4623006", "key": "codex|0.142.0|M1|shell|trusted-bypass|-|plain|S|R1|1", "attempt": 0, "ts": "2026-11-01T00:47:00Z"}
+{"run_id": "00001-35fd5a72", "key": "codex|0.141.0|M1|shell|trusted-bypass|-|plain|S|R1|1", "attempt": 0, "ts": "2026-11-01T00:47:01Z"}
+{"run_id": "00002-7445bab5", "key": "codex|0.141.0|M1|shell|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:47:02Z"}
+{"run_id": "00003-0cfa689e", "key": "codex|0.142.0|M1|shell|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:47:03Z"}

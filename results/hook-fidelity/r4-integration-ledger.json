@@ -1,0 +1,81 @@
+{
+ "lane": "r4-integration",
+ "branch": "worktree-wf_64c5ca79-a50-8",
+ "arm": "S (local stub model, 127.0.0.1, fake key, isolated HOME per run)",
+ "paid_spend_usd": 0,
+ "deepseek": false,
+ "cursor": false,
+ "budget_launches": 60,
+ "invocations": [
+  {
+   "invocation": "mitigation_eval plan-r4 (allow, deny-all, slowdefault, norecord)",
+   "results": "results/hook-fidelity/mitigation/eval-r4",
+   "HOOK_FIDELITY_GO_planned": 36,
+   "launches_actual": 35,
+   "note": "one Codex slowdefault cell crashed in the runner before launching (KeyError on a missing hook timeout); fixed, rerun below"
+  },
+  {
+   "invocation": "mitigation_eval run --where codex slowdefault (rerun)",
+   "results": "results/hook-fidelity/mitigation/eval-r4",
+   "HOOK_FIDELITY_GO_planned": 1,
+   "launches_actual": 1
+  },
+  {
+   "invocation": "codex r4_persisted_b",
+   "results": "results/hook-fidelity/codex/r4-integration",
+   "HOOK_FIDELITY_GO_planned": 6,
+   "exec_runs_actual": 6,
+   "app_server_hooks_list": 6,
+   "version_probes": 1
+  },
+  {
+   "invocation": "codex bypass bisect 0.141.0 and 0.142.0 (R1, trusted-bypass, n=2)",
+   "results": "results/hook-fidelity/codex/r4-integration/bisect",
+   "HOOK_FIDELITY_GO_planned": 4,
+   "exec_runs_actual": 4,
+   "app_server_hooks_list": 0,
+   "version_probes": 2
+  },
+  {
+   "invocation": "gemini yolo ask with a 900 s cap (0.66.0, 0.38.2)",
+   "results": "results/hook-fidelity/gemini/r4-integration",
+   "HOOK_FIDELITY_GO_planned": 2,
+   "exec_runs_actual": 2,
+   "app_server_hooks_list": 0,
+   "version_probes": 2
+  },
+  {
+   "invocation": "manual `codex --version` of the newly installed 0.141.0 and 0.142.0",
+   "results": "none",
+   "HOOK_FIDELITY_GO_planned": null,
+   "version_probes": 2,
+   "deviation": "run with the real HOME (see home_snapshot)"
+  }
+ ],
+ "totals": {
+  "exec_runs": 48,
+  "app_server_hooks_list_launches": 6,
+  "runs_plus_app_server": 54,
+  "version_probes": 7,
+  "every_binary_start": 61,
+  "note": "The 60-launch budget was applied to runs plus app-server starts (54). Counting every binary start including 7 --version probes, which make no model call and run no hook, it is 61. HOOK_FIDELITY_GO equalled the exact planned run count in every invocation except the 2 manual probes (no GO)."
+ },
+ "outcomes": {
+  "mitigation_eval_r4": "36 rows, 0 INVALID",
+  "codex_persisted_b": "6/6 RAN hook invoked",
+  "codex_bisect": "4/4 RAN hook invoked",
+  "gemini_900s": "2/2 HUNG hook invoked"
+ },
+ "egress": "Codex behind the refusing egress proxy (log never created: 0 requests in 10 runs); Claude-free; Gemini and the mitigation cells under the loopback sandbox-exec profile",
+ "home_snapshot": {
+  "method": "find ~/.claude ~/.codex ~/.gemini ~/.cursor -exec stat -f '%m %N' before the first and after the last launch (68030 and 68030 entries)",
+  "~/.gemini": 0,
+  "~/.cursor": 0,
+  "~/.codex": "12 changed lines, all under ~/.codex/tmp/arg0: the two manual `codex --version` probes run with the real HOME created codex-arg0jhx0AZ (06:16) and Codex removed a stale codex-arg0lrjwEA (03:23, an earlier session's). No config, auth, session or hook state. Not reverted. Every run row has home_isolated true; the probes inside the runner use the isolated HOME.",
+  "~/.claude": "32 changed lines, all the live orchestrating session and its sync (projects transcripts, skills, backups, remote-settings, policy-limits); attribution, not proof, by mtime alone"
+ },
+ "other_deviations": [
+  "npm install of Codex 0.141.0 and 0.142.0 used the user's npm cache outside the four harness dirs",
+  "a first Gemini invocation was refused by the runner before launching (no credential name passed)"
+ ]
+}

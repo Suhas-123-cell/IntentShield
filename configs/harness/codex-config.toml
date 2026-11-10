@@ -1,16 +1,16 @@
 [[hooks.UserPromptSubmit]]
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
-command = "intentshield-hook codex"
+command = "intentshield-hook codex --deadline 30"
 
 [[hooks.PreToolUse]]
 matcher = "mcp__.*"
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "intentshield-hook codex"
+command = "intentshield-hook codex --deadline 30 || { rc=$?; [ \"$rc\" -eq 2 ] || echo \"IntentShield hook did not run (exit code $rc); this call is refused.\" >&2; exit 2; }"
 
 [[hooks.PostToolUse]]
 matcher = "mcp__.*"
 [[hooks.PostToolUse.hooks]]
 type = "command"
-command = "intentshield-hook codex"
+command = "intentshield-hook codex --deadline 30"

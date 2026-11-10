@@ -1,0 +1,151 @@
+216 runs (0 INVALID, left out of n), 108 cells: control 28, scored 80
+informative cells (scored and differing from P_guard, P_doc or the prediction): 54
+
+R0 (no hook) versus R1 (neutral hook), per block:
+  gemini 0.24.5 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.26.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.28.2 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.29.7 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.30.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.30.1 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.32.1 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.34.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.35.3 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.36.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.37.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.37.1 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.37.2 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.38.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.38.2 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.39.1 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.41.2 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.43.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.45.3 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.47.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.50.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.53.1 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.56.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.59.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.62.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.64.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.65.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.66.0 M2 shell - - plain S: R0 none | R1 RAN:2 | no-r0
+
+cell                                                                       result                         class
+gemini 0.24.5 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.24.5 M2 shell - - plain arm S R10b                                2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.24.5 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.24.5 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.26.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.26.0 M2 shell - - plain arm S R10b                                2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.26.0 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.26.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.28.2 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.28.2 M2 shell - - plain arm S R10b                                2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.28.2 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.28.2 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.29.7 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.29.7 M2 shell - - plain arm S R10b                                2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.29.7 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.29.7 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.30.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.30.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.30.0 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.30.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.30.1 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.30.1 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.30.1 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.30.1 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.32.1 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.32.1 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.32.1 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.32.1 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.34.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.34.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.34.0 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.34.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.35.3 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.35.3 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.35.3 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.35.3 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.36.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.36.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.36.0 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.36.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.37.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.37.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.37.0 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.37.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.37.1 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.37.1 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.37.1 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.37.1 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.37.2 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.37.2 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.37.2 M2 shell - - plain arm S R3                                  2/2 RAN                        VERSION-FLIP | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.37.2 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.38.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.38.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.38.2 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.38.2 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.39.1 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.39.1 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.39.1 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.39.1 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.41.2 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.41.2 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.41.2 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.41.2 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.43.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.43.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.43.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.43.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.45.3 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.45.3 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.45.3 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.45.3 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.47.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.47.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.47.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.47.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.50.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.50.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.50.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.50.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.53.1 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.53.1 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.53.1 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.53.1 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.56.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.56.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.56.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.56.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.59.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.59.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.59.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.59.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.62.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.62.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.62.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.62.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.64.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.64.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.64.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.64.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.65.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.65.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.65.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.65.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.66.0 M2 shell - - plain arm S R1                                  2/2 RAN                        control | hook invoked 2/2
+gemini 0.66.0 M2 shell - - plain arm S R10b                                0/2 RAN modal BLOCKED 2/2      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+gemini 0.66.0 M2 shell - - plain arm S R3                                  0/2 RAN modal HUNG 2/2         VERDICT-HANG | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+gemini 0.66.0 M2 shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+
+version flips (candidate regressions, check release notes before calling them that):
+  gemini M2 shell - - plain S R3: 0.24.5=RAN, 0.26.0=RAN, 0.28.2=RAN, 0.29.7=RAN, 0.30.0=RAN, 0.30.1=RAN, 0.32.1=RAN, 0.34.0=RAN, 0.35.3=RAN, 0.36.0=RAN, 0.37.0=RAN, 0.37.1=RAN, 0.37.2=RAN, 0.38.0=HUNG, 0.38.2=HUNG, 0.39.1=HUNG, 0.41.2=HUNG, 0.43.0=HUNG, 0.45.3=HUNG, 0.47.0=HUNG, 0.50.0=HUNG, 0.53.1=HUNG, 0.56.0=HUNG, 0.59.0=HUNG, 0.62.0=HUNG, 0.64.0=HUNG, 0.65.0=HUNG, 0.66.0=HUNG
+  gemini M2 shell - - plain S R10b: 0.24.5=RAN, 0.26.0=RAN, 0.28.2=RAN, 0.29.7=RAN, 0.30.0=BLOCKED, 0.30.1=BLOCKED, 0.32.1=BLOCKED, 0.34.0=BLOCKED, 0.35.3=BLOCKED, 0.36.0=BLOCKED, 0.37.0=BLOCKED, 0.37.1=BLOCKED, 0.37.2=BLOCKED, 0.39.1=BLOCKED, 0.41.2=BLOCKED, 0.43.0=BLOCKED, 0.45.3=BLOCKED, 0.47.0=BLOCKED, 0.50.0=BLOCKED, 0.53.1=BLOCKED, 0.56.0=BLOCKED, 0.59.0=BLOCKED, 0.62.0=BLOCKED, 0.64.0=BLOCKED, 0.65.0=BLOCKED, 0.66.0=BLOCKED
+
+classes per harness: gemini: CODE-INVERSION x22, FAILURE-OPEN x4, VERDICT-HANG x15, VERSION-FLIP x13
+prediction hits by basis: docs hit x26, pilot hit x2, source MISS x4, source hit x22
+kill criterion (>= 5 undocumented deviations replicating on >= 3 versions): not met over gemini
+  gemini: 2 undocumented, 0 on every one of 28 version(s) run, 2 on 3+

@@ -1,0 +1,823 @@
+{
+ "cells": {
+  "claude|2.1.47|ask": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.47|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.47|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.47|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.89|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.89|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.89|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.89|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.281|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.281|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.281|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.281|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.296|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.296|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.296|timeout": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "claude|2.1.296|dead": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.143.0|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.143.0|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.143.0|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.143.0|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.148.0|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.148.0|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.148.0|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.148.0|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.155.0|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.155.0|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.155.0|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.155.0|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.165.0|ask": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.165.0|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.165.0|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "codex|0.165.0|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.29.7|ask": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.29.7|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.29.7|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.29.7|dead": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.37.1|ask": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.37.1|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.37.1|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.38.0|ask": {
+   "off": [
+    "HUNG",
+    "HUNG"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.38.0|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.38.0|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.43.0|ask": {
+   "off": [
+    "HUNG",
+    "HUNG"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.43.0|deny": {
+   "off": [
+    "BLOCKED",
+    "BLOCKED"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  },
+  "gemini|0.43.0|timeout": {
+   "off": [
+    "RAN",
+    "RAN"
+   ],
+   "on": [
+    "BLOCKED",
+    "BLOCKED"
+   ]
+  }
+ },
+ "changed_off_ran_or_hung_to_blocked": {
+  "claude": {
+   "k": 14,
+   "n": 14
+  },
+  "codex": {
+   "k": 16,
+   "n": 16
+  },
+  "gemini": {
+   "k": 18,
+   "n": 18
+  }
+ },
+ "by_scenario": {
+  "claude": {
+   "ask": {
+    "k": 2,
+    "n": 2
+   },
+   "dead": {
+    "k": 6,
+    "n": 6
+   },
+   "timeout": {
+    "k": 6,
+    "n": 6
+   }
+  },
+  "codex": {
+   "timeout": {
+    "k": 8,
+    "n": 8
+   },
+   "dead": {
+    "k": 8,
+    "n": 8
+   }
+  },
+  "gemini": {
+   "ask": {
+    "k": 8,
+    "n": 8
+   },
+   "timeout": {
+    "k": 8,
+    "n": 8
+   },
+   "dead": {
+    "k": 2,
+    "n": 2
+   }
+  }
+ },
+ "regressions_off_blocked_to_ran_or_hung": {
+  "claude": {
+   "k": 0,
+   "n": 18
+  },
+  "codex": {
+   "k": 0,
+   "n": 16
+  },
+  "gemini": {
+   "k": 0,
+   "n": 8
+  }
+ },
+ "both_blocked_of_all_pairs": {
+  "claude": {
+   "k": 18,
+   "n": 32
+  },
+  "codex": {
+   "k": 16,
+   "n": 32
+  },
+  "gemini": {
+   "k": 8,
+   "n": 26
+  }
+ },
+ "invalid": [
+  {
+   "harness": "gemini",
+   "version": "0.37.1",
+   "scenario": "dead",
+   "arm": "off",
+   "rep": 0,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.37.1",
+   "scenario": "dead",
+   "arm": "off",
+   "rep": 1,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.37.1",
+   "scenario": "dead",
+   "arm": "on",
+   "rep": 0,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.37.1",
+   "scenario": "dead",
+   "arm": "on",
+   "rep": 1,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.38.0",
+   "scenario": "dead",
+   "arm": "off",
+   "rep": 0,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.38.0",
+   "scenario": "dead",
+   "arm": "off",
+   "rep": 1,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.38.0",
+   "scenario": "dead",
+   "arm": "on",
+   "rep": 0,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.38.0",
+   "scenario": "dead",
+   "arm": "on",
+   "rep": 1,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.43.0",
+   "scenario": "dead",
+   "arm": "off",
+   "rep": 0,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.43.0",
+   "scenario": "dead",
+   "arm": "off",
+   "rep": 1,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.43.0",
+   "scenario": "dead",
+   "arm": "on",
+   "rep": 0,
+   "invalid_reason": "the stub issued no call"
+  },
+  {
+   "harness": "gemini",
+   "version": "0.43.0",
+   "scenario": "dead",
+   "arm": "on",
+   "rep": 1,
+   "invalid_reason": "the stub issued no call"
+  }
+ ],
+ "table_check": [
+  {
+   "harness": "claude",
+   "version": "2.1.47",
+   "feature": "ask",
+   "class": "dropped",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.47",
+   "feature": "dead",
+   "class": "runs",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.89",
+   "feature": "ask",
+   "class": "uncertain",
+   "predicted_off": null,
+   "observed_off": [
+    "BLOCKED"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.89",
+   "feature": "dead",
+   "class": "runs",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.281",
+   "feature": "ask",
+   "class": "denied",
+   "predicted_off": "BLOCKED",
+   "observed_off": [
+    "BLOCKED"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.281",
+   "feature": "dead",
+   "class": "runs",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.296",
+   "feature": "ask",
+   "class": "denied",
+   "predicted_off": "BLOCKED",
+   "observed_off": [
+    "BLOCKED"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "claude",
+   "version": "2.1.296",
+   "feature": "dead",
+   "class": "runs",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "BLOCKED"
+   ],
+   "hit": false
+  },
+  {
+   "harness": "codex",
+   "version": "0.143.0",
+   "feature": "dead",
+   "class": "unmeasured",
+   "predicted_off": null,
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "codex",
+   "version": "0.148.0",
+   "feature": "dead",
+   "class": "unmeasured",
+   "predicted_off": null,
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "codex",
+   "version": "0.155.0",
+   "feature": "dead",
+   "class": "unmeasured",
+   "predicted_off": null,
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "codex",
+   "version": "0.165.0",
+   "feature": "dead",
+   "class": "unmeasured",
+   "predicted_off": null,
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "gemini",
+   "version": "0.29.7",
+   "feature": "ask",
+   "class": "dropped",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "gemini",
+   "version": "0.29.7",
+   "feature": "dead",
+   "class": "uncertain",
+   "predicted_off": null,
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "gemini",
+   "version": "0.37.1",
+   "feature": "ask",
+   "class": "dropped",
+   "predicted_off": "RAN",
+   "observed_off": [
+    "RAN"
+   ],
+   "hit": true
+  },
+  {
+   "harness": "gemini",
+   "version": "0.38.0",
+   "feature": "ask",
+   "class": "uncertain",
+   "predicted_off": null,
+   "observed_off": [
+    "HUNG"
+   ],
+   "hit": null
+  },
+  {
+   "harness": "gemini",
+   "version": "0.43.0",
+   "feature": "ask",
+   "class": "hangs",
+   "predicted_off": "HUNG",
+   "observed_off": [
+    "HUNG"
+   ],
+   "hit": true
+  }
+ ]
+}

@@ -1,11 +1,48 @@
 {
   "hooks": {
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "intentshield-hook claude"}]}],
-    "PreToolUse": [{"matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
-                    "hooks": [{"type": "command", "command": "intentshield-hook claude", "onFailure": "block"}]}],
-    "PostToolUse": [{"matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
-                     "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}],
-    "PostToolUseFailure": [{"matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
-                            "hooks": [{"type": "command", "command": "intentshield-hook claude"}]}]
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook claude --deadline 30"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook claude --deadline 30 || { rc=$?; [ \"$rc\" -eq 2 ] || echo \"IntentShield hook did not run (exit code $rc); this call is refused.\" >&2; exit 2; }",
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook claude --deadline 30"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook claude --deadline 30"
+          }
+        ]
+      }
+    ]
   }
 }

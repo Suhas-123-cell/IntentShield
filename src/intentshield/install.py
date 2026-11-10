@@ -30,6 +30,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from . import translation
+
 HARNESSES = ("claude", "codex", "cursor", "gemini")
 _HOOK = "intentshield-hook"
 _PROXY = "intentshield-mcp"
@@ -68,7 +70,8 @@ _NEEDS_MODEL = ("openai", "openrouter", "custom")  # the user's own key: they na
 
 
 def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, judge: str | None = None,
-                 judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False) -> str:
+                 judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False,
+                 deadline: float | None = None) -> str:
     """The shell command the harness runs on every event. Every piece is quoted and validated:
     the harness hands the string to a shell."""
     command = f"{shlex.quote(hook)} {harness}"
@@ -92,6 +95,10 @@ def hook_command(harness: str, hook: str = _HOOK, review: str | None = None, jud
         if harness != "gemini":
             raise ValueError("--gemini-ask is for Gemini CLI only")
         command += " --gemini-ask"
+    if deadline is not None:
+        if not 0 < deadline < 3600:
+            raise ValueError(f"--deadline must be between 0 and 3600 seconds, not {deadline!r}")
+        command += f" --deadline {deadline:g}"
     return command
 
 
@@ -182,9 +189,20 @@ def _store_env(home: Path | None, env: str, value: str) -> Path:
     return path
 
 
-def hook_entries(harness: str, command: str, builtin_tools: bool = False) -> dict[str, Any]:
+def hook_entries(harness: str, command: str, builtin_tools: bool = False, translate: bool = True) -> dict[str, Any]:
     """The hook configuration for one harness, as ``configs/harness/`` ships it. ``builtin_tools`` also sends
-    the harness's own shell, file and web tools to the hook (whose command must carry --builtin-tools)."""
+    the harness's own shell, file and web tools to the hook (whose command must carry --builtin-tools). With ``translate``
+    the hooks that check a call run behind translation.launcher, so a hook that cannot start refuses the call."""
+    if translate:
+        entries = hook_entries(harness, command, builtin_tools, translate=False)
+        guarded = translation.launcher(command) if harness in translation.LAUNCHER_HARNESSES else command
+        for event in translation.CALL_EVENTS:
+            for group in entries.get(event, []):
+                hooks = group["hooks"] if "hooks" in group else [group]
+                for hook in hooks:
+                    if hook.get("command") == command:
+                        hook["command"] = guarded
+        return entries
     if harness == "claude":
         calls = f"{_MCP_MATCHER}|{_BUILTIN_CALLS}" if builtin_tools else _MCP_MATCHER
         results = f"{_MCP_MATCHER}|{_BUILTIN_RESULTS}" if builtin_tools else _MCP_MATCHER
@@ -297,10 +315,10 @@ def remove_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], bool]:
 _TOML_BEGIN, _TOML_END = "# >>> intentshield hooks >>>", "# <<< intentshield hooks <<<"
 
 
-def codex_toml(command: str, builtin_tools: bool = False) -> str:
+def codex_toml(command: str, builtin_tools: bool = False, translate: bool = True) -> str:
     """The Codex CLI hook block, between markers so it can be removed again."""
     lines = [_TOML_BEGIN]
-    for event, groups in hook_entries("codex", command, builtin_tools).items():
+    for event, groups in hook_entries("codex", command, builtin_tools, translate).items():
         for group in groups:
             lines.append(f"[[hooks.{event}]]")
             if "matcher" in group:
@@ -503,17 +521,20 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
             judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
             judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False,
-            judge_url: str | None = None) -> Path:
-    """Register the hooks in the harness's settings file. Returns the file touched."""
+            judge_url: str | None = None, translate: bool = True) -> Path:
+    """Register the hooks in the harness's settings file. Returns the file touched. With ``translate`` (the default) the hooks
+    that check a call carry the hook's own deadline and the fail-closed launcher (translation.py), and the harness's version
+    is recorded for the hook."""
     path = settings_path(harness, scope, home, cwd)
-    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools, gemini_ask)
+    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools, gemini_ask,
+                           deadline=translation.DEFAULT_DEADLINE_S if translate else None)
     if judge and not dry_run:  # after the spec is checked, so a refused --judge stores nothing
         ensure_judge_key(judge, home, api_key, ask, judge_url)
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
         stripped, _ = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
-        new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command, builtin_tools)
+        new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command, builtin_tools, translate)
         tomllib.loads(new)
         if new == text:
             print(f"already installed: {path}")
@@ -523,7 +544,7 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             _record_install(path, home, time.time())
     else:
         existed = path.exists()
-        settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools))
+        settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools, translate))
         if not changed:
             print(f"already installed: {path}")
             return path
@@ -534,6 +555,14 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         if not dry_run:
             _record_install(path, home, time.time())
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
+    if translate and not dry_run:
+        seen = translation.probe_and_record(harness, home)
+        if seen:
+            print(f"{harness} version {'.'.join(map(str, seen))} recorded: the hook picks its replies for it "
+                  "(`intentshield doctor` shows what is measured)")
+        else:
+            print(f"{harness} was not found on PATH, so its version is not recorded: asks are sent as refusals until "
+                  "`intentshield doctor` records it")
     if harness == "codex":
         # Measured 2026-10-29 with Codex CLI 0.165: hooks nobody has trusted are skipped, and the
         # session runs unguarded with no warning from Codex.
@@ -805,6 +834,9 @@ def add_subcommands(sub: Any) -> None:
             p.add_argument("--gemini-ask", action="store_true",
                            help="Gemini CLI 0.66 or later, interactive sessions only: ask instead of refusing. "
                                 "Headless runs (gemini -p) then hang on an ask; check with `intentshield doctor`")
+            p.add_argument("--no-translate", action="store_true",
+                           help="send the guard's verdicts as they are, with no deadline and no fail-closed launcher "
+                                "(the hook as it was before the verdict translation)")
             p.add_argument("--judge-outputs", action="store_true",
                            help="the judge also reads each tool result the rules pass (catches plain-language "
                                 "injections; one request per result, about 1 s locally, 4 s on Gemini)")
@@ -828,7 +860,8 @@ def run(args: argparse.Namespace) -> int:
                 raise ValueError("--judge-outputs needs --judge")
             install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
                     api_key=args.api_key, judge_url=args.judge_url, judge_outputs=args.judge_outputs,
-                    builtin_tools=args.builtin_tools, gemini_ask=args.gemini_ask)
+                    builtin_tools=args.builtin_tools, gemini_ask=args.gemini_ask,
+                    translate=not args.no_translate)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":

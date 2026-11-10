@@ -1,0 +1,23 @@
+......ss.F.............................................................. [ 93%]
+.....                                                                    [100%]
+=================================== FAILURES ===================================
+________________ test_the_ancestry_is_read_with_no_runnable_ps _________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0xffffb4dcffb0>
+
+    @pytest.mark.skipif(not (DARWIN or LINUX), reason="a ps-free reader exists for macOS and Linux")
+    def test_the_ancestry_is_read_with_no_runnable_ps(monkeypatch):
+        def no_ps(*args, **kwargs):
+            raise PermissionError("Operation not permitted")      # what sandbox-exec says to the setuid ps
+    
+        monkeypatch.setattr(translation.subprocess, "run", no_ps)
+        monkeypatch.delenv(translation.ANCESTRY_ENV, raising=False)
+        chain = translation._ancestors()
+>       assert chain and chain.complete and chain.source in ("proc", "libproc")
+E       assert ([])
+
+work/tests/test_translation_ancestry.py:139: AssertionError
+=========================== short test summary info ============================
+SKIPPED [1] work/tests/test_translation_ancestry.py:82: libproc is macOS
+SKIPPED [1] work/tests/test_translation_ancestry.py:97: libproc is macOS
+1 failed, 74 passed, 2 skipped in 4.10s

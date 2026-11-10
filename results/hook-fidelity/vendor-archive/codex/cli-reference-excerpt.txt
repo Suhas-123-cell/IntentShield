@@ -1,0 +1,50 @@
+VENDOR DOCUMENT TEXT ARCHIVE (r3-codex lane)
+source url: https://developers.openai.com/codex/cli/reference (redirects to https://learn.chatgpt.com/docs/developer-commands?surface=cli); EXCERPT of the converted text: lines 800-830 and 2078-2090 (flag table)
+retrieved: 2026-10-31 (UTC) with curl; HTML converted to text by a stdlib html.parser script (scripts/tags dropped), no other edit
+read by: r3-codex lane
+-----
+Key | Type / Values | Details | 
+--add-dir | path | 
+Grant additional directories write access alongside the main workspace. Repeat for multiple paths. | 
+--approve-for-me, --not-so-yolo | boolean | 
+Use automatic approval review with on-request approvals and the workspace-write sandbox. Conflicts with --sandbox and --yolo; the interactive CLI also rejects --ask-for-approval. | 
+--ask-for-approval, -a | on-request | never | 
+Control when Codex pauses for human approval before running a command. | 
+--cd, -C | path | 
+Set the working directory for the agent before it starts processing your request. | 
+--config, -c | key=value | 
+Override configuration values. Values parse as TOML if possible; otherwise the literal string is used. | 
+--dangerously-bypass-approvals-and-sandbox, --yolo | boolean | 
+Run every command without approvals or sandboxing. Only use inside an externally hardened environment. | 
+--dangerously-bypass-hook-trust | boolean | 
+Run enabled hooks without requiring persisted hook trust for this invocation. Intended only for automation that already vets hook sources. | 
+--disable | feature | 
+Force-disable a feature flag (translates to -c features.<name>=false). Repeatable. | 
+--enable | feature | 
+Force-enable a feature flag (translates to -c features.<name>=true). Repeatable. | 
+--image, -i | path[,path...] | 
+Attach one or more image files to the initial prompt. Separate multiple paths with commas or repeat the flag. | 
+--local-provider | lmstudio | ollama | 
+Choose the local provider used with --oss, overriding oss_provider for this run. | 
+--model, -m | string | 
+Override the model set in configuration (for example gpt-6.1-sol). | 
+--no-alt-screen | boolean | 
+Disable alternate screen mode for the TUI (overrides tui.alternate_screen for this run). | 
+--no-daemon | boolean | 
+Run the interactive CLI without the shared background server. Can't be combined with --remote or codex agents. | 
+--oss | boolean | 
+Use a local open source model provider. Codex uses --local-provider, your configured oss_provider, or prompts you to choose between LM Studio and Ollama. | 
+[... lines omitted ...]
+Type / Valuesvar-args
+Details
+Command to execute under the native Windows sandbox. Provide the executable after --.
+codex update
+Check for and apply a Codex CLI update when the installed release supports self-update. Debug builds print a message telling you to install a release build instead.
+Flag combinations and safety tips
+Use --sandbox workspace-write for unattended local work that can stay inside the workspace, and avoid --dangerously-bypass-approvals-and-sandbox unless you are inside a dedicated sandbox VM.
+When you need to grant Codex write access to more directories, prefer --add-dir rather than forcing --sandbox danger-full-access.
+Pair --json with --output-last-message in CI to capture machine-readable progress and a final natural-language summary.
+Interactive shortcuts
+Type @ to search for a file in the workspace and add its path to the prompt.
+Press Up or Down to restore draft history.
+Press Ctrl+R to search prompt history, then press Enter to use a match or Escape to cancel.

@@ -1,7 +1,36 @@
 {
   "hooks": {
-    "BeforeAgent": [{"hooks": [{"type": "command", "command": "intentshield-hook gemini"}]}],
-    "BeforeTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": "intentshield-hook gemini"}]}],
-    "AfterTool": [{"matcher": ".*", "hooks": [{"type": "command", "command": "intentshield-hook gemini"}]}]
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook gemini --deadline 30"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook gemini --deadline 30 || { rc=$?; [ \"$rc\" -eq 2 ] || echo \"IntentShield hook did not run (exit code $rc); this call is refused.\" >&2; exit 2; }"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "intentshield-hook gemini --deadline 30"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -1,0 +1,10 @@
+{"run_id": "00000-09311837", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R3|1", "attempt": 0, "ts": "2026-11-01T05:20:09Z"}
+{"run_id": "00001-8537c62b", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R3|0", "attempt": 0, "ts": "2026-11-01T05:20:24Z"}
+{"run_id": "00002-002b6a51", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R3|2", "attempt": 0, "ts": "2026-11-01T05:20:38Z"}
+{"run_id": "00003-c7cb2518", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R9|1", "attempt": 0, "ts": "2026-11-01T05:20:45Z"}
+{"run_id": "00004-ab8052d4", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R9|0", "attempt": 0, "ts": "2026-11-01T05:21:02Z"}
+{"run_id": "00005-60f2aa12", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R9|2", "attempt": 0, "ts": "2026-11-01T05:21:17Z"}
+{"run_id": "00006-b14d1e5d", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R6|1", "attempt": 0, "ts": "2026-11-01T05:21:33Z"}
+{"run_id": "00007-2043b247", "key": "claude|2.1.316|M1h|shell|-|-|plain|S|R6|0", "attempt": 0, "ts": "2026-11-01T05:21:45Z"}
+{"run_id": "00008-f70dc43e", "key": "codex|0.166.0|M1|shell|trusted-bypass|-|plain|S|R9|1", "attempt": 0, "ts": "2026-11-01T05:21:58Z"}
+{"run_id": "00009-842268dd", "key": "codex|0.166.0|M1|shell|trusted-bypass|-|plain|S|R9|0", "attempt": 0, "ts": "2026-11-01T05:22:17Z"}

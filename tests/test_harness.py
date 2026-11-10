@@ -612,6 +612,8 @@ def test_parallel_hook_processes_share_one_database_and_keep_the_flag(tmp_path: 
     for key in list(env):
         if key.startswith("INTENTSHIELD_") and key != "INTENTSHIELD_HOOK_DB":
             del env[key]
+    # an ask reaches Claude Code as an ask only where a person can answer it (translation.py): say so, as a terminal would
+    env.update(INTENTSHIELD_HARNESS_MODE="interactive", INTENTSHIELD_HARNESS_VERSION="2.1.200")
     post = {"hook_event_name": "PostToolUse", "session_id": "p1", "tool_name": "mcp__web__fetch", "tool_input": {},
             "tool_response": INJECTED}
     pre = {"hook_event_name": "PreToolUse", "session_id": "p1", "tool_name": "mcp__mail__send_email",

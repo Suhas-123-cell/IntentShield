@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:27:30.065Z","session_id":"fbd90b47-a736-4e40-a8bf-7f677660a4ce","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:27:30.065Z","role":"user","content":"Run exactly this shell command and nothing else: touch ran-nzcdcbdb6a.txt   Then reply with the single word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:27:30.074Z","tool_name":"run_shell_command","tool_id":"run_shell_command_1793485650074_0","parameters":{"command":"touch ran-nzcdcbdb6a.txt"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:27:30.151Z","tool_id":"run_shell_command_1793485650074_0","status":"success","output":""}
+{"type":"message","timestamp":"2026-10-31T22:27:30.154Z","role":"assistant","content":"stub done nzcdcbdb6a","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:27:30.155Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":91,"tool_calls":1}}

@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:29:57.794Z","session_id":"e4e0f0f1-66f2-4ac7-a00d-33af882f335b","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:29:57.795Z","role":"user","content":"Run exactly this shell command and nothing else: touch ran-nz4bdf24db.txt   Then reply with the single word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:29:57.819Z","tool_name":"run_shell_command","tool_id":"run_shell_command__run_shell_command_1793485797808_0","parameters":{"command":"touch ran-nz4bdf24db.txt"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:29:57.890Z","tool_id":"run_shell_command__run_shell_command_1793485797808_0","status":"success","output":""}
+{"type":"message","timestamp":"2026-10-31T22:29:57.895Z","role":"assistant","content":"stub done nz4bdf24db","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:29:57.896Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":102,"tool_calls":1,"models":{"gemini-3.1-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

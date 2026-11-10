@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a194e2-fa4e-7ac2-8467-c79588751607"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_2","type":"error","message":"Model metadata for `stub-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+2026-11-01T02:14:27.173477Z ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: IntentShield evaluation verdict: ask. (IntentShield wanted the user to confirm this call, but no one can answer a prompt in a headless run; so it is refused and the user can allow it.) Do not retry this call or a variant of it: tell the user what you wanted to do and why, so they can decide.. Command: <run>/shim/touch ran-nz4b3e12d4.txt
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"stub done nz4b3e12d4"}}
+{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}

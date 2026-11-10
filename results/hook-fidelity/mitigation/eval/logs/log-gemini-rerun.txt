@@ -1,0 +1,5 @@
+4 runs, GO=4, parallel 4
+gemini 0.38.0 ask     off #0 -> HUNG hook=True (90.56 s) 
+gemini 0.43.0 ask     off #0 -> HUNG hook=True (90.77 s) 
+gemini 0.43.0 ask     off #1 -> HUNG hook=True (90.79 s) 
+gemini 0.38.0 ask     off #1 -> HUNG hook=True (90.81 s) 

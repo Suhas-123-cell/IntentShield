@@ -1,0 +1,4 @@
+{"ts": 1793498725.3047822, "pid": 68967, "phase": "start", "event": "UserPromptSubmit", "harness": "claude", "env_attended": "1", "env_entrypoint": "cli", "stdin_isatty": false}
+{"ts": 1793498725.339904, "pid": 68967, "phase": "end", "event": "UserPromptSubmit", "exit_code": 0, "reply_stdout": "", "ask_decisions": []}
+{"ts": 1793498725.404872, "pid": 68971, "phase": "start", "event": "PreToolUse", "harness": "claude", "env_attended": "1", "env_entrypoint": "cli", "stdin_isatty": false, "probe_mode": "headless", "probe_source": "the harness process was not found among the ancestors: assumed headless", "probe_chain": [], "probe_s": 0.002}
+{"ts": 1793498725.438116, "pid": 68971, "phase": "end", "event": "PreToolUse", "exit_code": 0, "reply_stdout": "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"IntentShield evaluation verdict: deny.\"}}\n", "ask_decisions": []}

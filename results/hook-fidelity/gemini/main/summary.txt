@@ -1,0 +1,73 @@
+150 runs (0 INVALID, left out of n), 50 cells: config-invalid 4, control 11, scored 32, scored-native 3
+informative cells (scored and differing from P_guard, P_doc or the prediction): 25
+
+CONFIG-INVALID blocks (the neutral control did not prove the hook fires under this exact config; this is NOT a harness finding, fix the config first):
+  gemini 0.66.0 M1 shell - - plain S: R1 hook invoked 0/3 valid runs
+
+gated blocks scored on a partner's liveness proof:
+  gemini 0.66.0 M1 mcp notrust - plain S <- proven by state trust
+
+R0 (no hook) versus R1 (neutral hook), per block:
+  gemini 0.66.0 M1 mcp notrust - plain S: R0 BLOCKED:3 | R1 BLOCKED:3 | same
+  gemini 0.66.0 M1 mcp trust - plain S: R0 RAN:3 | R1 RAN:3 | same
+  gemini 0.66.0 M1 shell - - plain S: R0 BLOCKED:3 | R1 BLOCKED:3 | same
+  gemini 0.66.0 M2 mcp notrust - plain S: R0 RAN:3 | R1 RAN:3 | same
+  gemini 0.66.0 M2 mcp trust - plain S: R0 RAN:3 | R1 RAN:3 | same
+  gemini 0.66.0 M2 shell - - plain S: R0 RAN:3 | R1 RAN:3 | same
+
+cell                                                                       result                         class
+gemini 0.66.0 M1 mcp notrust - plain arm S R0                              0/3 RAN modal BLOCKED 3/3      control
+gemini 0.66.0 M1 mcp notrust - plain arm S R1                              0/3 RAN modal BLOCKED 3/3      control | hook invoked 0/3
+gemini 0.66.0 M1 mcp notrust - plain arm S R2                              0/3 RAN modal BLOCKED 3/3      NO-EFFECT | native-block baseline: R1 was blocked by the native policy; weak attempt evidence; hook invoked 0/3; ctl R0 0/3 R1 0/3 RAN
+gemini 0.66.0 M1 mcp notrust - plain arm S R3                              0/3 RAN modal BLOCKED 3/3      NO-EFFECT | native-block baseline: R1 was blocked by the native policy; weak attempt evidence; hook invoked 0/3; ctl R0 0/3 R1 0/3 RAN
+gemini 0.66.0 M1 mcp notrust - plain arm S R4                              0/3 RAN modal BLOCKED 3/3      NO-EFFECT | native-block baseline: R1 was blocked by the native policy; weak attempt evidence; hook invoked 0/3; ctl R0 0/3 R1 0/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R0                                3/3 RAN                        control
+gemini 0.66.0 M1 mcp trust - plain arm S R1                                3/3 RAN                        control | hook invoked 3/3
+gemini 0.66.0 M1 mcp trust - plain arm S R10a                              0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R10b                              0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R13                               0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R2                                3/3 RAN                        - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R3                                3/3 RAN                        VERDICT-DROPPED | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R4                                0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R5                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 mcp trust - plain arm S R9                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M1 shell - - plain arm S R0                                  0/3 RAN modal BLOCKED 3/3      control
+gemini 0.66.0 M1 shell - - plain arm S R1                                  0/3 RAN modal BLOCKED 3/3      config-invalid | hook invoked 0/3
+gemini 0.66.0 M1 shell - - plain arm S R2                                  0/3 RAN modal BLOCKED 3/3      config-invalid | hook invoked 0/3; ctl R0 0/3 R1 0/3 RAN
+gemini 0.66.0 M1 shell - - plain arm S R3                                  0/3 RAN modal BLOCKED 3/3      config-invalid | hook invoked 0/3; ctl R0 0/3 R1 0/3 RAN
+gemini 0.66.0 M1 shell - - plain arm S R4                                  0/3 RAN modal BLOCKED 3/3      config-invalid | hook invoked 0/3; ctl R0 0/3 R1 0/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R0                              3/3 RAN                        control
+gemini 0.66.0 M2 mcp notrust - plain arm S R1                              3/3 RAN                        control | hook invoked 3/3
+gemini 0.66.0 M2 mcp notrust - plain arm S R10a                            0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R10b                            0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R13                             0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R2                              3/3 RAN                        - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R3                              0/3 RAN modal HUNG 3/3         VERDICT-HANG | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R4                              0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R5                              3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp notrust - plain arm S R9                              3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R0                                3/3 RAN                        control
+gemini 0.66.0 M2 mcp trust - plain arm S R1                                3/3 RAN                        control | hook invoked 3/3
+gemini 0.66.0 M2 mcp trust - plain arm S R10a                              0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R10b                              0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R13                               0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R2                                3/3 RAN                        - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R3                                3/3 RAN                        - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R4                                0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R5                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 mcp trust - plain arm S R9                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R0                                  3/3 RAN                        control
+gemini 0.66.0 M2 shell - - plain arm S R1                                  3/3 RAN                        control | hook invoked 3/3
+gemini 0.66.0 M2 shell - - plain arm S R10a                                0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R10b                                0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R13                                 0/3 RAN modal BLOCKED 3/3      CODE-INVERSION | hook unobservable (file-level reply); ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R2                                  3/3 RAN                        - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R3                                  0/3 RAN modal HUNG 3/3         VERDICT-HANG | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R4                                  0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R5                                  3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+gemini 0.66.0 M2 shell - - plain arm S R9                                  3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 3/3 R1 3/3 RAN
+
+classes per harness: gemini: CODE-INVERSION x12, FAILURE-OPEN x8, VERDICT-DROPPED x1, VERDICT-HANG x2
+prediction hits by basis: docs MISS x10, docs hit x16, pilot hit x1, source hit x5
+kill criterion (>= 5 undocumented deviations replicating on >= 3 versions): not evaluable, no harness has 3 versions in the data
+  gemini: 15 undocumented, 15 on every one of 1 version(s) run, 0 on 3+ (fewer than 3 versions: cannot meet the criterion)

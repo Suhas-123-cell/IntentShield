@@ -5,8 +5,10 @@
 For each harness it checks that the settings file holds every IntentShield hook, that the hook command names an
 executable that exists, that a hosted judge has its API key, and that the harness has run a hook since the hooks
 were installed (Codex skips hooks nobody has trusted, without a word). It also lists stdio MCP servers that are
-not behind the transparent proxy, whose tool descriptions the hooks never see. Exit 1 on any problem. Reads
-only; it changes nothing. Only the standard library is imported.
+not behind the transparent proxy, whose tool descriptions the hooks never see. For each harness it records the
+version it finds on PATH (``~/.intentshield/harness-versions.json``, which the hooks read to choose their replies) and
+prints what the hook-fidelity study measured for that version. Exit 1 on any problem. Apart from that record it reads
+only. Only the standard library is imported.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from . import install
+from . import install, translation
 
 # The events whose hooks a guarded harness needs: the prompt (intent), the call and its result.
 REQUIRED = {"claude": ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"),
@@ -33,8 +35,8 @@ REQUIRED = {"claude": ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToo
             "gemini": ("BeforeAgent", "BeforeTool", "AfterTool")}
 _KEYS = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY",
          "openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", "custom": "INTENTSHIELD_JUDGE_API_KEY"}
-# The oldest Gemini CLI on which a hook's ask was measured to be a prompt (in 0.37.1 yolo mode approved it).
-GEMINI_ASK_TESTED = (0, 66, 0)
+# Kept for callers that import it; the check itself reads translation.RANGES.
+GEMINI_ASK_TESTED = (0, 38, 2)
 
 
 def gemini_version() -> tuple[int, ...] | None:
@@ -122,8 +124,16 @@ _EXEC_LINE = re.compile(r"(?:^|[\s;'\"])exec'?\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+)
 
 def _dead_interpreter(program: str) -> str:
     """Why a hook executable cannot start though the file is there: a script whose ``#!`` line names an interpreter
-    that is gone (a venv built on a Python that was upgraded or removed). Such a hook exits 126, which Codex and
-    Gemini CLI treat as a hook that failed, not as a refusal, so the call runs unguarded."""
+    that is gone (a venv built on a Python that was upgraded or removed). Such a hook exits 126 with the shell's error
+    text on stderr. Claude Code and Codex treat that as a hook that failed, not as a refusal, so the call runs unguarded
+    (Claude Code from 2.1.295 on also with ``onFailure: block``, which IntentShield's install sets, blocks it).
+    Gemini CLI differs by release. Measured on the CLI against a stub model (results/hook-fidelity/gemini, 28 releases, 2 runs
+    each) and on its hook runner (results/hook-fidelity/gemini-core, 25 releases): the call runs through 0.29.7 and is DENIED
+    from 0.30.0, because the runner takes the error text as a block reason; the boundary lies between those two releases and
+    the runner's hookRunner.js is byte-identical across 0.29.0 to 0.29.7 and across 0.30.0 to 0.30.1. The Gemini documentation
+    says other exit codes only warn, so it is wrong for 0.30.0 and later. Bash on macOS only; a hook that exits 126 with no
+    output at all is allowed on every release. The hooks ``intentshield install`` writes run behind a launcher that turns the
+    exit code into a refusal (translation.launcher), so this check matters for hooks installed without it."""
     try:
         with open(program, "rb") as handle:
             head = handle.read(4096)
@@ -152,6 +162,39 @@ def _dead_interpreter(program: str) -> str:
             if target and target.startswith("/") and not (os.path.isfile(target) and os.access(target, os.X_OK)):
                 return target
     return ""
+
+
+def _harness_version(harness: str, home: Path) -> tuple[int, ...] | None:
+    """The harness's version: read from the one on PATH (and recorded, for the hooks) when there is one, else the recorded
+    one."""
+    if harness == "gemini":
+        found = gemini_version()
+        if found:
+            translation.record_version("gemini", ".".join(map(str, found)), shutil.which("gemini") or "", home)
+    else:
+        found = translation.probe_and_record(harness, home)
+    return found if found is not None else translation.recorded_version(harness, home)[0]
+
+
+def _dead_effect(harness: str, version: tuple[int, ...] | None, hooks: dict[str, list[dict[str, Any]]]) -> tuple[str, str]:
+    """(level, what happens to a call) when the hook executable cannot start, by what was measured for the version."""
+    calls = [h for event in translation.CALL_EVENTS for h in hooks.get(event, [])]
+    launched = bool(calls) and all(translation.LAUNCHER in h["command"] for h in calls)
+    shown = ".".join(map(str, version)) if version else "of an unknown version"
+    if harness == "gemini":
+        cls = translation.lookup("gemini", "dead", version)
+        effect = {"blocks": f"Gemini CLI {shown} blocks every call the hook covers",
+                  "runs": f"Gemini CLI {shown} runs the call unguarded (releases before 0.30.0 do)",
+                  }.get(cls, "Gemini CLI blocks every call the hook covers from 0.30.0 and runs it unguarded through 0.29.7 "
+                              f"(this one, {shown}, is not measured exactly)")
+    elif harness == "claude":
+        effect = "Claude Code runs the call unguarded (unless `onFailure: block` is honoured, from 2.1.295)"
+    else:
+        effect = f"{'Codex CLI' if harness == 'codex' else harness} runs the call unguarded"
+    if launched:
+        return "warn", (f"{effect}, but the launcher in front of the hook turns that into a refusal of the call "
+                        "(results and prompts go unchecked)")
+    return "FAIL", effect
 
 
 def _disabled(harness: str, path: Path, home: Path, cwd: Path | None = None) -> str:
@@ -202,6 +245,12 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
     if not hooks:
         return False
     problems_before = report.problems
+    before, why_stale = translation.recorded_version(harness, home)
+    version = _harness_version(harness, home)
+    if before is None and why_stale and not why_stale.startswith("no version"):
+        # What the hook saw until this run: it sent every ask as a refusal, because it could not trust the recorded version.
+        report.line("warn", subject, f"the recorded harness version was stale ({why_stale.split(' (run')[0]}); refreshed now. "
+                                     "Until then the hook sent every ask as a refusal")
     missing = [event for event in REQUIRED[harness] if event not in hooks]
     if missing:
         report.line("FAIL", subject, f"no IntentShield hook for {', '.join(missing)}; run `intentshield install {harness}`")
@@ -214,10 +263,11 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
                 report.line("FAIL", subject, f"the hook executable {program} does not exist (a deleted environment?); "
                                              f"run `intentshield install {harness}` again from the one you use")
             elif dead := _dead_interpreter(program):
-                report.line("FAIL", subject, f"the hook executable {program} starts with #!{dead}, which does not "
-                                             "exist (an environment whose Python was removed or upgraded?): it exits "
-                                             "126 and the harness runs the call unguarded or blocks every MCP call; "
-                                             f"run `intentshield install {harness}` again from the environment you use")
+                level, effect = _dead_effect(harness, version, hooks)
+                report.line(level, subject, f"the hook executable {program} starts with #!{dead}, which does not "
+                                            "exist (an environment whose Python was removed or upgraded?): it exits 126, so "
+                                            f"{effect}; "
+                                            f"run `intentshield install {harness}` again from the environment you use")
         else:
             where = shutil.which(program)
             report.line("FAIL", subject, f"the hook command names {program!r} without a path"
@@ -248,9 +298,18 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
                 report.line("FAIL", subject, "the hook reads built-in tools but its PreToolUse matcher does not send "
                                              "Bash; run `intentshield install claude --builtin-tools` again")
         if "--gemini-ask" in argv and harness == "gemini":
-            _check_gemini_ask(report, subject)
+            _check_gemini_ask(report, subject, version)
     if why := _disabled(harness, path, home, cwd):
         report.line("FAIL", subject, f"the hooks are installed but switched off: {why}")
+    if harness in translation.LAUNCHER_HARNESSES:
+        plain = [h for event in translation.CALL_EVENTS for h in hooks.get(event, []) if translation.LAUNCHER not in h["command"]]
+        if plain:
+            report.line("warn", subject, "the hook that checks calls was installed without the verdict translation (no launcher, "
+                                         "no deadline): a hook that cannot start, or a slow one, lets the call run on every "
+                                         f"harness measured; run `intentshield install {harness}` again")
+    gemini_ask = any("--gemini-ask" in h["command"] for handlers in hooks.values() for h in handlers)
+    for level, message in translation.findings(harness, version, gemini_ask):
+        report.line(level, subject, message)
     for event, what in ((_CALL_EVENT.get(harness), "call is checked"),
                         (_RESULT_EVENT.get(harness), "result is scanned or tainted")):
         for handler in hooks.get(event, []):
@@ -273,19 +332,27 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
     return True
 
 
-def _check_gemini_ask(report: Report, subject: str) -> None:
-    version = gemini_version()
-    tested = ".".join(map(str, GEMINI_ASK_TESTED))
+def _check_gemini_ask(report: Report, subject: str, version: tuple[int, ...] | None = None) -> None:
+    """--gemini-ask by what was measured (translation.RANGES): a hook's ask ran the shell call in yolo mode through 0.37.2 and
+    waits for ever in a headless yolo run from 0.38.0 (measured; so with the shell allow-listed). An interactive session was not
+    run: it is expected to get a prompt from 0.38.0 on, and the hook
+    sends an ask only there (it sends a refusal when it can tell the run is headless)."""
+    version = version if version is not None else gemini_version()
     if version is None:
-        report.line("warn", subject, f"--gemini-ask is on, but the Gemini CLI version could not be read; it was "
-                                     f"tested on {tested} and later only")
-    elif version < GEMINI_ASK_TESTED:
-        report.line("FAIL", subject, f"--gemini-ask is on, but Gemini CLI {'.'.join(map(str, version))} is older "
-                                     f"than {tested}; on 0.37.1 yolo mode ran a call the hook asked about. Update "
-                                     "Gemini CLI or run `intentshield install gemini` without --gemini-ask")
+        report.line("warn", subject, "--gemini-ask is on, but the Gemini CLI version could not be read; it was measured on "
+                                     "0.24.5 to 0.66.0 only")
+        return
+    shown = ".".join(map(str, version))
+    cls = translation.lookup("gemini", "ask", version)
+    if cls in ("dropped", "uncertain", "unmeasured"):
+        ran = "ran" if cls == "dropped" else "may run"
+        report.line("FAIL", subject, f"--gemini-ask is on, but Gemini CLI {shown} {ran} a call "
+                                     "its hook asked about in yolo mode (measured: through 0.37.2 it did, 0.38.0 and later wait; "
+                                     "the releases between are not measured). Update Gemini CLI or run `intentshield install "
+                                     "gemini` without --gemini-ask")
     else:
         report.line("warn", subject, "--gemini-ask is on: interactive sessions get a prompt, but a headless run "
-                                     "(gemini -p) waits for an answer that never comes")
+                                     "(gemini -p) waits for an answer that never comes (yolo, measured on 0.38.0 to 0.66.0)")
 
 
 def _check_servers(report: Report, path: Path) -> None:

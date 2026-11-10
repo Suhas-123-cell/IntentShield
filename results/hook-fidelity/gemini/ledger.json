@@ -1,0 +1,120 @@
+{
+ "lane": "r3-gemini",
+ "harness": "gemini",
+ "arm": "S (loopback stub model endpoint, fake key sk-stub-not-a-real-key, isolated HOME per run)",
+ "launch_cap": 400,
+ "rows_in_results": {
+  "main": 150,
+  "sweep": 216,
+  "enable-default": 8,
+  "smoke": 8
+ },
+ "launches_not_in_rows": [
+  {
+   "what": "manual smoke launch before run.py was wired (stub pilot script run-00, 0.66.0 M2 shell R0)",
+   "launches": 1
+  },
+  {
+   "what": "main phase, first invocation: the runner crashed in _kill_group (macOS EPERM on killpg after the wall-clock cap) during a capped run; that run's row was never written",
+   "launches": 1
+  },
+  {
+   "what": "main phase, second invocation: process killed by hand to split the rest over three parallel runners; one run was in flight",
+   "launches": 1
+  },
+  {
+   "what": "sweep phase, second invocation: process killed by hand (pkill) to split the rest over four parallel runners; one run was in flight",
+   "launches": 1
+  }
+ ],
+ "invocations": [
+  {
+   "name": "smoke",
+   "HOOK_FIDELITY_GO": 5,
+   "rows": 5,
+   "loopback_only": false,
+   "cap_s": 60
+  },
+  {
+   "name": "smoke2",
+   "HOOK_FIDELITY_GO": 3,
+   "rows": 3,
+   "loopback_only": true,
+   "cap_s": 60
+  },
+  {
+   "name": "main-1",
+   "HOOK_FIDELITY_GO": 170,
+   "rows": 1,
+   "note": "crashed, see launches_not_in_rows",
+   "loopback_only": false,
+   "cap_s": 300
+  },
+  {
+   "name": "main-2",
+   "HOOK_FIDELITY_GO": 165,
+   "rows": 11,
+   "note": "killed by hand, see launches_not_in_rows",
+   "loopback_only": false,
+   "cap_s": 300
+  },
+  {
+   "name": "main-A/B/C",
+   "HOOK_FIDELITY_GO": "4 + 32 + 123",
+   "rows": 138,
+   "loopback_only": true,
+   "cap_s": 300
+  },
+  {
+   "name": "sweep-1",
+   "HOOK_FIDELITY_GO": 220,
+   "rows": 4,
+   "note": "launched 4 runs, then stopped at the version probe of 0.30.0: the 0.29.7 and 0.30.0 CLIs were not on the --bin list (launch.sh pointed at the wrong directory), so the PATH gemini (0.66.0) answered and the runner refused",
+   "loopback_only": true,
+   "cap_s": 90
+  },
+  {
+   "name": "sweep-2",
+   "HOOK_FIDELITY_GO": 220,
+   "rows": 4,
+   "note": "killed by hand, see launches_not_in_rows",
+   "loopback_only": true,
+   "cap_s": 90
+  },
+  {
+   "name": "sweep-P1..P4",
+   "HOOK_FIDELITY_GO": "57 + 56 + 49 + 51",
+   "rows": 200,
+   "loopback_only": true,
+   "cap_s": 90,
+   "note": "each seeded with the rows already done; run_dir rows merged by gemini_lane.py merge"
+  },
+  {
+   "name": "enable-default",
+   "HOOK_FIDELITY_GO": 8,
+   "rows": 8,
+   "loopback_only": true,
+   "cap_s": 90
+  },
+  {
+   "name": "pin-0.38",
+   "HOOK_FIDELITY_GO": 8,
+   "rows": 8,
+   "loopback_only": true,
+   "cap_s": 90
+  }
+ ],
+ "launches_total": 386,
+ "reruns_of_invalid": 0,
+ "unsandboxed_rows": "the first 12 main rows and 5 smoke rows ran without --loopback-only (stub URL, fake key, isolated HOME; a harness that ignored the base URL could have reached Google with the fake key; the stub log shows it did not for the requests that were made, and every later row ran under sandbox-exec). Rows carry network_sandbox where the field existed.",
+ "paid_spend_usd": 0.0,
+ "deepseek_used": false,
+ "real_model_used": false,
+ "commands": [
+  "python3 benchmarks/hook_fidelity/gemini_lane.py cells main > cells-main.json",
+  "python3 benchmarks/hook_fidelity/gemini_lane.py cells sweep V1,V2,... > cells-sweep.json",
+  "HOOK_FIDELITY_GO=<n> python3 benchmarks/hook_fidelity/run.py run OUT --execute --cells-json CELLS --bin gemini:<v>=<path> ... --cap-s <300|90> [--loopback-only]",
+  "python3 benchmarks/hook_fidelity/gemini_lane.py merge OUT_DIR RUN_DIR...",
+  "python3 benchmarks/hook_fidelity/gemini_lane.py report RUNS.jsonl [--by-version --transpose]"
+ ]
+}

@@ -1,0 +1,8 @@
+{"run_id": "00000-4679b88e", "key": "claude|2.1.281|M1h|shell|-|-|plain|S|R9|0", "attempt": 0, "ts": "2026-11-01T00:15:16Z"}
+{"run_id": "00001-765825e2", "key": "claude|2.1.281|M1h|shell|-|-|plain|S|R9|1", "attempt": 0, "ts": "2026-11-01T00:15:20Z"}
+{"run_id": "00002-fd27ea00", "key": "claude|2.1.281|M1h|shell|-|block|plain|S|R9|0", "attempt": 0, "ts": "2026-11-01T00:15:24Z"}
+{"run_id": "00003-578dde93", "key": "claude|2.1.281|M1h|shell|-|block|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:15:29Z"}
+{"run_id": "00004-4e34a527", "key": "claude|2.1.281|M1h|shell|-|block|plain|S|R9|1", "attempt": 0, "ts": "2026-11-01T00:15:30Z"}
+{"run_id": "00005-29d98e76", "key": "claude|2.1.281|M1h|shell|-|block|plain|S|R8|1", "attempt": 0, "ts": "2026-11-01T00:15:34Z"}
+{"run_id": "00006-c9732c81", "key": "claude|2.1.281|M1h|shell|-|block|plain|S|R1|1", "attempt": 0, "ts": "2026-11-01T00:15:35Z"}
+{"run_id": "00007-8d117259", "key": "claude|2.1.281|M1h|shell|-|block|plain|S|R8|0", "attempt": 0, "ts": "2026-11-01T00:15:37Z"}

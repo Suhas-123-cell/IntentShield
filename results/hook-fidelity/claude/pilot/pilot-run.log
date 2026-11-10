@@ -1,0 +1,20 @@
+run 1: harness exit 0
+  stub requests:        2  marker: 1  hook events:        0
+run 2: harness exit 0
+  stub requests:        2  marker: 1  hook events:        1
+run 3: harness exit 0
+  stub requests:        2  marker: 0  hook events:        1
+run 4: harness exit 0
+  stub requests:        2  marker: 1  hook events:        1
+run 5: harness exit 0
+  stub requests:        2  marker: 0  hook events:        1
+run 6: harness exit 0
+  stub requests:        2  marker: 0  hook events:        1
+run 7: harness exit 0
+  stub requests:        2  marker: 0  hook events:        0
+run 8: harness exit 0
+  stub requests:        2  marker: 0  hook events:        1
+run 9: harness exit 0
+  stub requests:        2  marker: 0  hook events:        1
+run 10: harness exit 0
+  stub requests:        2  marker: 1  hook events:        1

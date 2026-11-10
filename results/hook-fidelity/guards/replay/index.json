@@ -1,0 +1,807 @@
+[
+ {
+  "id": "rp21827d24b8",
+  "intent": "ASK",
+  "why": "stdout decision 'ask', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-memory-write-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-memory-write",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   }
+  ]
+ },
+ {
+  "id": "rp2ab8a27439",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --gemini-cli",
+    "shape": "gemini",
+    "scenario": "flagged-git-reset",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   }
+  ]
+ },
+ {
+  "id": "rp335b05c4e9",
+  "intent": "ALLOW",
+  "why": "no decision (empty, {} or allow)",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / default env, no AEGMIS_API_KEY",
+    "shape": "gemini",
+    "scenario": "non-gated-tool",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / AEGMIS_FORWARD_ALL=false (local risk filter)",
+    "shape": "gemini",
+    "scenario": "flagged-rm",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / AEGMIS_FORWARD_ALL=false (local risk filter)",
+    "shape": "gemini",
+    "scenario": "flagged-env-read",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / AEGMIS_FORWARD_ALL=false (local risk filter)",
+    "shape": "gemini",
+    "scenario": "benign",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   }
+  ]
+ },
+ {
+  "id": "rp3a8daed298",
+  "intent": "ALLOW",
+  "why": "no decision (empty, {} or allow)",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-rm-guard / no jq, python3 or node on PATH (documented fail-open)",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   }
+  ]
+ },
+ {
+  "id": "rp4c6a37c3c6",
+  "intent": "BLOCK",
+  "why": "exit 2 with stderr reason",
+  "exit_code": 2,
+  "captures": [
+   {
+    "guard": "axonflow-codex",
+    "entry": "pre-tool-check.sh / local free-tier throttle active (guard's exit-2 deny path)",
+    "shape": "codex",
+    "scenario": "flagged-rm",
+    "guard_commit": "580815d0e1b6b3b20076511916092ce99cb16c0a"
+   },
+   {
+    "guard": "axonflow-codex",
+    "entry": "pre-tool-check.sh / local free-tier throttle active (guard's exit-2 deny path)",
+    "shape": "codex",
+    "scenario": "flagged-env-read",
+    "guard_commit": "580815d0e1b6b3b20076511916092ce99cb16c0a"
+   },
+   {
+    "guard": "axonflow-codex",
+    "entry": "pre-tool-check.sh / local free-tier throttle active (guard's exit-2 deny path)",
+    "shape": "codex",
+    "scenario": "benign",
+    "guard_commit": "580815d0e1b6b3b20076511916092ce99cb16c0a"
+   }
+  ]
+ },
+ {
+  "id": "rp4ea891d63d",
+  "intent": "ALLOW",
+  "why": "no decision (empty, {} or allow)",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "axonflow-codex",
+    "entry": "pre-tool-check.sh / policy server unreachable (documented fail-open)",
+    "shape": "codex",
+    "scenario": "flagged-rm",
+    "guard_commit": "580815d0e1b6b3b20076511916092ce99cb16c0a"
+   },
+   {
+    "guard": "axonflow-codex",
+    "entry": "pre-tool-check.sh / policy server unreachable (documented fail-open)",
+    "shape": "codex",
+    "scenario": "flagged-env-read",
+    "guard_commit": "580815d0e1b6b3b20076511916092ce99cb16c0a"
+   },
+   {
+    "guard": "axonflow-codex",
+    "entry": "pre-tool-check.sh / policy server unreachable (documented fail-open)",
+    "shape": "codex",
+    "scenario": "benign",
+    "guard_commit": "580815d0e1b6b3b20076511916092ce99cb16c0a"
+   }
+  ]
+ },
+ {
+  "id": "rp5506577971",
+  "intent": "ALLOW",
+  "why": "no decision (empty, {} or allow)",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-rm-guard",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-rm-guard",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-git-guard",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-git-guard",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-git-guard",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-credential-in-command",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-credential-in-command",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-credential-in-command",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-secret-file-read-guard",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-secret-file-read-guard",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-secret-file-read-guard",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-secret-file-read-guard",
+    "shape": "claude",
+    "scenario": "flagged-memory-write",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-secret-file-read-guard",
+    "shape": "claude",
+    "scenario": "flagged-mcp-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "flagged-powershell-remove",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "flagged-read-env-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "flagged-memory-write",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-powershell-remove-item-guard (ask by default)",
+    "shape": "claude",
+    "scenario": "flagged-mcp-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-memory-write-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-memory-write-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-memory-write-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-memory-write-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-read-env-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-memory-write-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-mcp-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-mcp-tool-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-mcp-tool-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-mcp-tool-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-mcp-tool-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-read-env-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-mcp-tool-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-memory-write",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-mcp-tool-guard (ask, opt-in)",
+    "shape": "claude",
+    "scenario": "flagged-mcp-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --coding-cli",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --coding-cli",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --codex",
+    "shape": "codex",
+    "scenario": "flagged-rm",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --codex",
+    "shape": "codex",
+    "scenario": "benign",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --gemini-cli",
+    "shape": "gemini",
+    "scenario": "flagged-rm",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --gemini-cli",
+    "shape": "gemini",
+    "scenario": "benign",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "railway-guard",
+    "entry": "hooks/railway-guard.sh",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead"
+   },
+   {
+    "guard": "railway-guard",
+    "entry": "hooks/railway-guard.sh",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead"
+   },
+   {
+    "guard": "railway-guard",
+    "entry": "hooks/railway-guard.sh",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead"
+   }
+  ]
+ },
+ {
+  "id": "rp5646cd69f9",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / key set, approval service unreachable",
+    "shape": "gemini",
+    "scenario": "flagged-rm",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / key set, approval service unreachable",
+    "shape": "gemini",
+    "scenario": "benign",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   }
+  ]
+ },
+ {
+  "id": "rp5af5793455",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "railway-guard",
+    "entry": "hooks/railway-guard.sh",
+    "shape": "claude",
+    "scenario": "flagged-railway-delete",
+    "guard_commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead"
+   }
+  ]
+ },
+ {
+  "id": "rp5e7b89c94e",
+  "intent": "BLOCK",
+  "why": "exit 2 with stderr reason",
+  "exit_code": 2,
+  "captures": [
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-rm-guard",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   }
+  ]
+ },
+ {
+  "id": "rp6c9d12a784",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --coding-cli",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --codex",
+    "shape": "codex",
+    "scenario": "flagged-env-read",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   }
+  ]
+ },
+ {
+  "id": "rp7cc2cbed43",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --coding-cli",
+    "shape": "claude",
+    "scenario": "flagged-git-reset",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --codex",
+    "shape": "codex",
+    "scenario": "flagged-git-reset",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   }
+  ]
+ },
+ {
+  "id": "rp86fd1ff388",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / default env, no AEGMIS_API_KEY",
+    "shape": "gemini",
+    "scenario": "flagged-rm",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / default env, no AEGMIS_API_KEY",
+    "shape": "gemini",
+    "scenario": "flagged-env-read",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / default env, no AEGMIS_API_KEY",
+    "shape": "gemini",
+    "scenario": "benign",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / default env, no AEGMIS_API_KEY",
+    "shape": "gemini",
+    "scenario": "flagged-workspace-wipe",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "entry": "hook.py / AEGMIS_FORWARD_ALL=false (local risk filter)",
+    "shape": "gemini",
+    "scenario": "flagged-workspace-wipe",
+    "guard_commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe"
+   }
+  ]
+ },
+ {
+  "id": "rp951f8b977c",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "railway-guard",
+    "entry": "hooks/railway-guard.sh",
+    "shape": "claude",
+    "scenario": "flagged-railway-redeploy-production",
+    "guard_commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead"
+   }
+  ]
+ },
+ {
+  "id": "rpa6a79cf2ca",
+  "intent": "ASK",
+  "why": "stdout decision 'ask', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "railway-guard",
+    "entry": "hooks/railway-guard.sh",
+    "shape": "claude",
+    "scenario": "flagged-railway-redeploy-staging",
+    "guard_commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead"
+   }
+  ]
+ },
+ {
+  "id": "rpc3e9b16414",
+  "intent": "BLOCK",
+  "why": "stdout decision 'block', exit 2",
+  "exit_code": 2,
+  "captures": [
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "claude",
+    "scenario": "flagged-no-verify",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor-pre",
+    "scenario": "flagged-no-verify",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "gemini",
+    "scenario": "flagged-no-verify",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   }
+  ]
+ },
+ {
+  "id": "rpc8066a34ea",
+  "intent": "BLOCK",
+  "why": "exit 2 with stderr reason",
+  "exit_code": 2,
+  "captures": [
+   {
+    "guard": "cc-safe-setup",
+    "entry": "example-secret-file-read-guard",
+    "shape": "claude",
+    "scenario": "flagged-read-env-tool",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   }
+  ]
+ },
+ {
+  "id": "rpcc0d72747d",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --gemini-cli",
+    "shape": "gemini",
+    "scenario": "flagged-env-read",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   }
+  ]
+ },
+ {
+  "id": "rpdafa913716",
+  "intent": "ALLOW",
+  "why": "no decision (empty, {} or allow)",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "claude",
+    "scenario": "flagged-rm",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "claude",
+    "scenario": "flagged-env-read",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "claude",
+    "scenario": "benign",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor",
+    "scenario": "flagged-rm",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor",
+    "scenario": "flagged-env-read",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor",
+    "scenario": "benign",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor",
+    "scenario": "flagged-no-verify",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor-pre",
+    "scenario": "flagged-rm",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor-pre",
+    "scenario": "flagged-env-read",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "cursor-pre",
+    "scenario": "benign",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "gemini",
+    "scenario": "flagged-rm",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "gemini",
+    "scenario": "flagged-env-read",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   },
+   {
+    "guard": "block-no-verify",
+    "entry": "dist/cli.js (polyhook SDK)",
+    "shape": "gemini",
+    "scenario": "benign",
+    "guard_commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de"
+   }
+  ]
+ },
+ {
+  "id": "rpf6467e392c",
+  "intent": "BLOCK",
+  "why": "exit 2 with stderr reason",
+  "exit_code": 2,
+  "captures": [
+   {
+    "guard": "cc-safe-setup",
+    "entry": "core-git-guard",
+    "shape": "claude",
+    "scenario": "flagged-git-reset",
+    "guard_commit": "793c6c12ddca009b2f108b2cc931caaa83151844"
+   }
+  ]
+ },
+ {
+  "id": "rpfef2a5481a",
+  "intent": "BLOCK",
+  "why": "stdout decision 'deny', exit 0",
+  "exit_code": 0,
+  "captures": [
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --cursor",
+    "shape": "cursor",
+    "scenario": "flagged-rm",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --cursor",
+    "shape": "cursor",
+    "scenario": "flagged-env-read",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --cursor",
+    "shape": "cursor",
+    "scenario": "benign",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   },
+   {
+    "guard": "safety-net",
+    "entry": "cc-safety-net hook --cursor",
+    "shape": "cursor",
+    "scenario": "flagged-git-reset",
+    "guard_commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e"
+   }
+  ]
+ }
+]

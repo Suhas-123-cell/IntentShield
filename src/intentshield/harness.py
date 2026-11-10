@@ -22,6 +22,7 @@ import re
 import shlex
 import sqlite3
 import sys
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
@@ -29,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import credentials, shell
+from . import credentials, dangerous, shell, translation
 from .hostlists import NEEDS_SUBDOMAIN
 from .install import server_stem
 from .mcp_inspect import (
@@ -138,6 +139,35 @@ class Verdict:
     findings: list[str] = field(default_factory=list)
 
 
+def _kind_of(tool: str) -> str:
+    """shell, write, read, fetch... for a built-in tool (``builtin:Bash``), "mcp" for an MCP tool (``server:tool``)."""
+    return _BUILTIN.get(tool[8:], ("mcp",))[0] if tool.startswith("builtin:") else "mcp"
+
+
+def _mode_note(guard: "HarnessGuard", harness: str, why: str, asked: bool) -> str:
+    """The detector's reading (mode and which ancestry source decided), appended to the reason of every reply that came from an
+    ask, so a run's evidence shows what the translation saw. Empty without a translation (and for Cursor, which has none). When an
+    ask was passed on because the mode could not be read, ``why`` names the choice."""
+    sem = guard.translation
+    if sem is None or harness == "cursor":
+        return ""
+    return " " + sem.mode_note() + (f" {why}." if asked and why else "")
+
+
+def _ask_as(guard: "HarnessGuard", harness: str, kind: str) -> tuple[str, str]:
+    """("ask" or "deny", why) for a verdict of ask. With a translation (the default of the hook) the measured behaviour of the
+    harness build and mode decides; without one, the mapping the hook had before: Codex CLI and Cursor's MCP tools refuse,
+    Gemini CLI refuses unless --gemini-ask, Claude Code and Cursor's shell ask."""
+    sem = guard.translation
+    if sem is not None and harness != "cursor":  # Cursor has no measurement in the study (the free plan ran out)
+        return sem.ask_reply(kind, guard.gemini_ask)
+    if harness == "codex" or (harness == "cursor" and kind == "mcp"):
+        return "deny", ""
+    if harness == "gemini":
+        return ("ask", "") if guard.gemini_ask else ("deny", "")
+    return "ask", ""
+
+
 # The intent a session keeps, in characters: every hook of the session reads and scans all of it, at about 0.3 s
 # per MB, so a long session of large pastes slowed each call. Past the limit the prompts in the middle go, oldest
 # first: the first ``INTENT_HEAD`` characters (the task the session began with) and the rest of the limit, the
@@ -167,6 +197,9 @@ class HarnessGuard:
         # Gemini CLI: send an ask as an ask instead of a refusal. Measured: a real prompt in interactive 0.66.0;
         # approved by yolo in headless 0.37.1, and a wait with no end in headless 0.66.0. Hence opt-in.
         self.gemini_ask = gemini_ask
+        # What the harness in use is measured to do with a reply (translation.Semantics); None sends every verdict as the
+        # guard made it, with only the hand-written mapping each harness had before the translation (``_ask_as``).
+        self.translation: translation.Semantics | None = None
         # The working directory of the event being handled (one per hook process), to read relative paths.
         self.cwd = ""
         # As the proxy's setting: a value from a tool output always asks on a side-effecting
@@ -518,6 +551,16 @@ class HarnessGuard:
         return self.review == "always" or (self.review == "tainted" and bool(taint or self._flagged(session)))
 
     def shell(self, session: str, tool: str, command: str) -> Verdict:
+        """The session rules' verdict (below), or, when they allow, the text rules of ``dangerous.py``."""
+        verdict = self._shell_session(session, tool, command)
+        if verdict.decision != "allow":
+            return verdict
+        risky = dangerous.assess_shell(command, self._load(session)[0])
+        if risky and (risky.decision == "deny" or self.review != "never"):
+            return Verdict(risky.decision, f"IntentShield: {risky.reason}")
+        return verdict
+
+    def _shell_session(self, session: str, tool: str, command: str) -> Verdict:
         """A shell command of a built-in tool. Only where it sends data, which secrets it reads, and, after an
         output tried to instruct the agent, whether it changes anything count: ordinary local commands pass."""
         intent, taint = self._load(session)
@@ -603,6 +646,16 @@ class HarnessGuard:
         return Verdict()
 
     def file(self, session: str, tool: str, path: str, content: Any = None, write: bool = False) -> Verdict:
+        """The session rules' verdict (below), or, when they allow, the text rules of ``dangerous.py``."""
+        verdict = self._file_session(session, tool, path, content, write)
+        if verdict.decision != "allow":
+            return verdict
+        risky = dangerous.assess_file(path, content, write, self._load(session)[0])
+        if risky and (risky.decision == "deny" or self.review != "never"):
+            return Verdict(risky.decision, f"IntentShield: {risky.reason}")
+        return verdict
+
+    def _file_session(self, session: str, tool: str, path: str, content: Any = None, write: bool = False) -> Verdict:
         """A file read or write by a built-in tool. Light by design: only after an output tried to instruct
         the agent, a credential store, a shell startup file or a harness's settings, or (for a write) a value
         from that output, asks."""
@@ -903,7 +956,8 @@ def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[
         paths = [(a or b).strip() for a, b in _PATCH_FILE.findall(patch)] or [""]
         # One database read per file would make a huge patch slow: the path rules are plain patterns, so only the
         # files they fire on, and one of the rest (for what the patch adds), go to the guard.
-        special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)]
+        special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)
+                   or dangerous.path_risk(p)]
         verdicts = [guard.file(session, label, path, added, write=True) for path in special[:8] + paths[:1]]
         return next((v for v in verdicts if v.decision != "allow"), verdicts[0])
     return None
@@ -1055,8 +1109,14 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
         v.decision = "ask"
         v.reason = v.context + (" Confirm this call." if harness == "claude"
                                 else " Call the tool again with those fields empty.")
-    decision = "deny" if v.decision == "ask" and harness == "codex" else v.decision
-    if decision == "deny" and harness == "codex" and v.arguments is None:  # not "call again with fields empty"
+    decision, refused_ask, note = v.decision, False, ""
+    if decision == "ask":
+        decision, why = _ask_as(guard, harness, _kind_of(tool))
+        refused_ask = decision == "deny"
+        if refused_ask and why:  # the translation turned the ask into a refusal: say what was wanted and why
+            v.reason = translation.ask_refusal(v.reason, why)
+        note = _mode_note(guard, harness, why, not refused_ask)
+    if decision == "deny" and (harness == "codex" or refused_ask) and v.arguments is None:  # not "call again with fields empty"
         v.reason += NO_RETRY
     out: dict[str, Any] = {"hookEventName": "PreToolUse"}
     if not (decision == "allow" and (harness == "claude" or v.arguments is None)):
@@ -1065,7 +1125,8 @@ def _claude_reply(harness: str, session: str, tool: str, event: dict[str, Any], 
         # prompt is read by the user alone, so it may carry the judge's own words; a deny reason
         # goes to the model.
         reason = v.user_reason if decision == "ask" and harness == "claude" else ""
-        out.update(permissionDecision=decision, permissionDecisionReason=reason or v.reason or v.context)
+        out.update(permissionDecision=decision,
+                   permissionDecisionReason=(reason or v.reason or v.context or "IntentShield refused this call.") + note)
     if v.arguments is not None and decision != "deny":
         out["updatedInput"] = v.arguments
     if v.context:
@@ -1178,7 +1239,7 @@ def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
     if name == "BeforeTool":
         v = guard.call(session, tool, _as_dict(event.get("tool_input")))
         if v.decision != "allow":
-            return _gemini_decision(session, v, guard)
+            return _gemini_decision(session, v, guard, "mcp")
         if v.arguments is not None:
             return {"hookSpecificOutput": {"tool_input": v.arguments, "additionalContext": v.context}}
         return None
@@ -1187,11 +1248,16 @@ def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
     return None
 
 
-def _gemini_decision(session: str, v: Verdict, guard: HarnessGuard) -> dict[str, Any]:
+def _gemini_decision(session: str, v: Verdict, guard: HarnessGuard, kind: str = "mcp") -> dict[str, Any]:
     """A call the guard holds. Gemini CLI's ask is a prompt only in an interactive session of a recent version,
     so by default an ask is a refusal; with --gemini-ask it is sent as an ask, and the user sees why."""
-    if v.decision == "ask" and guard.gemini_ask:
-        shown = v.user_reason or v.reason
+    asked, why = ("ask", "") if v.decision != "ask" else _ask_as(guard, "gemini", kind)
+    note = _mode_note(guard, "gemini", why, asked == "ask") if v.decision == "ask" else ""
+    if v.decision == "ask" and asked == "deny" and why:
+        v.reason = translation.ask_refusal(v.reason, why)
+    v.reason += note
+    if v.decision == "ask" and asked == "ask":
+        shown = (v.user_reason or v.reason.removesuffix(note)) + note
         return {"decision": "ask", "reason": v.reason,
                 "systemMessage": shown if shown.startswith("IntentShield") else f"IntentShield: {shown}"}
     return _gemini_refusal(session, v.reason, guard)
@@ -1228,7 +1294,7 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
     arguments = _as_dict(event.get("tool_input"))
     if name == "BeforeTool":
         v = _builtin_call(guard, session, tool, arguments)
-        return None if v is None or v.decision == "allow" else _gemini_decision(session, v, guard)
+        return None if v is None or v.decision == "allow" else _gemini_decision(session, v, guard, _BUILTIN[tool][0])
     if name == "AfterTool" and _BUILTIN[tool][0] not in ("write", "patch"):
         kind, field_name = _BUILTIN[tool]
         target = _builtin_target(kind, field_name, arguments)
@@ -1238,6 +1304,8 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
 
 
 def main(argv: list[str] | None = None) -> None:
+    global _REPLY
+    _REPLY = threading.Lock()  # one answer per hook process: a new lock per call, for callers that run main in-process
     parser = argparse.ArgumentParser(description="IntentShield hook for MCP-using agent harnesses")
     parser.add_argument("harness", choices=("claude", "codex", "cursor", "gemini"))
     parser.add_argument("--db", default=os.getenv("INTENTSHIELD_HOOK_DB",
@@ -1274,6 +1342,14 @@ def main(argv: list[str] | None = None) -> None:
                         help="Gemini CLI 0.66 or later, interactive only: ask the user instead of refusing. A headless "
                              "run (gemini -p) then waits for an answer that never comes, and Gemini CLI 0.37 in yolo "
                              "mode runs the call")
+    parser.add_argument("--no-translate", action="store_true",
+                        default=os.getenv("INTENTSHIELD_HOOK_TRANSLATE", "").lower() in ("0", "off", "false", "no"),
+                        help="send each verdict as the guard made it: no choice of ask or deny by the harness's measured "
+                             "behaviour, and no deadline (translation.py)")
+    parser.add_argument("--deadline", type=float, default=float(os.getenv("INTENTSHIELD_HOOK_DEADLINE") or 0),
+                        help="seconds after which a hook still checking a call answers with a refusal, so that a slow "
+                             "judge or a stuck database is not read as a timeout, which every harness measured lets "
+                             "through (0: no deadline; `intentshield install` sets it under the harness's timeout)")
     parser.add_argument("--judge-outputs", action="store_true",
                         help="the judge also reads each tool result the rules pass, for plain-language injections "
                              "(one request per result: latency, and free-tier quota)")
@@ -1299,6 +1375,8 @@ def main(argv: list[str] | None = None) -> None:
         print(f"IntentShield hook could not read its event: {exc}", file=sys.stderr)
         sys.exit(2)
     guard = None
+    if args.deadline > 0 and not args.no_translate and event.get("hook_event_name") in translation.CALL_EVENTS:
+        _arm_deadline(args.harness, args.deadline)
     try:
         threats = None if args.no_threat_memory else args.threats or str(Path(args.db).with_name("threats.db"))
         guard = HarnessGuard(args.db, review=args.review, outputs=args.outputs, classifier=args.classifier,
@@ -1306,11 +1384,17 @@ def main(argv: list[str] | None = None) -> None:
                              review_output_sourced_arguments=not args.allow_sourced_reads,
                              judge_outputs=args.judge_outputs, builtin_tools=args.builtin_tools,
                              gemini_ask=args.gemini_ask, judge_pause=True)
+        if not args.no_translate:
+            guard.translation = translation.resolve(args.harness, event)
+            if event.get("hook_event_name") in translation.CALL_EVENTS:
+                for note in guard.translation.overrides():   # a project's settings can set these: never silently
+                    print(f"IntentShield: {note} replaces what the hook would detect", file=sys.stderr)
         reply = handle(args.harness, event, guard)
     except Exception as exc:  # fail closed on calls, open on everything else
         name = event.get("hook_event_name")
         print(f"IntentShield hook failed: {exc}", file=sys.stderr)
         if name in ("PreToolUse", "BeforeTool", "beforeMCPExecution", "beforeShellExecution", "beforeReadFile"):
+            _REPLY.acquire()  # the deadline's refusal, if it was first, ends the process; this one is the same refusal
             sys.exit(2)
         if name in ("PostToolUse", "PostToolUseFailure", "AfterTool", "afterMCPExecution", "afterShellExecution"):
             # The result went uninspected: the session is flagged as if it had instructed the agent,
@@ -1325,7 +1409,39 @@ def main(argv: list[str] | None = None) -> None:
         if guard is not None:
             guard.close()
     if reply is not None:
+        _REPLY.acquire()
         print(json.dumps(reply))
+
+
+_REPLY = threading.Lock()  # whoever answers first (the deadline or the main thread) holds it for good
+
+
+def _deadline_reply(harness: str, seconds: float) -> dict[str, Any]:
+    """The refusal the hook answers with when it is still checking a call ``seconds`` after it started. Exit 0 with a reason:
+    a refusal every harness measured honours, which a timeout is not (every one of them ran the call)."""
+    reason = (f"IntentShield did not finish checking this call within {seconds:g} s (a slow judge or database), so it is "
+              "refused rather than let through unchecked." + NO_RETRY)
+    if harness == "gemini":
+        return {"decision": "deny", "reason": reason}
+    if harness == "cursor":
+        return {"permission": "deny", "user_message": reason, "agent_message": reason}
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                   "permissionDecisionReason": reason}}
+
+
+def _arm_deadline(harness: str, seconds: float) -> threading.Timer:
+    answered = _REPLY
+
+    def fire() -> None:
+        if answered.acquire(blocking=False):
+            sys.stdout.write(json.dumps(_deadline_reply(harness, seconds)) + "\n")
+            sys.stdout.flush()
+            os._exit(0)
+
+    timer = threading.Timer(seconds, fire)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 def _flag_session(db: str, session: str) -> None:

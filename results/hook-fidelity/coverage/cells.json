@@ -1,0 +1,1566 @@
+[
+ {
+  "harness": "claude",
+  "version": "2.0.41",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 1,
+  "k_model": 0,
+  "k_server_read": 0,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.0.41",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.0.41",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 1,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   1,
+   1
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.0.41",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "system"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.0.41",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.0.41",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 1,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   1,
+   1
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.69",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 0,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.69",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.69",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.69",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "system"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.69",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.69",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.139",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 0,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.139",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.139",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolBatch",
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.139",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.139",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.139",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolBatch",
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.246",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.246",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.246",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolBatch",
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.246",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.246",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.246",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolBatch",
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 0,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolBatch",
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "messages[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolBatch",
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "messages[user:tool_result]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.131.0",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 0,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.131.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   3
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.131.0",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.131.0",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.131.0",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.134.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   3
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.136.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.140.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 1,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   1,
+   1
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.149.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 1,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   1,
+   1
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 0,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "PostToolUse"
+  ],
+  "model_sections": [
+   "input[function_call_output:function_call_output]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterAgent",
+   "AfterModel",
+   "BeforeAgent",
+   "BeforeModel",
+   "BeforeToolSelection"
+  ],
+  "model_sections": [
+   "contents[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "systemInstruction"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.2",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 1,
+  "k_model": 0,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.2",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "systemInstruction"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.2",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.2",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 1,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   1,
+   1
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.39.1",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.39.1",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "systemInstruction"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.39.1",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.39.1",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.41.2",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.41.2",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 2,
+  "k_model": 2,
+  "k_server_read": 2,
+  "k_decision_hook": 0,
+  "k_result_hook": 2,
+  "k_any_hook": 2,
+  "k_any_pre_model": 2,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   2,
+   2
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.41.2",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterModel",
+   "BeforeModel",
+   "BeforeToolSelection"
+  ],
+  "model_sections": [
+   "contents[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.41.2",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.41.2",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.50.0",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 1,
+  "k_model": 0,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.50.0",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "AfterModel",
+   "BeforeModel",
+   "BeforeToolSelection"
+  ],
+  "model_sections": [
+   "contents[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.50.0",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.50.0",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 1,
+  "k_model": 1,
+  "k_server_read": 1,
+  "k_decision_hook": 0,
+  "k_result_hook": 1,
+  "k_any_hook": 1,
+  "k_any_pre_model": 1,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   1,
+   1
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "variant": "base",
+  "surface": "changed_description",
+  "n": 3,
+  "k_model": 0,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "variant": "base",
+  "surface": "prompt_content",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterAgent",
+   "AfterModel",
+   "BeforeAgent",
+   "BeforeModel",
+   "BeforeToolSelection"
+  ],
+  "model_sections": [
+   "contents[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "variant": "base",
+  "surface": "resource_read",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "variant": "base",
+  "surface": "server_instructions",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterModel",
+   "BeforeModel",
+   "BeforeToolSelection"
+  ],
+  "model_sections": [
+   "contents[user:text]"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "variant": "base",
+  "surface": "tool_description",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 0,
+  "k_any_hook": 0,
+  "k_any_pre_model": 0,
+  "hook_events": [],
+  "model_sections": [
+   "tools"
+  ],
+  "scripted_call_pre_hooked": [
+   0,
+   0
+  ]
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "variant": "base",
+  "surface": "tool_result",
+  "n": 3,
+  "k_model": 3,
+  "k_server_read": 3,
+  "k_decision_hook": 0,
+  "k_result_hook": 3,
+  "k_any_hook": 3,
+  "k_any_pre_model": 3,
+  "hook_events": [
+   "AfterTool"
+  ],
+  "model_sections": [
+   "contents[user:functionResponse]"
+  ],
+  "scripted_call_pre_hooked": [
+   3,
+   3
+  ]
+ }
+]

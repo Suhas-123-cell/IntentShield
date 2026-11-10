@@ -1,0 +1,4 @@
+{"run_id": "ef7b16e564", "harness": "gemini", "version": "0.38.0", "scenario": "ask", "arm": "off", "rep": 0, "outcome": "INVALID", "invalid_reason": "runner error: PermissionError: [Errno 1] Operation not permitted"}
+{"run_id": "64d865d23d", "harness": "gemini", "version": "0.38.0", "scenario": "ask", "arm": "off", "rep": 1, "outcome": "INVALID", "invalid_reason": "runner error: PermissionError: [Errno 1] Operation not permitted"}
+{"run_id": "98678d2493", "harness": "gemini", "version": "0.43.0", "scenario": "ask", "arm": "off", "rep": 0, "outcome": "INVALID", "invalid_reason": "runner error: PermissionError: [Errno 1] Operation not permitted"}
+{"run_id": "2224647ced", "harness": "gemini", "version": "0.43.0", "scenario": "ask", "arm": "off", "rep": 1, "outcome": "INVALID", "invalid_reason": "runner error: PermissionError: [Errno 1] Operation not permitted"}

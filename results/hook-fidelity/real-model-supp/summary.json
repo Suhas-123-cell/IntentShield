@@ -1,0 +1,275 @@
+{
+ "cells": [
+  {
+   "arm_kind": "generic",
+   "harness": "claude",
+   "cell": "ask",
+   "build": "claude 2.1.316 M1h",
+   "launches": 2,
+   "outcomes": {
+    "INVALID": 1,
+    "BLOCKED": 1
+   },
+   "valid_n": 1,
+   "tool_call_k": 1,
+   "stub": {
+    "BLOCKED": 5
+   },
+   "stub_modal": "BLOCKED",
+   "agree_k": 1,
+   "agree_n": 1,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "0983918957",
+    "9e983881a3"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "claude",
+   "cell": "control",
+   "build": "claude 2.1.316 M1h",
+   "launches": 1,
+   "outcomes": {
+    "RAN": 1
+   },
+   "valid_n": 1,
+   "tool_call_k": 1,
+   "stub": {
+    "RAN": 5
+   },
+   "stub_modal": "RAN",
+   "agree_k": 1,
+   "agree_n": 1,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "57c5800d1d"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "claude",
+   "cell": "deny",
+   "build": "claude 2.1.316 M1h",
+   "launches": 3,
+   "outcomes": {
+    "BLOCKED": 3
+   },
+   "valid_n": 3,
+   "tool_call_k": 3,
+   "stub": {
+    "BLOCKED": 5
+   },
+   "stub_modal": "BLOCKED",
+   "agree_k": 3,
+   "agree_n": 3,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "e1b77f4a0b",
+    "32cc70fd5f",
+    "0c9eabffb4"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "claude",
+   "cell": "malformed",
+   "build": "claude 2.1.316 M1h",
+   "launches": 3,
+   "outcomes": {
+    "INVALID": 1,
+    "RAN": 2
+   },
+   "valid_n": 2,
+   "tool_call_k": 2,
+   "stub": {
+    "RAN": 3
+   },
+   "stub_modal": "RAN",
+   "agree_k": 2,
+   "agree_n": 2,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "d315df1319",
+    "8c78e8e7d0",
+    "dc44c015fc"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "claude",
+   "cell": "timeout",
+   "build": "claude 2.1.316 M1h",
+   "launches": 4,
+   "outcomes": {
+    "INVALID": 1,
+    "RAN": 3
+   },
+   "valid_n": 3,
+   "tool_call_k": 3,
+   "stub": {
+    "RAN": 3
+   },
+   "stub_modal": "RAN",
+   "agree_k": 3,
+   "agree_n": 3,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "d5edd79b7e",
+    "b37697bf28",
+    "4f8766e87d",
+    "0f21e55031"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "codex",
+   "cell": "ask",
+   "build": "codex 0.166.0 M1",
+   "launches": 4,
+   "outcomes": {
+    "RAN": 4
+   },
+   "valid_n": 4,
+   "tool_call_k": 4,
+   "stub": {
+    "RAN": 5
+   },
+   "stub_modal": "RAN",
+   "agree_k": 4,
+   "agree_n": 4,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "8480d16586",
+    "07ac193edb",
+    "a841878a7a",
+    "09e4591ad8"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "codex",
+   "cell": "control",
+   "build": "codex 0.166.0 M1",
+   "launches": 1,
+   "outcomes": {
+    "RAN": 1
+   },
+   "valid_n": 1,
+   "tool_call_k": 1,
+   "stub": {
+    "RAN": 5
+   },
+   "stub_modal": "RAN",
+   "agree_k": 1,
+   "agree_n": 1,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "0ee8a0001c"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "codex",
+   "cell": "deny",
+   "build": "codex 0.166.0 M1",
+   "launches": 3,
+   "outcomes": {
+    "BLOCKED": 3
+   },
+   "valid_n": 3,
+   "tool_call_k": 3,
+   "stub": {
+    "BLOCKED": 5
+   },
+   "stub_modal": "BLOCKED",
+   "agree_k": 3,
+   "agree_n": 3,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "a7e9d47461",
+    "317f8bb2b8",
+    "ddf9499dac"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "codex",
+   "cell": "malformed",
+   "build": "codex 0.166.0 M1",
+   "launches": 3,
+   "outcomes": {
+    "RAN": 3
+   },
+   "valid_n": 3,
+   "tool_call_k": 3,
+   "stub": {
+    "RAN": 2
+   },
+   "stub_modal": "RAN",
+   "agree_k": 3,
+   "agree_n": 3,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "423ad01241",
+    "a6945a68a9",
+    "f37e6f5235"
+   ]
+  },
+  {
+   "arm_kind": "generic",
+   "harness": "codex",
+   "cell": "timeout",
+   "build": "codex 0.166.0 M1",
+   "launches": 2,
+   "outcomes": {
+    "RAN": 2
+   },
+   "valid_n": 2,
+   "tool_call_k": 2,
+   "stub": {
+    "RAN": 2
+   },
+   "stub_modal": "RAN",
+   "agree_k": 2,
+   "agree_n": 2,
+   "multi_call_runs": 0,
+   "max_hook_invocations": 1,
+   "disagreements": [],
+   "run_ids": [
+    "baded004c0",
+    "f219e23c8f"
+   ]
+  }
+ ],
+ "tool_call_rate": {
+  "claude": {
+   "k": 10,
+   "n": 13
+  },
+  "codex": {
+   "k": 13,
+   "n": 13
+  }
+ },
+ "launches": 26,
+ "model": "qwen2.5:7b"
+}

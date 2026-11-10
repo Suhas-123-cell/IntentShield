@@ -1,0 +1,46 @@
+[
+ {
+  "harness": "gemini",
+  "version": "0.24.5",
+  "mode": "M2",
+  "kind": "shell",
+  "reply": "R1",
+  "state": "enable-default",
+  "arm": "S",
+  "tier": 0,
+  "reps": 2
+ },
+ {
+  "harness": "gemini",
+  "version": "0.24.5",
+  "mode": "M2",
+  "kind": "shell",
+  "reply": "R4",
+  "state": "enable-default",
+  "arm": "S",
+  "tier": 0,
+  "reps": 2
+ },
+ {
+  "harness": "gemini",
+  "version": "0.26.0",
+  "mode": "M2",
+  "kind": "shell",
+  "reply": "R1",
+  "state": "enable-default",
+  "arm": "S",
+  "tier": 0,
+  "reps": 2
+ },
+ {
+  "harness": "gemini",
+  "version": "0.26.0",
+  "mode": "M2",
+  "kind": "shell",
+  "reply": "R4",
+  "state": "enable-default",
+  "arm": "S",
+  "tier": 0,
+  "reps": 2
+ }
+]

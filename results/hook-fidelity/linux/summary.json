@@ -1,0 +1,43 @@
+{
+ "rows": 37,
+ "agree": 29,
+ "by_group": {
+  "hidepid": {
+   "agree": 1,
+   "n": 1,
+   "mode_equal": 1,
+   "sources": [
+    "none"
+   ],
+   "disagree": []
+  },
+  "matrix": {
+   "agree": 28,
+   "n": 28,
+   "mode_equal": 28,
+   "sources": [
+    "none",
+    "proc"
+   ],
+   "disagree": []
+  },
+  "pid1": {
+   "agree": 0,
+   "n": 8,
+   "mode_equal": 6,
+   "sources": [
+    "proc"
+   ],
+   "disagree": [
+    "pid1-native-p-notty",
+    "pid1-native-bare-notty",
+    "pid1-node-p-notty",
+    "pid1-node-bare-notty",
+    "pid1-native-p-tty",
+    "pid1-native-bare-tty",
+    "pid1-node-p-tty",
+    "pid1-node-bare-tty"
+   ]
+  }
+ }
+}

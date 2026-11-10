@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a19410-1fc9-7f00-b1ea-eb5871cec672"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"stub done nz5f1bb034"}}
+{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}

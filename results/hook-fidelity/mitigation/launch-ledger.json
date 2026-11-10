@@ -1,0 +1,31 @@
+{
+ "cap": 200,
+ "harness_cli_launches": {
+  "probe (payload keys, env names; hook answered nothing)": {
+   "claude 2.1.316": 1,
+   "codex 0.166.0": 1,
+   "gemini 0.66.0": 1,
+   "HOOK_FIDELITY_GO": "1 each"
+  },
+  "eval first pass": {
+   "claude": 64,
+   "codex": 64,
+   "gemini": 64,
+   "HOOK_FIDELITY_GO": "8 then 56, 64, 64"
+  },
+  "eval rerun (Gemini ask/off HUNG cells whose runner crashed on killpg EPERM after the cap, rows in runs-runner-errors.jsonl)": {
+   "gemini": 4,
+   "HOOK_FIDELITY_GO": "4"
+  }
+ },
+ "valid_or_invalid_rows_in_runs_jsonl": 192,
+ "runner_error_rows_not_in_runs_jsonl": 4,
+ "total": 199,
+ "version_probes": "none launched: build identity is the release directory. The user-agent the harness sent the stub names that version in 148 of 192 rows; the other 44 do not (32 Claude rows on 2.1.89 and 2.1.281 send only node or Bun/1.4.3, and the 12 INVALID Gemini rows sent no request). No row carries binary_sha256, so build identity here rests on the install path",
+ "paid_spend_usd": 0,
+ "deepseek": false,
+ "real_model": false,
+ "egress": "every run under sandbox-exec with outbound network allowed to loopback only (loopback.sb); loopback_selftest passed before each invocation",
+ "isolated_home": true,
+ "fake_key": "sk-stub-not-a-real-key"
+}

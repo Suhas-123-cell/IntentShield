@@ -1,0 +1,424 @@
+{
+ "harness": "gemini-cli",
+ "package": "@google/gemini-cli",
+ "versions": [
+  {
+   "version": "0.24.5",
+   "publish_date": "2026-01-20T06:34:32.345Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.24.5",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.24.5/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.24.5",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.26.0",
+   "publish_date": "2026-01-28T01:48:55.953Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.26.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.26.0/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.26.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* feat: add Rewind Confirmation dialog and Rewind Viewer component by @Adib234 in https://github.com/google-gemini/gemini-cli/pull/15717",
+    "* prefactor: add rootCommands as array so it can be used for policy parsing by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/16640",
+    "* chore(automation): enforce 'help wanted' label permissions and update guidelines by @bdmorgan in https://github.com/google-gemini/gemini-cli/pull/16707",
+    "* feat(policy): add source tracking to policy rules by @allenhutchison in https://github.com/google-gemini/gemini-cli/pull/16670",
+    "* fix(automation): robust label enforcement with permission checks by @bdmorgan in https://github.com/google-gemini/gemini-cli/pull/16762",
+    "* feat(plan): add experimental 'plan' approval mode by @jerop in https://github.com/google-gemini/gemini-cli/pull/16753",
+    "* feat(scheduler): add functional awaitConfirmation utility by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/16721",
+    "* feat(plan): enforce strict read-only policy and halt execution on violation by @jerop in https://github.com/google-gemini/gemini-cli/pull/16849",
+    "* fix(core): surface warnings for invalid hook event names in configuration (#16788) by @sehoon38 in https://github.com/google-gemini/gemini-cli/pull/16873",
+    "* feat(plan): remove `read_many_files` from approval mode policies by @jerop in https://github.com/google-gemini/gemini-cli/pull/16876",
+    "* refactor(cli): unify shell confirmation dialogs by @NTaylorMullen in https://github.com/google-gemini/gemini-cli/pull/16828",
+    "* fix(hooks): enable /hooks disable to reliably stop single hooks by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/16804",
+    "* refactor(core): decouple scheduler into orchestration, policy, and confirmation by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/16895",
+    "* fix return type of fireSessionStartEvent to defaultHookOutput  by @ved015 in https://github.com/google-gemini/gemini-cli/pull/16833",
+    "* Test coverage for hook exit code cases by @gundermanc in https://github.com/google-gemini/gemini-cli/pull/17041"
+   ]
+  },
+  {
+   "version": "0.28.2",
+   "publish_date": "2026-02-11T22:55:30.086Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.28.2",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.28.2/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.28.2",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.30.1",
+   "publish_date": "2026-02-27T18:28:01.889Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.30.1",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.30.1/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.30.1",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.32.1",
+   "publish_date": "2026-03-04T03:39:58.330Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.32.1",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.32.1/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.32.1",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.34.0",
+   "publish_date": "2026-03-17T21:03:34.934Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.34.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.34.0/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.34.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(cli): enable multi-arch docker builds for sandbox by @ru-aish in https://github.com/google-gemini/gemini-cli/pull/19821",
+    "* feat(sandbox): add experimental LXC container sandbox support by @h30s in https://github.com/google-gemini/gemini-cli/pull/20735",
+    "* chore(github): require prompt approvers for agent prompt files by @gundermanc in https://github.com/google-gemini/gemini-cli/pull/20896",
+    "* fix(extensions): preserve symlinks in extension source path while enforcing folder trust by @galz10 in https://github.com/google-gemini/gemini-cli/pull/20867",
+    "* fix(cli): defer tool exclusions to policy engine in non-interactive mode by @EricRahm in https://github.com/google-gemini/gemini-cli/pull/20639",
+    "* fix(core): explicitly allow codebase_investigator and cli_help in read-only mode by @Adib234 in https://github.com/google-gemini/gemini-cli/pull/21157",
+    "* feat(cli): add native gVisor (runsc) sandboxing support by @Zheyuan-Lin in https://github.com/google-gemini/gemini-cli/pull/21062",
+    "* fix(hooks): propagate stopHookActive in AfterAgent retry path (#20426) by @Aarchi-07 in https://github.com/google-gemini/gemini-cli/pull/20439",
+    "* fix(plan): keep approved plan during chat compression by @ruomengz in https://github.com/google-gemini/gemini-cli/pull/21284",
+    "* Disallow underspecified types by @gundermanc in https://github.com/google-gemini/gemini-cli/pull/21485",
+    "* docs: fix typo 'allowslisted' -> 'allowlisted' in mcp-server.md by @Gyanranjan-Priyam in https://github.com/google-gemini/gemini-cli/pull/21665",
+    "* docs: document tool exclusion from memory via deny policy by @Abhijit-2592 in https://github.com/google-gemini/gemini-cli/pull/21428",
+    "* feat(policy): support subagent-specific policies in TOML by @akh64bit in https://github.com/google-gemini/gemini-cli/pull/21431",
+    "* refactor: migrate to useKeyMatchers hook by @scidomino in https://github.com/google-gemini/gemini-cli/pull/21753",
+    "* docs: clarify global policy rules application in plan mode by @jerop in https://github.com/google-gemini/gemini-cli/pull/21864"
+   ]
+  },
+  {
+   "version": "0.35.3",
+   "publish_date": "2026-03-28T03:17:31.306Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.35.3",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.35.3/node_modules/.bin/gemini",
+   "install_scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit"
+   },
+   "version_ok": true,
+   "version_output": "0.35.3",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.36.0",
+   "publish_date": "2026-04-01T20:23:40.486Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.36.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.36.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.36.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(cli): expand tilde in policy paths from settings.json by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/22772",
+    "* chore: add posttest build hooks and fix missing dependencies by @NTaylorMullen in https://github.com/google-gemini/gemini-cli/pull/22865",
+    "* feat(core): implement strict macOS sandboxing using Seatbelt allowlist by @ehedlund in https://github.com/google-gemini/gemini-cli/pull/22832",
+    "* fix(browser-agent): enable \"Allow all server tools\" session policy by @cynthialong0-0 in https://github.com/google-gemini/gemini-cli/pull/22343",
+    "* feat(core): implement native Windows sandboxing by @mattKorwel in https://github.com/google-gemini/gemini-cli/pull/21807",
+    "* fix broken extension link in hooks guide by @Indrapal-70 in https://github.com/google-gemini/gemini-cli/pull/21728",
+    "* Wrap the text under TOML rule for easier readability in policy-engine.md\u2026 by @CogitationOps in https://github.com/google-gemini/gemini-cli/pull/23076",
+    "* fix(hooks): support 'ask' decision for BeforeTool hooks by @gundermanc in https://github.com/google-gemini/gemini-cli/pull/21146",
+    "* fix(cli): add Esc instruction to HooksDialog footer by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/23258",
+    "* Disallow and suppress misused spread operator. by @gundermanc in https://github.com/google-gemini/gemini-cli/pull/23294",
+    "* fix(core): enable global session and persistent approval for web_fetch by @NTaylorMullen in https://github.com/google-gemini/gemini-cli/pull/23295",
+    "* feat(core): refactor SandboxManager to a stateless architecture and introduce explicit Deny interface by @ehedlund in https://github.com/google-gemini/gemini-cli/pull/23141",
+    "* fix: \"allow always\" for commands with paths by @scidomino in https://github.com/google-gemini/gemini-cli/pull/23558",
+    "* test(core): migrate hook tests to scheduler by @abhipatel12 in https://github.com/google-gemini/gemini-cli/pull/23496",
+    "* fix(ui): make tool confirmations take up entire terminal height by @devr0306 in https://github.com/google-gemini/gemini-cli/pull/22366"
+   ]
+  },
+  {
+   "version": "0.37.0",
+   "publish_date": "2026-04-08T17:10:56.322Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.37.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.37.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.37.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* feat(sandbox): implement forbiddenPaths for OS-specific sandbox managers by @ehedlund in https://github.com/google-gemini/gemini-cli/pull/23282",
+    "* fix(core): conditionally expose additional_permissions in shell tool by @galz10 in https://github.com/google-gemini/gemini-cli/pull/23729",
+    "* refactor(core): standardize OS-specific sandbox tests and extract linux helper methods by @ehedlund in https://github.com/google-gemini/gemini-cli/pull/23715",
+    "* test(core): install bubblewrap on Linux CI for sandbox integration tests by @ehedlund in https://github.com/google-gemini/gemini-cli/pull/23583",
+    "* fix(browser): detect embedded URLs in query params to prevent allowedDomains bypass by @tony-shi in https://github.com/google-gemini/gemini-cli/pull/23225",
+    "* fix(policy): relax write_file argsPattern in plan mode to allow paths without session ID by @Adib234 in https://github.com/google-gemini/gemini-cli/pull/23695",
+    "* docs: fix grammar in CONTRIBUTING and numbering in sandbox docs by @splint-disk-8i in https://github.com/google-gemini/gemini-cli/pull/23448",
+    "* fix(acp): allow attachments by adding a permission prompt by @sripasg in https://github.com/google-gemini/gemini-cli/pull/23680",
+    "* feat(core): implement Windows sandbox dynamic expansion Phase 1 and 2.1 by @scidomino in https://github.com/google-gemini/gemini-cli/pull/23691",
+    "* Add note about root privileges in sandbox docs by @diodesign in https://github.com/google-gemini/gemini-cli/pull/23314",
+    "* docs: clarify policy requirement for `general.plan.directory` in settings schema by @jerop in https://github.com/google-gemini/gemini-cli/pull/23784",
+    "* fix(cli): allow ask question dialog to take full window height by @jacob314 in https://github.com/google-gemini/gemini-cli/pull/23693",
+    "* feat(sandbox): dynamic Linux sandbox expansion and worktree support by @galz10 in https://github.com/google-gemini/gemini-cli/pull/23692",
+    "* fix(core): replace hardcoded non-interactive ASK_USER denial with explicit policy rules by @ruomengz in https://github.com/google-gemini/gemini-cli/pull/23668",
+    "* fix(core): allow disabling environment variable redaction by @galz10 in https://github.com/google-gemini/gemini-cli/pull/23927"
+   ]
+  },
+  {
+   "version": "0.37.1",
+   "publish_date": "2026-04-09T19:05:36.032Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.37.1",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.37.1/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.37.1",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.37.2",
+   "publish_date": "2026-04-13T20:13:51.419Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.37.2",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.37.2/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.37.2",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.39.1",
+   "publish_date": "2026-04-24T02:05:15.022Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.39.1",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.39.1/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.39.1",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.41.2",
+   "publish_date": "2026-05-06T17:57:48.121Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.41.2",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.41.2/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.41.2",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.43.0",
+   "publish_date": "2026-05-22T00:55:41.418Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.43.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.43.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.43.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(core): allow redirection in YOLO and AUTO_EDIT modes without sandboxing by @galz10 in https://github.com/google-gemini/gemini-cli/pull/26542",
+    "* fix(cli): randomize sandbox container names by @Kkartik14 in https://github.com/google-gemini/gemini-cli/pull/26014",
+    "* Tighten private Auto Memory patch allowlist by @SandyTao520 in https://github.com/google-gemini/gemini-cli/pull/26535",
+    "* fix(cli): improve mcp list UX in untrusted folders by @Adib234 in https://github.com/google-gemini/gemini-cli/pull/26457",
+    "* fix(routing): fix resolveClassifierModel argument mismatch in ApprovalModeStrategy by @danielweis in https://github.com/google-gemini/gemini-cli/pull/26658",
+    "* docs: add vi mode shortcuts and clarify MCP/custom sandbox setup by @chrisjcthomas in https://github.com/google-gemini/gemini-cli/pull/23853",
+    "* fix(context): implement loose boundary policy for gc backstop. by @joshualitt in https://github.com/google-gemini/gemini-cli/pull/26594",
+    "* fix(cli): allow installing extensions from ssh repo by @danielmundi in https://github.com/google-gemini/gemini-cli/pull/26274",
+    "* fix(cli): use static tool name in confirmation prompt to avoid parsing errors by @cocosheng-g in https://github.com/google-gemini/gemini-cli/pull/26866",
+    "* Allow Enter to select session while in search mode in /resume by @f-pieri in https://github.com/google-gemini/gemini-cli/pull/21523"
+   ]
+  },
+  {
+   "version": "0.45.3",
+   "publish_date": "2026-06-09T22:10:14.719Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.45.3",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.45.3/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.45.3",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.47.0",
+   "publish_date": "2026-06-18T01:44:26.471Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.47.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.47.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.47.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(policy): add EBUSY fallback and TOML parse recovery (#19919) by @krishdef7 in https://github.com/google-gemini/gemini-cli/pull/21541"
+   ]
+  },
+  {
+   "version": "0.50.0",
+   "publish_date": "2026-07-08T18:31:15.479Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.50.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.50.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.50.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.53.1",
+   "publish_date": "2026-07-31T21:34:04.597Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.53.1",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.53.1/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.53.1",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.56.0",
+   "publish_date": "2026-08-19T19:29:01.177Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.56.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.56.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.56.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": []
+  },
+  {
+   "version": "0.59.0",
+   "publish_date": "2026-09-08T21:19:17.301Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.59.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.59.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.59.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(core): enforce fail-closed workspace trust and filter mcpServers in restricted mode by @luisfelipe-alt in https://github.com/google-gemini/gemini-cli/pull/29099"
+   ]
+  },
+  {
+   "version": "0.62.0",
+   "publish_date": "2026-09-29T21:25:44.188Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.62.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.62.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.62.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(cli): emit tool_call update prior to request_permission in ACP mode by @urielefrenvirtusa in https://github.com/google-gemini/gemini-cli/pull/29439"
+   ]
+  },
+  {
+   "version": "0.64.0",
+   "publish_date": "2026-10-13T20:48:24.183Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.64.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.64.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.64.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(cli): propagate resolved folder trust state in headless mode (#29031) by @amelidev in https://github.com/google-gemini/gemini-cli/pull/29528",
+    "* fix(cli): prevent CPU hang and quote swallowing on @ within code (#29434) by @elberthc-byte in https://github.com/google-gemini/gemini-cli/pull/29557",
+    "* fix(cli): ensure Enter and Spacebar reliably confirm selection list options by @ugorla-dev in https://github.com/google-gemini/gemini-cli/pull/29502"
+   ]
+  },
+  {
+   "version": "0.65.0",
+   "publish_date": "2026-10-20T21:26:34.492Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.65.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.65.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.65.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(cli): enforce read-only workspace settings in untrusted folders by @jvargassanchez-dot in https://github.com/google-gemini/gemini-cli/pull/29583",
+    "* fix(core): eliminate false positives on untrusted command flags and compound loops by @DavidAPierce in https://github.com/google-gemini/gemini-cli/pull/29672",
+    "* fix(cli): keep loading other extensions when one fails the allowlist check by @jesussamuel-byte in https://github.com/google-gemini/gemini-cli/pull/29720"
+   ]
+  },
+  {
+   "version": "0.66.0",
+   "publish_date": "2026-10-27T20:30:04.263Z",
+   "install_path": "<SCRATCH>/releases/gemini-cli/0.66.0",
+   "binary_path": "<SCRATCH>/releases/gemini-cli/0.66.0/node_modules/.bin/gemini",
+   "install_scripts": null,
+   "version_ok": true,
+   "version_output": "0.66.0",
+   "release_notes_reachable": true,
+   "hook_related_changelog": [
+    "* fix(ci): remove unsupported members permission in unassign-inactive-assignees workflow by @ugorla-dev in https://github.com/google-gemini/gemini-cli/pull/29770"
+   ]
+  }
+ ]
+}

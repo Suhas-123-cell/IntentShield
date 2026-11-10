@@ -1,0 +1,50 @@
+{
+ "branch": "r3-cursor",
+ "cursor_agent": "2026.10.22-27dcf5f",
+ "tier": "Free",
+ "model_reported": "Auto",
+ "invocations": [
+  {
+   "n": 1,
+   "HOOK_FIDELITY_GO": 1,
+   "cells": "K4 (shell smoke)",
+   "launched": 1,
+   "result": "died on EPERM mkdir ~/.cursor/projects/<slug> inside my sandbox profile, before any model call; profile then given the throwaway-slug exception"
+  },
+  {
+   "n": 2,
+   "HOOK_FIDELITY_GO": 1,
+   "cells": "K1",
+   "launched": 1,
+   "result": "usage limit error"
+  },
+  {
+   "n": 3,
+   "HOOK_FIDELITY_GO": 1,
+   "cells": "K1 (second try, 30 s later)",
+   "launched": 1,
+   "result": "usage limit error; driver stopped (two in a row)"
+  }
+ ],
+ "agent_launches_counted_against_cap": 3,
+ "cap_under_real_home_fallback": 10,
+ "cap_with_isolation_would_have_been": 40,
+ "non_model_invocations_not_counted": {
+  "--version": 4,
+  "status": 3,
+  "about": 1,
+  "note": "no model call; status and about contact the account service"
+ },
+ "valid_scored_runs": 0,
+ "planned_valid_runs_cap10": 9,
+ "designed_runs": 38,
+ "signoffs": "not applied: run_cursor_cells bypasses cmd_run's sign-off gate; the six Cursor items (cursor:failClosed-key, cursor:allowlist-syntax, timeout:cursor, mode:cursor:M1/M2, all:isolated-home-login, all:path-shim) have no independent reader and no archived vendor page. all:isolated-home-login is now MEASURED as false for Cursor (login-probe.json). cursor:failClosed-key and cursor:allowlist-syntax were never exercised because no run reached the model.",
+ "residue_in_users_real_home": [
+  "~/.cursor/projects/private-var-folders-pm-w2l-z-3x4kz8f8jwm1rl3gr0000-28606ca",
+  "~/.cursor/projects/private-var-folders-pm-w2l-z-3x4kz8f8jwm1rl3gr0000-8225618",
+  "~/.cursor/projects/private-var-folders-pm-w2l-z-3x4kz8f8jwm1rl3gr00000gn-T-hf-00001-f7d54342-k2xtlv1c-work",
+  "~/.cursor/projects/private-var-folders-pm-w2l-z-3x4kz8f8jwm1rl3gr00000gn-T-hf-00002-dd93941e-qnf6w2ch-work"
+ ],
+ "residue_note": "created by launches 2 and 3 (two dirs each); not deleted by this lane. ~/.cursor/cli-config.json and agent-cli-state.json mtimes unchanged; no other ~/.cursor entry changed",
+ "resume": "HOOK_FIDELITY_GO=<n> .venv/bin/python benchmarks/hook_fidelity/cursor_cells.py run --out results/hook-fidelity/cursor --profile cap10 (ignore-run-ids.txt keeps the three dead attempts from blocking their slots; cap-ledger.json holds 3 of 10)"
+}

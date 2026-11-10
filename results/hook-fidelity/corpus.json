@@ -1,0 +1,3343 @@
+{
+  "meta": {
+    "title": "Hook verdict fidelity: published third-party guard inventory, with sandboxed byte captures and replay cells",
+    "generated": "2026-11-01",
+    "method": "GitHub search through Firecrawl (research_search_github), then shallow clones (git clone --depth 1, repo hooks disabled) into separate directories; hook code and docs READ. Round 3: six guards' own hook entry points (four more could not be built offline) were then run inside sandbox-exec (deny default, no network, writes only under a scratch directory) on fixture payloads to capture their bytes (guard_capture.py), and the captured bytes were replayed through the Gemini hook runner (22 releases) and through Claude Code and Codex CLI against a local stub model (guard_replay.py). No paid API or real model was used.",
+    "status_of_every_prediction": "PREDICTED from vendor docs and Codex/Gemini source unless a row says MEASURED-RUNNER-LAYER (Gemini hook runner, no model), MEASURED-RUNNER-REPLAY, MEASURED-STUB-REPLAY (a harness CLI against the stub model) or MEASURED-CAPTURE (the guard's own bytes).",
+    "selection_rule": "Included if the repo ships a hook configuration for at least one of Claude Code, Codex, Cursor or Gemini and its hook emits permissionDecision, a decision field, or exit 2 for a security purpose; ranked by the search tool, then cloned until the budget ended. The number of search hits rejected was not recorded.",
+    "selection_caveat": "Convenience sample from search ranking, not a census. Stars (repo-level, from the public GitHub API on 2026-11-01) and last-commit age are recorded per guard; install counts were not collected. Commits range from 2025-12 to 2026-10.",
+    "harness_scope": [
+      "claude",
+      "codex",
+      "cursor",
+      "gemini"
+    ],
+    "clone_root": "scratchpad/corpus/<dir>/repo (not committed)"
+  },
+  "rules": {
+    "CC-FAILOPEN": {
+      "harness": "claude",
+      "statement": "Empty stdout, malformed JSON, exit 1/3/126/127/other non-zero (except 2), missing or non-executable script, crash and timeout are all non-blocking: the tool call proceeds. `onFailure: block` (v2.1.295+) makes a failure act like exit 2; it is off by default.",
+      "basis": "DOC (hooks page)"
+    },
+    "CC-EXIT2": {
+      "harness": "claude",
+      "statement": "Exit 2 blocks the call with stderr as the reason, before permission rules are evaluated.",
+      "basis": "DOC"
+    },
+    "CC-ASK-HEADLESS": {
+      "harness": "claude",
+      "statement": "`ask` under `claude -p` (no human) is not stated for a hook ask. The hooks page says that when Claude Code denies a call in a -p run where no one can answer the prompt, Claude reads the reason in the tool result (indirect evidence for deny). The only measurement is a guard author's comment (cc-safe-setup, examples/memory-write-guard.sh, Claude Code 2.1.228): -p refuses the ask. Undocumented, and the only data point is a deny on one version.",
+      "basis": "UNVERIFIED (undocumented; indirect DOC plus one third-party measurement pointing to deny)"
+    },
+    "CC-ASK-BYPASS": {
+      "harness": "claude",
+      "statement": "`ask` under bypassPermissions / auto / dontAsk is not documented (bypass skips prompts except actions no mode auto-approves; the list names explicit ask rules, not hook asks). Public issue reports disagree by version.",
+      "basis": "UNVERIFIED"
+    },
+    "CC-ALLOW-SCOPE": {
+      "harness": "claude",
+      "statement": "Hook `allow` skips the prompt but deny/ask rules still apply, plus exceptions (network-path reads, requiresUserInteraction MCP tools, AskUserQuestion, critical-path rm, explicit ask rules).",
+      "basis": "DOC"
+    },
+    "CC-P-TRUST": {
+      "harness": "claude",
+      "statement": "`-p` / SDK never shows the workspace-trust dialog and treats the folder as trusted, so repo hooks run in a never-trusted folder.",
+      "basis": "DOC"
+    },
+    "CC-MCP-RES": {
+      "harness": "claude",
+      "statement": "ReadMcpResourceTool and ListMcpResourcesTool are built-in tools with built-in names; an `mcp__` matcher or `^mcp__` self-filter does not match them. No doc says so outright.",
+      "basis": "DOC for ingredients; conclusion is an inference"
+    },
+    "CC-LEGACY-DECISION": {
+      "harness": "claude",
+      "statement": "A top-level legacy `{decision: block}` on PreToolUse is deprecated but mapped: block becomes deny, approve becomes allow.",
+      "basis": "DOC (hooks page, fetched 2026-11-01): the top-level decision/reason fields on PreToolUse are deprecated; the deprecated values approve and block map to allow and deny"
+    },
+    "CX-BLOCK-OK": {
+      "harness": "codex",
+      "statement": "Blocking works for (a) PreToolUse JSON deny / decision:block with a non-empty reason and (b) exit 2 with non-empty stderr.",
+      "basis": "DOC + SRC (pre_tool_use.rs:248-255, 277-283)"
+    },
+    "CX-ASK": {
+      "harness": "codex",
+      "statement": "PreToolUse `ask` is parsed but unsupported: the hook run is marked Failed and the tool call CONTINUES.",
+      "basis": "DOC + SRC (output_parser.rs:458-460)"
+    },
+    "CX-ALLOW": {
+      "harness": "codex",
+      "statement": "`allow` without `updatedInput` is unsupported: hook Failed, call continues (same net effect as allow, plus an error).",
+      "basis": "SRC (output_parser.rs:453-457)"
+    },
+    "CX-DENY-EMPTY": {
+      "harness": "codex",
+      "statement": "`deny` with an empty reason is invalid: hook Failed, call continues.",
+      "basis": "SRC (output_parser.rs:461-470)"
+    },
+    "CX-EXIT2-EMPTY": {
+      "harness": "codex",
+      "statement": "Exit 2 with EMPTY stderr: hook Failed (\"did not write a blocking reason\"), call continues.",
+      "basis": "SRC only (pre_tool_use.rs:277-283)"
+    },
+    "CX-EXIT-OTHER": {
+      "harness": "codex",
+      "statement": "Exit 1, 126, 127, any other non-zero code, spawn error or no status code: hook Failed, call continues.",
+      "basis": "SRC; docs say only that a failure can fail the hook without blocking"
+    },
+    "CX-TIMEOUT": {
+      "harness": "codex",
+      "statement": "Timeout (default 600 s): hook Failed, call continues.",
+      "basis": "DOC (default) + SRC (command_runner.rs:333-377)"
+    },
+    "CX-UNSUPPORTED-FIELDS": {
+      "harness": "codex",
+      "statement": "`continue:false`, `stopReason`, `suppressOutput` are unsupported: hook Failed, call continues.",
+      "basis": "DOC + SRC"
+    },
+    "CX-MALFORMED": {
+      "harness": "codex",
+      "statement": "Output that looks like JSON but does not parse: hook Failed, call continues.",
+      "basis": "SRC (pre_tool_use.rs:260-266)"
+    },
+    "CX-TRUST": {
+      "harness": "codex",
+      "statement": "Non-managed user-config and hooks.json hooks must be reviewed and trusted; an untrusted one is not registered (skipped). Hooks delivered by a plugin follow plugin-level trust (discovery.rs registers a handler when `plugin_content_hash` is none and `plugin_trust` is some), so this row may not apply to them. The exposure is a fresh install or a changed hook before the first review, not a standing weakness. The startup warning in source is TUI-only; a headless warning is UNVERIFIED.",
+      "basis": "DOC + SRC (discovery.rs:917-927)"
+    },
+    "CX-COVERAGE": {
+      "harness": "codex",
+      "statement": "PreToolUse covers Bash, apply_patch and MCP calls only; hosted tools (WebSearch) and some specialised paths do not use it. Docs: a useful guardrail, not a complete enforcement boundary. A public report says no hook fires for unified_exec/command_execution on some Desktop builds (not verified here).",
+      "basis": "DOC"
+    },
+    "CU-ASK-MCP": {
+      "harness": "cursor",
+      "statement": "`ask` for beforeMCPExecution is in the schema but reported not enforced when the MCP tool is allowlisted/approved: it ran 3/3 in an earlier live Cursor CLI run (not part of this task), matching IDE forum reports and one guard's source reading of the Cursor 3.24.18 executor.",
+      "basis": "FORUM + earlier measurement elsewhere; docs silent"
+    },
+    "CU-ASK-PRETOOLUSE": {
+      "harness": "cursor",
+      "statement": "`ask` on preToolUse is accepted by the schema but not enforced.",
+      "basis": "DOC"
+    },
+    "CU-ASK-SHELL": {
+      "harness": "cursor",
+      "statement": "`ask` on beforeShellExecution was held in the earlier CLI run even when allowlisted; one Nov 2025 IDE forum report says an allowlisted shell ask auto-runs.",
+      "basis": "DOC (schema only) + FORUM; earlier measurement elsewhere"
+    },
+    "CU-FAILCLOSED": {
+      "harness": "cursor",
+      "statement": "Crash, timeout, non-zero exit other than 2, and empty output fail OPEN unless the hook sets `failClosed: true`. Invalid JSON or a schema mismatch on a permission hook blocks regardless of failClosed.",
+      "basis": "DOC"
+    },
+    "CU-MISSING": {
+      "harness": "cursor",
+      "statement": "Missing hook script / missing interpreter / exit 126 is not documented. Guess: it is the same as a non-zero exit (fails open without failClosed).",
+      "basis": "UNVERIFIED"
+    },
+    "CU-ALLOW": {
+      "harness": "cursor",
+      "statement": "A hook `allow` does not override Cursor's own approval/allowlist (forum, IDE).",
+      "basis": "FORUM"
+    },
+    "CU-IMPORT": {
+      "harness": "cursor",
+      "statement": "Claude-plugin hooks imported by Cursor are reported to run with failClosed:false, and bash/jq hooks that print nothing on allow count as hook failures.",
+      "basis": "UNVERIFIED (blog/forum)"
+    },
+    "GM-DENY-OK": {
+      "harness": "gemini",
+      "statement": "`decision: deny|block` on stdout (exit 0) blocks in every approval mode including yolo.",
+      "basis": "DOC + SRC (scheduler.ts:654-665)"
+    },
+    "GM-ASK": {
+      "harness": "gemini",
+      "statement": "BeforeTool `ask` is undocumented. 0.66.0 headless yolo: no non-interactive branch, waits indefinitely. 0.37.1 shell tool drops the forced ask (runs). MCP tool on a trusted server or allowlisted: ask silently approved (source prediction, never run).",
+      "basis": "SRC; DOC absent"
+    },
+    "GM-EXIT2-EMPTY": {
+      "harness": "gemini",
+      "statement": "Exit 2 with NO stdout and NO stderr: no output, so the call is ALLOWED in every one of 22 releases (docs say exit 2 blocks). Exit 2 with JSON on stdout: the JSON decides from 0.30.0 on; earlier releases ignore it. Exit 2 with text on stderr denies.",
+      "basis": "MEASURED (runner layer, no model); contradicts the docs"
+    },
+    "GM-EXIT-TEXT": {
+      "harness": "gemini",
+      "statement": "Exit 126/127/3+ with text on stderr or stdout becomes a DENY (stderr is the reason) from gemini-cli-core 0.30.0 on; with empty output the call is allowed; 0.29.7 and earlier allow with a warning. Docs say \"Other: warning, continue\". MEASURED at the hook-runner layer on 22 releases (results/hook-fidelity/gemini-core); the scheduler was not run.",
+      "basis": "MEASURED (runner layer, no model); contradicts the docs"
+    },
+    "GM-TIMEOUT": {
+      "harness": "gemini",
+      "statement": "Timeout (default 60 s) or spawn error: no output, call ALLOWED in every release measured (1.5 s timeout tested; the 60 s default and a grandchild that holds the pipe are covered by the sweep's last scenarios).",
+      "basis": "MEASURED (runner layer, no model) + DOC (default)"
+    },
+    "GM-PLAINTEXT": {
+      "harness": "gemini",
+      "statement": "Plain-text stdout with exit 0 becomes allow plus a systemMessage; malformed JSON is treated as plain text (exit 1 allows with a warning).",
+      "basis": "DOC + SRC"
+    },
+    "CU-SDK-SHAPE": {
+      "harness": "cursor",
+      "statement": "A guard built on a polyhook SDK may not recognise a harness's event payload; the guard then answers `{}` and the call proceeds. Whether Cursor's real beforeShellExecution payload is recognised is not established.",
+      "basis": "MEASURED at the guard on one fixture shape; payload not recorded from a live Cursor"
+    }
+  },
+  "summary": {
+    "guards_total": 26,
+    "guards_security": 20,
+    "guards_adjacent": 6,
+    "per_harness_in_study": {
+      "claude": 19,
+      "codex": 12,
+      "cursor": 15,
+      "gemini": 6
+    },
+    "emit_ask_to_a_harness": 14,
+    "emit_ask_ids": [
+      "cc-safe-setup",
+      "dcg",
+      "safety-net",
+      "malanta-trustgate",
+      "tool-gate-hook",
+      "defenseclaw",
+      "balerx",
+      "agent-edict",
+      "oh-my-harness",
+      "vaibot-cursor",
+      "railway-guard",
+      "knox",
+      "claude-codex-settings",
+      "riphook"
+    ],
+    "emit_ask_by_mode": {
+      "opt-in": 2,
+      "conditional": 3,
+      "not classified": 9
+    },
+    "emit_ask_claude": [
+      "cc-safe-setup",
+      "dcg",
+      "safety-net",
+      "tool-gate-hook",
+      "defenseclaw",
+      "balerx",
+      "oh-my-harness",
+      "railway-guard",
+      "knox",
+      "claude-codex-settings"
+    ],
+    "emit_ask_cursor": [
+      "dcg",
+      "malanta-trustgate",
+      "balerx",
+      "agent-edict",
+      "vaibot-cursor",
+      "knox",
+      "riphook"
+    ],
+    "codex_supporting": 12,
+    "codex_supporting_ids": [
+      "dcg",
+      "safety-net",
+      "ggshield",
+      "hol-guard",
+      "ai-guardian",
+      "defenseclaw",
+      "axonflow-codex",
+      "oh-my-harness",
+      "tob-codex-config",
+      "knox",
+      "skillgate",
+      "claude-codex-settings"
+    ],
+    "codex_guards_that_avoid_ask": [
+      "dcg",
+      "safety-net",
+      "defenseclaw",
+      "knox",
+      "oh-my-harness"
+    ],
+    "cursor_guards_without_failclosed_on_a_blocking_entry": [
+      "ggshield",
+      "ai-guardian",
+      "balerx",
+      "block-no-verify",
+      "endor-cursor-hooks"
+    ],
+    "rules_defined": 33,
+    "rules_used_by_a_row": 22,
+    "rows_total": 85,
+    "rows_counted": 82,
+    "rows_by_status": {
+      "CONTRADICTS-GUARD-CLAIM": 8,
+      "DOCUMENTED-BY-GUARD": 27,
+      "HOLDS-BY-ACCIDENT": 4,
+      "HOLDS": 8,
+      "UNKNOWN": 35,
+      "NOT-APPLICABLE": 3
+    },
+    "rows_by_evidence": {
+      "MEASURED-STUB-REPLAY": 6,
+      "PREDICTED": 68,
+      "MEASURED-RUNNER-LAYER": 6,
+      "MEASURED-RUNNER-REPLAY": 1,
+      "MEASURED-CAPTURE": 1
+    },
+    "guards_with_a_contradicting_row": [
+      "axonflow-codex",
+      "oh-my-harness",
+      "prevent-destructive",
+      "railway-guard"
+    ],
+    "security_guards_with_a_contradicting_row": [
+      "axonflow-codex",
+      "oh-my-harness",
+      "prevent-destructive",
+      "railway-guard"
+    ],
+    "contradicting_rows_by_harness": {
+      "codex": 4,
+      "claude": 4
+    },
+    "rows_measured_at_runner_layer": 6
+  },
+  "measured": {
+    "captured_guards": [
+      "axonflow-codex",
+      "block-no-verify",
+      "cc-safe-setup",
+      "gemini-intrupt-hook",
+      "railway-guard",
+      "safety-net"
+    ],
+    "capture_records": 91,
+    "not_captured_guards": [
+      "dcg",
+      "ggshield",
+      "hol-guard",
+      "tool-gate-hook"
+    ],
+    "live_cells_tested": 38,
+    "live_cells_ran": 5,
+    "live_runs": 111,
+    "live_cell_runs": 96,
+    "live_cells_by_cause": {
+      "untrusted skip": 5
+    },
+    "live_by_state": {
+      "codex untrusted": {
+        "cells": 5,
+        "runs": 12,
+        "ran": 12,
+        "hook_invoked_runs": 0
+      },
+      "codex trusted": {
+        "cells": 7,
+        "runs": 18,
+        "ran": 0,
+        "hook_invoked_runs": 18
+      },
+      "claude": {
+        "cells": 26,
+        "runs": 66,
+        "ran": 0,
+        "hook_invoked_runs": 66
+      }
+    },
+    "live_cells_by_harness": {
+      "claude": 26,
+      "codex": 12
+    },
+    "pairs_tested": 6,
+    "pairs_with_a_cell_that_ran": 2,
+    "ask_cells": 14,
+    "ask_runs": 34,
+    "ask_runs_where_call_ran": 0,
+    "ask_builds_claude": [
+      "2.1.118",
+      "2.1.214",
+      "2.1.280",
+      "2.1.309",
+      "2.1.316"
+    ],
+    "ask_modes": [
+      "M1",
+      "M1h",
+      "M2"
+    ],
+    "matcher_probe": {
+      "Bash": {
+        "hook_invoked": 2,
+        "runs": 2,
+        "ran": 0
+      },
+      "exec_command": {
+        "hook_invoked": 0,
+        "runs": 2,
+        "ran": 2
+      },
+      "shell": {
+        "hook_invoked": 0,
+        "runs": 2,
+        "ran": 2
+      },
+      "Write|Edit": {
+        "hook_invoked": 0,
+        "runs": 2,
+        "ran": 2
+      }
+    },
+    "control_groups": 21,
+    "control_groups_not_all_ran": [
+      "claude|2.1.316|M0|shell|-",
+      "claude|2.1.316|M0|write|-"
+    ],
+    "gemini_runner": {
+      "releases": 22,
+      "native_blocking_cell_builds": 110,
+      "proceeded": 0
+    },
+    "stars_min": 0,
+    "stars_max": 85142,
+    "stars_median": 13,
+    "guards_with_under_20_stars": 15
+  },
+  "guards": [
+    {
+      "id": "cc-safe-setup",
+      "name": "cc-safe-setup",
+      "repo": "https://github.com/yurukusa/cc-safe-setup",
+      "commit": "793c6c12ddca009b2f108b2cc931caaa83151844",
+      "commit_date": "2026-09-25",
+      "dir": "cc-safe-setup",
+      "found_by": "GitHub search: PreToolUse permissionDecision / exit 2 hooks",
+      "category": "security",
+      "supported": [
+        "claude"
+      ],
+      "study": [
+        "claude"
+      ],
+      "interpreter": "bash (911 of 921 examples have #!/bin/bash; 4 #!/usr/bin/env bash; 1 #!/bin/sh). Needs jq: README says 757 of 916 examples mention jq with no python3/node fallback; the 8 core hooks try jq, python3, then node. Registered as bash <path> or an inline shell command in settings.json.",
+      "verdicts": [
+        {
+          "situation": "dangerous command / secret / path",
+          "emission": "stderr text + exit 2 (293 of 921 example scripts contain `exit 2`)"
+        },
+        {
+          "situation": "a few opt-in or default confirmations",
+          "emission": "JSON hookSpecificOutput.permissionDecision \"ask\" on exit 0. 4 scripts contain \"ask\": mcp-tool-guard (CC_MCP_AUTOMATION_GUARD=ask, opt-in), memory-write-guard (opt-in), powershell-remove-item-guard (default ask), system-message-workaround"
+        },
+        {
+          "situation": "auto-approvals",
+          "emission": "permissionDecision \"allow\" JSON in some of the 29 scripts that print permissionDecision"
+        },
+        {
+          "situation": "no match",
+          "emission": "silent exit 0"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "No jq: core hooks print a once-per-session stderr warning that they are NOT protecting you, then allow (README: blocking every call would make Claude Code unusable). Example hooks without a fallback silently parse an empty command and exit 0. No `onFailure` setting found anywhere in the repo.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "Only `exit 2` counts as blocked here; `exit 1`, `exit 127` and a crash all let the command run.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "Without a JSON parser they print a warning to stderr and exit `0` — and Claude Code stops for exit code `2`, not for warnings.",
+          "third_hand": false
+        },
+        {
+          "source": "examples/memory-write-guard.sh",
+          "text": "an \"ask\" needs somebody present to answer, so for fully unattended runs use CC_MEMORY_WRITE_APPROVAL=block (exit 2), which is enforced regardless of permission mode.",
+          "third_hand": false
+        },
+        {
+          "source": "examples/memory-write-guard.sh",
+          "text": "Non-interactively (claude -p) the call is refused rather than approved. [guard author's own measurement on Claude Code 2.1.228; not ours]",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "powershell-remove-item-guard asks by default; mcp/memory guards ask when opted in",
+          "prediction": "MEASURED (stub model, replayed ask bytes, Claude Code 2.1.118, 2.1.214, 2.1.280, 2.1.309, 2.1.316): the guarded call ran in 0 of 14 runs; the ask was refused because nobody could answer it. Outcome of the ask is undocumented; inferred deny. The author reports a refusal on 2.1.228. Confirmation semantics need a human, which the guard's own comment concedes.",
+          "status": "HOLDS",
+          "evidence": "MEASURED-STUB-REPLAY",
+          "status_basis": "measured: the guard's captured ask bytes through Claude Code, headless -p with --allowedTools (M1 adds --permission-prompts none; M1h leaves prompts unanswered)",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "bypassPermissions / auto",
+          "rule": "CC-ASK-BYPASS",
+          "claim_at_risk": "same ask-emitting scripts",
+          "prediction": "MEASURED (stub model, replayed ask bytes, Claude Code 2.1.316): the guarded call ran in 0 of 3 runs; the ask was refused because nobody could answer it. Undocumented. The author reports the prompt still appears on 2.1.228; public issues #89561 (auto mode) and #103994 (bypass plus .git/.claude write in the same call) report an ask that does not gate. Version dependent.",
+          "status": "HOLDS",
+          "evidence": "MEASURED-STUB-REPLAY",
+          "status_basis": "measured: the guard's captured ask bytes through Claude Code, headless --dangerously-skip-permissions",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "README guarantee that guards stop destructive operations before they run",
+          "prediction": "Every non-exit-2 failure (missing jq, crash, timeout, non-executable file) lets the call through; no onFailure:block. The README documents most of this.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "claude",
+          "mode": "any (MCP)",
+          "rule": "CC-MCP-RES",
+          "claim_at_risk": "mcp-tool-guard.sh matcher \".*\" with a `^mcp__` self-filter",
+          "prediction": "Built-in ReadMcpResourceTool / ListMcpResourcesTool names do not start with mcp__, so resource reads fall outside the guard. Inference, not a doc statement.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "notes": "Largest corpus by script count; only a subset of scripts emit JSON. Most scripts block with exit 2 + stderr, which is the vendor-documented blocking contract on Claude Code, so that path is predicted to hold; the rows below cover only the ask and failure paths. Claude-only per README; not predicted for other harnesses.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "fail-open (documented)",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "opt-in (3 of 4 ask scripts; powershell-remove-item-guard asks by default)",
+      "stars": 9,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-09-25T08:16:07Z",
+      "commit_age_days_at_2026-11-01": 37,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 2,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 2,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "dcg",
+      "name": "destructive_command_guard (dcg)",
+      "repo": "https://github.com/Dicklesworthstone/destructive_command_guard",
+      "commit": "e4e062960f6a0e3531842fffb4c76ab828504dd7",
+      "commit_date": "2026-10-30",
+      "dir": "dcg",
+      "found_by": "GitHub search: Codex PreToolUse guard; issues #77, #183",
+      "category": "security",
+      "supported": [
+        "claude",
+        "codex",
+        "gemini",
+        "cursor",
+        "copilot",
+        "vscode-copilot",
+        "hermes",
+        "grok",
+        "opencode",
+        "others"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "gemini",
+        "cursor"
+      ],
+      "interpreter": "Native Rust binary `dcg` on PATH for Claude, Codex and Gemini (a missing binary is exit 127). For Cursor the installer writes a python3 bridge (`~/.cursor/hooks/dcg-pre-shell.py`) that runs dcg: a missing python3 is the Cursor-side interpreter risk.",
+      "verdicts": [
+        {
+          "situation": "destructive command, Claude-compatible",
+          "emission": "JSON hookSpecificOutput.permissionDecision \"deny\" + extra fields (ruleId, allowOnceCode...), exit 0"
+        },
+        {
+          "situation": "destructive command, Codex",
+          "emission": "minimal JSON {hookSpecificOutput:{permissionDecision:deny, reason}} only, exit 0 (src/hook.rs:4405: Codex does not support `ask`)"
+        },
+        {
+          "situation": "destructive command, Gemini",
+          "emission": "JSON {\"decision\":\"deny\", reason, systemMessage}"
+        },
+        {
+          "situation": "evaluation deadline expired / command over max_command_bytes",
+          "emission": "`ask` on review-capable protocols (Claude-compatible, Copilot); `deny` on Codex and other non-review clients; `unverified_decision=\"deny\"` turns ask into deny; payload permission_mode bypassPermissions or dontAsk gets deny automatically"
+        },
+        {
+          "situation": "allow",
+          "emission": "empty stdout, empty stderr, exit 0"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Malformed or oversized raw hook JSON: allow with an audit warning (fail-open) unless general.fail_closed / DCG_FAIL_CLOSED=1. Transient stdin I/O error: always allow. Panic after config load: the unverified-command response (ask or deny). Parse/config/runtime error exit 1 or 2 (docs/codex-integration.md). Cursor bridge: denies in-process on crash, timeout, unreadable or empty payload, non-zero exit and no verdict (DCG_BRIDGE_CRASH_DECISION=allow turns that off); a missing or unrunnable dcg is allowed on purpose.",
+      "quotes": [
+        {
+          "source": "README, Bounded Failure Policy",
+          "text": "It never treats elapsed analysis time or an oversized extracted command as proof that execution is safe.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "the default `ask` presumes a human is present to answer. On unattended or autonomous sessions there is no such human, and anything auto-answering prompts would approve exactly the commands dcg declined to inspect.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "Claude Code documents that a hook `deny` holds in those modes, but not what a hook `ask` does there.",
+          "third_hand": false
+        },
+        {
+          "source": "docs/codex-integration.md",
+          "text": "the legacy exit-2 path being classified as `PreToolUse Failed` and then failing open, whereas the minimal JSON denial blocks correctly (#183).",
+          "third_hand": false
+        },
+        {
+          "source": "docs/codex-integration.md",
+          "text": "dcg behavior under this gap is **fail-open by construction**: when Codex routes a command through `unified_exec`/`command_execution`, *no* `PreToolUse` hook fires",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p), permission_mode not bypass/dontAsk",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "default ask for unverified commands (timeout, oversize)",
+          "prediction": "dcg only auto-denies for permission_mode bypassPermissions/dontAsk. Whether a -p payload reports another mode (e.g. default) is not checked here; if it does, the ask reaches a harness with no human and its outcome is undocumented (inferred deny). dcg's README states the human assumption.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-COVERAGE",
+          "claim_at_risk": "blocks destructive commands across Codex CLI",
+          "prediction": "Codex hooks do not cover every command path; dcg documents the unified_exec gap itself (fail-open by construction).",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "headless / untrusted hook",
+          "rule": "CX-TRUST",
+          "claim_at_risk": "hook is installed by the installer",
+          "prediction": "A hook that is not trusted is skipped; the installed hook only runs after trust review. Headless warning unverified.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "dcg missing from PATH",
+          "rule": "CX-EXIT-OTHER",
+          "claim_at_risk": "installer-configured hook",
+          "prediction": "Exit 127 from the shell is Failed and the call continues.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "gemini",
+          "mode": "dcg missing from PATH",
+          "rule": "GM-EXIT-TEXT",
+          "claim_at_risk": "installer-configured hook",
+          "prediction": "Shell prints a command-not-found line to stderr with exit 127, which source says is a DENY (accidental fail-closed, contradicts docs). Not run.",
+          "status": "HOLDS-BY-ACCIDENT",
+          "evidence": "MEASURED-RUNNER-LAYER",
+          "status_basis": "the guarantee holds on gemini-cli-core 0.30.0 and later because the shell's error text turns a dead hook into a deny; 0.29.7 and earlier allow",
+          "outcome_label": "HOLDS-BY-ACCIDENT"
+        },
+        {
+          "harness": "cursor",
+          "mode": "python3 bridge cannot start, or dcg missing",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "installer-configured Cursor hook",
+          "prediction": "The bridge denies in-process on crash, timeout, bad payload, non-zero exit and no verdict, so the missing failClosed flag matters only if python3 or the bridge fails to start; a missing dcg binary is allowed by design ('command allowed unchecked').",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the Cursor hook is a generated python3 bridge (install.sh, dcg-pre-shell.py) that denies in-process on crash, timeout, unreadable or empty payload, non-zero exit and no verdict; only a missing or unrunnable dcg binary is deliberately allowed ('command allowed unchecked'), or python3 itself failing to start",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "compensations": [
+        "Codex: never emits ask; emits minimal deny JSON (matches CX-BLOCK-OK) and documents why",
+        "Claude-compatible: auto-deny instead of ask under bypassPermissions/dontAsk",
+        "Gemini: deny-only JSON, no ask"
+      ],
+      "notes": "Version data point: dcg issue #183 reports exit 2 plus stderr treated as a failed hook on Codex 0.144.1 (Windows), while 0.165.0 source says exit 2 with non-empty stderr blocks; the cause is unestablished. Most vendor-aware guard in the corpus. Its own README and docs already encode several of the predicted Codex and Claude behaviours (issue #183 is a reported real failure of its earlier exit-2 path on Codex 0.144.x Windows).",
+      "ask_on": [
+        "claude",
+        "copilot",
+        "cursor"
+      ],
+      "error_posture": "mixed (malformed envelope allows; analysis timeout asks or denies)",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "conditional (analysis timeout or oversize command only)",
+      "stars": 6235,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-30T21:42:52Z",
+      "commit_age_days_at_2026-11-01": 2,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 4,
+        "HOLDS-BY-ACCIDENT": 1,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "safety-net",
+      "name": "CC Safety Net (cc-safety-net)",
+      "repo": "https://github.com/kenryu42/claude-code-safety-net",
+      "commit": "24b5e018d20f21335619e40fb855de3b6c27ee9e",
+      "commit_date": "2026-10-30",
+      "dir": "safety-net",
+      "found_by": "GitHub search: Gemini BeforeTool hook decision deny (PR #13)",
+      "category": "security",
+      "supported": [
+        "claude",
+        "codex",
+        "cursor",
+        "gemini",
+        "copilot",
+        "droid",
+        "antigravity",
+        "amp",
+        "opencode",
+        "grok",
+        "devin"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor",
+        "gemini"
+      ],
+      "interpreter": "node (TypeScript compiled to dist/bin/cc-safety-net.js); hooks/hooks.json, hooks/codex.json and hooks/cursor.json run `node \"${PLUGIN_ROOT}/dist/bin/cc-safety-net.js\" hook --<host>`. Missing node gives exit 127.",
+      "verdicts": [
+        {
+          "situation": "blocked command or secret access",
+          "emission": "JSON permissionDecision \"deny\" + reason on stdout, exit 0 (Claude, Codex, Copilot); Droid exits 2; Gemini JSON {decision:deny}"
+        },
+        {
+          "situation": "command it could not verify under standard mode",
+          "emission": "`ask` JSON, only on Claude Code when payload permission_mode is one of default, acceptEdits, plan, auto (claude-code/hook.ts:13); otherwise deny"
+        },
+        {
+          "situation": "allow",
+          "emission": "no output"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Unparseable or oversized stdin is turned into a deny (\"Failed to parse hook input JSON.\", common.ts readHookInput); evaluation errors go through a catch block that was not read to the end. A broken config file falls back to safe defaults (README).",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "A broken config file falls back to safe defaults instead of stopping your agent. It is not a sandbox: it does not contain processes, set filesystem permissions, or watch network egress.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "blocks destructive commands and access to secrets such as SSH keys and `.env` files before the tool call runs.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "ask on unverifiable commands",
+          "prediction": "permission_mode in a -p payload is probably `default` (not checked), which is in the list that gets ask, so a no-human run would get an ask whose outcome is undocumented (inferred deny).",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "blocks before tool runs",
+          "prediction": "hooks/hooks.json carries no onFailure:block; a missing node, crash or timeout is non-blocking.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "node missing / hook untrusted",
+          "rule": "CX-EXIT-OTHER",
+          "claim_at_risk": "blocks unsafe Codex tool calls",
+          "prediction": "MEASURED (stub model, Codex 0.145.0, 0.155.0, 0.165.0, 0.166.0, user-config hook, captured block bytes): hook never invoked and the guarded call ran in 9 of 9 runs while untrusted (silent: no warning in the --json stream); with trust bypassed the hook ran and the call ran in 0 of 9. Plugin-delivered hooks (plugin-level trust) were not measured. Exit 127 is Failed and the call continues; untrusted hooks are skipped (CX-TRUST).",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "MEASURED-STUB-REPLAY",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "gemini",
+          "mode": "node missing",
+          "rule": "GM-EXIT-TEXT",
+          "claim_at_risk": "blocks on Gemini BeforeTool",
+          "prediction": "Command-not-found text on stderr with exit 127 is predicted DENY; not run, contradicts docs.",
+          "status": "HOLDS-BY-ACCIDENT",
+          "evidence": "MEASURED-RUNNER-LAYER",
+          "status_basis": "the guarantee holds on gemini-cli-core 0.30.0 and later because the shell's error text turns a dead hook into a deny; 0.29.7 and earlier allow",
+          "outcome_label": "HOLDS-BY-ACCIDENT"
+        }
+      ],
+      "compensations": [
+        "Cursor: hooks/cursor.json sets failClosed:true and the installer checks it",
+        "Codex: deny only, never ask; Claude: ask only in modes it believes prompt"
+      ],
+      "notes": "Second guard that explicitly branches on harness and permission mode before choosing ask vs deny.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "fail-closed in-process for unparseable input",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "conditional (unverifiable commands only)",
+      "stars": 1872,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-30T12:33:32Z",
+      "commit_age_days_at_2026-11-01": 2,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 2,
+        "HOLDS-BY-ACCIDENT": 1,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "malanta-trustgate",
+      "name": "Malanta TrustGate",
+      "repo": "https://github.com/malanta-ai/Malanta-TrustGate",
+      "commit": "28798c5fd2ab4b5544273d1fa3ef27441e21741b",
+      "commit_date": "2026-10-12",
+      "dir": "malanta-trustgate",
+      "found_by": "GitHub search: beforeShellExecution beforeMCPExecution hook ask deny (named in task)",
+      "category": "security",
+      "supported": [
+        "cursor"
+      ],
+      "study": [
+        "cursor"
+      ],
+      "interpreter": "Go binaries installed to ~/.local/bin (trustgate-before-shell, -before-mcp, -before-read-file, -before-tool-use, -before-prompt); native executables.",
+      "verdicts": [
+        {
+          "situation": "flagged action, mode warn (default)",
+          "emission": "deny once with an explanation; the identical retry is allowed"
+        },
+        {
+          "situation": "flagged action, mode ask (Cursor 3.11.25+)",
+          "emission": "{\"permission\":\"ask\"}; below the version floor degrades to deny"
+        },
+        {
+          "situation": "flagged action, mode enforce",
+          "emission": "deny; provider error/timeout/misconfiguration also denies"
+        },
+        {
+          "situation": "report-only / off",
+          "emission": "allow"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "warn mode (default): provider errors and timeouts fail open. enforce mode: fail-closed. hooks.json sets failClosed:true on shell, MCP, read-file and preToolUse, false on beforeSubmitPrompt. Missing binary under a failClosed hook gives exit 127 and the guard says every agent tool is then locked.",
+      "quotes": [
+        {
+          "source": "docs/admin.md",
+          "text": "for **autonomous/auto-run** agents prefer `warn`, because with no human present the dialog is auto-approved.",
+          "third_hand": false
+        },
+        {
+          "source": "docs/admin.md",
+          "text": "`enforce` (locked) is the actual security floor for a managed fleet: the only mode that *guarantees* a flagged action is blocked regardless of who is at the keyboard.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "A fail-closed hook whose target binary doesn't exist locks every agent tool with `exit 127` until an operator fixes the manifest from outside the session.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "cursor",
+          "mode": "ask mode, MCP tools",
+          "rule": "CU-ASK-MCP",
+          "claim_at_risk": "ask \"renders a native approve/reject dialog ... and pauses until a human decides\"",
+          "prediction": "Reported not enforced for allowlisted/approved MCP tools (3/3 ran in an earlier live CLI run). The README limits ask to `Cursor 3.11.25+` and warns about auto-approval but not about allowlisted tools.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-MCP is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "ask mode, preToolUse events",
+          "rule": "CU-ASK-PRETOOLUSE",
+          "claim_at_risk": "ask on preToolUse",
+          "prediction": "Docs: accepted but not enforced. README says ask degrades to deny on events Cursor does not enforce ask for (it names WebFetch/WebSearch and file events), so it partly knows.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-PRETOOLUSE is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "ask mode, allowlisted shell",
+          "rule": "CU-ASK-SHELL",
+          "claim_at_risk": "ask pauses for a human",
+          "prediction": "Held in the earlier CLI run; one IDE forum report says it auto-runs for allowlisted commands. Version/surface dependent.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-SHELL is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "warn mode default",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "default posture blocks flagged domains once",
+          "prediction": "By design provider errors fail open and a retry is allowed; the README says so.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "compensations": [
+        "version-gated ask so an old Cursor degrades to deny",
+        "failClosed:true on blocking events",
+        "documents auto-approval of ask with no human"
+      ],
+      "notes": "The only guard in the corpus that states the headline problem in its own docs (ask auto-approved with no human). Cursor only, so no Codex/Gemini rows.",
+      "ask_on": [
+        "cursor"
+      ],
+      "error_posture": "mixed (warn mode opens, enforce mode closes)",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "not classified",
+      "stars": 2,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-12T11:00:25Z",
+      "commit_age_days_at_2026-11-01": 20,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 1,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 3,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "ggshield",
+      "name": "GitGuardian ggshield AI hook",
+      "repo": "https://github.com/GitGuardian/ggshield",
+      "commit": "d5bc0736709c06f2f51b55b43cebd34e69812c73",
+      "commit_date": "2026-10-30",
+      "dir": "ggshield",
+      "found_by": "GitHub search: ggshield secret scan hook Claude Code Cursor (named in task)",
+      "category": "security",
+      "supported": [
+        "claude",
+        "cursor",
+        "codex",
+        "copilot",
+        "vscode",
+        "kiro",
+        "junie",
+        "vibe"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "interpreter": "Python console script `ggshield secret scan ai-hook` (a Rust port of the hook exists under rust/hook). Command string is persisted into each assistant's settings. Missing binary gives exit 127.",
+      "verdicts": [
+        {
+          "situation": "secret found, PreToolUse on Claude Code / Codex",
+          "emission": "JSON hookSpecificOutput.permissionDecision \"deny\" + reason, exit 0 (agents/claude_code.py:123, codex.py:84)"
+        },
+        {
+          "situation": "secret found, PreToolUse on Cursor",
+          "emission": "{\"permission\":\"deny\", user_message, agent_message}, exit 0 (agents/cursor.py:124)"
+        },
+        {
+          "situation": "secret found, prompt / PostToolUse",
+          "emission": "{\"decision\":\"block\"} on Claude/Codex; Cursor {\"continue\":false}"
+        },
+        {
+          "situation": "clean",
+          "emission": "allow JSON or empty"
+        },
+        {
+          "situation": "no ask",
+          "emission": "never emits ask on PreToolUse"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "Any auth, network or unexpected failure: fail open with a warning surfaced through the agent (ai_hook.py:70-75, emit_fail_open_response). If the calling agent cannot be identified, exit 1.",
+      "quotes": [
+        {
+          "source": "ai_hook.py:75",
+          "text": "Any auth / network / unexpected failure must not crash the hook: fail open with a warning surfaced through the agent.",
+          "third_hand": false
+        },
+        {
+          "source": "GitHub PR GitGuardian/ggshield#1453 (text from search result, not in the clone)",
+          "text": "The hook then exited non-zero, and an agent reads that as a non-blocking error rather than a verdict, which is why the failure was silent. (BOM in Cursor-on-Windows payload; guard-side statement)",
+          "third_hand": true
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-BLOCK-OK",
+          "claim_at_risk": "blocks secrets in tool calls",
+          "prediction": "Deny JSON with a non-empty reason matches the supported shape, so a successful scan blocks. Only the fail-open paths (own error, missing binary, untrusted hook, CX-COVERAGE) leave calls unscanned.",
+          "status": "HOLDS",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard's shape is a supported blocking shape",
+          "outcome_label": "HOLDS"
+        },
+        {
+          "harness": "cursor",
+          "mode": "missing binary / crash / timeout",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "hook blocks secrets",
+          "prediction": "Hook-config template has {\"command\": ...} with no failClosed (agents/cursor.py:155-157), so non-zero exits fail open; PR #1453 reports exactly that on Cursor Windows.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "blocks secrets before they leave",
+          "prediction": "Fail-open by design on scan errors and by harness default on crash/timeout/non-executable.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "claude",
+          "mode": "MCP matcher",
+          "rule": "CC-MCP-RES",
+          "claim_at_risk": "PR #1357 added MCP argument scanning",
+          "prediction": "PreToolUse content is picked by tool; MCP resource reads (ReadMcpResourceTool) are not an MCP tool name and are not scanned (inference).",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "compensations": [
+        "Codex: emits the supported deny shape and avoids the extra systemMessage",
+        "never emits ask, so the ask-without-human problem does not arise"
+      ],
+      "notes": "Cleanest example of 'verdict is deny-only, failure is fail-open'. The stated purpose is secret detection, not an enforcement boundary.",
+      "ask_on": [],
+      "error_posture": "fail-open (documented, by design)",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "none",
+      "stars": 2011,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-30T17:02:20Z",
+      "commit_age_days_at_2026-11-01": 2,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 3,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 1,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "tool-gate-hook",
+      "name": "tool-gate-hook (formerly claude-code-permissions-hook)",
+      "repo": "https://github.com/kornysietsma/claude-code-permissions-hook",
+      "commit": "56b9db4553e5eb1252ee36af0326e8d17627cb7e",
+      "commit_date": "2026-10-05",
+      "dir": "tool-gate-hook",
+      "found_by": "GitHub search: Claude Code PreToolUse permissionDecision",
+      "category": "security",
+      "supported": [
+        "claude",
+        "copilot-cli"
+      ],
+      "study": [
+        "claude"
+      ],
+      "interpreter": "Rust binary `tool-gate-hook run --agent claude` on PATH (needs cargo to build); macOS local CLI only per README.",
+      "verdicts": [
+        {
+          "situation": "rule match",
+          "emission": "deny > ask > allow regardless of rule order; deny/ask/allow JSON on exit 0"
+        },
+        {
+          "situation": "no match",
+          "emission": "passthrough to the agent's normal permission flow"
+        },
+        {
+          "situation": "config problem (missing file, bad TOML, invalid regex)",
+          "emission": "`ask` on EVERY call with the error as the reason, plus stderr"
+        },
+        {
+          "situation": "payload for wrong agent or malformed",
+          "emission": "passthrough with stderr warning"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Always exits 0 (Copilot treats any non-zero exit as deny). Config error: ask on every call (\"Loud, never locked out\"). Malformed payload: passthrough.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "`tool-gate-hook run` always exits 0 (Copilot treats any non-zero exit as a deny).",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "Config problem (missing file, bad TOML, invalid regex): every call gets an `ask` with the error as the reason, plus a message on stderr. Loud, never locked out.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "Both agents have been checked on a real install (2026-10-04): payloads captured, and `allow`, `deny`, `ask` and config-error behaviour seen in the UI.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "'Loud, never locked out' for a config error",
+          "prediction": "With no human, an ask on every call is undocumented and inferred to be a deny, so a broken config could block every tool call under -p (availability, not a fail-open). Whether ask rules prompt without a human is the same unknown.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "bypassPermissions",
+          "rule": "CC-ASK-BYPASS",
+          "claim_at_risk": "force a prompt (`ask`) for tool calls",
+          "prediction": "Undocumented whether a hook ask is honoured under bypass; the README's UI checks were interactive.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-BYPASS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "binary missing",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "gate",
+          "prediction": "Missing binary is exit 127, non-blocking.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "notes": "Only the Claude path is in the study (Copilot CLI is outside scope). The README's 'checked on a real install' evidence is interactive.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "ask on config error, passthrough on bad payload; always exit 0",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "not classified",
+      "stars": 41,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-12T08:14:31Z",
+      "commit_age_days_at_2026-11-01": 27,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 1,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 2,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "hol-guard",
+      "name": "HOL Guard",
+      "repo": "https://github.com/hashgraph-online/hol-guard",
+      "commit": "98d5968a7bd11d57b3106b5a01943691e831b0bc",
+      "commit_date": "2026-10-31",
+      "dir": "hol-guard",
+      "found_by": "GitHub search: failClosed Cursor beforeShellExecution beforeMCPExecution",
+      "category": "security",
+      "supported": [
+        "codex",
+        "claude-code",
+        "cursor",
+        "copilot",
+        "cline",
+        "pi",
+        "omp",
+        "grok",
+        "devin",
+        "opencode",
+        "gemini (wrapper/detection; no native hook evidence read)",
+        "others"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "interpreter": "Python 3 bridge script generated per harness (`#!/usr/bin/env python3`, bounded_cli_hook_script_template.py:13) that calls a local daemon/Rust edge. Missing python3 or daemon-less start is outside the guard's own fail-closed machinery.",
+      "verdicts": [
+        {
+          "situation": "blocking verdict, Codex / Claude Code / Copilot",
+          "emission": "JSON envelope carries the denial; exit 0 for PreToolUse, UserPromptSubmit and PermissionRequest; exit 1 for other events"
+        },
+        {
+          "situation": "blocking verdict, Cursor / Devin / Kimi / Hermes",
+          "emission": "exit 2"
+        },
+        {
+          "situation": "Cursor `ask`",
+          "emission": "left to Cursor's native approval (\"leaves native Cursor tool approval in place for `ask` decisions\")"
+        },
+        {
+          "situation": "Codex approvals",
+          "emission": "approval-center flow plus resume; Codex hooks as the authoritative boundary even in YOLO"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "Docs: native identity, protocol, rule-digest, policy-snapshot, overload, timeout, transport and response failures fail closed. Devin only: a timed-out or crashed review continues with an allow envelope. Cursor hooks written with failClosed true for blocking events (cursor_hook_config.py:193).",
+      "quotes": [
+        {
+          "source": "docs/guard/harness-support.md",
+          "text": "Native identity, protocol, rule-digest, policy-snapshot, overload, timeout, transport, and response failures fail closed.",
+          "third_hand": false
+        },
+        {
+          "source": "docs/guard/harness-support.md",
+          "text": "installs Guard-owned Codex `PreToolUse` and `PermissionRequest` hooks as the authoritative complete-command boundary, so native shell commands can be denied before execution even when Codex itself is running in YOLO mode",
+          "third_hand": false
+        },
+        {
+          "source": "docs/guard/approval-decision-wait.md",
+          "text": "A timeout leaves the request pending and is never approval.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "codex",
+          "mode": "hook untrusted / headless",
+          "rule": "CX-TRUST",
+          "claim_at_risk": "'authoritative complete-command boundary'",
+          "prediction": "Untrusted hooks are skipped, so the boundary exists only after trust review; the headless warning is unverified.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "python3 missing, harness timeout",
+          "rule": "CX-EXIT-OTHER",
+          "claim_at_risk": "fails closed on timeout/transport",
+          "prediction": "The guard's fail-closed handling lives inside its own process. A missing interpreter or a harness-side timeout is Failed and the call continues (CX-TIMEOUT).",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-COVERAGE",
+          "claim_at_risk": "complete-command boundary",
+          "prediction": "Hook coverage is Bash/apply_patch/MCP only per Codex docs; unified_exec reports exist.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "python3 missing / timeout",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "fail closed",
+          "prediction": "Non-blocking at the harness unless onFailure:block is set (not checked in hol-guard's installed config).",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "Cursor ask on MCP",
+          "rule": "CU-ASK-MCP",
+          "claim_at_risk": "native Cursor approval left in place for ask",
+          "prediction": "If Guard returns ask for an allowlisted MCP tool, Cursor may not enforce it.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-MCP is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "compensations": [
+        "Cursor failClosed:true on blocking events",
+        "does not rely on ask for Codex"
+      ],
+      "notes": "Largest codebase read only at the docs and adapter-config level; per-harness response shapes taken from docs/guard/harness-support.md. Gemini listed by the guard as detection/wrapper only.",
+      "ask_on": [],
+      "error_posture": "fail-closed (documented)",
+      "guarantee_wording": "mixed",
+      "ask_mode": "none",
+      "stars": 1041,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-31T22:18:28Z",
+      "commit_age_days_at_2026-11-01": 1,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 5,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "ai-guardian",
+      "name": "AI Guardian (Red Hat Product Security)",
+      "repo": "https://github.com/RedHatProductSecurity/ai-guardian",
+      "commit": "da58b03395220a6bcae38b56bc0dfef941e48940",
+      "commit_date": "2026-10-30",
+      "dir": "ai-guardian",
+      "found_by": "GitHub search: Gemini BeforeTool hook decision deny security (issue #634)",
+      "category": "security",
+      "supported": [
+        "claude",
+        "cursor",
+        "copilot",
+        "gemini",
+        "codex",
+        "cline",
+        "grok",
+        "kiro",
+        "windsurf",
+        "augment",
+        "opencode",
+        "pi",
+        "junie",
+        "crush",
+        "antigravity"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor",
+        "gemini"
+      ],
+      "interpreter": "Python package; entry binary `ai-guardian` (optional daemon with direct fallback); tkinter / NiceGUI for ask dialogs.",
+      "verdicts": [
+        {
+          "situation": "block",
+          "emission": "Claude Code: exit 0 allow / exit 2 block (response_format.py); Cursor JSON {permission|continue}; Gemini JSON {\"decision\":\"deny\",\"reason\"}; Copilot {permissionDecision}"
+        },
+        {
+          "situation": "ask action (profile @moderator)",
+          "emission": "NOT forwarded as a harness ask: the guard shows its own native dialog (ask_mode.py), with fallback block by default (`ask` = (ask, block); `ask:warn` / `ask:log-only` allowed)"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "README: \"Fail-open by design — prioritizes availability over security (errors allow operations)\".",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "**AI Guardian is not a silver bullet** and cannot guarantee detection of all security threats.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "**Fail-open by design** — prioritizes availability over security (errors allow operations)",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless / no display",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "@moderator ask on every finding",
+          "prediction": "Ask is an out-of-band dialog, so headless behaviour depends on the guard's fallback (default block, other settings allow). Dialog absence handling was not read.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-COVERAGE",
+          "claim_at_risk": "Codex lifecycle hooks protection",
+          "prediction": "Codex hook coverage limits apply; README only claims 'Codex CLI + Desktop' lifecycle hooks.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "cursor",
+          "mode": "crash / timeout / missing binary",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "hook protection",
+          "prediction": "No failClosed key found in src (grep), so these fail open.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "gemini",
+          "mode": "exit and timeout paths",
+          "rule": "GM-TIMEOUT",
+          "claim_at_risk": "hook protection",
+          "prediction": "Hook timeout or spawn failure is an allow on Gemini; the guard is fail-open anyway.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "MEASURED-RUNNER-LAYER",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "compensations": [
+        "states fail-open by design",
+        "does its own ask dialog instead of relying on harness ask"
+      ],
+      "notes": "Unusual design: the guard owns the human prompt, so the harness `ask` semantics matter less, but a headless host may lack the display it needs.",
+      "ask_on": [],
+      "error_posture": "fail-open (documented, by design)",
+      "guarantee_wording": "explicit disclaimer",
+      "ask_mode": "none",
+      "stars": 17,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-30T21:24:48Z",
+      "commit_age_days_at_2026-11-01": 2,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 4,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "defenseclaw",
+      "name": "DefenseClaw (Cisco AI Defense)",
+      "repo": "https://github.com/cisco-ai-defense/defenseclaw",
+      "commit": "54ad050a00e62d9d1d65c5e96c820443686e32e7",
+      "commit_date": "2026-10-30",
+      "dir": "defenseclaw",
+      "found_by": "GitHub search: beforeShellExecution failClosed Cursor guard",
+      "category": "security",
+      "supported": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "copilot",
+        "devin",
+        "kiro",
+        "amp",
+        "antigravity",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "zeptoclaw"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "interpreter": "Go binary invoked as `defenseclaw hook --connector <name>` (native executable); hooks call a local gateway; managed installs use root-owned config.",
+      "verdicts": [
+        {
+          "situation": "Claude Code PreToolUse, action mode",
+          "emission": "deny, or `permissionDecision: ask` for a confirm verdict, which the docs say shows inside Claude Code in Manual mode; in any other permission mode the call is blocked with a note"
+        },
+        {
+          "situation": "Codex",
+          "emission": "no native ask: a confirm verdict is recorded and alerted with the original action kept, i.e. NOT blocked"
+        },
+        {
+          "situation": "Cursor",
+          "emission": "native ask is not enabled; deny uses Cursor's own response; hooks registered failClosed:true"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Gateway outage follows policy tier: default and permissive allow with a warning, strict blocks. Claude/Cursor: a running hook blocks every other failure it detects. Codex: \"Codex itself treats a hook process failure or timeout as non-blocking\"; managed status warns hook_process_fail_open.",
+      "quotes": [
+        {
+          "source": "docs-site/content/docs/connectors/codex.mdx",
+          "text": "Codex itself treats a hook process failure or timeout as non-blocking. Setup registers `PreToolUse` with a 30-second timeout, but Codex has no reviewed on-timeout deny setting.",
+          "third_hand": false
+        },
+        {
+          "source": "docs-site/content/docs/connectors/claudecode.mdx",
+          "text": "In action mode `PreToolUse` can deny a tool call or ask you first. The question appears inside Claude Code in Manual mode, its default; in any other permission mode the call is blocked with a note to switch to Manual mode and ask again.",
+          "third_hand": false
+        },
+        {
+          "source": "docs-site/content/docs/connectors/cursor.mdx",
+          "text": "Outside Secure Client, action and observe both register `failClosed: true`, so a stopped, killed or timed-out hook cannot silently let a tool run.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "ask in Manual mode only",
+          "prediction": "Whether a -p run counts as Manual mode, and what the harness does with the ask, is undocumented; inferred deny.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "hook killed / timeout / crash",
+          "rule": "CX-EXIT-OTHER",
+          "claim_at_risk": "capability-matrix 'Fail closed: yes'",
+          "prediction": "Codex treats failure as non-blocking; DefenseClaw documents this itself (hook_process_fail_open). 'yes' holds only for failures the running hook detects.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "confirm verdict",
+          "rule": "CX-ASK",
+          "claim_at_risk": "confirm findings",
+          "prediction": "No ask is emitted; confirm is an alert and the action proceeds. Consistent with CX-ASK; documented.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "compensations": [
+        "Cursor failClosed:true everywhere and native ask off (avoids the unenforced CU-ASK-MCP path)",
+        "Codex: no ask",
+        "Claude: ask only in the mode it believes prompts"
+      ],
+      "notes": "Documents harness fail-open limits more explicitly than any other guard. The Cursor row is a HOLDS, not a gap.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "mixed (policy tier decides on gateway outage)",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "not classified",
+      "stars": 899,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-31T22:11:31Z",
+      "commit_age_days_at_2026-11-01": 2,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 2,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "balerx",
+      "name": "Balerx guard",
+      "repo": "https://github.com/wrjewski/balerx",
+      "commit": "4f974386b36384f60d868f8dd899d99c0453d45b",
+      "commit_date": "2026-10-25",
+      "dir": "balerx",
+      "found_by": "GitHub search: Cursor permission ask hook",
+      "category": "security",
+      "supported": [
+        "claude-code",
+        "cursor"
+      ],
+      "study": [
+        "claude",
+        "cursor"
+      ],
+      "interpreter": "Native binary `balerx` (`balerx hook`), installed into ~/.claude/settings.json and ~/.cursor/hooks.json by `balerx guard install`. Missing binary gives exit 127 (guard status reports it).",
+      "verdicts": [
+        {
+          "situation": "Claude PreToolUse",
+          "emission": "hookSpecificOutput.permissionDecision allow|deny|ask; deny exits 2; allow and ask exit 0"
+        },
+        {
+          "situation": "Cursor",
+          "emission": "always exit 0 with {\"permission\":\"allow|deny|ask\", user_message, agent_message}"
+        },
+        {
+          "situation": "default policy on git push --force etc.",
+          "emission": "ask"
+        },
+        {
+          "situation": "body over 1 MB, or empty/unreadable policy file",
+          "emission": "ask (not parsed / fail closed to ask)"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "global.fail_open default true: a 50 ms budget overrun or invalid JSON allows. An empty or unreadable policy file is never covered by fail_open and always asks. README: a crash, timeout or non-zero exit other than 2 fails open unless the hook sets failClosed.",
+      "quotes": [
+        {
+          "source": "docs/HOOKS.md",
+          "text": "A crash, timeout, or non-zero exit other than 2 fails open unless the hook sets `\"failClosed\": true`.",
+          "third_hand": false
+        },
+        {
+          "source": "docs/HOOKS.md",
+          "text": "A timed-out `PreToolUse` hook does not block the tool call unless the hook config sets `\"onFailure\": \"block\"`.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p) / bypass",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "default policy asks on destructive git/commands",
+          "prediction": "Ask with no human is undocumented (inferred deny). A broken policy file makes every call ask.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "MCP calls",
+          "rule": "CU-ASK-MCP",
+          "claim_at_risk": "ask outcome of the shared policy, if the Cursor MCP event is routed through it (not read)",
+          "prediction": "Reported unenforced for allowlisted MCP tools.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-MCP is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "crash / timeout",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "guard install",
+          "prediction": "No failClosed or onFailure key written by the installer (grep of packages), so the README's own warning applies to the default install.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "notes": "README documents the host fail-open behaviour but the installer does not appear to opt in to failClosed/onFailure.",
+      "ask_on": [
+        "claude",
+        "cursor"
+      ],
+      "error_posture": "fail-open by default (fail_open true); empty policy asks",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "not classified",
+      "stars": 1,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-25T16:36:27Z",
+      "commit_age_days_at_2026-11-01": 7,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 1,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 2,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "agent-edict",
+      "name": "AgentEdict (Cursor adapter)",
+      "repo": "https://github.com/ryandunton/agent-edict",
+      "commit": "5bebf398721c36ec665c63728487ab3030219202",
+      "commit_date": "2026-10-31",
+      "dir": "agent-edict",
+      "found_by": "GitHub search: beforeShellExecution beforeMCPExecution hook permission deny ask Cursor guard",
+      "category": "security",
+      "supported": [
+        "cursor (hooks)",
+        "codex/claude/gemini/others (compiled native policy, not hook scripts)"
+      ],
+      "study": [
+        "cursor"
+      ],
+      "interpreter": "Go executable `edict` at an absolute installed path, bounded timeout, failClosed:true; rules sidecar installed before the hook.",
+      "verdicts": [
+        {
+          "situation": "shell rule ask",
+          "emission": "permission ask (delegated to Cursor confirmation)"
+        },
+        {
+          "situation": "MCP rule",
+          "emission": "allow only; every unmatched MCP call is denied; ask is rejected at compile time"
+        },
+        {
+          "situation": "generic gate",
+          "emission": "allow/deny only; never ask on preToolUse"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "failClosed:true on every hook; fail-closed on timeouts, non-zero exit, missing output, malformed responses and execution errors per its reading of Cursor's executor.",
+      "quotes": [
+        {
+          "source": "docs/integrations/cursor.md",
+          "text": "The shipped Cursor 3.24.18 MCP executor checks `deny` and otherwise proceeds, so `ask` would not enforce a confirmation. AgentEdict rejects it even though the public hook response schema includes that value.",
+          "third_hand": false
+        },
+        {
+          "source": "docs/integrations/cursor.md",
+          "text": "`failClosed` protects failures of a configured hook, not failure to discover the configuration itself. The adapter therefore reports application guardrails, not guaranteed containment.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "cursor",
+          "mode": "hook config not discovered",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "failClosed:true",
+          "prediction": "The guard states that a hook config parse/read failure can mean no hook loads; failClosed cannot help. Documented by the guard.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "cursor",
+          "mode": "shell ask",
+          "rule": "CU-ASK-SHELL",
+          "claim_at_risk": "shell ask delegates to user confirmation",
+          "prediction": "Held in the earlier CLI run; IDE forum differs; version dependent.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-SHELL is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "compensations": [
+        "rejects MCP ask",
+        "no ask on preToolUse",
+        "failClosed:true"
+      ],
+      "notes": "Independent source-reading corroboration of the Cursor MCP-ask finding (it avoids emitting it). Other harnesses are policy-compiled and have no hook verdict to study.",
+      "ask_on": [
+        "cursor"
+      ],
+      "error_posture": "fail-closed (failClosed:true)",
+      "guarantee_wording": "explicit disclaimer",
+      "ask_mode": "not classified",
+      "stars": 1,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-31T16:56:44Z",
+      "commit_age_days_at_2026-11-01": 1,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 1,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "axonflow-codex",
+      "name": "AxonFlow Codex plugin",
+      "repo": "https://github.com/getaxonflow/axonflow-codex-plugin",
+      "commit": "580815d0e1b6b3b20076511916092ce99cb16c0a",
+      "commit_date": "2026-09-14",
+      "dir": "axonflow-codex",
+      "found_by": "GitHub search: Codex CLI PreToolUse hook guard block dangerous commands",
+      "category": "security",
+      "supported": [
+        "codex"
+      ],
+      "study": [
+        "codex"
+      ],
+      "interpreter": "bash + jq + curl (`#!/usr/bin/env bash`; hooks.json runs ./scripts/pre-tool-check.sh with a relative path, timeout 15).",
+      "verdicts": [
+        {
+          "situation": "policy violation",
+          "emission": "stderr message + exit 2 (no JSON)"
+        },
+        {
+          "situation": "auth/config error, per-user token rejected (HTTP 401)",
+          "emission": "exit 2 with stderr text (fail-closed)"
+        },
+        {
+          "situation": "AxonFlow unreachable, empty body, curl failure",
+          "emission": "exit 0 (fail-open)"
+        },
+        {
+          "situation": "jq or curl missing",
+          "emission": "exit 0 (fail-open)"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "Network failure fail-open (exit 0); auth/config failure fail-closed (exit 2).",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "**Hard-enforced: dangerous commands blocked with exit code 2**",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "**Hard-enforced.** Exit code 2 blocks execution before it starts. Cannot be bypassed.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "AxonFlow unreachable (network) → fail-open, tool execution continues",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-COVERAGE",
+          "claim_at_risk": "\"Cannot be bypassed\"",
+          "prediction": "Codex docs say tool hooks are a guardrail, not a complete enforcement boundary; the matcher covers Bash|exec_command|shell only.",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        },
+        {
+          "harness": "codex",
+          "mode": "untrusted hook / headless",
+          "rule": "CX-TRUST",
+          "claim_at_risk": "\"Hard-enforced\"",
+          "prediction": "MEASURED (stub model, Codex 0.166.0, user-config hook, captured block bytes): hook never invoked and the guarded call ran in 3 of 3 runs while untrusted (silent: no warning in the --json stream); with trust bypassed the hook ran and the call ran in 3 of 6. Plugin-delivered hooks (plugin-level trust) were not measured. A hook that is not reviewed and trusted is skipped, so it is not enforced at all until trusted; headless warning unverified.",
+          "status": "UNKNOWN",
+          "evidence": "MEASURED-STUB-REPLAY",
+          "status_basis": "plugin-delivered hook: plugin-level trust may apply (CX-TRUST)",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "stderr empty or script cannot start",
+          "rule": "CX-EXIT2-EMPTY",
+          "claim_at_risk": "exit 2 blocks",
+          "prediction": "Blocks only when stderr is non-empty. The violation and auth paths print text so they hold; a shell failure before the script prints (relative path ./scripts/pre-tool-check.sh from a wrong cwd) is exit 126/127, Failed, call continues (CX-EXIT-OTHER).",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        },
+        {
+          "harness": "codex",
+          "mode": "timeout",
+          "rule": "CX-TIMEOUT",
+          "claim_at_risk": "hard enforcement under policy-server latency",
+          "prediction": "hooks.json timeout 15 s plus a curl budget; a Codex-side timeout is Failed and the call continues.",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        }
+      ],
+      "compensations": [
+        "uses exit 2 with stderr text (CX-BLOCK-OK path), not ask"
+      ],
+      "notes": "Strongest absolute wording in the corpus (`Cannot be bypassed`), on the harness whose docs say its hooks are not an enforcement boundary.",
+      "ask_on": [],
+      "error_posture": "mixed (network opens, auth/config closes)",
+      "guarantee_wording": "strong",
+      "ask_mode": "none",
+      "stars": 3,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-09-25T13:16:54Z",
+      "commit_age_days_at_2026-11-01": 48,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 3,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "oh-my-harness",
+      "name": "oh-my-harness (omh)",
+      "repo": "https://github.com/kyu1204/oh-my-harness",
+      "commit": "ccbd489ce46c2dd993431054dd4e2eff432ac760",
+      "commit_date": "2026-09-30",
+      "dir": "oh-my-harness",
+      "found_by": "GitHub search: Codex CLI PreToolUse hook guard block dangerous commands",
+      "category": "security",
+      "supported": [
+        "claude",
+        "codex",
+        "pi"
+      ],
+      "study": [
+        "claude",
+        "codex"
+      ],
+      "interpreter": "Generated bash scripts that depend on jq (INPUT=$(cat); jq -r ...). No `command -v jq` guard found in src.",
+      "verdicts": [
+        {
+          "situation": "block",
+          "emission": "legacy top-level JSON {\"decision\":\"block\",\"reason\":...} on exit 0 (hooks.ts:381-382)"
+        },
+        {
+          "situation": "block with mode: ask",
+          "emission": "On Claude Code (payload has transcript_path) {hookSpecificOutput:{permissionDecision:\"ask\"}}; on Codex falls back to the block JSON"
+        },
+        {
+          "situation": "allow",
+          "emission": "no output, logged"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Generated scripts log an `error` event on non-zero exit. semantic-rule-guard allows and logs `skipped` without a key or on API error. No fail-closed wrapper found.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "a `PreToolUse` hook that returns `{\"decision\":\"block\"}` is a fact.",
+          "third_hand": false
+        },
+        {
+          "source": "README, mode block vs ask",
+          "text": "**Codex**: `ask` is **not** supported, so the hook falls back to a hard block — your guardrail is never silently downgraded to \"allow\".",
+          "third_hand": false
+        },
+        {
+          "source": "src/generators/hooks.ts:369",
+          "text": "a legacy {decision:\"block\"} overrides permissionDecision:\"ask\" on Claude",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-LEGACY-DECISION",
+          "claim_at_risk": "`{\"decision\":\"block\"}` is a fact",
+          "prediction": "The vendor-semantics report does not cover a top-level `decision` field on PreToolUse. Public issues (oh-my-claudecode #2177, DCG #77) describe wrong-shape output being silently ignored on Claude Code. Treat as UNKNOWN until run.",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        },
+        {
+          "harness": "claude",
+          "mode": "no jq",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "generated hooks block",
+          "prediction": "With jq missing the command parses empty and the script exits 0 (allow).",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        },
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "mode: ask",
+          "prediction": "Optional mode; ask with no human undocumented. Default mode is block.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-BLOCK-OK",
+          "claim_at_risk": "top-level decision block",
+          "prediction": "`decision:\"block\"` with a reason is a supported Codex shape, so this HOLDS if the reason is non-empty.",
+          "status": "HOLDS",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard's shape is a supported blocking shape",
+          "outcome_label": "HOLDS"
+        },
+        {
+          "harness": "codex",
+          "mode": "untrusted hook",
+          "rule": "CX-TRUST",
+          "claim_at_risk": "hooks that actually block",
+          "prediction": "Skipped until trusted.",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        }
+      ],
+      "compensations": [
+        "Codex falls back from ask to block (explicitly stated)",
+        "branches on caller using transcript_path"
+      ],
+      "notes": "Tells the two harnesses apart with a payload heuristic (transcript_path), not a documented field.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "no fail-closed wrapper found; jq or API failure allows",
+      "guarantee_wording": "strong",
+      "ask_mode": "opt-in (mode: ask; the default is block)",
+      "stars": 17,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-10T11:01:50Z",
+      "commit_age_days_at_2026-11-01": 32,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 3,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 1,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "vaibot-cursor",
+      "name": "VAIBot circuit-breaker plugin for Cursor",
+      "repo": "https://github.com/vaibot-io/cursor-circuitbreaker-plugin",
+      "commit": "3575fba54f3814bdc12b7865ca55eb59428f7f63",
+      "commit_date": "2026-10-10",
+      "dir": "vaibot-cursor",
+      "found_by": "GitHub search: Cursor beforeShellExecution beforeMCPExecution failClosed",
+      "category": "security",
+      "supported": [
+        "cursor"
+      ],
+      "study": [
+        "cursor"
+      ],
+      "interpreter": "node (`node ./scripts/pre-tool-use.mjs`, relative path, timeout 15, failClosed:true on beforeShellExecution and beforeMCPExecution).",
+      "verdicts": [
+        {
+          "situation": "policy deny",
+          "emission": "{\"permission\":\"deny\"}"
+        },
+        {
+          "situation": "approval_required / risky",
+          "emission": "{\"permission\":\"ask\"}"
+        },
+        {
+          "situation": "allow",
+          "emission": "{\"permission\":\"allow\"} or {} (observe/fail-open path)"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Exit 2 is a fail-closed deny; other non-zero exit and empty output rely on Cursor's failClosed. VAIBOT_FAIL_OPEN default false; unparseable input denies unless FAIL_OPEN/observe. Missing key governs locally with a classifier.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "Cursor runs the hooks with **`failClosed: true`**, so if the check crashes or times out the action is blocked, not silently allowed. If the goal is a tamper-evident audit record or blocking a misbehaving agent, the plugin is the enforcement layer that actually enforces it.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "the hook returns Cursor's **`ask`** permission and Cursor prompts you in-session before the command runs",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "cursor",
+          "mode": "MCP calls needing approval",
+          "rule": "CU-ASK-MCP",
+          "claim_at_risk": "approval-required MCP calls prompt in-session",
+          "prediction": "Reported unenforced for allowlisted MCP tools; the ask path then approves, and the README promises a prompt.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-MCP is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "shell calls needing approval",
+          "rule": "CU-ASK-SHELL",
+          "claim_at_risk": "approval prompt for risky commands",
+          "prediction": "Held in the earlier CLI run; IDE reports differ.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-SHELL is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "compensations": [
+        "failClosed:true on blocking events"
+      ],
+      "notes": "Cursor-only. The prompt claim is the main exposure.",
+      "ask_on": [
+        "cursor"
+      ],
+      "error_posture": "fail-closed by default (VAIBOT_FAIL_OPEN=false)",
+      "guarantee_wording": "strong",
+      "ask_mode": "not classified",
+      "stars": 0,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-11T00:44:53Z",
+      "commit_age_days_at_2026-11-01": 22,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 2,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "gemini-intrupt-hook",
+      "name": "gemini-intrupt-hook (Aegmis intrupt approval gate)",
+      "repo": "https://github.com/Aegmis/gemini-intrupt-hook",
+      "commit": "6c4b6899903fadae30fb41e66a182a271d04bcfe",
+      "commit_date": "2026-07-15",
+      "dir": "gemini-intrupt-hook",
+      "found_by": "GitHub search: Gemini CLI BeforeTool hook decision deny security",
+      "category": "security",
+      "supported": [
+        "gemini"
+      ],
+      "study": [
+        "gemini"
+      ],
+      "interpreter": "`#!/usr/bin/env python3`; settings.json runs `python3 ~/.gemini/hooks/intrupt_hook.py` with timeout 630000 ms.",
+      "verdicts": [
+        {
+          "situation": "risky call, approved remotely",
+          "emission": "{} (defer to Gemini's normal flow), exit 0"
+        },
+        {
+          "situation": "reject / timeout / API unreachable / crash",
+          "emission": "{\"decision\":\"deny\",\"reason\":...} on stdout, exit 0 (fail closed)"
+        },
+        {
+          "situation": "low-risk call",
+          "emission": "{} exit 0"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "BaseException handler converts any crash to a deny JSON, because an unhandled exception exits 1 and \"fails OPEN in Gemini\" (hook.py:581-584).",
+      "quotes": [
+        {
+          "source": "hook.py header",
+          "text": "On reject / timeout / error / crash it emits a \"deny\" decision (fail closed).",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "The hook **fails closed**: if the API is unreachable, the env vars are missing, or the request times out, the tool call is denied — not allowed.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "Gemini's default per-hook timeout is 60 s, which would kill [the 10-minute approval wait]",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "gemini",
+          "mode": "python3 missing",
+          "rule": "GM-EXIT-TEXT",
+          "claim_at_risk": "fails closed",
+          "prediction": "The in-process fail-closed path never runs. Shell reports command-not-found on stderr with exit 127, which source predicts is a DENY: fail-closed by accident, contradicting docs (not run).",
+          "status": "HOLDS-BY-ACCIDENT",
+          "evidence": "MEASURED-RUNNER-LAYER",
+          "status_basis": "the guarantee holds on gemini-cli-core 0.30.0 and later because the shell's error text turns a dead hook into a deny; 0.29.7 and earlier allow",
+          "outcome_label": "HOLDS-BY-ACCIDENT"
+        }
+      ],
+      "compensations": [
+        "converts crashes to deny JSON and exit 0 specifically because of the Gemini behaviour"
+      ],
+      "notes": "Only Gemini-specific guard found. Shows an author who learnt the Gemini exit-1 fail-open from experience. A row about kills no harness setting controls (OOM, SIGKILL) was removed.",
+      "ask_on": [],
+      "error_posture": "fail-closed in-process (crash converted to deny JSON)",
+      "guarantee_wording": "strong",
+      "ask_mode": "none",
+      "stars": 0,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-07-15T07:48:38Z",
+      "commit_age_days_at_2026-11-01": 109,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 1,
+        "HOLDS": 0,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "railway-guard",
+      "name": "claude-code-railway-guard",
+      "repo": "https://github.com/JackMBurch/claude-code-railway-guard",
+      "commit": "54b2b1ce7b8d08366bc732ca1da4473891b39ead",
+      "commit_date": "2026-06-25",
+      "dir": "railway-guard",
+      "found_by": "GitHub search: Claude Code PreToolUse hook permissionDecision deny ask",
+      "category": "security",
+      "supported": [
+        "claude"
+      ],
+      "study": [
+        "claude"
+      ],
+      "interpreter": "`#!/usr/bin/env bash` + jq (README: Requires bash, jq); executable bit set in the repo.",
+      "verdicts": [
+        {
+          "situation": "shared-DB, catastrophic commands",
+          "emission": "JSON permissionDecision deny, exit 0"
+        },
+        {
+          "situation": "mutating commands in production",
+          "emission": "deny"
+        },
+        {
+          "situation": "mutating commands in other environments",
+          "emission": "ask"
+        },
+        {
+          "situation": "environment cannot be determined",
+          "emission": "deny (fail closed)"
+        },
+        {
+          "situation": "read-only / non-railway",
+          "emission": "no output, exit 0"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Emit() always exits 0 with JSON; an undeterminable environment fails closed to deny. Missing jq: not guarded in the first 60 lines read (bash `set -uo pipefail` without -e).",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "A `PreToolUse` hook and `deny`/`ask` permission rules both apply in **every** permission mode, including `bypassPermissions`. Hooks and rules are the durable guardrails; a mode is not.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "If neither yields an environment, the hook **fails closed** and denies.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "bypassPermissions",
+          "rule": "CC-ASK-BYPASS",
+          "claim_at_risk": "hook ask applies in every permission mode, including bypassPermissions",
+          "prediction": "MEASURED (stub model, replayed ask bytes, Claude Code 2.1.316): the guarded call ran in 0 of 3 runs; the ask was refused because nobody could answer it. Vendor docs state deny holds under bypass but say nothing about a hook ask; public issue #103994 reports an ask overridden in bypass in one case. The README sentence is stronger than the docs for `ask`.",
+          "status": "HOLDS",
+          "evidence": "MEASURED-STUB-REPLAY",
+          "status_basis": "measured: the guard's captured ask bytes through Claude Code, headless --dangerously-skip-permissions",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "staging ask",
+          "prediction": "MEASURED (stub model, replayed ask bytes, Claude Code 2.1.118, 2.1.214, 2.1.280, 2.1.309, 2.1.316): the guarded call ran in 0 of 14 runs; the ask was refused because nobody could answer it. Undocumented; inferred deny.",
+          "status": "HOLDS",
+          "evidence": "MEASURED-STUB-REPLAY",
+          "status_basis": "measured: the guard's captured ask bytes through Claude Code, headless -p with --allowedTools (M1 adds --permission-prompts none; M1h leaves prompts unanswered)",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "jq missing",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "deny on production",
+          "prediction": "emit() builds its JSON with jq and then runs `exit 0`; with jq missing a deny becomes an empty exit 0 (allow), and the parse step also fails (script read only to line 60).",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        }
+      ],
+      "notes": "Clean example of an overstated sentence about ask under bypass.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "fail-closed for an undeterminable environment",
+      "guarantee_wording": "strong",
+      "ask_mode": "conditional (non-production environments only)",
+      "stars": 2,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-06-25T17:39:40Z",
+      "commit_age_days_at_2026-11-01": 129,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 1,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 2,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "prevent-destructive",
+      "name": "prevent-destructive-commands",
+      "repo": "https://github.com/halfsies1/prevent-destructive-commands",
+      "commit": "c5386cfe11cd4c57c15e9411d9fab13b09952f3f",
+      "commit_date": "2025-12-25",
+      "dir": "prevent-destructive",
+      "found_by": "GitHub search: Codex CLI PreToolUse guard block dangerous commands",
+      "category": "security",
+      "supported": [
+        "claude"
+      ],
+      "study": [
+        "claude"
+      ],
+      "interpreter": "Bash script using jq (settings.unix.json) or PowerShell (.claude/settings.json registers `powershell -NoProfile -ExecutionPolicy Bypass -File ...block-destructive.ps1`, which does not exist on a stock macOS/Linux host).",
+      "verdicts": [
+        {
+          "situation": "match",
+          "emission": "stderr + exit 2"
+        },
+        {
+          "situation": "no match or empty command",
+          "emission": "exit 0"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "No jq: `command` is empty, so `[ -z \"$command\" ] && exit 0` allows. No fail-closed path.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "A safety framework for preventing AI agents (like Claude Code) from executing destructive commands.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "`2` - Block the command (stderr shown to AI agent)",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "jq missing",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "blocks 50+ destructive patterns",
+          "prediction": "jq absent gives an empty command and exit 0.",
+          "status": "CONTRADICTS-GUARD-CLAIM",
+          "evidence": "PREDICTED",
+          "status_basis": "the README promises more than the harness semantics give (guard-level wording: strong)",
+          "outcome_label": "CONTRADICTS-GUARD-CLAIM"
+        },
+        {
+          "harness": "claude",
+          "mode": "default .claude/settings.json on non-Windows host",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "safety framework",
+          "prediction": "The committed default registers powershell; a missing powershell binary is exit 127, non-blocking, so the guard never runs.",
+          "status": "NOT-APPLICABLE",
+          "evidence": "PREDICTED",
+          "status_basis": "the README tells Unix users to copy settings.unix.json: a documented setup step",
+          "outcome_label": "NOT-APPLICABLE"
+        }
+      ],
+      "notes": "Plain exit-2 contract on Claude (HOLDS where it runs); the README also lists separate permissions allow/deny/ask settings.",
+      "ask_on": [],
+      "error_posture": "fail-open (jq missing allows)",
+      "guarantee_wording": "strong",
+      "ask_mode": "none",
+      "stars": 0,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2025-12-25T23:15:10Z",
+      "commit_age_days_at_2026-11-01": 311,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 1,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 1
+      }
+    },
+    {
+      "id": "block-no-verify",
+      "name": "block-no-verify",
+      "repo": "https://github.com/tupe12334/block-no-verify",
+      "commit": "874fa5989bc13fd03cf92ad28b36c0440b0d94de",
+      "commit_date": "2026-10-20",
+      "dir": "block-no-verify",
+      "found_by": "GitHub search: Gemini BeforeTool hook (issue #23123); omi PR for Cursor",
+      "category": "security",
+      "supported": [
+        "claude",
+        "cursor",
+        "gemini",
+        "others via polyhook"
+      ],
+      "study": [
+        "claude",
+        "cursor",
+        "gemini"
+      ],
+      "interpreter": "node (`#!/usr/bin/env node`, dist/cli.js) started through `pnpm dlx block-no-verify` or `npx block-no-verify@1.1.2` in the repo's own configs, which needs a package manager and network.",
+      "verdicts": [
+        {
+          "situation": "blocked git bypass",
+          "emission": "polyhook SDK response on stdout PLUS the reason on stderr and exit 2 (cli.ts)"
+        },
+        {
+          "situation": "unparseable command",
+          "emission": "block (fail-closed via checkFailClosed in run-hook.ts)"
+        },
+        {
+          "situation": "not a tool call / allow",
+          "emission": "approve response, exit 0"
+        },
+        {
+          "situation": "no ask",
+          "emission": "never"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "A parse error is turned into a block. An uncaught error exits 1 (EXIT_CODES.ERROR), which is non-blocking on Claude Code and Cursor.",
+      "quotes": [
+        {
+          "source": "src/cli.ts",
+          "text": "Claude Code only treats a `PreToolUse` hook as blocking when it exits with code 2 and surfaces stderr to the model, so the exit code is what actually stops the bypass.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "A command it cannot parse (for example an unterminated `${`) is blocked, because it cannot confirm that the command is safe.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "pnpm/npx missing or offline",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "blocks hook-skipping git flags",
+          "prediction": "The shipped config runs `pnpm dlx block-no-verify`: a missing pnpm (127), a registry failure or a timeout is non-blocking.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "cursor",
+          "mode": "crash / missing pnpm",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "beforeShellExecution blocks",
+          "prediction": "The repo's own .cursor/hooks.json has no failClosed; exit 1 and 127 fail open. Exit 2 blocks.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: calibrated)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "gemini",
+          "mode": "exit 2 with stdout JSON from the SDK",
+          "rule": "GM-EXIT2-EMPTY",
+          "claim_at_risk": "exit 2 blocks",
+          "prediction": "MEASURED (no model, Gemini hook runner, 22 core releases): the captured block (stdout JSON decision 'block', stderr reason, exit 2) is a deny in every release. Source: exit 2 with JSON stdout lets the JSON decide. If the polyhook response for a block is a Gemini-shaped deny the block holds; if the SDK writes a non-deny shape it would allow. Not verified which; the reason on stderr does not save it in that case.",
+          "status": "HOLDS",
+          "evidence": "MEASURED-RUNNER-REPLAY",
+          "status_basis": "measured: the SDK's captured block (exit 2, stderr reason, JSON decision block) through the Gemini hook runner",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "gemini",
+          "mode": "pnpm missing",
+          "rule": "GM-EXIT-TEXT",
+          "claim_at_risk": "exit 2 blocks",
+          "prediction": "Command-not-found on stderr with exit 127 predicted DENY (accidental).",
+          "status": "HOLDS-BY-ACCIDENT",
+          "evidence": "MEASURED-RUNNER-LAYER",
+          "status_basis": "the guarantee holds on gemini-cli-core 0.30.0 and later because the shell's error text turns a dead hook into a deny; 0.29.7 and earlier allow",
+          "outcome_label": "HOLDS-BY-ACCIDENT"
+        },
+        {
+          "harness": "cursor",
+          "mode": "beforeShellExecution payload (documented shape), polyhook SDK 0.1.4",
+          "rule": "CU-SDK-SHAPE",
+          "claim_at_risk": "README Cursor snippet: beforeShellExecution runs `pnpm exec block-no-verify`",
+          "prediction": "MEASURED at the guard (sandboxed capture, n=1 per shape): for a `git commit --no-verify` command the guard printed `{}` and exited 0 on a beforeShellExecution-shaped payload written from Cursor's docs, but blocked (exit 2, JSON decision block) on the preToolUse shape. The payload was not recorded from a live Cursor, so whether the SDK recognises Cursor's real beforeShellExecution event is UNKNOWN.",
+          "status": "UNKNOWN",
+          "evidence": "MEASURED-CAPTURE",
+          "status_basis": "a single fixture shape; not a live payload",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "compensations": [
+        "parse failures block",
+        "exit 2 plus stderr for Claude/Cursor"
+      ],
+      "notes": "Targets all three harnesses through the polyhook SDK; the exact stdout the SDK writes per harness was not read. README says hooks are disabled by default in Gemini CLI and the repo settings.json lists \"enabled\":[\"BeforeTool\"] (guard-author statement, not checked here).",
+      "ask_on": [],
+      "error_posture": "fail-closed on parse errors; uncaught error exits 1",
+      "guarantee_wording": "calibrated",
+      "ask_mode": "none",
+      "stars": 7,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-24T00:33:19Z",
+      "commit_age_days_at_2026-11-01": 12,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 2,
+        "HOLDS-BY-ACCIDENT": 1,
+        "HOLDS": 1,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "tob-codex-config",
+      "name": "Trail of Bits codex-config hooks",
+      "repo": "https://github.com/trailofbits/codex-config",
+      "commit": "29a66d1aef1a3e6c2696811109a781b059b95b4f",
+      "commit_date": "2026-09-01",
+      "dir": "tob-codex-config",
+      "found_by": "GitHub search: Codex CLI PreToolUse hook guard block dangerous commands",
+      "category": "adjacent",
+      "supported": [
+        "codex"
+      ],
+      "study": [
+        "codex"
+      ],
+      "interpreter": "`#!/bin/bash` with `set -euo pipefail` and jq; config.toml runs `bash ~/.codex/hooks/<name>.sh`, timeout 30 s, matcher ^Bash$.",
+      "verdicts": [
+        {
+          "situation": "block (rm -rf, sudo, mkfs, dd, curl|sh, force-push, reset --hard, push to main, npm in pnpm project)",
+          "emission": "stderr \"BLOCKED: ...\" + exit 2"
+        },
+        {
+          "situation": "allow",
+          "emission": "exit 0"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "`set -euo pipefail`: a jq failure or missing jq makes the script exit non-zero (1 or 127), which Codex treats as Failed and continues (CX-EXIT-OTHER).",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "Hooks are not a security boundary. Use them for workflow pressure: block known-bad patterns, enforce project conventions, add audit logs, or inject context at decision points. Keep sandboxing on.",
+          "third_hand": false
+        },
+        {
+          "source": "hooks/block-dangerous-command.sh",
+          "text": "This is a guardrail, not a security boundary; keep sandboxing on.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "YOLO mode drops sandboxing and approvals, but it still evaluates installed rules and hooks.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "codex",
+          "mode": "jq missing / any script error",
+          "rule": "CX-EXIT-OTHER",
+          "claim_at_risk": "blocks rm -rf, force-push, etc.",
+          "prediction": "`set -e` turns a jq or shell failure into a non-0, non-2 exit, which is Failed and the call continues: fail-open. Same for timeout (CX-TIMEOUT).",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "untrusted hook",
+          "rule": "CX-TRUST",
+          "claim_at_risk": "hooks still run in YOLO",
+          "prediction": "Per the README hooks run in YOLO; the Codex trust gate precedes that and skips untrusted hooks.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "codex",
+          "mode": "any",
+          "rule": "CX-COVERAGE",
+          "claim_at_risk": "regex blocker",
+          "prediction": "Honest: not a boundary; Codex coverage limits apply.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        }
+      ],
+      "compensations": [
+        "exit 2 with stderr text matches CX-BLOCK-OK",
+        "README disclaims being a boundary"
+      ],
+      "notes": "The best-calibrated claim in the corpus: it already says 'not a security boundary'. Re-categorised as adjacent after review: an example config repo that disclaims being a security boundary.",
+      "ask_on": [],
+      "error_posture": "unhandled: set -e exits non-zero on any failure",
+      "guarantee_wording": "explicit disclaimer",
+      "ask_mode": "none",
+      "stars": 30,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-18T21:09:18Z",
+      "commit_age_days_at_2026-11-01": 61,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 3,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "endor-cursor-hooks",
+      "name": "Endor Labs cursor-hook-examples",
+      "repo": "https://github.com/endorlabs/cursor-hook-examples",
+      "commit": "3b39bdcc32d766255fbba63a6dc35d9d790fe755",
+      "commit_date": "2025-12-17",
+      "dir": "endor-cursor-hooks",
+      "found_by": "GitHub search: beforeShellExecution Cursor hook",
+      "category": "adjacent",
+      "supported": [
+        "cursor"
+      ],
+      "study": [
+        "cursor"
+      ],
+      "interpreter": "`#!/bin/bash` + jq + endorctl; hooks.json uses relative paths ./.cursor/hooks/*.sh and sets no failClosed.",
+      "verdicts": [
+        {
+          "situation": "known-malware package install",
+          "emission": "{\"permission\":\"deny\", user_message, agent_message}"
+        },
+        {
+          "situation": "everything else, jq missing, endorctl missing, API failure",
+          "emission": "{\"permission\":\"allow\"} or exit 0 with no output"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "README: fail-open if endorctl is missing, auth is misconfigured or the API call fails. jq missing: exit 0, no output (hook failure on Cursor).",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "**Fail-open**: if `endorctl` is missing, auth is misconfigured, or the API call fails, hooks allow the operation (and emit a warning).",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "**Best-effort parsing**: unexpected formats (or invalid JSON/XML/TOML) may yield partial extraction; on errors, the hook fails open.",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "cursor",
+          "mode": "jq missing",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "denies known-malware installs",
+          "prediction": "Empty output on a non-failClosed hook is a hook failure that proceeds.",
+          "status": "DOCUMENTED-BY-GUARD",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard states limits of this kind (guard-level wording: explicit disclaimer)",
+          "outcome_label": "DOCUMENTED-BY-GUARD"
+        },
+        {
+          "harness": "cursor",
+          "mode": "relative script path",
+          "rule": "CU-MISSING",
+          "claim_at_risk": "hook runs before every shell command",
+          "prediction": "./.cursor/hooks/*.sh resolves against the hook cwd; if it does not resolve the result is undocumented (UNVERIFIED), likely a non-blocking failure.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-MISSING is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "notes": "Explicitly fail-open; the README says so, so little overclaim. Re-categorised as adjacent after review: an example repo that disclaims being a boundary.",
+      "ask_on": [],
+      "error_posture": "fail-open (documented)",
+      "guarantee_wording": "explicit disclaimer",
+      "ask_mode": "none",
+      "stars": 2,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-03-12T19:41:58Z",
+      "commit_age_days_at_2026-11-01": 319,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 1,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "hookify",
+      "name": "hookify (Anthropic claude-plugins-official)",
+      "repo": "https://github.com/anthropics/claude-plugins-official",
+      "commit": "a7ba5b93db0c7c8d17f3f1d25853adca79598a1a",
+      "commit_date": "2026-10-30",
+      "dir": "hookify-official",
+      "found_by": "GitHub search: PreToolUse permissionDecision (issue #4260, #5662)",
+      "category": "adjacent",
+      "supported": [
+        "claude"
+      ],
+      "study": [
+        "claude"
+      ],
+      "interpreter": "python3 (`python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.py\"`, timeout 10). Plugin is under plugins/hookify in the repo.",
+      "verdicts": [
+        {
+          "situation": "rule action: block",
+          "emission": "hookSpecificOutput.permissionDecision \"deny\" + systemMessage (no permissionDecisionReason; issue #4260)"
+        },
+        {
+          "situation": "rule action: warn (default)",
+          "emission": "systemMessage only, call allowed"
+        },
+        {
+          "situation": "no match",
+          "emission": "{}"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "Any exception: print a systemMessage and `ALWAYS exit 0 - never block operations due to hook errors` (pretooluse.py:61).",
+      "quotes": [
+        {
+          "source": "hooks/pretooluse.py:61",
+          "text": "ALWAYS exit 0 - never block operations due to hook errors",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "`warn`: Shows warning but allows operation (default)",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "python3 missing",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "action: block prevents the operation",
+          "prediction": "Missing interpreter is exit 127, non-blocking.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "notes": "Fail-open by design on all error paths; the blocking path uses the documented deny field. Issue #4260 reports no permissionDecisionReason, and #5662 reports stop-event rules leaking into PreToolUse on MCP tools. Re-categorised as adjacent after review: a user-rule engine whose default action is warn.",
+      "ask_on": [],
+      "error_posture": "fail-open (documented, always exit 0)",
+      "guarantee_wording": "mixed",
+      "ask_mode": "none",
+      "stars": 45568,
+      "repo_stars_note": "repo-level count (the guard is one plugin inside a larger repository)",
+      "repo_pushed_at": "2026-10-31T17:02:18Z",
+      "commit_age_days_at_2026-11-01": 2,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 1,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "knox",
+      "name": "Knox (qoris-ai)",
+      "repo": "https://github.com/qoris-ai/knox",
+      "commit": "726f0dd06b52d7475c369d0279a28a5b5f55fec9",
+      "commit_date": "2026-08-10",
+      "dir": "knox",
+      "found_by": "GitHub search: MCP tool call guard PreToolUse hook mcp__ matcher",
+      "category": "security",
+      "supported": [
+        "claude",
+        "codex",
+        "cursor",
+        "openclaw"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor"
+      ],
+      "interpreter": "`#!/usr/bin/env node` bin scripts launched through bash wrappers (run-check.sh, run-check-codex.sh, run-check-cursor.sh) using ${CLAUDE_PLUGIN_ROOT} / ${PLUGIN_ROOT}.",
+      "verdicts": [
+        {
+          "situation": "critical block",
+          "emission": "JSON deny AND exit 2 with stderr (Codex adapter: isCritical ? 2 : 0); Claude: exit 2"
+        },
+        {
+          "situation": "non-critical deny",
+          "emission": "JSON deny on exit 0"
+        },
+        {
+          "situation": "preset paranoid / use_ask_not_deny",
+          "emission": "every block becomes `ask` on Claude (bin/knox-check:87) and Cursor (adapter-cursor.js:150); Codex adapter only emits deny (it notes allow and ask are parsed-then-rejected)"
+        },
+        {
+          "situation": "sanitize",
+          "emission": "rewrites the command, permissionDecision allow with updated input"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Not read in full. Cursor hooks.json sets failClosed:true on beforeShellExecution and beforeMCPExecution only; beforeReadFile, preToolUse, beforeSubmitPrompt do not.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "`KNOX_PRESET=paranoid` — switches deny to ask, every block becomes a prompt",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "**Exit codes:** `0` for allow / sanitize / non-critical deny, `2` for critical block. Mirrors Claude Code's PreToolUse hook semantics.",
+          "third_hand": false
+        },
+        {
+          "source": "lib/adapter-codex.js:108",
+          "text": "(only `deny` is honored — `allow` and `ask` are parsed-then-rejected)",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "paranoid preset + headless",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "every block requires your approval",
+          "prediction": "Under -p an ask is undocumented (inferred deny); under bypass undocumented.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "paranoid preset, MCP",
+          "rule": "CU-ASK-MCP",
+          "claim_at_risk": "ask on MCP calls",
+          "prediction": "Reported unenforced for allowlisted MCP tools.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-MCP is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "Write/Edit and read hooks",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "guards writes and reads",
+          "prediction": "preToolUse and beforeReadFile entries carry no failClosed, so crash/timeout fail open.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard's error path was not read far enough to judge this row",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "non-critical deny",
+          "rule": "CX-BLOCK-OK",
+          "claim_at_risk": "non-critical blocks",
+          "prediction": "JSON deny exit 0 is a supported shape; HOLDS. Critical blocks use exit 2 plus stderr, also supported.",
+          "status": "HOLDS",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard's shape is a supported blocking shape",
+          "outcome_label": "HOLDS"
+        }
+      ],
+      "compensations": [
+        "Codex: deny only, exit 2 + stderr for critical",
+        "Cursor: failClosed on shell and MCP"
+      ],
+      "notes": "Knox's own Codex adapter comment matches CX-ASK.",
+      "ask_on": [
+        "claude",
+        "cursor"
+      ],
+      "error_posture": "not established",
+      "guarantee_wording": "strong",
+      "ask_mode": "not classified",
+      "stars": 7,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-08-10T10:20:58Z",
+      "commit_age_days_at_2026-11-01": 83,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 1,
+        "UNKNOWN": 3,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "skillgate",
+      "name": "skillgate (definition-of-done gate)",
+      "repo": "https://github.com/renezander030/skillgate",
+      "commit": "423b9c90740c51c7d89d1da1aa19be85cd62ebcd",
+      "commit_date": "2026-10-28",
+      "dir": "skillgate",
+      "found_by": "GitHub search: failClosed Cursor beforeShellExecution guard",
+      "category": "adjacent",
+      "supported": [
+        "claude",
+        "codex",
+        "copilot-cli",
+        "gemini",
+        "cursor",
+        "opencode"
+      ],
+      "study": [
+        "claude",
+        "codex",
+        "cursor",
+        "gemini"
+      ],
+      "interpreter": "node through `npx @reneza/skillgate ...` appended with ` || exit 2` (src/integrations.ts:34). Missing npx or offline triggers the exit 2 branch.",
+      "verdicts": [
+        {
+          "situation": "gate not satisfied",
+          "emission": "block on commit/push/publish via the host-specific output (--format gemini / cursor JSON)"
+        },
+        {
+          "situation": "gate cannot run (npx missing, offline)",
+          "emission": "` || exit 2`; Stop hook prints {decision:block}"
+        },
+        {
+          "situation": "no ask",
+          "emission": "never"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "Installed fail-closed: ` || exit 2` and an internal 9-minute budget inside a 10-minute host timeout; Cursor hooks written with failClosed:true; `doctor` flags hooks that would fail open.",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "Agent hooks are installed **fail-closed**: if the gate itself cannot run (npx missing, offline, registry error), the hook blocks instead of letting the command through",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "so the guarantee does not rest on a local hook",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "codex",
+          "mode": "gate fails silently",
+          "rule": "CX-EXIT2-EMPTY",
+          "claim_at_risk": "fail-closed via exit 2",
+          "prediction": "When npx is missing the shell prints a message to stderr so exit 2 blocks; a failure with no stderr is exit 2 with empty stderr, which Codex marks Failed and continues.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "gemini",
+          "mode": "gate fails silently",
+          "rule": "GM-EXIT2-EMPTY",
+          "claim_at_risk": "fail-closed via exit 2",
+          "prediction": "Source: exit 2 with no output is ALLOWED on Gemini; with command-not-found text it is predicted a deny.",
+          "status": "UNKNOWN",
+          "evidence": "MEASURED-RUNNER-LAYER",
+          "status_basis": "rule GM-EXIT2-EMPTY is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "fail-closed",
+          "prediction": "The `|| exit 2` guard converts missing-tool failures to exit 2, which holds; a harness timeout is still non-blocking, hence the internal 9-minute budget.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "untrusted hook",
+          "rule": "CX-TRUST",
+          "claim_at_risk": "installed hook enforces",
+          "prediction": "Skipped until trusted; `doctor` checks `[features] hooks = false` but not trust state.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is mixed: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "compensations": [
+        "|| exit 2 and failClosed:true for fail-closed on the guard's own failure",
+        "internal budget below the host timeout"
+      ],
+      "notes": "Not a command-pattern guard: a completion gate. Included because it is a published fail-closed hook installer for all four harnesses. Re-categorised as adjacent after review: a definition-of-done gate; its own note says so.",
+      "ask_on": [],
+      "error_posture": "fail-closed (|| exit 2, failClosed:true)",
+      "guarantee_wording": "mixed",
+      "ask_mode": "none",
+      "stars": 8,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-10-28T13:08:06Z",
+      "commit_age_days_at_2026-11-01": 4,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 4,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "claude-codex-settings",
+      "name": "claude-codex-settings (fcakyon)",
+      "repo": "https://github.com/fcakyon/claude-codex-settings",
+      "commit": "0dbec38410c6d9bcc39d0a6f4d76dc2f1de32f35",
+      "commit_date": "2026-10-31",
+      "dir": "claude-codex-settings",
+      "found_by": "GitHub search: Codex CLI PreToolUse hook guard (PR #156)",
+      "category": "adjacent",
+      "supported": [
+        "claude",
+        "codex"
+      ],
+      "study": [
+        "claude",
+        "codex"
+      ],
+      "interpreter": "Python 3 scripts (`#!/usr/bin/env python3`, executable bit set) run directly from hooks.json, e.g. ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/block_force_push.py.",
+      "verdicts": [
+        {
+          "situation": "force-push / rebase",
+          "emission": "JSON permissionDecision deny, exit 0"
+        },
+        {
+          "situation": "git commit, gh pr create",
+          "emission": "permissionDecision ask (confirm hooks)"
+        },
+        {
+          "situation": "invalid JSON input",
+          "emission": "stderr + exit 1 (non-blocking)"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "git_commit_confirm.py exits 1 on invalid JSON (non-blocking). Others not read in full.",
+      "quotes": [
+        {
+          "source": "GitHub PR fcakyon/claude-codex-settings#156 (text from search result, not in the clone)",
+          "text": "Adds a PreToolUse hook that auto-allows safe Bash commands and flags dangerous ones (rm, kill, git push, git reset, subprocess, etc.) for manual review before running",
+          "third_hand": true
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "headless (-p)",
+          "rule": "CC-ASK-HEADLESS",
+          "claim_at_risk": "commit/PR confirm via ask",
+          "prediction": "No human under -p; outcome undocumented.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CC-ASK-HEADLESS is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "non-executable file",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "block force push",
+          "prediction": "The command is a bare script path; if the exec bit is lost the hook is a non-blocking failure (reported in anthropics/claude-code#94362).",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "guard-level wording is not rated: needs a per-row reading",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "codex",
+          "mode": "ask-based confirms",
+          "rule": "CX-ASK",
+          "claim_at_risk": "confirm before commit/PR on Codex",
+          "prediction": "If the same ask-emitting scripts are used on Codex the ask is Failed and the call continues. PR #156 says a safety hook was added to Codex settings, but no such file was found at HEAD by filename grep.",
+          "status": "NOT-APPLICABLE",
+          "evidence": "PREDICTED",
+          "status_basis": "the Codex file the PR mentions was not found",
+          "outcome_label": "NOT-APPLICABLE"
+        }
+      ],
+      "notes": "Marked adjacent: workflow confirmation more than a security control. Kept because it is a clear ask-emitting plugin pair for Claude and Codex.",
+      "ask_on": [
+        "claude"
+      ],
+      "error_posture": "unhandled: exit 1 on invalid input",
+      "guarantee_wording": "not rated",
+      "ask_mode": "not classified",
+      "stars": 1194,
+      "repo_stars_note": "repo-level count (the guard is one plugin inside a larger repository)",
+      "repo_pushed_at": "2026-10-31T10:33:33Z",
+      "commit_age_days_at_2026-11-01": 1,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 2,
+        "NOT-APPLICABLE": 1
+      }
+    },
+    {
+      "id": "riphook",
+      "name": "Riphook (merciagents)",
+      "repo": "https://github.com/merciagents/riphook",
+      "commit": "4683e4f8931d009a63dc71972b40dfdabb7dfb89",
+      "commit_date": "2026-02-05",
+      "dir": "riphook",
+      "found_by": "GitHub search: ggshield secret scan hook Claude Code Cursor",
+      "category": "security",
+      "supported": [
+        "cursor",
+        "claude",
+        "openclaw"
+      ],
+      "study": [
+        "claude",
+        "cursor"
+      ],
+      "interpreter": "node (`node dist/cursor/entry.js`, `node dist/claude/entry.js`) written into ~/.cursor/hooks.json and ~/.claude/settings.json by an install script that is fetched via curl|bash.",
+      "verdicts": [
+        {
+          "situation": "block",
+          "emission": "Cursor: exit 2 plus permission deny; permission map allow, block->deny, warn->allow, ask->ask"
+        },
+        {
+          "situation": "Claude",
+          "emission": "hookSpecificOutput.permissionDecision (value set in logic.ts:28)"
+        },
+        {
+          "situation": "ask",
+          "emission": "emitted for Cursor beforeReadFile / beforeShellExecution / beforeMCPExecution when action=ask"
+        }
+      ],
+      "ask_to_harness": true,
+      "own_error": "Not read in full. Known limitations listed in README (agent crash may skip stop-time scans).",
+      "quotes": [
+        {
+          "source": "README",
+          "text": "Hooks are **deterministic enforcement**: they intercept tool calls, reads, and outputs and can block actions regardless of what the prompt says.",
+          "third_hand": false
+        },
+        {
+          "source": "README",
+          "text": "Cursor Read File hooks are not always fired properly",
+          "third_hand": false
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "cursor",
+          "mode": "MCP / read ask",
+          "rule": "CU-ASK-MCP",
+          "claim_at_risk": "ask on beforeMCPExecution",
+          "prediction": "Reported unenforced for allowlisted MCP tools.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "rule CU-ASK-MCP is unverified, conditional or rests on a pilot or forum report",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "cursor",
+          "mode": "crash / timeout",
+          "rule": "CU-FAILCLOSED",
+          "claim_at_risk": "deterministic enforcement",
+          "prediction": "Install writes {command, args} entries; no failClosed found by grep in README/src quick pass (only partially read).",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard's error path was not read far enough to judge this row",
+          "outcome_label": "UNKNOWN"
+        },
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-FAILOPEN",
+          "claim_at_risk": "deterministic enforcement",
+          "prediction": "Harness default is fail-open; no onFailure found.",
+          "status": "UNKNOWN",
+          "evidence": "PREDICTED",
+          "status_basis": "the guard's error path was not read far enough to judge this row",
+          "outcome_label": "UNKNOWN"
+        }
+      ],
+      "notes": "Only partly read (README, cursor/logic.ts, grep of src).",
+      "ask_on": [
+        "cursor"
+      ],
+      "error_posture": "not established",
+      "guarantee_wording": "strong",
+      "ask_mode": "not classified",
+      "stars": 45,
+      "repo_stars_note": "",
+      "repo_pushed_at": "2026-02-05T22:16:56Z",
+      "commit_age_days_at_2026-11-01": 269,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 3,
+        "NOT-APPLICABLE": 0
+      }
+    },
+    {
+      "id": "rtk",
+      "name": "RTK rewrite hook",
+      "repo": "https://github.com/rtk-ai/rtk",
+      "commit": "954c3371d4efa9e650f84002d4b3a0a67f97eaa7",
+      "commit_date": "2026-10-31",
+      "dir": "rtk",
+      "found_by": "GitHub search: PreToolUse permissionDecision (issues #260, #576)",
+      "category": "adjacent",
+      "supported": [
+        "claude",
+        "codex",
+        "cursor",
+        "copilot",
+        "gemini?",
+        "opencode",
+        "others"
+      ],
+      "study": [
+        "claude"
+      ],
+      "interpreter": "`rtk-rewrite.sh` (bash) calling the `rtk rewrite` Rust binary; exit-code protocol 0/1/2/3 from the binary.",
+      "verdicts": [
+        {
+          "situation": "no deny/ask rule matched",
+          "emission": "rewrite command with permissionDecision \"allow\""
+        },
+        {
+          "situation": "deny rule matched",
+          "emission": "pass through unchanged (Claude Code's native deny handles it)"
+        },
+        {
+          "situation": "ask rule matched",
+          "emission": "rewrite WITHOUT permissionDecision so Claude Code prompts"
+        }
+      ],
+      "ask_to_harness": false,
+      "own_error": "Older binaries: warn once and exit 0. Passthrough on missing binary.",
+      "quotes": [
+        {
+          "source": "GitHub PR rtk-ai/rtk#576 (text from search result, not in the clone)",
+          "text": "The `PreToolUse` hook (`rtk-rewrite.sh`) was emitting `permissionDecision: \"allow\"` on **every** rewritten command, silently bypassing deny and ask rules defined in `.claude/settings.json`.",
+          "third_hand": true
+        }
+      ],
+      "gaps": [
+        {
+          "harness": "claude",
+          "mode": "any",
+          "rule": "CC-ALLOW-SCOPE",
+          "claim_at_risk": "hook allow on a rewritten command",
+          "prediction": "Per docs a hook allow does not skip deny/ask rules; the PR describes an earlier build where it was believed to. After the fix it only allows when no rule matched.",
+          "status": "NOT-APPLICABLE",
+          "evidence": "PREDICTED",
+          "status_basis": "an earlier build was fixed in PR #576; kept as a note",
+          "outcome_label": "NOT-APPLICABLE"
+        }
+      ],
+      "notes": "Not a security guard: a token-saving rewriter that delegates permission decisions. Adjacent. Included because it is the clearest example of a hook `allow` interacting with deny/ask rules.",
+      "ask_on": [],
+      "error_posture": "passthrough / fail-open",
+      "guarantee_wording": "not rated",
+      "ask_mode": "none",
+      "stars": 85142,
+      "repo_stars_note": "repo-level count (the guard is one plugin inside a larger repository)",
+      "repo_pushed_at": "2026-10-31T21:59:54Z",
+      "commit_age_days_at_2026-11-01": 1,
+      "rows_by_status": {
+        "CONTRADICTS-GUARD-CLAIM": 0,
+        "DOCUMENTED-BY-GUARD": 0,
+        "HOLDS-BY-ACCIDENT": 0,
+        "HOLDS": 0,
+        "UNKNOWN": 0,
+        "NOT-APPLICABLE": 1
+      }
+    }
+  ],
+  "excluded": [
+    {
+      "name": "lasso-security/claude-hooks",
+      "repo": "https://github.com/lasso-security/claude-hooks",
+      "commit": "8fbfd14c2a2271fe58a95c416b3b31880458c7bc",
+      "reason": "PostToolUse prompt-injection scanner that warns and never blocks (README: 'The defender warns but does not block'). No PreToolUse verdict."
+    },
+    {
+      "name": "anthropics/claude-plugins-official: security-guidance plugin",
+      "repo": "https://github.com/anthropics/claude-plugins-official",
+      "commit": "a7ba5b93db0c7c8d17f3f1d25853adca79598a1a",
+      "reason": "Registers only SessionStart, UserPromptSubmit, PostToolUse and Stop (hooks.json); no PreToolUse verdict. README: 'a best-effort assistive tool, not a guarantee'."
+    },
+    {
+      "name": "AgentsID-dev/cursor-plugin",
+      "repo": "https://github.com/AgentsID-dev/cursor-plugin",
+      "commit": "dcbabfa6ac2ea2c0574d57faeb9b6f0373b1f933",
+      "reason": "The repo holds only plugin.json, an .mdc rule and a README; no hook code to read. Its README says the plugin ships beforeShellExecution, beforeMCPExecution and beforeReadFile hooks with failClosed:true, so that claim is unchecked."
+    }
+  ],
+  "not_cloned": [
+    "pkg-guard (Gemini CLI BeforeTool hook, mentioned in google-gemini/gemini-cli discussion 29954): found, not cloned.",
+    "ArmorGemini / ArmorIQ (Piebald-AI/awesome-gemini-cli list): found, not cloned.",
+    "kontext-dev/kontext-cli (Cursor managed hooks, merged PR 632): found, not cloned.",
+    "1password/cursor-hooks: validation hooks rather than a security guard; not cloned.",
+    "wyattowalsh/agents hook-registry (cursor-before-shell-execution-guard), JackMBurch-style single-script repos, getaxonflow Claude plugin, nousresearch/hermes-agent shell hooks, qwen-code hook aggregator: found, not cloned (budget).",
+    "Anthropic's own terrylica/cc-skills and yurukusa/cc-safe-setup siblings: only cc-safe-setup was cloned."
+  ]
+}

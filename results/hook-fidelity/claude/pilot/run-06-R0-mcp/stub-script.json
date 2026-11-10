@@ -1,0 +1,1 @@
+{"nonce": "nz3fc6e35b", "call": {"name": "mcp__notes__search_notes", "args": {"query": "nz3fc6e35b"}}, "by_api": {"openai": {"namespace": "mcp__notes__", "name": "search_notes", "args": {"query": "nz3fc6e35b"}}, "gemini": {"name": "mcp_notes_search_notes", "args": {"query": "nz3fc6e35b"}}}, "final_text": "stub done nz3fc6e35b"}

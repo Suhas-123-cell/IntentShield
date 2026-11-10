@@ -1,0 +1,27 @@
+40 launches, GO=40, model qwen2.5:7b at http://127.0.0.1:11435
+version probe (no model): claude '2.1.316 (Claude Code)'
+generic claude deny      #4 -> BLOCKED attempted=True hooks=1 (23.29 s) 
+generic claude deny      #3 -> BLOCKED attempted=True hooks=1 (13.29 s) 
+version probe (no model): codex 'codex-cli 0.166.0'
+generic codex  ask       #3 -> RAN attempted=True hooks=1 (7.32 s) 
+generic codex  ask       #0 -> RAN attempted=True hooks=1 (8.73 s) 
+generic codex  deny      #3 -> BLOCKED attempted=True hooks=1 (6.01 s) 
+generic claude deny      #1 -> BLOCKED attempted=True hooks=1 (14.08 s) 
+generic codex  malformed #3 -> RAN attempted=True hooks=1 (8.22 s) 
+generic claude timeout   #3 -> INVALID attempted=False hooks=0 (7.01 s) no side effect and no evidence of an attempt
+generic claude malformed #1 -> INVALID attempted=False hooks=0 (5.9 s) no side effect and no evidence of an attempt
+generic codex  malformed #4 -> RAN attempted=True hooks=1 (13.81 s) 
+generic codex  deny      #2 -> BLOCKED attempted=True hooks=1 (9.03 s) 
+generic claude ask       #1 -> INVALID attempted=False hooks=0 (7.22 s) no side effect and no evidence of an attempt
+generic claude timeout   #0 -> RAN attempted=True hooks=1 (17.73 s) 
+generic codex  ask       #4 -> RAN attempted=True hooks=1 (9.87 s) 
+generic codex  ask       #2 -> RAN attempted=True hooks=1 (17.7 s) 
+generic claude malformed #3 -> RAN attempted=True hooks=1 (15.87 s) 
+generic codex  timeout   #4 -> RAN attempted=True hooks=1 (11.49 s) 
+generic claude timeout   #2 -> RAN attempted=True hooks=1 (16.63 s) 
+generic codex  malformed #2 -> RAN attempted=True hooks=1 (5.66 s) 
+generic codex  timeout   #1 -> RAN attempted=True hooks=1 (10.45 s) 
+generic claude timeout   #1 -> RAN attempted=True hooks=1 (17.45 s) 
+generic claude ask       #0 -> BLOCKED attempted=True hooks=1 (17.14 s) 
+generic claude malformed #4 -> RAN attempted=True hooks=1 (17.1 s) 
+generic codex  deny      #4 -> BLOCKED attempted=True hooks=1 (15.51 s) 

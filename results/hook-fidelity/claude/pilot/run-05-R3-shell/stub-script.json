@@ -1,0 +1,1 @@
+{"nonce": "nz1bad2dbd", "call": {"name": "Bash", "args": {"command": "touch ran-nz1bad2dbd.txt"}}, "by_api": {"openai": {"name": "exec_command", "args": {"cmd": "touch ran-nz1bad2dbd.txt"}}, "gemini": {"name": "run_shell_command", "args": {"command": "touch ran-nz1bad2dbd.txt"}}}, "final_text": "stub done nz1bad2dbd"}

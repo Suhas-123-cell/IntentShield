@@ -1,0 +1,350 @@
+{
+ "claude-2.1.316": {
+  "allow": {
+   "arms": [],
+   "counts": {},
+   "outcome": "RAN",
+   "source": "an allow lets the call run"
+  },
+  "ask": {
+   "arms": [
+    "IS-OFF",
+    "railway-guard"
+   ],
+   "counts": {
+    "BLOCKED": 4
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS-OFF",
+    "block-no-verify",
+    "cc-safe-setup",
+    "railway-guard",
+    "safety-net"
+   ],
+   "counts": {
+    "BLOCKED": 5
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [
+    "block-no-verify",
+    "cc-safe-setup"
+   ],
+   "counts": {
+    "BLOCKED": 4
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "error": {
+   "arms": [
+    "cc-safe-setup"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  }
+ },
+ "claude-2.1.316-interactive": {
+  "allow": {
+   "arms": [
+    "IS hook allow, interactive pty"
+   ],
+   "counts": {
+    "RAN-NO-PROMPT": 1
+   },
+   "outcome": "RAN",
+   "source": "interactive/runs.jsonl"
+  },
+  "ask": {
+   "arms": [
+    "IS hook ask, interactive pty; rows where the detector was blind (round 6) left out"
+   ],
+   "counts": {
+    "PROMPT-DENIED": 4
+   },
+   "note": "a prompt with the hook's text appeared and the scripted answerer pressed Esc (call ran 0/n); a real person was not measured",
+   "outcome": "PROMPT",
+   "source": "interactive/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS hook deny, interactive pty"
+   ],
+   "counts": {
+    "BLOCKED-NO-PROMPT": 2
+   },
+   "outcome": "BLOCKED",
+   "source": "interactive/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [],
+   "assumed": true,
+   "counts": {},
+   "outcome": "BLOCKED",
+   "source": "ASSUMED from the headless 2.1.316 exit2empty cell"
+  },
+  "error": {
+   "arms": [],
+   "assumed": true,
+   "counts": {},
+   "outcome": "RAN",
+   "source": "ASSUMED from the headless 2.1.316 crash cell: no failure cell was run interactively"
+  }
+ },
+ "claude-2.1.84": {
+  "allow": {
+   "arms": [],
+   "counts": {},
+   "outcome": "RAN",
+   "source": "an allow lets the call run"
+  },
+  "ask": {
+   "arms": [
+    "IS-OFF",
+    "railway-guard"
+   ],
+   "counts": {
+    "RAN": 4
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS-OFF",
+    "block-no-verify",
+    "cc-safe-setup",
+    "railway-guard",
+    "safety-net"
+   ],
+   "counts": {
+    "BLOCKED": 5
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [],
+   "counts": {},
+   "outcome": "UNMEASURED",
+   "source": "compare/runs.jsonl"
+  },
+  "error": {
+   "arms": [
+    "cc-safe-setup"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  }
+ },
+ "codex-0.166.0": {
+  "allow": {
+   "arms": [],
+   "counts": {},
+   "outcome": "RAN",
+   "source": "an allow lets the call run"
+  },
+  "ask": {
+   "arms": [
+    "railway-guard@codex"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS-OFF",
+    "axonflow-codex",
+    "safety-net"
+   ],
+   "counts": {
+    "BLOCKED": 3
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [
+    "axonflow-codex"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  },
+  "error": {
+   "arms": [
+    "axonflow-codex"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  }
+ },
+ "gemini-0.37.1-yolo": {
+  "allow": {
+   "arms": [],
+   "counts": {},
+   "outcome": "RAN",
+   "source": "an allow lets the call run"
+  },
+  "ask": {
+   "arms": [
+    "IS-OFF",
+    "stub-ask"
+   ],
+   "counts": {
+    "RAN": 3
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS-OFF",
+    "block-no-verify",
+    "gemini-intrupt-hook",
+    "safety-net"
+   ],
+   "counts": {
+    "BLOCKED": 4
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [],
+   "counts": {},
+   "outcome": "UNMEASURED",
+   "source": "compare/runs.jsonl"
+  },
+  "error": {
+   "arms": [
+    "gemini-intrupt-hook"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  }
+ },
+ "gemini-0.66.0-allow": {
+  "allow": {
+   "arms": [],
+   "counts": {},
+   "outcome": "RAN",
+   "source": "an allow lets the call run"
+  },
+  "ask": {
+   "arms": [
+    "IS-OFF",
+    "stub-ask"
+   ],
+   "counts": {
+    "HUNG": 3
+   },
+   "outcome": "HUNG",
+   "source": "compare/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS-OFF",
+    "block-no-verify",
+    "gemini-intrupt-hook",
+    "safety-net"
+   ],
+   "counts": {
+    "BLOCKED": 4
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [],
+   "counts": {},
+   "outcome": "UNMEASURED",
+   "source": "compare/runs.jsonl"
+  },
+  "error": {
+   "arms": [
+    "gemini-intrupt-hook"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  }
+ },
+ "gemini-0.66.0-yolo": {
+  "allow": {
+   "arms": [],
+   "counts": {},
+   "outcome": "RAN",
+   "source": "an allow lets the call run"
+  },
+  "ask": {
+   "arms": [
+    "IS-OFF",
+    "stub-ask"
+   ],
+   "counts": {
+    "HUNG": 3
+   },
+   "outcome": "HUNG",
+   "source": "compare/runs.jsonl"
+  },
+  "deny": {
+   "arms": [
+    "IS-OFF",
+    "block-no-verify",
+    "gemini-intrupt-hook",
+    "safety-net"
+   ],
+   "counts": {
+    "BLOCKED": 4
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "deny-exit2-empty": {
+   "arms": [
+    "block-no-verify"
+   ],
+   "counts": {
+    "BLOCKED": 2
+   },
+   "outcome": "BLOCKED",
+   "source": "compare/runs.jsonl"
+  },
+  "error": {
+   "arms": [
+    "gemini-intrupt-hook"
+   ],
+   "counts": {
+    "RAN": 2
+   },
+   "outcome": "RAN",
+   "source": "compare/runs.jsonl"
+  }
+ }
+}

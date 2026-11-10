@@ -1,0 +1,140 @@
+{
+ "lane": "r4-gaps",
+ "branch": "r4-gaps",
+ "arm": "S (local stub model, 127.0.0.1, fake key, isolated HOME per run)",
+ "paid_spend_usd": 0,
+ "deepseek": false,
+ "cursor": false,
+ "cap": 150,
+ "invocations": [
+  {
+   "invocation": "codex r4_persisted",
+   "results": "results/hook-fidelity/codex/r4-gaps",
+   "HOOK_FIDELITY_GO_planned": 24,
+   "exec_runs_actual": 24,
+   "app_server_hooks_list": 24,
+   "version_probes": 17
+  },
+  {
+   "invocation": "codex r4_r0",
+   "results": "results/hook-fidelity/codex/r4-gaps",
+   "HOOK_FIDELITY_GO_planned": 15,
+   "exec_runs_actual": 15,
+   "app_server_hooks_list": 0,
+   "version_probes": 0
+  },
+  {
+   "invocation": "codex nojson-debug (r4_variant)",
+   "results": "results/hook-fidelity/codex/r4-gaps/nojson-debug",
+   "HOOK_FIDELITY_GO_planned": 2,
+   "exec_runs_actual": 2,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "gemini smoke (r4_variant)",
+   "results": "results/hook-fidelity/gemini/r4-gaps/smoke",
+   "HOOK_FIDELITY_GO_planned": 5,
+   "exec_runs_actual": 5,
+   "app_server_hooks_list": 0,
+   "version_probes": 5
+  },
+  {
+   "invocation": "gemini main (r4_variant)",
+   "results": "results/hook-fidelity/gemini/r4-gaps/main",
+   "HOOK_FIDELITY_GO_planned": 30,
+   "exec_runs_actual": 30,
+   "app_server_hooks_list": 0,
+   "version_probes": 5
+  },
+  {
+   "invocation": "claude onfailure",
+   "results": "results/hook-fidelity/claude/r4-gaps/onfailure",
+   "HOOK_FIDELITY_GO_planned": 8,
+   "exec_runs_actual": 8,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "claude bisect 2.1.78",
+   "results": "results/hook-fidelity/claude/r4-gaps/bisect",
+   "HOOK_FIDELITY_GO_planned": 6,
+   "exec_runs_actual": 6,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "claude bisect 2.1.83",
+   "results": "results/hook-fidelity/claude/r4-gaps/bisect",
+   "HOOK_FIDELITY_GO_planned": 6,
+   "exec_runs_actual": 6,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "claude bisect 2.1.86",
+   "results": "results/hook-fidelity/claude/r4-gaps/bisect",
+   "HOOK_FIDELITY_GO_planned": 6,
+   "exec_runs_actual": 6,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "claude bisect 2.1.84",
+   "results": "results/hook-fidelity/claude/r4-gaps/bisect",
+   "HOOK_FIDELITY_GO_planned": 6,
+   "exec_runs_actual": 6,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "claude bisect 2.1.85",
+   "results": "results/hook-fidelity/claude/r4-gaps/bisect",
+   "HOOK_FIDELITY_GO_planned": 6,
+   "exec_runs_actual": 6,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  },
+  {
+   "invocation": "claude permissionrequest (r4_variant)",
+   "results": "results/hook-fidelity/claude/r4-gaps/permissionrequest",
+   "HOOK_FIDELITY_GO_planned": 3,
+   "exec_runs_actual": 3,
+   "app_server_hooks_list": 0,
+   "version_probes": 1
+  }
+ ],
+ "totals": {
+  "exec_runs": 117,
+  "app_server_hooks_list_launches": 24,
+  "harness_launches_runs_plus_app_server": 141,
+  "version_probes": 35,
+  "every_binary_start": 176,
+  "note": "HOOK_FIDELITY_GO counted the planned exec runs of each invocation and equals the actual number in all 12 invocations; the runner does not count the app-server hooks/list launch of a persisted-trust run against GO, nor --version probes. Counting runs plus app-server launches the total is 141 of 150; counting every binary start including the --version probes it is above the cap of 150 (the probes make no model call and run no hook)."
+ },
+ "not_in_rows": {
+  "claude_installs": "17 releases 2.1.70 to 2.1.87 installed with npm --ignore-scripts (no CLI launch); 5 were run",
+  "manual_cli_launches": 0
+ },
+ "egress": {
+  "codex_proxy_log_lines": 0,
+  "claude_gemini_sandbox": "loopback-only sandbox-exec on all 76 claude and gemini rows",
+  "egress_attempts_in_rows": 0
+ },
+ "home_snapshot": {
+  "method": "find ~/.claude ~/.codex ~/.gemini ~/.cursor -exec stat -f '%m %N' before the first and after the last launch (68025 and 68028 entries)",
+  "changed_entries_by_area": {
+   ".claude": 2,
+   ".claude/file-history": 3,
+   ".claude/policy-limits.json.signature.json": 2,
+   ".claude/policy-limits.json.stamp.json": 2,
+   ".claude/projects": 26,
+   ".claude/remote-settings.json": 2,
+   ".claude/remote-settings.json.signature.json": 2,
+   ".claude/remote-settings.json.synced-at": 2,
+   ".claude/skills": 6
+  },
+  "codex_gemini_cursor_changed_entries": 0,
+  "claude_note": "All ~/.claude changes are the live orchestrating Claude Code session itself (its transcript, subagent transcripts, file-history, memory directory, remote-settings and policy-limits sync, synced skills); no run of this lane used the real HOME or CLAUDE_CONFIG_DIR (home_isolated true on every row). The two cannot be separated by mtime alone, so this is an attribution, not a proof."
+ }
+}

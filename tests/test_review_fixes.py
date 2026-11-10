@@ -66,7 +66,7 @@ def test_install_owns_only_its_own_handler(tmp_path: Path):
     stale = {"type": "command", "command": "/old/venv/bin/intentshield-hook claude", "onFailure": "block"}
     path.write_text(json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mention]},
                                                           {"matcher": "mcp__.*", "hooks": [audit, stale]}]}}))
-    install.install("claude", "user", hook="/new/bin/intentshield-hook", home=home)
+    install.install("claude", "user", hook="/new/bin/intentshield-hook", home=home, translate=False)
     pre = json.loads(path.read_text())["hooks"]["PreToolUse"]
     commands = [h["command"] for g in pre for h in g["hooks"]]
     assert "/old/venv/bin/intentshield-hook claude" not in commands  # the stale path was repaired
@@ -81,10 +81,10 @@ def test_codex_block_is_escaped_quoted_and_replaced(tmp_path: Path):
     home = tmp_path / "home"
     import shlex
     windows = r"C:\\Users\\a\\Scripts\\intentshield-hook.exe"
-    path = install.install("codex", "user", hook=windows, home=home)
+    path = install.install("codex", "user", hook=windows, home=home, translate=False)
     command = tomllib.loads(path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert shlex.split(command) == [windows, "codex"]  # the TOML string and the shell quoting both round-trip
-    install.install("codex", "user", hook="/opt/my tools/intentshield-hook", home=home)
+    install.install("codex", "user", hook="/opt/my tools/intentshield-hook", home=home, translate=False)
     parsed = tomllib.loads(path.read_text())
     assert parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "'/opt/my tools/intentshield-hook' codex"
     assert path.read_text().count(install._TOML_BEGIN) == 1
@@ -232,7 +232,7 @@ def test_install_with_a_hosted_judge_asks_for_the_key_once_and_the_hook_reads_it
     home = tmp_path / "home"
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     asked = []
-    path = install.install("claude", "user", hook="intentshield-hook", home=home, judge="groq",
+    path = install.install("claude", "user", hook="intentshield-hook", home=home, judge="groq", translate=False,
                            ask=lambda prompt: asked.append(prompt) or "gsk_test_key")
     assert asked and "never printed" in asked[0]
     env = home / ".intentshield" / ".env"

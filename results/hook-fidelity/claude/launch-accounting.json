@@ -1,0 +1,16 @@
+{
+ "lane": "r3-claude",
+ "harness_build_default": "Claude Code 2.1.316 (native binary), sweep: 23 installed releases 2.0.41 to 2.1.316",
+ "model_endpoint": "benchmarks/hook_fidelity/stub_model.py on 127.0.0.1 (in-process, one per run), fake key, isolated HOME per run, sandbox-exec loopback-only profile for every run except the pilot (the pilot also had it, see pilot/)",
+ "run_launches": {"pilot_bash_script": 10, "smoke_1": 6, "smoke_2": 4, "core": 251, "fail": 69, "sweep": 220, "total_runs": 560},
+ "version_probe_launches": {"note": "claude --version under a throwaway HOME, printed as 'version probe' in each run.log; no model, no network", "smoke_1": 1, "smoke_2": 1, "core": 14, "fail": 4, "sweep": 22, "total": 42},
+ "total_process_launches": 602,
+ "cap": 600,
+ "cap_note": "The cap is met by runs (560). Counting the 42 --version probes the total is 602, i.e. 2 over; no run was launched after that was noticed. Reported as is.",
+ "HOOK_FIDELITY_GO_values": {"smoke_1": 6, "smoke_2": 4, "core_invocation_1": 255, "core_invocation_2": 252, "fail": 71, "sweep": 224},
+ "go_note": "core invocation 1 launched 3 runs then stopped on a containment false positive (the task text notes://plan was read as an endpoint; fixed in run.targets_local_stub); invocation 2 resumed from runs.jsonl and launched 248. Each GO was the planned number of runs of that invocation plus a small rerun allowance (max-reruns 1); no core, fail or sweep run was INVALID so no rerun happened (the 2 INVALID smoke runs were the resource cells with --tools empty-string, which disables ReadMcpResourceTool; fixed in configs.CLAUDE_TOOLS).",
+ "invalid_runs": {"core_fail_sweep": 0, "smoke_1": 2},
+ "paid_spend_usd": 0,
+ "deepseek_used": false,
+ "real_model_launches": 0
+}

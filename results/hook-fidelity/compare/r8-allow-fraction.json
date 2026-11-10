@@ -1,0 +1,324 @@
+{
+ "source": "results/hook-fidelity/guards/captures.jsonl, scenario 'benign', classified by intentshield.wrap_hook.classify",
+ "all_shapes": {
+  "n": 21,
+  "silent": 12,
+  "explicit_allow": 5,
+  "guard_denied_or_failed": 4,
+  "allows": 17,
+  "allows_blocked_by_default": 12,
+  "allows_blocked_by_on_empty_allow": 0,
+  "silent_fail_open": 1
+ },
+ "claude_codex_gemini_shapes": {
+  "n": 18,
+  "silent": 12,
+  "explicit_allow": 3,
+  "guard_denied_or_failed": 3,
+  "allows": 15,
+  "allows_blocked_by_default": 12,
+  "allows_blocked_by_on_empty_allow": 0,
+  "silent_fail_open": 1
+ },
+ "by_pair_claude_codex_gemini": {
+  "shapes": [
+   "claude",
+   "codex",
+   "gemini"
+  ],
+  "pairs": 9,
+  "allow_pairs": 9,
+  "silent_allow_pairs": 6,
+  "silent_allow_pairs_excluding_fail_open": 5,
+  "allow_pairs_excluding_fail_open": 8,
+  "list": [
+   {
+    "guard": "axonflow-codex",
+    "shape": "codex",
+    "kinds": [
+     "guard-denied-or-failed",
+     "silent"
+    ],
+    "fail_open": true
+   },
+   {
+    "guard": "block-no-verify",
+    "shape": "claude",
+    "kinds": [
+     "explicit-allow"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "block-no-verify",
+    "shape": "gemini",
+    "kinds": [
+     "explicit-allow"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "cc-safe-setup",
+    "shape": "claude",
+    "kinds": [
+     "silent"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "gemini-intrupt-hook",
+    "shape": "gemini",
+    "kinds": [
+     "explicit-allow",
+     "guard-denied-or-failed"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "railway-guard",
+    "shape": "claude",
+    "kinds": [
+     "silent"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "safety-net",
+    "shape": "claude",
+    "kinds": [
+     "silent"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "safety-net",
+    "shape": "codex",
+    "kinds": [
+     "silent"
+    ],
+    "fail_open": false
+   },
+   {
+    "guard": "safety-net",
+    "shape": "gemini",
+    "kinds": [
+     "silent"
+    ],
+    "fail_open": false
+   }
+  ]
+ },
+ "items": [
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "core-rm-guard",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "core-git-guard",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "core-credential-in-command",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "example-secret-file-read-guard",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "example-powershell-remove-item-guard (ask by default)",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "example-memory-write-guard (ask, opt-in)",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "cc-safe-setup",
+   "shape": "claude",
+   "entry": "example-mcp-tool-guard (ask, opt-in)",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "safety-net",
+   "shape": "claude",
+   "entry": "cc-safety-net hook --coding-cli",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "safety-net",
+   "shape": "codex",
+   "entry": "cc-safety-net hook --codex",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "safety-net",
+   "shape": "cursor",
+   "entry": "cc-safety-net hook --cursor",
+   "exit": 0,
+   "kind": "guard-denied-or-failed",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "deny"
+  },
+  {
+   "guard": "safety-net",
+   "shape": "gemini",
+   "entry": "cc-safety-net hook --gemini-cli",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "railway-guard",
+   "shape": "claude",
+   "entry": "hooks/railway-guard.sh",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "axonflow-codex",
+   "shape": "codex",
+   "entry": "pre-tool-check.sh / policy server unreachable (documented fa",
+   "exit": 0,
+   "kind": "silent",
+   "fail_open": true,
+   "deny_default": "deny",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "axonflow-codex",
+   "shape": "codex",
+   "entry": "pre-tool-check.sh / local free-tier throttle active (guard's",
+   "exit": 2,
+   "kind": "guard-denied-or-failed",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "deny"
+  },
+  {
+   "guard": "gemini-intrupt-hook",
+   "shape": "gemini",
+   "entry": "hook.py / default env, no AEGMIS_API_KEY",
+   "exit": 0,
+   "kind": "guard-denied-or-failed",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "deny"
+  },
+  {
+   "guard": "gemini-intrupt-hook",
+   "shape": "gemini",
+   "entry": "hook.py / AEGMIS_FORWARD_ALL=false (local risk filter)",
+   "exit": 0,
+   "kind": "explicit-allow",
+   "fail_open": false,
+   "deny_default": "allow",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "gemini-intrupt-hook",
+   "shape": "gemini",
+   "entry": "hook.py / key set, approval service unreachable",
+   "exit": 0,
+   "kind": "guard-denied-or-failed",
+   "fail_open": false,
+   "deny_default": "deny",
+   "on_empty_allow": "deny"
+  },
+  {
+   "guard": "block-no-verify",
+   "shape": "claude",
+   "entry": "dist/cli.js (polyhook SDK)",
+   "exit": 0,
+   "kind": "explicit-allow",
+   "fail_open": false,
+   "deny_default": "allow",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "block-no-verify",
+   "shape": "cursor",
+   "entry": "dist/cli.js (polyhook SDK)",
+   "exit": 0,
+   "kind": "explicit-allow",
+   "fail_open": false,
+   "deny_default": "allow",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "block-no-verify",
+   "shape": "cursor-pre",
+   "entry": "dist/cli.js (polyhook SDK)",
+   "exit": 0,
+   "kind": "explicit-allow",
+   "fail_open": false,
+   "deny_default": "allow",
+   "on_empty_allow": "allow"
+  },
+  {
+   "guard": "block-no-verify",
+   "shape": "gemini",
+   "entry": "dist/cli.js (polyhook SDK)",
+   "exit": 0,
+   "kind": "explicit-allow",
+   "fail_open": false,
+   "deny_default": "allow",
+   "on_empty_allow": "allow"
+  }
+ ],
+ "note": "captures of one guard share bytes and are not independent items; (guard, shape) pairs are a convenience sample of the corpus, so the intervals are descriptive only"
+}

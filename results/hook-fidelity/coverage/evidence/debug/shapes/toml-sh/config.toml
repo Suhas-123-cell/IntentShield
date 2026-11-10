@@ -1,0 +1,21 @@
+check_for_update_on_startup = false
+model = "stub-model"
+model_provider = "stub"
+approval_policy = "never"
+[model_providers.stub]
+name = "stub"
+base_url = "http://127.0.0.1:54810/v1"
+env_key = "STUB_API_KEY"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+[[hooks.SessionStart]]
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "/bin/sh -c 'cat >> <SCRATCH>/r3/exp/toml-sh/sh-hit.txt; echo >> <SCRATCH>/r3/exp/toml-sh/sh-hit.txt'"
+timeout = 20
+[[hooks.UserPromptSubmit]]
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "/bin/sh -c 'cat >> <SCRATCH>/r3/exp/toml-sh/sh-hit.txt; echo >> <SCRATCH>/r3/exp/toml-sh/sh-hit.txt'"
+timeout = 20

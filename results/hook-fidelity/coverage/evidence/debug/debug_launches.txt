@@ -1,0 +1,12 @@
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=1
+debug-launches=2 (trust-step apps: counted in ledger via planned)

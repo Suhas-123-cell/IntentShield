@@ -1,0 +1,149 @@
+[
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on-nops",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on-nops",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on-nops",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on-nops",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on-dark",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on-dark",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on-dark",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on-dark",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on-wrapped",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on-wrapped",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-on-wrapped",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "headless-notty",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "headless-notty",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "headless-notty",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-raw",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-raw",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "replay-ccsafe",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "replay-ccsafe",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "replay-railway",
+  "rep": 0,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "replay-railway",
+  "rep": 1,
+  "round": 7
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "headless-notty-dark",
+  "rep": 0,
+  "round": 7
+ }
+]

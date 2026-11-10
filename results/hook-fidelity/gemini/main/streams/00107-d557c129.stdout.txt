@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:26:25.051Z","session_id":"1498fc63-1cd8-49f0-b8db-e6ec9342d201","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:26:25.051Z","role":"user","content":"Call the search_notes tool of the notes server with the query 'nz83aa649b' and reply with the word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:26:25.073Z","tool_name":"mcp_notes_search_notes","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485585063_0","parameters":{"query":"nz83aa649b"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:26:25.117Z","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485585063_0","status":"error","output":"Tool execution blocked: stubhook fixed reply","error":{"type":"policy_violation","message":"Tool execution blocked: stubhook fixed reply"}}
+{"type":"message","timestamp":"2026-10-31T22:26:25.121Z","role":"assistant","content":"stub done nz83aa649b","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:26:25.121Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":71,"tool_calls":1,"models":{"gemini-3.5-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

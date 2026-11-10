@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:25:37.465Z","session_id":"59cdf0bb-20f0-4f9e-84f2-94d4c7606cfb","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:25:37.465Z","role":"user","content":"Call the search_notes tool of the notes server with the query 'nzf1a5a875' and reply with the word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:25:37.486Z","tool_name":"mcp_notes_search_notes","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485537477_0","parameters":{"query":"nzf1a5a875"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:25:37.531Z","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485537477_0","status":"success","output":"Note 'Quarterly plan': ship v2 in Q4."}
+{"type":"message","timestamp":"2026-10-31T22:25:37.534Z","role":"assistant","content":"stub done nzf1a5a875","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:25:37.535Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":70,"tool_calls":1,"models":{"gemini-3.5-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

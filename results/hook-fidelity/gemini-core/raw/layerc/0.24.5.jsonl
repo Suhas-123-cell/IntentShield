@@ -1,0 +1,57 @@
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"allow","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":175}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"ask","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":154}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"deny","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":172}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"block","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":169}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"empty_exit0","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":177}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"malformed_json_exit0","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":161}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"malformed_json_exit2","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":167}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit1_empty","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":169}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit1_stderr","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":166}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit2_empty","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":164}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit2_stderr","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":167}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit2_json_allow","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":161}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit2_json_deny","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":168}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit3_text","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":161}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit3_empty","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":176}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"intentshield_crash_exit2","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":389}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"python_uncaught_exit1","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":394}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit126_script_empty","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":174}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit126_script_stderr","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":165}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit127_script_empty","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":166}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"nonexec_file_126","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":3}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"bad_interpreter_shebang","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":2}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"missing_command_127","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":2}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"timeout","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":["Hook timed out after 1500ms"],"wallMs":1504}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"continue_false","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"stop","proceeds":"no","errors":[],"wallMs":181}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"unknown_decision","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":204}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit2_json_on_stderr","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":172}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"exit1_json_deny_stdout","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"none","proceeds":"yes","errors":[],"wallMs":169}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"python3_missing_on_path","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":3}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"timeout_grandchild_holds_pipe","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"no-return","proceeds":"hang","wallMs":12003}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"multi_ask_plus_allow","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":214}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"multi_deny_plus_allow","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":178}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"multi_crash_exit1_then_deny","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"deny","proceeds":"no","errors":[],"wallMs":178}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"multi_ask_plus_ask","kind":"reply","config":"one matcher group, matcher \".*\"","decision":"allow","proceeds":"yes","errors":[],"wallMs":227}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"trust_folderTrust_on_folder_trusted","kind":"trust","trust":{"folderTrust":true,"trustedFolder":true},"invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":461}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"trust_folderTrust_on_folder_untrusted","kind":"trust","trust":{"folderTrust":true,"trustedFolder":false},"invocations":0,"decision":"none","proceeds":"yes","errors":[],"wallMs":0}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"groups_ask_then_allow","kind":"multi","tool":"run_shell_command","invocations":2,"decision":"allow","proceeds":"yes","errors":[],"wallMs":805}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"groups_allow_then_ask","kind":"multi","tool":"run_shell_command","invocations":2,"decision":"allow","proceeds":"yes","errors":[],"wallMs":8}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"groups_deny_then_allow","kind":"multi","tool":"run_shell_command","invocations":2,"decision":"deny","proceeds":"no","errors":[],"wallMs":6}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"seq_ask_then_deny","kind":"multi","tool":"run_shell_command","invocations":2,"decision":"deny","proceeds":"no","errors":[],"wallMs":11}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"dedupe_identical_hook_twice","kind":"multi","tool":"run_shell_command","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":6}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_exact_shell_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":7}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_exact_shell_vs_mcp","kind":"matcher","tool":"mcp_notes_search_notes","invocations":0,"decision":"none","proceeds":"yes","errors":[],"wallMs":0}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_substring_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":5}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_dotstar_search_notes_vs_mcp","kind":"matcher","tool":"mcp_notes_search_notes","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":5}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_dotstar_search_notes_vs_mcp_dunder","kind":"matcher","tool":"notes__search_notes","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":6}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_claude_style_mcp_vs_mcp","kind":"matcher","tool":"mcp_notes_search_notes","invocations":0,"decision":"none","proceeds":"yes","errors":[],"wallMs":0}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_claude_style_mcp_vs_dunder","kind":"matcher","tool":"notes__search_notes","invocations":0,"decision":"none","proceeds":"yes","errors":[],"wallMs":0}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_mcp_prefix_vs_mcp","kind":"matcher","tool":"mcp_notes_search_notes","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":6}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_bash_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":0,"decision":"none","proceeds":"yes","errors":[],"wallMs":0}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_write_alt_vs_write_file","kind":"matcher","tool":"write_file","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":5}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_write_alt_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":0,"decision":"none","proceeds":"yes","errors":[],"wallMs":0}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_star_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":7}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_empty_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":5}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_absent_vs_shell","kind":"matcher","tool":"run_shell_command","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":5}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"matcher_invalid_regex_literal_vs_literal","kind":"matcher","tool":"run_shell_command(","invocations":1,"decision":"deny","proceeds":"no","errors":[],"wallMs":5}
+{"version":"0.24.5","pkgVersion":"0.24.5","scenario":"config_default_enableHooks","kind":"default","getEnableHooks":false}

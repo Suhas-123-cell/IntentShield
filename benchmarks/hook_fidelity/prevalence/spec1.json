@@ -1,0 +1,20 @@
+[
+{"name":"h_cc_action","q":"anthropics/claude-code-action path:.github/workflows"},
+{"name":"h_cc_p","q":"\"claude -p\" path:.github/workflows"},
+{"name":"h_cc_print","q":"\"claude --print\" path:.github/workflows"},
+{"name":"h_codex_exec","q":"\"codex exec\" path:.github/workflows"},
+{"name":"h_codex_action","q":"openai/codex-action path:.github/workflows"},
+{"name":"h_gem_action","q":"google-github-actions/run-gemini-cli path:.github/workflows"},
+{"name":"h_gem_p","q":"\"gemini -p\" path:.github/workflows"},
+{"name":"h_gem_prompt","q":"\"gemini --prompt\" path:.github/workflows"},
+{"name":"h_cur_p","q":"\"cursor-agent -p\" path:.github/workflows"},
+{"name":"h_cur_print","q":"\"cursor-agent --print\" path:.github/workflows"},
+{"name":"h_cur_agent_any","q":"cursor-agent path:.github/workflows"},
+{"name":"k_claude_settings","q":"path:.claude filename:settings.json PreToolUse"},
+{"name":"k_claude_settings_hooks","q":"path:.claude filename:settings.json hooks"},
+{"name":"k_codex_hooks_json","q":"path:.codex filename:hooks.json"},
+{"name":"k_codex_config_hooks","q":"path:.codex filename:config.toml hooks"},
+{"name":"k_gemini_settings","q":"path:.gemini filename:settings.json BeforeTool"},
+{"name":"k_gemini_settings_hooks","q":"path:.gemini filename:settings.json hooks"},
+{"name":"k_cursor_hooks","q":"path:.cursor filename:hooks.json"}
+]

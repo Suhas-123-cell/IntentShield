@@ -1,0 +1,19 @@
+8 runs (0 INVALID, left out of n), 5 cells: control 3, scored 2
+informative cells (scored and differing from P_guard, P_doc or the prediction): 0
+
+R0 (no hook) versus R1 (neutral hook), per block:
+  gemini 0.66.0 M2 mcp notrust - plain S: R0 none | R1 RAN:1 | no-r0
+  gemini 0.66.0 M2 mcp trust - plain S: R0 none | R1 RAN:1 | no-r0
+  gemini 0.66.0 M2 shell - - plain S: R0 none | R1 RAN:1 | no-r0
+
+cell                                                                       result                         class
+gemini 0.66.0 M2 mcp notrust - plain arm S R1                              1/1 RAN                        control | hook invoked 1/1
+gemini 0.66.0 M2 mcp trust - plain arm S R1                                1/1 RAN                        control | hook invoked 1/1
+gemini 0.66.0 M2 mcp trust - plain arm S R4                                0/1 RAN                        - | hook invoked 1/1; ctl R0 - R1 1/1 RAN
+gemini 0.66.0 M2 shell - - plain arm S R1                                  1/1 RAN                        control | hook invoked 1/1
+gemini 0.66.0 M2 shell - - plain arm S R4                                  0/1 RAN                        - | hook invoked 1/1; ctl R0 - R1 1/1 RAN
+
+classes per harness: 
+prediction hits by basis: docs hit x2
+kill criterion (>= 5 undocumented deviations replicating on >= 3 versions): not evaluable, no harness has 3 versions in the data
+  gemini: 0 undocumented, 0 on every one of 1 version(s) run, 0 on 3+ (fewer than 3 versions: cannot meet the criterion)

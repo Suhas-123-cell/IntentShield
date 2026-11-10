@@ -1,0 +1,592 @@
+{
+ "benign_split": {
+  "block-no-verify": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 0,
+    "n": 32
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 73
+   }
+  },
+  "cc-safe-setup": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 2,
+    "n": 20
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 54
+   }
+  },
+  "claude-codex-settings[force-push]": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 0,
+    "n": 16
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 1,
+    "n": 35
+   }
+  },
+  "gemini-intrupt-hook": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 20,
+    "n": 20
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 46,
+    "n": 46
+   }
+  },
+  "gemini-intrupt-hook[local-filter]": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 7,
+    "n": 20
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 9,
+    "n": 46
+   }
+  },
+  "intentshield": {
+   "near-miss": {
+    "ask": 1,
+    "deny": 0,
+    "n": 65
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 169
+   }
+  },
+  "intentshield-always": {
+   "near-miss": {
+    "ask": 53,
+    "deny": 0,
+    "n": 65
+   },
+   "ordinary-dev": {
+    "ask": 123,
+    "deny": 0,
+    "n": 169
+   }
+  },
+  "intentshield-default": {
+   "near-miss": {
+    "ask": 1,
+    "deny": 0,
+    "n": 8
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 23
+   }
+  },
+  "intentshield-nostate": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 0,
+    "n": 65
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 169
+   }
+  },
+  "intentshield-tainted": {
+   "near-miss": {
+    "ask": 28,
+    "deny": 0,
+    "n": 45
+   },
+   "ordinary-dev": {
+    "ask": 40,
+    "deny": 0,
+    "n": 123
+   }
+  },
+  "knox": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 0,
+    "n": 45
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 123
+   }
+  },
+  "prevent-destructive": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 6,
+    "n": 16
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 35
+   }
+  },
+  "railway-guard": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 0,
+    "n": 16
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 35
+   }
+  },
+  "safety-net": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 3,
+    "n": 48
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 112
+   }
+  },
+  "tob-codex-config": {
+   "near-miss": {
+    "ask": 0,
+    "deny": 5,
+    "n": 16
+   },
+   "ordinary-dev": {
+    "ask": 0,
+    "deny": 0,
+    "n": 39
+   }
+  }
+ },
+ "per_harness": {
+  "block-no-verify": {
+   "claude": {
+    "benign": {
+     "allow": 160,
+     "ask": 0,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 119,
+     "ask": 0,
+     "deny": 11,
+     "n": 130
+    }
+   },
+   "gemini": {
+    "benign": {
+     "allow": 160,
+     "ask": 0,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 119,
+     "ask": 0,
+     "deny": 11,
+     "n": 130
+    }
+   }
+  },
+  "cc-safe-setup": {
+   "claude": {
+    "benign": {
+     "allow": 192,
+     "ask": 0,
+     "deny": 3,
+     "n": 195
+    },
+    "harmful": {
+     "allow": 122,
+     "ask": 0,
+     "deny": 26,
+     "n": 148
+    }
+   }
+  },
+  "claude-codex-settings[force-push]": {
+   "claude": {
+    "benign": {
+     "allow": 157,
+     "ask": 0,
+     "deny": 3,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 118,
+     "ask": 0,
+     "deny": 12,
+     "n": 130
+    }
+   }
+  },
+  "gemini-intrupt-hook": {
+   "gemini": {
+    "benign": {
+     "allow": 0,
+     "ask": 0,
+     "deny": 183,
+     "n": 183
+    },
+    "harmful": {
+     "allow": 0,
+     "ask": 0,
+     "deny": 143,
+     "n": 143
+    }
+   }
+  },
+  "gemini-intrupt-hook[local-filter]": {
+   "gemini": {
+    "benign": {
+     "allow": 149,
+     "ask": 0,
+     "deny": 34,
+     "n": 183
+    },
+    "harmful": {
+     "allow": 62,
+     "ask": 0,
+     "deny": 81,
+     "n": 143
+    }
+   }
+  },
+  "intentshield": {
+   "claude": {
+    "benign": {
+     "allow": 233,
+     "ask": 1,
+     "deny": 0,
+     "n": 234
+    },
+    "harmful": {
+     "allow": 137,
+     "ask": 29,
+     "deny": 0,
+     "n": 166
+    }
+   },
+   "codex": {
+    "benign": {
+     "allow": 160,
+     "ask": 0,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 111,
+     "ask": 19,
+     "deny": 0,
+     "n": 130
+    }
+   },
+   "gemini": {
+    "benign": {
+     "allow": 183,
+     "ask": 0,
+     "deny": 0,
+     "n": 183
+    },
+    "harmful": {
+     "allow": 124,
+     "ask": 19,
+     "deny": 0,
+     "n": 143
+    }
+   }
+  },
+  "intentshield-always": {
+   "claude": {
+    "benign": {
+     "allow": 58,
+     "ask": 176,
+     "deny": 0,
+     "n": 234
+    },
+    "harmful": {
+     "allow": 3,
+     "ask": 163,
+     "deny": 0,
+     "n": 166
+    }
+   },
+   "codex": {
+    "benign": {
+     "allow": 28,
+     "ask": 132,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 2,
+     "ask": 128,
+     "deny": 0,
+     "n": 130
+    }
+   },
+   "gemini": {
+    "benign": {
+     "allow": 28,
+     "ask": 155,
+     "deny": 0,
+     "n": 183
+    },
+    "harmful": {
+     "allow": 2,
+     "ask": 141,
+     "deny": 0,
+     "n": 143
+    }
+   }
+  },
+  "intentshield-default": {
+   "claude": {
+    "benign": {
+     "allow": 30,
+     "ask": 1,
+     "deny": 0,
+     "n": 31
+    },
+    "harmful": {
+     "allow": 0,
+     "ask": 10,
+     "deny": 0,
+     "n": 10
+    }
+   }
+  },
+  "intentshield-nostate": {
+   "claude": {
+    "benign": {
+     "allow": 234,
+     "ask": 0,
+     "deny": 0,
+     "n": 234
+    },
+    "harmful": {
+     "allow": 147,
+     "ask": 19,
+     "deny": 0,
+     "n": 166
+    }
+   },
+   "codex": {
+    "benign": {
+     "allow": 160,
+     "ask": 0,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 111,
+     "ask": 19,
+     "deny": 0,
+     "n": 130
+    }
+   },
+   "gemini": {
+    "benign": {
+     "allow": 183,
+     "ask": 0,
+     "deny": 0,
+     "n": 183
+    },
+    "harmful": {
+     "allow": 124,
+     "ask": 19,
+     "deny": 0,
+     "n": 143
+    }
+   }
+  },
+  "intentshield-tainted": {
+   "claude": {
+    "benign": {
+     "allow": 134,
+     "ask": 100,
+     "deny": 0,
+     "n": 234
+    },
+    "harmful": {
+     "allow": 9,
+     "ask": 138,
+     "deny": 19,
+     "n": 166
+    }
+   },
+   "codex": {
+    "benign": {
+     "allow": 69,
+     "ask": 91,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 8,
+     "ask": 103,
+     "deny": 19,
+     "n": 130
+    }
+   }
+  },
+  "knox": {
+   "claude": {
+    "benign": {
+     "allow": 233,
+     "ask": 0,
+     "deny": 1,
+     "n": 234
+    },
+    "harmful": {
+     "allow": 93,
+     "ask": 0,
+     "deny": 73,
+     "n": 166
+    }
+   },
+   "codex": {
+    "benign": {
+     "allow": 159,
+     "ask": 0,
+     "deny": 1,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 67,
+     "ask": 0,
+     "deny": 63,
+     "n": 130
+    }
+   }
+  },
+  "prevent-destructive": {
+   "claude": {
+    "benign": {
+     "allow": 142,
+     "ask": 0,
+     "deny": 18,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 98,
+     "ask": 0,
+     "deny": 32,
+     "n": 130
+    }
+   }
+  },
+  "railway-guard": {
+   "claude": {
+    "benign": {
+     "allow": 160,
+     "ask": 0,
+     "deny": 0,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 130,
+     "ask": 0,
+     "deny": 0,
+     "n": 130
+    }
+   }
+  },
+  "safety-net": {
+   "claude": {
+    "benign": {
+     "allow": 157,
+     "ask": 0,
+     "deny": 3,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 31,
+     "ask": 4,
+     "deny": 95,
+     "n": 130
+    }
+   },
+   "codex": {
+    "benign": {
+     "allow": 157,
+     "ask": 0,
+     "deny": 3,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 31,
+     "ask": 0,
+     "deny": 99,
+     "n": 130
+    }
+   },
+   "gemini": {
+    "benign": {
+     "allow": 157,
+     "ask": 0,
+     "deny": 3,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 31,
+     "ask": 0,
+     "deny": 99,
+     "n": 130
+    }
+   }
+  },
+  "tob-codex-config": {
+   "codex": {
+    "benign": {
+     "allow": 143,
+     "ask": 0,
+     "deny": 17,
+     "n": 160
+    },
+    "harmful": {
+     "allow": 94,
+     "ask": 0,
+     "deny": 36,
+     "n": 130
+    }
+   }
+  }
+ },
+ "primary_mix": {
+  "benign": {
+   "claude": 113,
+   "codex": 55,
+   "gemini": 66
+  },
+  "harmful": {
+   "claude": 75,
+   "codex": 42,
+   "gemini": 49
+  }
+ }
+}

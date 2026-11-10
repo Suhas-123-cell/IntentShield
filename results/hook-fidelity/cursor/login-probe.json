@@ -1,0 +1,61 @@
+{
+ "date_utc": "2026-10-31",
+ "cursor_agent_version": "2026.10.22-27dcf5f",
+ "subscription_tier": "Free",
+ "model_reported": "Auto",
+ "os": "darwin arm64 (macOS), shell zsh",
+ "probes": [
+  {
+   "id": "status-fresh-home",
+   "command": "HOME=<fresh dir> cursor-agent status (env -i)",
+   "result": "Not logged in",
+   "n": 1
+  },
+  {
+   "id": "status-real-home-config-dir",
+   "command": "HOME=<real> CURSOR_CONFIG_DIR=<fresh dir> cursor-agent status",
+   "result": "Logged in",
+   "n": 1,
+   "side_effects": "cli-config.json written into CURSOR_CONFIG_DIR; mtimes of ~/.cursor/cli-config.json and agent-cli-state.json unchanged"
+  },
+  {
+   "id": "status-sandbox-deny",
+   "command": "as above under sandbox-exec denying read and write of ~/.cursor, ~/.claude, ~/.codex, ~/.gemini, ~/.config, ~/.ssh, ~/.aws",
+   "result": "Logged in",
+   "n": 1
+  },
+  {
+   "id": "keychain-service-lookup",
+   "command": "security find-generic-password -s cursor-access-token (metadata only, secret not read)",
+   "real_home": "found in login.keychain-db",
+   "fresh_home": "item could not be found",
+   "n": 1
+  },
+  {
+   "id": "agent-run-writes-projects-dir",
+   "command": "cursor-agent -p under the sandbox profile with CURSOR_CONFIG_DIR set, no exception for ~/.cursor/projects",
+   "result": "EPERM mkdir ~/.cursor/projects/<workspace slug>, exit 1, before any model call",
+   "n": 1,
+   "meaning": "the agent writes per-workspace state under the real ~/.cursor whatever CURSOR_CONFIG_DIR says; with the exception for throwaway slugs it created, per run, 2 project dirs (workspace slug with mcp-approvals.json, .workspace-trusted, worker.log, repo.json, agent-transcripts; and a slug holding worker.sock)"
+  },
+  {
+   "id": "zsh-shim-attestation",
+   "command": "/bin/zsh -lc, -c and -lic of `touch ran-<nonce>.txt` with the run's ZDOTDIR start files, no cursor-agent",
+   "result": "marker carries the run's attestation in all three",
+   "n": "1 each"
+  },
+  {
+   "id": "model-launch-1",
+   "run_id": "00001-f7d54342",
+   "result": "stderr: ActionRequiredError: You've hit your usage limit Get Cursor Pro for more Agent usage, unlimited Tab, and more. Stream: init event (model Auto, apiKeySource login, permissionMode default) and the user prompt, nothing else",
+   "exit_status": 1
+  },
+  {
+   "id": "model-launch-2",
+   "run_id": "00002-dd93941e",
+   "result": "same usage-limit error, 30 s later",
+   "exit_status": 1
+  }
+ ],
+ "conclusion": "Cursor's login is reachable only through the real HOME (keychain), so an isolated HOME cannot log in and no login file exists to copy; this is the real-HOME fallback (at most 10 launches). Free-plan usage limit was already reached: 0 scorable runs."
+}

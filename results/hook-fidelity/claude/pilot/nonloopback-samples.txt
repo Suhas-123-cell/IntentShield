@@ -1,0 +1,1 @@
+0 bytes: no non-loopback socket of a claude, node or python process was seen by an lsof sampler (every 0.4 s) during the 10 runs; the runs were also inside the loopback-only sandbox-exec profile (benchmarks/hook_fidelity/loopback.sb)

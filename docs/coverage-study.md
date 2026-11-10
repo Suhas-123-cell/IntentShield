@@ -147,3 +147,7 @@ hook could act on a marker before the model sees it was not tested; this study o
 event carried it. Real injections on each channel, an adaptive attacker and the review cost of a
 proxy are not covered here. See [contribution.md](contribution.md) §5 and §7 for what this does
 and does not support as a research claim, and for the two routes forward.
+
+## Re-run on installed releases without a model (2026-11-01)
+
+The visibility half of this study was re-measured against Claude Code 2.0.41 to 2.1.316, Codex 0.131.0 to 0.166.0 and Gemini CLI 0.37.1 to 0.66.0 with a stub model endpoint, adding server instructions and a longitudinal table. See [hook-fidelity-coverage-rerun.md](hook-fidelity-coverage-rerun.md); the data is in `results/hook-fidelity/coverage/`.

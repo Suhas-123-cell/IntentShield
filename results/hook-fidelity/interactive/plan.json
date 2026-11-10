@@ -1,0 +1,164 @@
+[
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-on",
+  "rep": 1
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-off",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "ask-off",
+  "rep": 1
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "deny-on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "deny-on",
+  "rep": 1
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "r0",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "r0",
+  "rep": 1
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "headless-on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-on",
+  "rep": 1
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-off",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "ask-off",
+  "rep": 1
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "deny-on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "deny-on",
+  "rep": 1
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "r0",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "r0",
+  "rep": 1
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "headless-on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-on",
+  "rep": 1
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-off",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "ask-off",
+  "rep": 1
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "deny-on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "deny-on",
+  "rep": 1
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "r0",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "r0",
+  "rep": 1
+ },
+ {
+  "harness": "codex",
+  "version": "0.166.0",
+  "cell": "headless-on",
+  "rep": 0
+ }
+]

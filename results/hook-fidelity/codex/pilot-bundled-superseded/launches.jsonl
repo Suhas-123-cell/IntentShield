@@ -1,0 +1,3 @@
+{"run_id": "00000-5bda3b8a", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R4|0", "attempt": 0, "ts": "2026-10-31T22:16:11Z"}
+{"run_id": "00001-8b2585dc", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-10-31T22:16:12Z"}
+{"run_id": "00002-f2d38b7c", "key": "codex|0.165.0|M1|mcp|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-10-31T22:16:13Z"}

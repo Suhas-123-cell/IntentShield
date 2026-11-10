@@ -56,10 +56,13 @@ def _doctor(home: Path, cwd: Path, capsys) -> tuple[int, str]:
 def test_doctor_fails_a_hook_executable_with_a_dead_shebang(tmp_path: Path, home: Path, capsys):
     cwd = tmp_path / "work"
     cwd.mkdir()
-    install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path, "#!/nonexistent/venv/bin/python"))
+    install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path, "#!/nonexistent/venv/bin/python"), translate=False)
     _ran(_db(home), "claude", time.time() + 5)
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 1 and "#!/nonexistent/venv/bin/python" in out and "exits 126" in out
+    # a hook installed without the launcher: the call runs unguarded in Claude Code (and refused behind the launcher: see
+    # tests/test_harness_translation.py for Gemini CLI's own boundary at 0.30.0)
+    assert "Claude Code runs the call unguarded" in out
 
 
 @pytest.mark.parametrize("shebang", ["#!/bin/sh", "#!/usr/bin/env sh", ""])
@@ -74,7 +77,7 @@ def test_doctor_passes_a_hook_executable_whose_interpreter_exists(tmp_path: Path
 def test_doctor_fails_an_env_shebang_for_a_program_that_is_not_on_path(tmp_path: Path, home: Path, capsys):
     cwd = tmp_path / "work"
     cwd.mkdir()
-    install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path, "#!/usr/bin/env no-such-interpreter-xyz"))
+    install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path, "#!/usr/bin/env no-such-interpreter-xyz"), translate=False)
     _ran(_db(home), "claude", time.time() + 5)
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 1 and "no-such-interpreter-xyz" in out
@@ -89,7 +92,7 @@ def test_doctor_fails_a_shell_wrapper_that_execs_a_missing_interpreter(tmp_path:
     cwd.mkdir()
     exe = _exe(tmp_path)
     Path(exe).write_text("#!/bin/sh\n" + body)
-    install.install("claude", home=home, cwd=cwd, hook=exe)
+    install.install("claude", home=home, cwd=cwd, hook=exe, translate=False)
     _ran(_db(home), "claude", time.time() + 5)
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 1 and "/nonexistent" in out and "does not exist" in out

@@ -1,0 +1,1 @@
+{"run_id": "00009-816c1ce2", "ts_ns": 1793483719977895000, "pid": 81903, "harness": "claude", "event": "PreToolUse", "tool": "Bash", "tool_input": "{\"command\": \"touch ran-nz72ff9eb8.txt\"}", "decision_event": true, "reply": "R1", "exit_code": 0, "sleep": 0.0}

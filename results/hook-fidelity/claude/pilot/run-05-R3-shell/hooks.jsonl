@@ -1,0 +1,1 @@
+{"run_id": "00005-dfba4342", "ts_ns": 1793483713508982000, "pid": 81662, "harness": "claude", "event": "PreToolUse", "tool": "Bash", "tool_input": "{\"command\": \"touch ran-nz1bad2dbd.txt\"}", "decision_event": true, "reply": "R3", "exit_code": 0, "sleep": 0.0}

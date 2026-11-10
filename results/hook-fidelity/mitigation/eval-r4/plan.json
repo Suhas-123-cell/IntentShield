@@ -1,0 +1,257 @@
+[
+ {
+  "harness": "claude",
+  "version": "2.1.47",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.47",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.89",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.89",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.281",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.281",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.296",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.296",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.47",
+  "scenario": "allow",
+  "arm": "deny-all",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.296",
+  "scenario": "allow",
+  "arm": "deny-all",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.296",
+  "scenario": "slowdefault",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.143.0",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.143.0",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.148.0",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.148.0",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.155.0",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.155.0",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.165.0",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.165.0",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.143.0",
+  "scenario": "allow",
+  "arm": "deny-all",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.165.0",
+  "scenario": "allow",
+  "arm": "deny-all",
+  "rep": 0
+ },
+ {
+  "harness": "codex",
+  "version": "0.165.0",
+  "scenario": "slowdefault",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.29.7",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.29.7",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.38.0",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.38.0",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.43.0",
+  "scenario": "allow",
+  "arm": "off",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.43.0",
+  "scenario": "allow",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.29.7",
+  "scenario": "allow",
+  "arm": "deny-all",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.43.0",
+  "scenario": "allow",
+  "arm": "deny-all",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.43.0",
+  "scenario": "slowdefault",
+  "arm": "on",
+  "rep": 0
+ },
+ {
+  "harness": "claude",
+  "version": "2.1.47",
+  "scenario": "ask",
+  "arm": "on",
+  "rep": 0,
+  "norecord": true
+ },
+ {
+  "harness": "gemini",
+  "version": "0.37.1",
+  "scenario": "ask",
+  "arm": "on",
+  "rep": 0,
+  "norecord": true
+ },
+ {
+  "harness": "gemini",
+  "version": "0.43.0",
+  "scenario": "ask",
+  "arm": "on",
+  "rep": 0,
+  "norecord": true
+ }
+]

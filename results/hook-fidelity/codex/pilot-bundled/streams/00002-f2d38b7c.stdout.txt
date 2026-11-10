@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a19409-65c1-7b80-a782-479829246ef0"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"notes","tool":"search_notes","arguments":{"query":"nz34671db9"},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"notes","tool":"search_notes","arguments":{"query":"nz34671db9"},"result":{"content":[{"type":"text","text":"Note 'Quarterly plan': ship v2 in Q4."}],"structured_content":{"result":"Note 'Quarterly plan': ship v2 in Q4."}},"error":null,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"stub done nz34671db9"}}
+{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}

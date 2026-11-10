@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"<run>/work","session_id":"4e25c0b8-e121-44ea-a4a3-59a26a7a7132","model":"Auto","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Call the search_notes tool of the notes server with the query 'nz66c65dce' and reply with the word done."}]},"session_id":"4e25c0b8-e121-44ea-a4a3-59a26a7a7132"}
