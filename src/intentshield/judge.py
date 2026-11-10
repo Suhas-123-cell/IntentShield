@@ -164,7 +164,10 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 reply = json.load(response)
                 # OpenAI-compatible, or Ollama's native /api/chat
-                return (reply["choices"][0]["message"] if "choices" in reply else reply["message"]), ""
+                message = reply["choices"][0]["message"] if "choices" in reply else reply["message"]
+                if not isinstance(message, dict):
+                    raise ValueError("reply message is not an object")
+                return message, ""
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace") if exc.fp else ""
             error = f"HTTP {exc.code}: {detail[:200]}"
@@ -178,7 +181,8 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
             time.sleep(pause)
         # OSError covers URLError, timeouts and a reset connection; HTTPException a server that hung up
         # mid-response. Either is no opinion, never a crash in the hook that would block the call.
-        except (OSError, http.client.HTTPException, ValueError, KeyError, IndexError) as exc:
+        # TypeError and AttributeError: a reply that is valid JSON of another shape (a list, null choices).
+        except (OSError, http.client.HTTPException, ValueError, LookupError, TypeError, AttributeError) as exc:
             error = f"{type(exc).__name__}: {exc}"[:200]
             if attempt == retries or time.monotonic() + 2 ** attempt > deadline:
                 break
@@ -423,7 +427,8 @@ class Judge:
         return getattr(self._local, "deadline", None)
 
     def _ask(self, question: str, system: str, user: str) -> dict[str, Any] | None:
-        key = hashlib.sha256(f"{self.model}\0{system}\0{user}".encode()).hexdigest()  # benchmark caches on disk use this key
+        # Benchmark caches on disk use this key.
+        key = hashlib.sha256(f"{self.model}\0{system}\0{user}".encode("utf-8", "replace")).hexdigest()
         # In memory, answers from different hosts serving a model of the same name are kept apart.
         shared = f"{self.provider}\0{self.url}\0{key}"
         with self._cache_lock:

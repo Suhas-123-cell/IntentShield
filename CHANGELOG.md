@@ -6,6 +6,11 @@
   memory. The hook asks for reasons unrelated to the server (a redacted field, a credential), so one routine
   approval cleared it across sessions. The proxy already required an explicit `trust_source` (PX10); the hook now
   never clears a source.
+- **Hook input edges:** a prompt or argument holding a lone surrogate (half of a cut emoji) no longer loses the
+  prompt or fails the hook; a judge reply that is valid JSON of the wrong shape is no opinion, not a crash that
+  blocked the call; `~/.intentshield/.env` may hold `export KEY=value` lines and bytes that are not UTF-8.
+- **Built-in tools:** `.env.example`, `.env.sample`, `.env.template` and `.env.dist` are templates, not secrets,
+  so committing and pushing one no longer asks.
 
 ## 0.4.2
 

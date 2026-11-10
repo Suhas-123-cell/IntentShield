@@ -19,7 +19,9 @@ from pathlib import PurePosixPath
 
 from .mcp_inspect import _SENSITIVE, _parse, distinctive_values
 
-SECRET = re.compile(_SENSITIVE + r"|(?:^|[^\w.])\.env(?:\.[\w-]+)?$|(?:^|/)\.git-credentials$", re.I)
+# A template (.env.example) holds names, not values, and is committed on purpose.
+SECRET = re.compile(_SENSITIVE + r"|(?:^|[^\w.])\.env(?!\.(?:example|sample|template|dist)$)(?:\.[\w-]+)?$"
+                    r"|(?:^|/)\.git-credentials$", re.I)
 # Commands that print secrets with no file argument to match.
 _SECRET_COMMANDS = {("printenv",), ("gh", "auth", "token"), ("security", "find-generic-password"),
                     ("security", "find-internet-password"), ("aws", "configure", "export-credentials")}
