@@ -1203,10 +1203,16 @@ def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
         # denial keeps it from the agent (beforeReadFile has no ask).
         path = str(event.get("file_path") or "")
         v = guard.file(session, "builtin:read", path)
+        note = ""
+        # An ask from the text rules (a .env, an .npmrc, a key file) cannot be put to the user here, and a refusal is stricter
+        # than the other harnesses, which ask: the read goes ahead with the note. An ask from the session rules (an output
+        # in this session tried to instruct the agent) and a deny stay refusals.
+        if v.decision == "ask" and guard._file_session(session, "builtin:read", path).decision == "allow":
+            note, v = v.reason, Verdict()
         if v.decision == "allow" and event.get("content") is not None:
             v = guard.result(session, "builtin:read", event["content"], source=f"read:{path[:200]}", local=True)
         if v.decision == "allow":
-            return {"permission": "allow"}
+            return {"permission": "allow", "user_message": note} if note else {"permission": "allow"}
         return {"permission": "deny", "user_message": v.reason}
     # Never silence: Cursor reads an empty reply from a failClosed hook as a failure and blocks the call.
     return {}
@@ -1303,6 +1309,14 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
     return None
 
 
+def _env_seconds(name: str) -> float:
+    """A number of seconds from the environment; 0 (none) when it is unset or not a number, so a typo cannot crash the hook."""
+    try:
+        return float(os.getenv(name) or 0)
+    except ValueError:
+        return 0.0
+
+
 def main(argv: list[str] | None = None) -> None:
     global _REPLY
     _REPLY = threading.Lock()  # one answer per hook process: a new lock per call, for callers that run main in-process
@@ -1346,7 +1360,7 @@ def main(argv: list[str] | None = None) -> None:
                         default=os.getenv("INTENTSHIELD_HOOK_TRANSLATE", "").lower() in ("0", "off", "false", "no"),
                         help="send each verdict as the guard made it: no choice of ask or deny by the harness's measured "
                              "behaviour, and no deadline (translation.py)")
-    parser.add_argument("--deadline", type=float, default=float(os.getenv("INTENTSHIELD_HOOK_DEADLINE") or 0),
+    parser.add_argument("--deadline", type=float, default=_env_seconds("INTENTSHIELD_HOOK_DEADLINE"),
                         help="seconds after which a hook still checking a call answers with a refusal, so that a slow "
                              "judge or a stuck database is not read as a timeout, which every harness measured lets "
                              "through (0: no deadline; `intentshield install` sets it under the harness's timeout)")

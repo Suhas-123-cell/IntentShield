@@ -50,6 +50,7 @@ SHELL_TOOLS = {"Bash", "shell", "local_shell", "exec_command", "run_shell_comman
 _ALLOW = {"allow", "approve", "approved", "proceed"}
 _DENY = {"deny", "block", "blocked", "reject", "refuse"}
 _ASK = {"ask"}
+_CURSOR_KINDS = {"beforeShellExecution": "shell", "beforeMCPExecution": "mcp", "beforeReadFile": "read"}
 
 
 def effective_deadline(deadline: float, hook_timeout: float = 0.0) -> float:
@@ -153,6 +154,8 @@ def decide(harness: str, event: dict[str, Any], code: int, stdout: str, stderr: 
     if decision == "ask":
         tool = str(event.get("tool_name") or "")
         kind = "shell" if tool in SHELL_TOOLS else "mcp" if tool.startswith("mcp") else "other"
+        if harness == "cursor" and event.get("hook_event_name") in _CURSOR_KINDS:  # its shell event carries no tool_name
+            kind = _CURSOR_KINDS[event["hook_event_name"]]
         sent, why = sem.ask_reply(kind, gemini_ask)
         if sent == "ask":
             return translation.native_reply(harness, "ask", _reason_or(reason, "The guard wants you to confirm this call.")), \

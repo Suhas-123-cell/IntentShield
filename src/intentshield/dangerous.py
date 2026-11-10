@@ -94,6 +94,124 @@ def _strip_heredocs(text: str) -> str:
     return "\n".join(out)
 
 
+_CODE_WORD = re.compile(r"\b(?:(?:ba|z|da|k)?sh|python[\d.]*|perl|ruby|node|php|deno|bun|lua|pwsh|eval|source|su|ssh|awk|gawk|mawk|"
+                        r"nawk|xargs|watch|parallel|osascript|expect|at|batch)\b")
+_CODE_RUNNERS = _SHELLS | _INTERPRETERS | frozenset({"eval", "su", "ssh", "watch", "xargs", "source", ".", "awk", "gawk", "mawk", "nawk",
+                                                      "parallel", "osascript", "expect", "at", "batch"})
+_CMD_END = frozenset(";|&()`\n")
+
+
+def _blank_heredocs(buf: list[str]) -> None:
+    """Blanks the body of a quoted here-document (plain text, the shell expands nothing in it) unless its line starts a
+    program. The quotes of an unquoted body are dropped so an apostrophe in it is not read as a quote."""
+    text = "".join(buf)
+    pos = 0
+    lines = text.split("\n")
+    starts = []
+    for line in lines:
+        starts.append(pos)
+        pos += len(line) + 1
+    i = 0
+    unterminated: set[str] = set()
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        m = _HEREDOC.search(line)
+        if not m or "<<<" in line[m.start():m.start() + 3]:
+            continue
+        if m[1] in unterminated or _CODE_WORD.search(line):
+            continue
+        end = i
+        while end < len(lines) and lines[end].strip() != m[1]:
+            end += 1
+        if end >= len(lines):
+            unterminated.add(m[1])  # not searched for again: a line of ``<<X`` repeated must not cost a scan each
+            continue
+        quoted = bool(re.match(r"<<-?[ \t]*['\"\\]", line[m.start():]))
+        for k in range(starts[i], starts[end] - 1):
+            if buf[k] != "\n" and (quoted or buf[k] in "'\""):
+                buf[k] = " "
+        i = end + 1
+
+
+def _mask_data(text: str) -> str:
+    """``text`` with the inside of single-quoted strings and of quoted here-documents blanked, same length. The shell
+    reads those as data (a commit message, an ``echo``), so a command or a payload spelled in one is not a command
+    here. Left as it is when a program that runs text comes first in the same command (``bash -c '...'``, ``python -c``,
+    ``ssh host '...'``) or takes the output (``echo '...' | sh``), and when the text names a startup file or a
+    scheduler, where written text runs later."""
+    if "'" not in text and "<<" not in text or _PERSIST.search(text) or _CRON.search(text):
+        return text
+    buf = list(text)
+    _blank_heredocs(buf)
+    text = "".join(buf)
+    cmds: list[tuple[bool, list[tuple[int, int]]]] = []  # (has a code word, spans to blank) per simple command
+    spans: list[tuple[int, int]] = []
+    runs = [False]
+    nxt: list[bool] = []  # the command ends in a pipe
+    cur, n, i = "", len(text), 0
+
+    def end_word() -> None:
+        nonlocal cur
+        if cur and (cur in (".", "-S", "--split-string") or _bin(cur) in _CODE_RUNNERS):
+            runs[0] = True
+        cur = ""
+
+    def end_cmd(piped: bool) -> None:
+        nonlocal spans
+        end_word()
+        cmds.append((runs[0], spans))
+        nxt.append(piped)
+        spans, runs[0] = [], False
+
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            cur += text[i:i + 2] if text[i + 1:i + 2] != "\n" else ""
+            i += 2
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            cur += text[i + 1:j]
+            i = j + 1
+        elif c == "'" or c == "$" and text[i + 1:i + 2] == "'":
+            a = i + (2 if c == "$" else 1)
+            j = a
+            while j < n and text[j] != "'":
+                j += 2 if c == "$" and text[j] == "\\" else 1
+            if j >= n:  # never closed: an apostrophe, not a quote
+                cur += c
+                i += 1
+                continue
+            if not runs[0]:
+                spans.append((a, j))
+            cur += text[a:j]
+            i = j + 1
+        elif c == "#" and not cur:
+            while i < n and text[i] != "\n":
+                i += 1
+        elif c in " \t":
+            end_word()
+            i += 1
+        elif c in _CMD_END:
+            piped = c == "|" and text[i - 1:i] != "|" and text[i + 1:i + 2] != "|"
+            end_cmd(piped)
+            i += 1
+        else:
+            cur += c
+            i += 1
+    end_cmd(False)
+    for k, (_, sp) in enumerate(cmds):
+        if nxt[k] and k + 1 < len(cmds) and cmds[k + 1][0]:  # its output goes to a program that runs text
+            continue
+        for a, b in sp:
+            for x in range(a, b):
+                if buf[x] != "\n":
+                    buf[x] = " "
+    return "".join(buf)
+
+
 def _stages(text: str) -> list[_Stage] | None:
     """The simple commands of ``text``, or None when it cannot be tokenized (unbalanced quotes)."""
     text = _strip_heredocs(text[:_MAX]).replace("\r", " ").replace("\n", " ; ")
@@ -203,7 +321,7 @@ _HOME_DIRS = frozenset({"Documents", "Desktop", "Downloads", "Pictures", "Music"
                         ".aws", ".gnupg", ".config", ".kube", ".local"})
 
 
-_HOME_HEAD = re.compile(r"^(?:~[\w.-]{0,32}|\$\{?(?:HOME|USERPROFILE)\}?)(?=/|$)")
+_HOME_HEAD = re.compile(r"^(?:~[\w.-]{0,32}|\$\{?(?:HOME|USERPROFILE)\}?|\$\{(?:HOME|USERPROFILE):?[-?=][^}]{0,60}\})(?=/|$)")
 
 
 def _norm(path: str) -> str:
@@ -519,8 +637,14 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
         return Hit(ASK, "this removes the reflog or unreachable commits, the way back from a bad rewrite.")
     if sub == "update-ref" and "-d" in args:
         return Hit(ASK, "git update-ref -d deletes a ref.")
-    if sub == "branch" and any(a in ("-D", "-d", "--delete") for a in flags) and any(_PROTECTED_BRANCH.match(a) for a in args if not a.startswith("-")):
-        return Hit(DENY, "deleting a shared branch.")
+    if sub == "branch" and any(a in ("--delete", "-d", "-D") or a[:1] == "-" and a[1:2] != "-" and set("dD") & set(a) for a in flags):
+        # a local delete: -d refuses an unmerged branch itself, -D (or -d -f) drops it whatever it holds
+        force = any(a == "--force" or a[:1] == "-" and a[1:2] != "-" and ("D" in a or "f" in a) for a in flags)
+        if force and any(_PROTECTED_BRANCH.match(a) for a in args if not a.startswith("-")):
+            return Hit(ASK, "git branch -D deletes a shared branch locally, even with commits that are not merged.")
+    if sub == "restore" and ("--staged" in args or "-S" in args) and not (
+            "--worktree" in args or "-W" in args or any(a[:1] == "-" and a[1:2] != "-" and "W" in a for a in flags)):
+        return None  # only unstages
     if sub == "checkout" and args and args[-1] in (".", "--") or sub == "restore" and "." in args:
         return Hit(ASK, "this discards every uncommitted change in the tree.")
     return None
@@ -739,6 +863,14 @@ def _sensitive_source(path: str) -> bool:
     return path == "-" or bool(_cred_level(path)) or _protected(path) or bool(re.search(r"(?:^|/)\.(?:ssh|aws|gnupg|kube)(?:/|$)", _norm(path)))
 
 
+# Options of the copy tools whose next word is a setting (an identity file, a remote shell), not a file that is sent.
+_SSH_VALUED = {
+    "scp": frozenset({"-i", "-F", "-o", "-J", "-c", "-D", "-l", "-P", "-S", "-X"}),
+    "sftp": frozenset({"-i", "-F", "-o", "-J", "-c", "-D", "-l", "-P", "-S", "-X", "-b", "-B", "-R", "-s"}),
+    "rsync": frozenset({"-e", "--rsh", "--rsync-path", "--exclude", "--include", "--filter", "-f", "--port", "--bwlimit", "--timeout"}),
+}
+
+
 def _net_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool, intent: str) -> Hit | None:
     if name in ("curl", "wget", "http", "https", "xh"):
         hosts = _remote_hosts(argv) or ([] if any(shell.is_loopback(v) for a in argv[1:] for v in shell.network_values(a)) else ["?"])
@@ -764,7 +896,8 @@ def _net_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool
                     return Hit(ASK, f"sends command output to {hosts[0]}, which the user did not name.", hosts[0])
         return None
     if name in ("scp", "sftp", "rsync", "rclone", "gsutil"):
-        pos = [a for a in argv[1:] if not a.startswith("-")]
+        valued = _SSH_VALUED.get(name, frozenset())
+        pos = [a for k, a in enumerate(argv[1:]) if not a.startswith("-") and (k == 0 or argv[k] not in valued)]
         if name in ("rclone", "gsutil") and pos:
             pos = pos[1:] if pos[0] in ("copy", "sync", "copyto", "move", "moveto", "cp", "rsync", "mv") else pos
         if len(pos) < 2:
@@ -852,6 +985,8 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
         if op.startswith(">"):
             if _device(target):
                 out.append(Hit(DENY, f"redirect into the block device {target}.", target))
+        elif op == "<<<" and name in _SHELLS and depth < _MAX_DEPTH and not any(not a.startswith("-") or "c" in a[1:] for a in argv[1:]):
+            out.extend(_analyse(target, intent, depth + 1, state, sudo))  # bash <<< 'rm -rf /': the string is the program
         elif op == "<" and _cred_level(target) and _cred_level(target)[0] == DENY and name in _READERS | _NET_SINKS:
             out.append(Hit(DENY, f"{name} reads {target}, {_cred_level(target)[1]}.", target))
     # destruction
@@ -913,8 +1048,26 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
     return out
 
 
+_STDOUT = frozenset({"-", "/dev/stdout", "/dev/fd/1", "/proc/self/fd/1"})
+
+
 def _writes(argv: list[str]) -> bool:
-    return any(a in ("-o", "-O", "--output", "--remote-name") or a.startswith(("-o", "--output=")) for a in argv[1:])
+    """True when a fetcher saves the download to a file; ``-O -`` and ``-o /dev/stdout`` send it to the next stage."""
+    args = argv[1:]
+    for i, a in enumerate(args):
+        if a in ("-o", "-O", "--output", "--output-document"):
+            val = args[i + 1] if i + 1 < len(args) else ""
+        elif a.startswith(("--output=", "--output-document=")):
+            val = a.partition("=")[2]
+        elif a.startswith("-o") and not a.startswith("--") and len(a) > 2:
+            val = a[2:]
+        elif a == "--remote-name":
+            val = ""
+        else:
+            continue
+        if val not in _STDOUT:
+            return True
+    return False
 
 
 def _pipe_hits(stages: list[_Stage], intent: str) -> list[Hit]:
@@ -994,32 +1147,52 @@ def _download_run(stages: list[_Stage]) -> Hit | None:
     return None
 
 
+def _piped_text(prev: _Stage, st: _Stage, intent: str, depth: int, sudo: bool) -> list[Hit]:
+    """What ``echo`` or ``printf`` pipes into a shell that reads its stdin is run as a command."""
+    maker, _ = _unwrap(prev)
+    shell_stage, _ = _unwrap(st)
+    if not maker.argv or not shell_stage.argv or _bin(maker.argv[0]) not in ("echo", "printf"):
+        return []
+    if _bin(shell_stage.argv[0]) not in _SHELLS or any(not a.startswith("-") for a in shell_stage.argv[1:]) or any(
+            "c" in a[1:] for a in shell_stage.argv[1:] if not a.startswith("--")):
+        return []  # a script file or -c has its own text
+    words = [a for a in maker.argv[1:] if a not in ("-n", "-e", "-E", "-ne", "-en")]
+    if _bin(maker.argv[0]) == "printf" and words and "%" in words[0]:
+        words = words[1:]
+    if not words:
+        return []
+    return _analyse(" ".join(words), intent, depth + 1, {}, sudo or shell_stage.sudo)
+
+
 def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo: bool = False) -> list[Hit]:
     hits: list[Hit] = []
     text = command[:_MAX]
-    if _FORK_BOMB.search(text) and re.search(r"\|\s{0,3}[\w:.-]{1,40}\s{0,3}&", text) or _FORK_LOOP.search(text):
+    data = _mask_data(text)  # what the raw patterns read: single-quoted data is not code
+    if _FORK_BOMB.search(data) and re.search(r"\|\s{0,3}[\w:.-]{1,40}\s{0,3}&", data) or _FORK_LOOP.search(data):
         hits.append(Hit(DENY, "a fork bomb: a function or loop that starts copies of itself until the machine stops."))
-    if _FORK_CODE.search(text) and ("while" in text.lower() or "fork" in text.lower()) and re.search(r"fork\s{0,3}\(\)\s{0,3}(?:#|;|\n|$|\))|fork\s+while|:\(\)", text, re.I) and len(text) < 2000:
-        if re.search(r"while[^;\n]{0,40}fork|fork\s+while|:\(\)\s*\{", text, re.I):
+    if _FORK_CODE.search(data) and ("while" in data.lower() or "fork" in data.lower()) and re.search(r"fork\s{0,3}\(\)\s{0,3}(?:#|;|\n|$|\))|fork\s+while|:\(\)", data, re.I) and len(data) < 2000:
+        if re.search(r"while[^;\n]{0,40}fork|fork\s+while|:\(\)\s*\{", data, re.I):
             hits.append(Hit(DENY, "a fork bomb: code that forks without end."))
-    if _PIPE_SHELL_SUBST.search(text):
-        plain = bool(re.search(r"http://|\b\d{1,3}(?:\.\d{1,3}){3}\b", text))
+    if _PIPE_SHELL_SUBST.search(data):
+        plain = bool(re.search(r"http://|\b\d{1,3}(?:\.\d{1,3}){3}\b", data))
         hits.append(Hit(DENY if sudo or plain else ASK, "code downloaded and run unread (a shell or eval given a download's output)."))
-    if _REVERSE_STRICT.search(text):
+    if _REVERSE_STRICT.search(data):
         hits.append(Hit(DENY, "a reverse shell: a shell handed to a network socket."))
-    elif "/dev/tcp/" in text or "/dev/udp/" in text:
-        for m in re.finditer(r"/dev/(?:tcp|udp)/([^/\s'\"]{1,100})/\d{1,5}", text):
+    elif "/dev/tcp/" in data or "/dev/udp/" in data:
+        for m in re.finditer(r"/dev/(?:tcp|udp)/([^/\s'\"]{1,100})/\d{1,5}", data):
             if not shell.is_loopback(m[1]):
                 hits.append(Hit(ASK, f"a raw network socket to {m[1]}.", m[1]))
                 break
     if re.search(r"rmtree\(\s{0,3}(?:os\.path\.expanduser\(\s{0,3}['\"]~['\"]\s{0,3}\)|['\"](?:/|~|\$HOME)['\"]|Path\.home\(\)|"
-                 r"os\.environ\[['\"]HOME['\"]\])", text):
+                 r"os\.environ\[['\"]HOME['\"]\])", data):
         hits.append(Hit(DENY, "code that deletes the home or root directory tree."))
     stages = _stages(text)
     if stages is None:
         return hits
     state_pipe_secret = False
-    for st in stages:
+    for k, st in enumerate(stages):
+        if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
+            hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
         local = dict(state)
         local["prev_secret"] = state_pipe_secret
         st.sudo = st.sudo or sudo
@@ -1035,8 +1208,8 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     run = _download_run(stages)
     if run:
         hits.append(run)
-    for inner in _SUBST.finditer(text):
-        body = inner[1] or inner[2]
+    for inner in _SUBST.finditer(data):
+        body = text[slice(*inner.span(1 if inner[1] is not None else 2))]  # from the unmasked text: the code inside may quote
         if body and depth < _MAX_DEPTH and len(hits) < 50:
             hits.extend(_analyse(body, intent, depth + 1, {}, sudo))
     return hits
@@ -1059,6 +1232,8 @@ def assess_shell(command: str, intent: str = "") -> Hit | None:
     if not command or not command.strip():
         return None
     hits = _analyse(command, intent, 0, {})
+    if len(command) > _MAX and not any(h.decision == DENY for h in hits):  # the rest was not read: do not pass it as safe
+        hits.append(Hit(ASK, f"the command is longer than {_MAX} characters, too long to read in full; check the part after that."))
     if command.strip() and command.strip() in intent and hits and all(h.decision == DENY for h in hits):
         return Hit(ASK, hits[0].reason + " (the user typed this command, so confirm it)")
     return _worst(hits, intent)

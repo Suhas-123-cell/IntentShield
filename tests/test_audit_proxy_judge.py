@@ -159,8 +159,8 @@ def test_a_readable_instruction_inside_a_run_of_junk_still_reaches_the_judge(sha
 
 def test_readable_words_kept_from_a_blob_are_few_for_a_real_image():
     import base64
-    import os
+    import random
 
-    blob = base64.b64encode(os.urandom(100_000)).decode()
+    blob = base64.b64encode(random.Random(7).randbytes(100_000)).decode()  # seeded: the count varies with the bytes
     out = judge_module.strip_blobs("x " + blob)
     assert "omitted" in out and len(out) < 1_200, len(out)
