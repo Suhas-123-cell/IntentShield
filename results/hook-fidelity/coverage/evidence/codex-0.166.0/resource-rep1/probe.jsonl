@@ -1,0 +1,3 @@
+{"ts_ns": 1793484466200440000, "method": "start", "instructions_marker": "ISC-INSTR-nzf5e91cb3"}
+{"ts_ns": 1793484466205963000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": false}, "client_info": "codex-mcp-client 0.166.0"}, "lookup_v_calls": 0}
+{"ts_ns": 1793484466321033000, "method": "resources/read", "uri": "probe://notes", "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": false}, "client_info": "codex-mcp-client 0.166.0"}}

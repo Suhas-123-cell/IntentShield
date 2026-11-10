@@ -1,0 +1,5 @@
+{"ts_ns": 1793484462068565000, "method": "start", "instructions_marker": "ISC-INSTR-nzac4af3be"}
+{"ts_ns": 1793484462075301000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "claude-code 2.1.69"}, "lookup_v_calls": 0}
+{"ts_ns": 1793484462075624000, "method": "prompts/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "claude-code 2.1.69"}}
+{"ts_ns": 1793484462075915000, "method": "resources/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "claude-code 2.1.69"}}
+{"ts_ns": 1793484462142600000, "method": "prompts/get", "name": "brief", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "claude-code 2.1.69"}}

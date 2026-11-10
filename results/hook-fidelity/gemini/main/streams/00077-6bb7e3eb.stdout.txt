@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:25:44.562Z","session_id":"9c3a1e89-a12a-4140-b5b5-e4256a3205e8","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:25:44.563Z","role":"user","content":"Call the search_notes tool of the notes server with the query 'nz6804a248' and reply with the word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:25:44.584Z","tool_name":"mcp_notes_search_notes","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485544575_0","parameters":{"query":"nz6804a248"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:25:44.628Z","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485544575_0","status":"error","output":"Tool execution blocked: bash: <run>/hookbin/deadhook: Permission denied","error":{"type":"policy_violation","message":"Tool execution blocked: bash: <run>/hookbin/deadhook: Permission denied"}}
+{"type":"message","timestamp":"2026-10-31T22:25:44.632Z","role":"assistant","content":"stub done nz6804a248","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:25:44.633Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":71,"tool_calls":1,"models":{"gemini-3.5-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

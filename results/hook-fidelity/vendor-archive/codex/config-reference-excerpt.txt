@@ -1,0 +1,151 @@
+VENDOR DOCUMENT TEXT ARCHIVE (r3-codex lane)
+source url: https://developers.openai.com/codex/config-reference (redirects to https://learn.chatgpt.com/docs/config-file/config-reference); EXCERPT of the converted text: lines 880-960, 1060-1070, 1222-1256, 1385-1400 (the keys the generated config.toml uses)
+retrieved: 2026-10-31 (UTC) with curl; HTML converted to text by a stdlib html.parser script (scripts/tags dropped), no other edit
+read by: r3-codex lane
+-----
+Enable or disable multi-agent tools (default: true). | 
+agents.interrupt_message | boolean | 
+Record a model-visible message when an agent turn is interrupted (default: true). | 
+agents.max_concurrent_threads_per_session | number | 
+Maximum number of spawned-agent threads that can be open concurrently, excluding the primary thread. When unset, Codex chooses the default. | 
+agents.max_threads | number | 
+Legacy alias for agents.max_concurrent_threads_per_session. | 
+allow_login_shell | boolean | 
+Allow shell-based tools to use login-shell semantics. Defaults to true; when false, login = true requests are rejected and omitted login defaults to non-login shells. | 
+analytics.enabled | boolean | 
+Enable or disable analytics for this machine/profile. In Codex CLI, false also disables custom OTLP metrics exporters. When unset, the client default applies. | 
+approval_policy | on-request | never | { granular = { sandbox_approval = bool, rules = bool, mcp_elicitations = bool, request_permissions = bool, skill_approval = bool } } | 
+Controls when Codex pauses for approval before executing commands. You can also use approval_policy = { granular = { ... } } to allow or auto-reject specific prompt categories while keeping other prompts interactive. untrusted is unsupported, and on-failure is deprecated; use on-request for interactive runs or never for non-interactive runs. | 
+approval_policy.granular.mcp_elicitations | boolean | 
+When true, MCP elicitation prompts are allowed to surface instead of being auto-rejected. | 
+approval_policy.granular.request_permissions | boolean | 
+When true, prompts from the request_permissions tool are allowed to surface. | 
+approval_policy.granular.rules | boolean | 
+When true, approvals triggered by execpolicy prompt rules are allowed to surface. | 
+approval_policy.granular.sandbox_approval | boolean | 
+When true, sandbox escalation approval prompts are allowed to surface. | 
+approval_policy.granular.skill_approval | boolean | 
+When true, skill-script approval prompts are allowed to surface. | 
+approvals_reviewer | user | auto_review | 
+Who reviews eligible approval prompts under on-request or granular approval policies. Defaults to user; auto_review uses the reviewer subagent. This setting doesn't change sandboxing or review actions already allowed inside the sandbox. | 
+apps._default.approvals_reviewer | user | auto_review | 
+Default reviewer for app tool approval prompts unless overridden per app. When omitted, apps inherit the top-level approvals_reviewer value. | 
+apps._default.default_tools_approval_mode | auto | prompt | writes | approve | 
+Default approval behavior for app tools without per-app or per-tool overrides. | 
+apps._default.destructive_enabled | boolean | 
+Default allow/deny for app tools with destructive_hint = true. | 
+apps._default.enabled | boolean | 
+Default app enabled state for all apps unless overridden per app. | 
+apps._default.open_world_enabled | boolean | 
+Default allow/deny for app tools with open_world_hint = true. | 
+apps.<id>.approvals_reviewer | user | auto_review | 
+Reviewer for this app's tool approval prompts. Overrides apps._default.approvals_reviewer. | 
+apps.<id>.default_tools_approval_mode | auto | prompt | writes | approve | 
+Default approval behavior for tools in this app unless a per-tool override exists. | 
+apps.<id>.default_tools_enabled | boolean | 
+Default enabled state for tools in this app unless a per-tool override exists. | 
+apps.<id>.destructive_enabled | boolean | 
+Allow or block tools in this app that advertise destructive_hint = true. | 
+apps.<id>.enabled | boolean | 
+Enable or disable a specific app/connector by id (default: true). | 
+apps.<id>.open_world_enabled | boolean | 
+Allow or block tools in this app that advertise open_world_hint = true. | 
+apps.<id>.tools.<tool>.approval_mode | auto | prompt | writes | approve | 
+Per-tool approval behavior override for a single app tool. | 
+apps.<id>.tools.<tool>.enabled | boolean | 
+Per-tool enabled override for an app tool (for example repos/list). | 
+auto_review.extra_policy | string | 
+Additional local Markdown policy for automatic review, included alongside the main policy. Managed guardian_extra_policy takes precedence. Blank values are ignored. | 
+auto_review.policy | string | 
+Local Markdown policy instructions for automatic review. Managed guardian_policy_config takes precedence. Blank values are ignored. | 
+background_terminal_max_timeout | number | 
+Maximum poll window in milliseconds for empty write_stdin polls (background terminal polling). Default: 300000 (5 minutes). Replaces the older background_terminal_timeout key. | 
+browser_use.allow_history_access | boolean | 
+Set to false to restrict browser-history access. Managed requirements can enforce this restriction. | 
+browser_use.default_origin_policy | table | 
+Fallback browser-origin restrictions. Supports access, uploads, downloads, and full_cdp_access, each set to allow or deny. | 
+browser_use.origins.<origin> | table | 
+Per-origin browser restrictions with the same fields as browser_use.default_origin_policy. Include an HTTP or HTTPS scheme and optional port; omit paths, queries, and fragments. Local values cannot relax managed denies. | 
+chatgpt_base_url | string | 
+Override the base URL used during the ChatGPT login flow. | 
+check_for_update_on_startup | boolean | 
+Check for Codex updates on startup (set to false only when updates are centrally managed). | 
+cli_auth_credentials_store | file | keyring | auto | ephemeral | 
+Control where the CLI stores cached credentials. | 
+compact_prompt | string | 
+Inline override for the history compaction prompt. | 
+computer_use.default_app_access | allow | deny | 
+Fallback native-app access policy for Computer Use. App-specific entries can supply a policy; local configuration cannot relax managed restrictions. | 
+computer_use.macos.bundle_ids | map<string, allow | deny> | 
+Native macOS app access keyed by bundle identifier. | 
+computer_use.windows.always_allowed_app_ids | array<string> | 
+Windows app identifiers that Computer Use can open without prompting. Apps not in the list require approval; remove saved entries from the ChatGPT desktop app's Computer Use settings. | 
+computer_use.windows.aumids | map<string, allow | deny> | 
+Packaged Windows app access keyed by Application User Model ID (AUMID). | 
+computer_use.windows.exes | array<table> | 
+Windows executable access rules. Each rule requires publisher_name, product_name, and access (allow or deny); binary_name is optional. | 
+[... lines omitted ...]
+Deprecated legacy toggle; prefer the top-level web_search setting. | 
+features.web_search_cached | boolean | 
+Deprecated legacy toggle. When web_search is unset, true maps to web_search = "cached". | 
+features.web_search_request | boolean | 
+Deprecated legacy toggle. When web_search is unset, true maps to web_search = "live". | 
+feedback.enabled | boolean | 
+Enable feedback submission via /feedback across local clients (default: true). | 
+file_opener | vscode | vscode-insiders | windsurf | cursor | none | 
+URI scheme used to open citations from Codex output (default: vscode). | 
+forced_chatgpt_workspace_id | string (uuid) | 
+Limit ChatGPT logins to a specific workspace identifier. | 
+[... lines omitted ...]
+Provider compaction protocol. unsupported uses local compaction; v2 sends compaction triggers through Responses. Omit to keep provider defaults; model and turn settings may restrict support further. | 
+model_providers.<id>.env_http_headers | map<string,string> | 
+HTTP headers populated from environment variables when present. | 
+model_providers.<id>.env_key | string | 
+Environment variable supplying the provider API key. | 
+model_providers.<id>.env_key_instructions | string | 
+Optional setup guidance for the provider API key. | 
+model_providers.<id>.experimental_bearer_token | string | 
+Direct bearer token for the provider (discouraged; use env_key). | 
+model_providers.<id>.http_headers | map<string,string> | 
+Static HTTP headers added to provider requests. | 
+model_providers.<id>.model_catalog_url | string | 
+Full URL for a Codex-native model catalog. Omit to keep the provider's default model discovery. | 
+model_providers.<id>.name | string | 
+Display name for a custom model provider. | 
+model_providers.<id>.query_params | map<string,string> | 
+Extra query parameters appended to provider requests. | 
+model_providers.<id>.request_max_retries | number | 
+Retry count for HTTP requests to the provider (default: 4). | 
+model_providers.<id>.requires_openai_auth | boolean | 
+The provider uses OpenAI authentication (defaults to false). | 
+model_providers.<id>.stream_idle_timeout_ms | number | 
+Idle timeout for SSE streams in milliseconds (default: 300000). | 
+model_providers.<id>.stream_max_retries | number | 
+Retry count for SSE streaming interruptions (default: 5). | 
+model_providers.<id>.supports_standalone_web_search | boolean | 
+Advertise support for a compatible standalone web search endpoint (default: false). Standalone search remains under development and off by default; provider compatibility alone doesn't enable it. | 
+model_providers.<id>.supports_websockets | boolean | 
+Whether that provider supports the Responses API WebSocket transport. | 
+model_providers.<id>.wire_api | responses | 
+Protocol used by the provider. responses is the only supported value, and it is the default when omitted. | 
+model_providers.amazon-bedrock.aws.profile | string | 
+AWS profile name used by the built-in amazon-bedrock provider. | 
+model_providers.amazon-bedrock.aws.region | string | 
+AWS region used by the built-in amazon-bedrock provider. | 
+[... lines omitted ...]
+review_model | string | 
+Optional model override used by /review (defaults to the current session model). | 
+sandbox_mode | read-only | workspace-write | danger-full-access | 
+Sandbox policy for filesystem and network access during command execution. | 
+sandbox_workspace_write.exclude_slash_tmp | boolean | 
+Exclude /tmp from writable roots in workspace-write mode. | 
+sandbox_workspace_write.exclude_tmpdir_env_var | boolean | 
+Exclude $TMPDIR from writable roots in workspace-write mode. | 
+sandbox_workspace_write.network_access | boolean | 
+Allow outbound network access inside the workspace-write sandbox. | 
+sandbox_workspace_write.writable_roots | array<string> | 
+Additional writable roots when sandbox_mode = "workspace-write". | 
+service_tier | string | 
+Preferred service tier for new turns. Use fast or another tier advertised by the active model; fast maps to the request value priority. | 
+shell_environment_policy.exclude | array<string> | 
+Legacy environment-variable exclusion patterns. Use shell_environment_policy.filters for new configuration; don't combine both forms in the same layer. | 

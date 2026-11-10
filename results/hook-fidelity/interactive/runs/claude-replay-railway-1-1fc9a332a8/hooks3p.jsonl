@@ -1,0 +1,1 @@
+{"run_id": "1fc9a332a8", "ts_ns": 1793502974326420000, "pid": 23473, "harness": "claude", "event": "PreToolUse", "tool": "Bash", "tool_input": "{\"command\": \"<run>/shim/touch ran-nz2ee0642d.txt\"}", "decision_event": true, "reply": "RP", "exit_code": 0, "sleep": 0.0}

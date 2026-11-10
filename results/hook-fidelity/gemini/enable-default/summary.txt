@@ -1,0 +1,20 @@
+8 runs (0 INVALID, left out of n), 4 cells: config-invalid 2, control 1, scored 1
+informative cells (scored and differing from P_guard, P_doc or the prediction): 0
+
+CONFIG-INVALID blocks (the neutral control did not prove the hook fires under this exact config; this is NOT a harness finding, fix the config first):
+  gemini 0.24.5 M2 shell enable-default - plain S: R1 hook invoked 0/2 valid runs
+
+R0 (no hook) versus R1 (neutral hook), per block:
+  gemini 0.24.5 M2 shell enable-default - plain S: R0 none | R1 RAN:2 | no-r0
+  gemini 0.26.0 M2 shell enable-default - plain S: R0 none | R1 RAN:2 | no-r0
+
+cell                                                                       result                         class
+gemini 0.24.5 M2 shell enable-default - plain arm S R1                     2/2 RAN                        config-invalid | hook invoked 0/2
+gemini 0.24.5 M2 shell enable-default - plain arm S R4                     2/2 RAN                        config-invalid | hook invoked 0/2; ctl R0 - R1 2/2 RAN
+gemini 0.26.0 M2 shell enable-default - plain arm S R1                     2/2 RAN                        control | hook invoked 2/2
+gemini 0.26.0 M2 shell enable-default - plain arm S R4                     0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+
+classes per harness: 
+prediction hits by basis: docs hit x1
+kill criterion (>= 5 undocumented deviations replicating on >= 3 versions): not evaluable, no harness has 3 versions in the data
+  gemini: 0 undocumented, 0 on every one of 2 version(s) run, 0 on 3+ (fewer than 3 versions: cannot meet the criterion)

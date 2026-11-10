@@ -1,0 +1,1 @@
+{"nonce": "nzb56f2971", "call": {"name": "Bash", "args": {"command": "touch ran-nzb56f2971.txt"}}, "by_api": {"openai": {"name": "exec_command", "args": {"cmd": "touch ran-nzb56f2971.txt"}}, "gemini": {"name": "run_shell_command", "args": {"command": "touch ran-nzb56f2971.txt"}}}, "final_text": "stub done nzb56f2971"}

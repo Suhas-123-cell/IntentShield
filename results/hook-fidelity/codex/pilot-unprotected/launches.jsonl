@@ -1,0 +1,11 @@
+{"run_id": "00000-5bda3b8a", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R4|0", "attempt": 0, "ts": "2026-10-31T22:00:43Z"}
+{"run_id": "00001-a0b9b541", "key": "codex|0.165.0|M1|mcp|trusted-bypass|-|plain|S|R4|0", "attempt": 0, "ts": "2026-10-31T22:00:45Z"}
+{"run_id": "00002-450d5773", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R3|0", "attempt": 0, "ts": "2026-10-31T22:00:47Z"}
+{"run_id": "00003-8b2585dc", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-10-31T22:00:49Z"}
+{"run_id": "00004-f2d38b7c", "key": "codex|0.165.0|M1|mcp|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-10-31T22:00:51Z"}
+{"run_id": "00005-8b2585dc", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-10-31T22:00:53Z"}
+{"run_id": "00006-0ab610a7", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R0|0", "attempt": 0, "ts": "2026-10-31T22:00:55Z"}
+{"run_id": "00007-2996da63", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R5|0", "attempt": 0, "ts": "2026-10-31T22:00:57Z"}
+{"run_id": "00008-ac495c0d", "key": "codex|0.165.0|M1|shell|trusted-bypass|-|plain|S|R7|0", "attempt": 0, "ts": "2026-10-31T22:00:59Z"}
+{"run_id": "00000-f2d38b7c", "key": "codex|0.165.0|M1|mcp|trusted-bypass|-|plain|S|R1|0", "attempt": 0, "ts": "2026-10-31T22:01:48Z"}
+{"run_id": "00001-cdfdd90f", "key": "codex|0.165.0|M1|mcp|trusted-bypass|-|plain|S|R0|0", "attempt": 0, "ts": "2026-10-31T22:01:50Z"}

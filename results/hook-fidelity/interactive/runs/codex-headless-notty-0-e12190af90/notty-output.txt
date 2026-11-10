@@ -1,0 +1,9 @@
+Reading additional input from stdin...
+{"type":"thread.started","thread_id":"01a19519-cd39-7883-b27c-381b7e1dab19"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_2","type":"error","message":"Model metadata for `stub-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+2026-11-01T03:14:19.032047Z ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: IntentShield evaluation verdict: ask. (IntentShield wanted the user to confirm this call, but no one can answer a prompt in a headless run; so it is refused and the user can allow it.) Do not retry this call or a variant of it: tell the user what you wanted to do and why, so they can decide. [IntentShield read this session as headless: harness command line has its headless flag [ancestry: libproc]]. Command: <run>/shim/touch ran-nz4fe4d27f.txt
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"stub done nz4fe4d27f"}}
+{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}

@@ -1,0 +1,6 @@
+{
+ "stdout_b64": "eyJob29rU3BlY2lmaWNPdXRwdXQiOiB7Imhvb2tFdmVudE5hbWUiOiAiUHJlVG9vbFVzZSIsICJwZXJtaXNzaW9uRGVjaXNpb24iOiAiYXNrIiwgInBlcm1pc3Npb25EZWNpc2lvblJlYXNvbiI6ICJJbnRlbnRTaGllbGQgd291bGQgbGlrZSB0byBjb25maXJtIHRoaXMgY2FsbCAoYXNrKS4ifX0K",
+ "stderr_b64": "",
+ "exit_code": 0,
+ "note": "the ask bytes the IntentShield hook sends on Claude Code (round 6 runs.jsonl, ask-on, hook_replies.stdout), replayed unchanged to Codex by stubhook.py: no IntentShield code runs in the ask-raw cell"
+}

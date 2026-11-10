@@ -1,0 +1,45 @@
+| scenario (exit codes) | `0.20.2 .. 0.25.2` | `0.26.0 .. 0.29.7` | `0.30.0 .. 0.35.3` | `0.36.0 .. 0.67.0-preview.0` |
+|---|---|---|---|---|
+| allow (0) | allow/yes | allow/yes | allow/yes | allow/yes |
+| ask (0) | allow/yes | allow/yes | allow/yes | ask/ask-kept |
+| deny (0) | deny/no | deny/no | deny/no | deny/no |
+| block (0) | deny/no | deny/no | deny/no | deny/no |
+| empty_exit0 (0) | none/yes | none/yes | none/yes | none/yes |
+| malformed_json_exit0 (0) | allow/yes | allow/yes | allow/yes | allow/yes |
+| malformed_json_exit2 (2) | deny/no | deny/no | deny/no | deny/no |
+| exit1_empty (1) | none/yes | none/yes | none/yes | none/yes |
+| exit1_stderr (1) | allow/yes | allow/yes | allow/yes | allow/yes |
+| exit2_empty (2) | none/yes | none/yes | none/yes | none/yes |
+| exit2_stderr (2) | deny/no | deny/no | deny/no | deny/no |
+| exit2_json_allow (2) | none/yes | none/yes | allow/yes | allow/yes |
+| exit2_json_deny (2) | none/yes | none/yes | deny/no | deny/no |
+| exit3_text (3) | none/yes | none/yes | deny/no | deny/no |
+| exit3_empty (3) | none/yes | none/yes | none/yes | none/yes |
+| intentshield_crash_exit2 (2) | deny/no | deny/no | deny/no | deny/no |
+| python_uncaught_exit1 (1) | allow/yes | allow/yes | allow/yes | allow/yes |
+| exit126_script_empty (126) | none/yes | none/yes | none/yes | none/yes |
+| exit126_script_stderr (126) | allow/yes | allow/yes | deny/no | deny/no |
+| exit127_script_empty (127) | none/yes | none/yes | none/yes | none/yes |
+| nonexec_file_126 (126) | allow/yes | allow/yes | deny/no | deny/no |
+| bad_interpreter_shebang (126) | allow/yes | allow/yes | deny/no | deny/no |
+| missing_command_127 (127) | allow/yes | allow/yes | deny/no | deny/no |
+| timeout (None) | none/yes | none/yes | none/yes | none/yes |
+| continue_false (0) | stop/no | stop/no | stop/no | stop/no |
+| unknown_decision (0) | allow/yes | allow/yes | allow/yes | allow/yes |
+| exit2_json_on_stderr (2) | deny/no | deny/no | deny/no | deny/no |
+| exit1_json_deny_stdout (1) | none/yes | none/yes | deny/no | deny/no |
+| python3_missing_on_path (127) | allow/yes | allow/yes | deny/no | deny/no |
+| timeout_grandchild_holds_pipe (None) | no-return/hang | no-return/hang | no-return/hang | no-return/hang |
+| multi_ask_plus_allow (0) | allow/yes | allow/yes | allow/yes | ask/ask-kept |
+| multi_deny_plus_allow (0) | deny/no | deny/no | deny/no | deny/no |
+| multi_crash_exit1_then_deny (1) | deny/no | deny/no | deny/no | deny/no |
+| multi_ask_plus_ask (0) | allow/yes | allow/yes | allow/yes | ask/ask-kept |
+
+Version groups: [0.20.2 .. 0.25.2] = 0.20.2, 0.22.5, 0.24.5, 0.25.2; [0.26.0 .. 0.29.7] = 0.26.0, 0.27.4, 0.28.2, 0.29.7; [0.30.0 .. 0.35.3] = 0.30.0, 0.30.1, 0.32.1, 0.33.2, 0.34.0, 0.35.3; [0.36.0 .. 0.67.0-preview.0] = 0.36.0, 0.37.1, 0.38.2, 0.40.1, 0.45.3, 0.50.0, 0.55.1, 0.60.0, 0.66.0, 0.67.0-nightly.20261031.g6814e00d6, 0.67.0-preview.0
+
+Groups are consecutive SAMPLED releases that behave identically at the runner level, split at 0.26.0 where hooks become enabled by default. Behaviour between two sampled releases is inferred, not run. `ask-kept` means the aggregator kept the ask; it is not a statement about prompting.
+
+Where the behaviour changes (each change happened between the two SAMPLED releases named, not at a release this sweep ran; boundary_scan.sh hashes the hook runner of the unsampled releases in between):
+- between sampled releases 0.25.2 and 0.26.0: no runner-level change (split because 0.26.0 is where hooks become enabled by default)
+- between sampled releases 0.29.7 and 0.30.0: exit2_json_allow, exit2_json_deny, exit3_text, exit126_script_stderr, nonexec_file_126, bad_interpreter_shebang, missing_command_127, exit1_json_deny_stdout, python3_missing_on_path
+- between sampled releases 0.35.3 and 0.36.0: ask, multi_ask_plus_allow, multi_ask_plus_ask

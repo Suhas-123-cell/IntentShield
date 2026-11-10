@@ -1,0 +1,50 @@
+Welcome to Claude Code v2.1.316
+
+..........................................................
+
+
+
+ * █████▓▓░
+
+ * ███▓░ ░░
+
+ ░░░░░░ ███▓░
+
+ ░░░ ░░░░░░░░░░ ███▓░
+
+ ░░░░░░░░░░░░░░░░░░░ * ██▓░░ ▓
+
+ ░▓▓███▓▓░
+
+ * ░░░░
+
+ ░░░░░░░░
+
+ ░░░░░░░░░░░░░░░░
+
+ █████████ *
+
+ ██▄█████▄██ *
+
+ █████████ *
+
+.......█ █ █ █..........................................
+
+
+
+ Unable to connect to Anthropic services
+
+
+
+ Failed to connect to api.anthropic.com: ECONNREFUSED
+
+
+
+ Please check your internet connection and network settings.
+
+
+
+ Note: Claude Code might not be available in your country. Check supported countries at
+
+ https://anthropic.com/supported-countries
+

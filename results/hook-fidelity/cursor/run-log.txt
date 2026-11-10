@@ -1,0 +1,9 @@
+start 2026-10-31T21:56:51Z go=1 cap=40 ledger=0 selection=2 runs seed=3
+00000-ebf530cc K4 cursor|2026.10.22|M1|shell|listed|-|plain|M|R1 -> INVALID hook_invoked=False attempt=0 evidence=none wall=0.79s model='' no side effect and no evidence of an attempt
+stopping: HOOK_FIDELITY_GO=1 launches used
+start 2026-10-31T21:59:24Z go=1 cap=10 ledger=1 selection=1 runs seed=3
+00001-f7d54342 K1 cursor|2026.10.22|M1|mcp|listed|-|plain|M|R1 -> INVALID hook_invoked=False attempt=0 evidence=none wall=9.05s model='Auto' no side effect and no evidence of an attempt
+done: nothing pending
+start 2026-10-31T21:59:53Z go=1 cap=10 ledger=2 selection=1 runs seed=3
+00002-dd93941e K1 cursor|2026.10.22|M1|mcp|listed|-|plain|M|R1 -> INVALID hook_invoked=False attempt=1 evidence=none wall=7.68s model='Auto' rate_limit
+stopping: rate_limit on a hosted plan; stop and report, do not retry

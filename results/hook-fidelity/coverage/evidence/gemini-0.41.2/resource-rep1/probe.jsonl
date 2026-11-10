@@ -1,0 +1,5 @@
+{"ts_ns": 1793484787203689000, "method": "start", "instructions_marker": "ISC-INSTR-nz85d1b1c5"}
+{"ts_ns": 1793484787210226000, "method": "prompts/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.41.2"}}
+{"ts_ns": 1793484787211134000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.41.2"}, "lookup_v_calls": 0}
+{"ts_ns": 1793484787212178000, "method": "resources/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.41.2"}}
+{"ts_ns": 1793484787369717000, "method": "resources/read", "uri": "probe://notes", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.41.2"}}

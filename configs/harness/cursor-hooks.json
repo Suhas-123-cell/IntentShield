@@ -1,8 +1,21 @@
 {
   "version": 1,
   "hooks": {
-    "beforeSubmitPrompt": [{"command": "intentshield-hook cursor"}],
-    "beforeMCPExecution": [{"command": "intentshield-hook cursor", "failClosed": true}],
-    "afterMCPExecution": [{"command": "intentshield-hook cursor"}]
+    "beforeSubmitPrompt": [
+      {
+        "command": "intentshield-hook cursor --deadline 30"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "intentshield-hook cursor --deadline 30",
+        "failClosed": true
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "intentshield-hook cursor --deadline 30"
+      }
+    ]
   }
 }

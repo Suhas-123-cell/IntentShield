@@ -1,0 +1,5 @@
+{"run_id": "00000-5cbc2171", "key": "gemini|0.24.5|M1|shell|-|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:06:52Z"}
+{"run_id": "00001-04332273", "key": "gemini|0.38.2|M1|shell|-|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:06:56Z"}
+{"run_id": "00002-9e8a6a21", "key": "gemini|0.66.0|M1|shell|-|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:06:58Z"}
+{"run_id": "00003-a5079ac4", "key": "gemini|0.36.0|M1|shell|-|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:06:59Z"}
+{"run_id": "00004-7fbaa86c", "key": "gemini|0.37.1|M1|shell|-|-|plain|S|R1|0", "attempt": 0, "ts": "2026-11-01T00:07:01Z"}

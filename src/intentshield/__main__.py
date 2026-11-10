@@ -8,6 +8,7 @@
     intentshield unwrap <mcp json>
     intentshield scan [config ...]     # find the MCP servers your agents use and check them offline
     intentshield doctor                # check the hooks and proxies are installed and actually run
+    intentshield wrap-hook --harness H -- <guard command>   # run any hook under the fail-closed launcher and translation
 
 The guard itself is ``intentshield-hook`` (hooks) and ``intentshield-mcp`` (gateway and transparent
 proxy); this command installs and runs them.
@@ -34,6 +35,11 @@ def serve(port: int = 8000) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["wrap-hook"]:  # the harness waits for it: its own parser, none of the others' imports
+        from . import wrap_hook
+
+        wrap_hook.main(argv[1:])
+        return
     parser = argparse.ArgumentParser(prog="intentshield", description=__doc__.strip(),
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--version", action="version", version=f"intentshield {__version__}")
@@ -43,6 +49,8 @@ def main(argv: list[str] | None = None) -> None:
     install.add_subcommands(sub)
     scan.add_subcommand(sub)
     doctor.add_subcommand(sub)
+    sub.add_parser("wrap-hook", help="run any third-party hook under the fail-closed launcher and verdict translation "
+                                     "(`intentshield wrap-hook --help`)", add_help=False)
     args = parser.parse_args(argv or ["serve"])
     if args.command == "serve":
         serve(args.port)

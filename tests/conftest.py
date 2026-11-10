@@ -26,6 +26,12 @@ def _isolate_environment(monkeypatch, tmp_path):
     monkeypatch.setattr("intentshield.harness.ENV_FILE", home / ".intentshield" / ".env")
     # A locally trained classifier would change decisions; tests run the deterministic agents.
     monkeypatch.setenv("INTENTSHIELD_INTENT_MODEL_DIR", "tests/no-intent-model")
+    # The hook's verdict translation picks its replies by the harness's version and mode, which a test process cannot have
+    # (and which would differ when pytest is started from inside a harness): tests written against the plain hook run with it
+    # off, and tests/test_harness_translation.py turns it on where it is the subject.
+    monkeypatch.setenv("INTENTSHIELD_HOOK_TRANSLATE", "off")
+    # install and doctor run `<harness> --version` to record the version; a test must not start a developer's real harness
+    monkeypatch.setattr("intentshield.translation.probe_and_record", lambda *a, **k: None)
     monkeypatch.setattr("intentshield.envfile.find_dotenv", lambda *a, **k: "")  # no developer .env, not even to name
     for module in ("api", "mcp_server", "mcp_verify"):
         monkeypatch.setattr(f"intentshield.{module}.load_dotenv", lambda *a, **k: False)

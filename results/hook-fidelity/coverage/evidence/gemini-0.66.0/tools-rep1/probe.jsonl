@@ -1,0 +1,6 @@
+{"ts_ns": 1793484479758477000, "method": "start", "instructions_marker": "ISC-INSTR-nz95ae49c2"}
+{"ts_ns": 1793484479765470000, "method": "prompts/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.66.0"}}
+{"ts_ns": 1793484479766517000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.66.0"}, "lookup_v_calls": 0}
+{"ts_ns": 1793484479767608000, "method": "resources/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.66.0"}}
+{"ts_ns": 1793484479961737000, "method": "tools/call", "name": "lookup_v", "arguments": {"word": "alpha"}, "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.66.0"}}
+{"ts_ns": 1793484479963482000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": false, "roots": true}, "client_info": "gemini-cli-mcp-client 0.66.0"}, "lookup_v_calls": 1}

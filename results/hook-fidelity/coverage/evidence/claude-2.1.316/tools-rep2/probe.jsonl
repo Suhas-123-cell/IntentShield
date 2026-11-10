@@ -1,0 +1,5 @@
+{"ts_ns": 1793484428548449000, "method": "start", "instructions_marker": "ISC-INSTR-nz4ea0a686"}
+{"ts_ns": 1793484428556877000, "method": "prompts/list", "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": true}, "client_info": "claude-code 2.1.316"}}
+{"ts_ns": 1793484428557279000, "method": "resources/list", "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": true}, "client_info": "claude-code 2.1.316"}}
+{"ts_ns": 1793484428557640000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": true}, "client_info": "claude-code 2.1.316"}, "lookup_v_calls": 0}
+{"ts_ns": 1793484428649146000, "method": "tools/call", "name": "lookup_v", "arguments": {"word": "alpha"}, "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": true}, "client_info": "claude-code 2.1.316"}}

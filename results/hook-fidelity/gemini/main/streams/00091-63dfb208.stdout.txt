@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:26:03.636Z","session_id":"17ed564d-6134-41c2-8b17-a6544e3b4035","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:26:03.637Z","role":"user","content":"Call the search_notes tool of the notes server with the query 'nz8dcb6d9a' and reply with the word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:26:03.660Z","tool_name":"mcp_notes_search_notes","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485563650_0","parameters":{"query":"nz8dcb6d9a"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:26:03.708Z","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485563650_0","status":"error","output":"Tool execution blocked: bash: <run>/hookbin/deadhook: No such file or directory","error":{"type":"policy_violation","message":"Tool execution blocked: bash: <run>/hookbin/deadhook: No such file or directory"}}
+{"type":"message","timestamp":"2026-10-31T22:26:03.713Z","role":"assistant","content":"stub done nz8dcb6d9a","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:26:03.714Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":78,"tool_calls":1,"models":{"gemini-3.5-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

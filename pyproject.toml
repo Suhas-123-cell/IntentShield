@@ -63,6 +63,7 @@ intentshield-mcp = "intentshield.mcp_server:main"
 intentshield-demo-mcp = "intentshield.demo_mcp_server:main"
 intentshield-mcp-verify = "intentshield.mcp_verify:main"
 intentshield-hook = "intentshield.harness:main"
+intentshield-wrap-hook = "intentshield.wrap_hook:main"
 intentshield-eval = "intentshield.evaluation:main"
 intentshield-threats = "intentshield.threat_memory:main"
 
@@ -86,8 +87,20 @@ packages = ["src/intentshield"]
 [tool.ruff]
 line-length = 130
 target-version = "py312"
-extend-exclude = ["artifacts", "results"]
+# prevalence: one-off GitHub census scripts kept for provenance, not maintained code
+extend-exclude = ["artifacts", "results", "benchmarks/hook_fidelity/prevalence"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E741", "E731", "B008", "B023", "B904", "B905", "UP035", "UP037"]
+
+[tool.ruff.lint.per-file-ignores]
+# The corpus readings are prose data (long quoted lines, printf-style row builders): not code style.
+"benchmarks/hook_fidelity/corpus_build/*.py" = ["E501", "UP031", "I001"]
+# Guard capture and replay: long prose strings (reasons, quoted payloads, table rows) are data, not code style.
+"benchmarks/hook_fidelity/guard_capture.py" = ["E501"]
+"benchmarks/hook_fidelity/guard_replay.py" = ["E501"]
+# The head-to-head report text (table rows and prose caveats) is data, not code style.
+"benchmarks/hook_fidelity/compare.py" = ["E501"]
+# The local-model lane: prose docstring, table headers and row builders are data, not code style.
+"benchmarks/hook_fidelity/model_lane.py" = ["E501"]

@@ -1,0 +1,48 @@
+{
+ "captured_on": "2026-11-01",
+ "sandbox_selftest": {
+  "write_outside_scratch": {
+   "exit_code": 1,
+   "stderr": "/bin/sh: <scratch>/guard-replay-canary.txt: Operation not p",
+   "held": true
+  },
+  "write_inside_scratch": {
+   "exit_code": 0,
+   "stderr": "",
+   "held": true
+  },
+  "read_home_file": {
+   "exit_code": 1,
+   "stderr": "head: <home>/.zshrc: Operation not permitted\n",
+   "held": true
+  },
+  "network_loopback": {
+   "exit_code": 1,
+   "stderr": "",
+   "held": true
+  },
+  "network_external": {
+   "exit_code": 6,
+   "stderr": "curl: (6) Could not resolve host: example.com\n",
+   "held": true
+  }
+ },
+ "tools": {
+  "node": "v20.20.2",
+  "jq": "jq-1.7.1-apple",
+  "python3": "Python 3.14.8",
+  "bash": "GNU bash, version 3.2.57(1)-release (arm64-apple-darwin26)",
+  "tsc (block-no-verify build only)": "Version 5.9.3"
+ },
+ "block_no_verify_build": "compiled from the clone with tsc (type errors only, no @types/node installed); @polyhook/sdk 0.1.4 from the earlier npm pack; shell-quote 1.8.3 (the repo asks ^1.9.0)",
+ "cargo_offline_evidence": {
+  "dcg": "htly (908501772 2026-08-30)\ninfo: downloading 6 components\nerror: no matching package named `aho-corasick` found\nlocation searched: crates.io index\nrequired by package `destructive_command_guard v0.15.3 (<scratch>/corpus/dcg/repo)`\nnote: offline mode (via `--offline`) can sometimes cause surprising resolution failures\nhelp: if this error is too confusing you may wish to retry without `--offline`\n",
+  "tool-gate-hook": "error: no matching package named `anyhow` found\nlocation searched: crates.io index\nrequired by package `tool-gate-hook v0.1.0 (<scratch>/corpus/tool-gate-hook/repo)`\nnote: offline mode (via `--offline`) can sometimes cause surprising resolution failures\nhelp: if this error is too confusing you may wish to retry without `--offline`\n"
+ },
+ "limits": [
+  "The guard processes run with a PATH shim mktemp (GNU-style TMPDIR) because macOS mktemp ignores TMPDIR and the user temp dir is not writable in the sandbox.",
+  "HOME, TMPDIR and cwd are inside the scratch directory; the payload cwd is the run's work directory, which holds a .env containing only HF_FIXTURE_MARKER=not-a-secret.",
+  "Payload shapes are written from vendor hook documentation, not recorded from a live harness.",
+  "Network is denied for every guard run, so guards that need a service (axonflow, gemini-intrupt) are captured on their no-service and local-state paths only."
+ ]
+}

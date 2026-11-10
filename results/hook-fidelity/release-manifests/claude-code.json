@@ -1,0 +1,653 @@
+{
+ "harness": "claude-code",
+ "package": "@anthropic-ai/claude-code",
+ "dist_tags": {
+  "stable": "2.1.309",
+  "latest": "2.1.316",
+  "next": "2.1.316"
+ },
+ "changelog_source": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
+ "version_check_env": "HOME/CLAUDE_CONFIG_DIR redirected to <install>/.fakehome, ANTHROPIC_API_KEY empty, autoupdater disabled",
+ "versions": [
+  {
+   "version": "2.0.41",
+   "published": "2025-11-14T01:55:35.892Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.0.41",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.0.41/node_modules/@anthropic-ai/claude-code/cli.js",
+   "packaging": "bundled cli.js (run with node)",
+   "version_works": true,
+   "version_output": "2.0.41 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `model` parameter to prompt-based stop hooks, allowing users to specify a custom model for hook evaluation",
+    "Fixed crash when plugin command hooks timeout during execution",
+    "SDK: Support custom timeouts for hooks"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed broken security documentation links in trust dialogs and onboarding",
+    "Allow more safe git commands to run without approval"
+   ]
+  },
+  {
+   "version": "2.1.0",
+   "published": "2026-01-07T02:43:04.533Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.0",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.0/node_modules/@anthropic-ai/claude-code/cli.js",
+   "packaging": "bundled cli.js (run with node)",
+   "version_works": true,
+   "version_output": "2.1.0 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed PreToolUse hooks to allow `updatedInput` when returning `ask` permission decision, enabling hooks to act as middleware while still requesting user consent",
+    "Added hooks support to agent frontmatter, allowing agents to define PreToolUse, PostToolUse, and Stop hooks scoped to the agent's lifecycle",
+    "Added hooks support for skill and slash command frontmatter",
+    "Added support for `once: true` config for hooks",
+    "Added support for prompt and agent hook types from plugins (previously only command hooks were supported)",
+    "Fixed `/hooks` menu selecting wrong hook type when scrolling to a different option",
+    "Fixed hook success message showing trailing colon when hook has no output"
+   ],
+   "other_permission_trust_lines": [
+    "Reduced permission prompts for complex bash commands",
+    "Added wildcard pattern matching for Bash tool permissions using `*` at any position in rules (e.g., `Bash(npm *)`, `Bash(* install)`, `Bash(git * main)`)",
+    "Added support for disabling specific agents using `Task(AgentName)` syntax in settings.json permissions or the `--disallowedTools` CLI flag",
+    "Fixed AWS Bedrock subagents not inheriting EU/APAC cross-region inference model configuration, causing 403 errors when IAM permissions are scoped to specific regions",
+    "Fixed `${CLAUDE_PLUGIN_ROOT}` not being substituted in plugin `allowed-tools` frontmatter, which caused tools to incorrectly require approval",
+    "Fixed files created by the Write tool using hardcoded 0o600 permissions instead of respecting the system umask",
+    "Fixed multi-line bash commands with backslash continuations being incorrectly split and flagged for permissions",
+    "Fixed duplicate Bash commands appearing in permission request option labels",
+    "Fixed cursor disappearing after dismissing permission dialogs",
+    "Improved subagents (Task tool) to continue working after permission denial, allowing them to try alternative approaches",
+    "Improved permission prompt UX with Tab hint moved to footer, cleaner Yes/No input labels with contextual placeholders",
+    "Removed permission prompt when entering plan mode - users can now enter plan mode without approval",
+    "[VSCode] Added descriptive labels on auto-accept permission button (e.g., \"Yes, allow npm for this project\" instead of \"Yes, and don't ask again\")"
+   ]
+  },
+  {
+   "version": "2.1.47",
+   "published": "2026-02-18T20:15:11.998Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.47",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.47/node_modules/@anthropic-ai/claude-code/cli.js",
+   "packaging": "bundled cli.js (run with node)",
+   "version_works": true,
+   "version_output": "2.1.47 (Claude Code)",
+   "hook_changelog_lines": [
+    "Improved startup performance by deferring SessionStart hook execution, reducing time-to-interactive by ~500ms.",
+    "Added `last_assistant_message` field to Stop and SubagentStop hook inputs, providing the final assistant response text so hooks can access it without parsing transcript files.",
+    "Fixed hooks (PreToolUse, PostToolUse) silently failing to execute on Windows by using Git Bash instead of cmd.exe (anthropics/claude-code#25981)"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed the bash permission classifier to validate that returned match descriptions correspond to actual input rules, preventing hallucinated descriptions from incorrectly granting permissions",
+    "Fixed \"Always allow\" on multiline bash commands creating invalid permission patterns that corrupt settings (anthropics/claude-code#25909)"
+   ]
+  },
+  {
+   "version": "2.1.69",
+   "published": "2026-03-04T21:46:46.306Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.69",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.69/node_modules/@anthropic-ai/claude-code/cli.js",
+   "packaging": "bundled cli.js (run with node)",
+   "version_works": true,
+   "version_output": "2.1.69 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `InstructionsLoaded` hook event that fires when CLAUDE.md or `.claude/rules/*.md` files are loaded into context",
+    "Added `agent_id` (for subagents) and `agent_type` (for subagents and `--agent`) to hook events",
+    "Added `worktree` field to status line hook commands with name, path, branch, and original repo directory when running in a `--worktree` session",
+    "Fixed plugin Stop/SessionEnd/etc hooks not firing after any `/plugin` operation",
+    "Fixed plugin hooks being silently dropped when two plugins use the same `${CLAUDE_PLUGIN_ROOT}/...` command template",
+    "Fixed a memory leak in interactive mode where hook events could accumulate unboundedly during long sessions",
+    "Fixed `TeammateIdle` and `TaskCompleted` hooks to support `{\"continue\": false, \"stopReason\": \"...\"}` to stop the teammate, matching `Stop` hook behavior",
+    "Fixed `WorktreeCreate` and `WorktreeRemove` plugin hooks being silently ignored"
+   ],
+   "other_permission_trust_lines": [
+    "Added `pluginTrustMessage` in managed settings to append organization-specific context to the plugin trust warning shown before installation",
+    "Fixed trust dialog silently enabling all `.mcp.json` servers on first run. You'll now see the per-server approval dialog as expected",
+    "Fixed sandbox prompting users to approve non-allowed domains when `allowManagedDomainsOnly` is enabled in managed settings \u2014 non-allowed domains are now blocked automatically with no bypass",
+    "Fixed interactive tools (e.g., `AskUserQuestion`) being silently auto-allowed when listed in a skill's allowed-tools, bypassing the permission prompt and running with empty answers",
+    "Fixed `cd <outside-dir> && <cmd>` permission prompt to surface the chained command instead of only showing \"Yes, allow reading from <dir>/\"",
+    "[VSCode] The permission mode picker now respects `permissions.disableBypassPermissionsMode` from your effective Claude Code settings (including managed/policy settings) \u2014 when set to `disable`, bypass permissions mode is hidden from the picker"
+   ]
+  },
+  {
+   "version": "2.1.89",
+   "published": "2026-03-31T23:32:40.530Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.89",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.89/node_modules/@anthropic-ai/claude-code/cli.js",
+   "packaging": "bundled cli.js (run with node)",
+   "version_works": true,
+   "version_output": "2.1.89 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `\"defer\"` permission decision to `PreToolUse` hooks \u2014 headless sessions can pause at a tool call and resume with `-p --resume` to have the hook re-evaluate",
+    "Added `PermissionDenied` hook that fires after auto mode classifier denials \u2014 return `{retry: true}` to tell the model it can retry",
+    "Fixed PreToolUse/PostToolUse hooks to receive `file_path` as an absolute path for Write/Edit/Read tools, matching the documented behavior",
+    "Fixed hooks `if` condition filtering not matching compound commands (`ls && git push`) or commands with env-var prefixes (`FOO=bar git push`)",
+    "Changed hook output over 10,000 characters to be saved to disk with a file path + a 2,000-character preview instead of being injected directly into context",
+    "Documented `TaskCreated` hook event and its blocking behavior"
+   ],
+   "other_permission_trust_lines": [
+    "Auto mode: denied commands now show a notification and appear in `/permissions` \u2192 Recent tab where you can retry with `r`",
+    "Fixed voice mode failing to request microphone permission on macOS Apple Silicon"
+   ]
+  },
+  {
+   "version": "2.1.118",
+   "published": "2026-04-22T23:48:56.690Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.118",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.118/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.118 (Claude Code)",
+   "hook_changelog_lines": [
+    "Hooks can now invoke MCP tools directly via `type: \"mcp_tool\"`",
+    "Fixed agent-type hooks failing with \"Messages are required for agent hooks\" when configured for events other than `Stop` or `SubagentStop`",
+    "Fixed `prompt` hooks re-firing on tool calls made by an agent-hook verifier subagent"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed plan acceptance dialog offering \"auto mode\" instead of \"bypass permissions\" when running with `--dangerously-skip-permissions`"
+   ]
+  },
+  {
+   "version": "2.1.139",
+   "published": "2026-05-11T18:09:28.537Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.139",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.139/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.139 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added hook `args: string[]` field (exec form) that spawns the command directly without a shell, so path placeholders never need quoting",
+    "Added hook `continueOnBlock` config option for `PostToolUse` \u2014 set to `true` to feed the hook's rejection reason back to Claude and continue the turn",
+    "MCP stdio servers now receive `CLAUDE_PROJECT_DIR` in their environment, matching hooks. Plugin configs can reference `${CLAUDE_PROJECT_DIR}` in commands",
+    "`/plugin` installed-plugin details now show hook event names and MCP server names cleanly",
+    "Fixed a bug where a hook writing to the terminal could corrupt an on-screen interactive prompt; hooks now run without terminal access"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed `autoAllowBashIfSandboxed` not auto-approving commands with shell expansions like `$VAR` and `$(cmd)`",
+    "Fixed `Skill(name *)` permission rules \u2014 the wildcard form now works as a prefix match, matching `Bash(ls *)` behavior"
+   ]
+  },
+  {
+   "version": "2.1.163",
+   "published": "2026-06-04T17:56:01.880Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.163",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.163/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.163 (Claude Code)",
+   "hook_changelog_lines": [
+    "Hooks: Stop and SubagentStop hooks can now return `hookSpecificOutput.additionalContext` to give Claude feedback and keep the turn going without being labeled a hook error",
+    "stdio MCP servers now receive the same `CLAUDE_CODE_SESSION_ID` as hooks/Bash on `--resume`",
+    "Fixed hook `if: \"Bash(...)\"` conditions firing on every Bash command containing `$()` or `$VAR`; the pattern now matches against commands inside subshells and backticks too"
+   ],
+   "other_permission_trust_lines": [
+    "Added `requiredMinimumVersion` and `requiredMaximumVersion` managed settings \u2014 Claude Code refuses to start if its version is outside the allowed range and directs the user to an approved version",
+    "Fixed org-managed permission rules not applying for the entire session when the managed settings fetch completed during startup on a fresh config directory"
+   ]
+  },
+  {
+   "version": "2.1.214",
+   "published": "2026-07-18T00:13:41.661Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.214",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.214/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.214 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed hooks with exit code 2 not blocking as documented when the hook's stdout JSON fails schema validation",
+    "Changed single-segment `dir/**` hook `if:` conditions to match only `<cwd>/dir`; write `**/dir/**` for any-depth matching. `deny`/`ask` permission rules keep their any-depth match.",
+    "Changed SessionStart hooks to report source `\"fork\"` when a session begins as a fork instead of `\"resume\"`"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed single-segment `dir/**` allow rules like `Edit(src/**)` auto-approving writes to nested `dir/` directories anywhere in the tree instead of only `<cwd>/dir`",
+    "Fixed a permission-check bypass affecting commands run in Windows PowerShell 5.1 sessions",
+    "Fixed Bash permission checks to fail closed on file-descriptor redirect forms that bash parses differently than the permission analyzer",
+    "Fixed Bash permission checks misjudging very long commands \u2014 commands over 10,000 characters now always prompt instead of running automatically",
+    "Fixed Bash permission checks treating zsh variable subscripts and modifiers in `[[ ]]` comparisons as inert text \u2014 these commands now prompt for approval",
+    "Fixed Bash permission checks to no longer auto-approve certain `help` and `man` commands that could run unsafe options, command substitutions, or backslash paths",
+    "Fixed permission prompts on remote sessions that could proceed before the local confirmation dialog",
+    "Added permission prompts for `docker` commands (including the Podman `docker` shim) carrying daemon-redirect flags (`--url`, `--connection`, `--identity`, and Podman's remote mode) that previously ran without one",
+    "Fixed scheduled tasks refusing their own configured prompt as untrusted input \u2014 the fired prompt is now delivered as the session's assigned task",
+    "Improved the `claude rc` workspace-trust error in the home directory to say trust there is never saved and to suggest running from a project directory",
+    "Changed `file` commands using `-m`/`--magic-file` or `-f`/`--files-from` to require permission instead of being auto-allowed as read-only"
+   ]
+  },
+  {
+   "version": "2.1.246",
+   "published": "2026-08-25T19:17:34.421Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.246",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.246/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.246 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed hook error messages showing a literal `${CLAUDE_PLUGIN_ROOT}` instead of the resolved plugin path",
+    "Fixed the `Notification` hook not firing while the sandbox \"Network request outside of sandbox\" permission prompt is waiting",
+    "Improved `/cd`: the new directory's project settings, hooks, `.mcp.json` servers (behind the usual approval prompt), skills, and agents now take effect right after the move instead of on `--resume`"
+   ],
+   "other_permission_trust_lines": [
+    "Added an Auto mode tab to `/permissions` for viewing and editing auto mode classifier rules",
+    "Fixed sessions that ended in plan mode resuming outside plan mode in the VS Code extension, and in `claude -p --continue`/`--resume` with a permission prompt tool, when no permission mode was set",
+    "Fixed Bash permission checks to always require approval for malformed commands with a dangling `&&` or `||` operator",
+    "Fixed `--strict-mcp-config` sessions prompting to approve `.mcp.json` servers they would never load, which left background sessions waiting at startup",
+    "Fixed MCP tools marked `requiresUserInteraction` still offering \"Yes, and don't ask again\" in their permission prompt; the option wrote an allow rule the tool then ignored"
+   ]
+  },
+  {
+   "version": "2.1.268",
+   "published": "2026-09-10T18:41:11.770Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.268",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.268/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.268 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed PermissionRequest hooks not firing in `--print` mode",
+    "Fixed `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` not extending SessionEnd hooks that have no per-hook `timeout` (they were still cancelled after 1.5 seconds)",
+    "Improved `--continue` / `--resume`: the conversation appears immediately instead of waiting for SessionStart hooks, and the first message no longer re-reads the whole transcript",
+    "[VSCode] Fixed session names reverting to the last prompt after a window reload when a SessionStart hook is configured"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed a respawned in-process teammate picking up tools or a system prompt from a same-named agent file in a folder you have not trusted",
+    "Fixed deny and ask permission rules on symlinked directories (`/etc`, `/tmp`, `/var` on macOS; `/bin` on Linux) not applying when a path was given by its real location, and Bash commands ignoring deny rules written on a symlinked path spelling",
+    "Fixed a case where a Read or Edit deny rule did not apply when an `env -C`, `eval` or similar command the permission checker cannot analyze was on the same line",
+    "Improved the terminal permission prompt for artifacts: it now leads with the ask's question",
+    "Changed the artifact data-edit permission prompt in the terminal to a card that shows the document count and who can open the artifact",
+    "Changed local Cowork sessions set to skip all approvals: the Artifact tool now refuses a local file outside the session's folders, or behind a symlink, instead of reading it without asking",
+    "[VSCode] Added Left and Right arrow keys to change where an always-allow permission rule is saved, for keyboard and screen reader users",
+    "[VSCode] Changed some artifact permission prompts to omit the \"don't ask again\" choice, matching the terminal",
+    "[Claude Tag] Improved how Claude explains a blocked action: it now says whether a permission check, its own decision to confirm first, or missing access stopped it"
+   ]
+  },
+  {
+   "version": "2.1.280",
+   "published": "2026-09-22T15:44:39.443Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.280",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.280/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.280 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added hook output sizes and the number of oversized outputs saved to a file to the `hook_execution_complete` OpenTelemetry event",
+    "Fixed background sessions (`claude --bg`) being unable to run git, hooks, plugins and other helper programs when an environment variable handed to the session contained a NUL character",
+    "Fixed IDE selection being dropped when a sent prompt comes back into the input, such as pressing Esc to edit it, rewinding to it, or pressing Esc while startup hooks run",
+    "Self-hosted runner: Fixed lifecycle-hook commits failing to sign under `--configure-git`",
+    "Improved the UserPromptSubmit hook timeout notice and the debug log to name which hook command timed out",
+    "Self-hosted runner: Changed git in lifecycle hooks to ignore hook folders and programs named in the runner's shared git files; local-path and `git://` remotes there now need `GIT_ALLOW_PROTOCOL`",
+    "Changed `PermissionRequest` hooks: an agent-type hook no longer runs there, since its answer could never allow or deny the request; it now shows an error pointing to command or http hooks"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed writes through a symlinked path being judged by their in-tree spelling: the prompt names where the write lands, and `acceptEdits`, allow rules and auto mode no longer approve one landing outside",
+    "Fixed Ctrl+C or Ctrl+D pressed twice in most dialogs (`/model`, `/effort`, `/config`, `/status`, `/usage`, `/plugin`, `/sandbox`, `/permissions`, `/artifacts`, `/mobile`, `/login`, `/upgrade`, `/usage-credits`, `/install-github-app`, `/setup-bedrock`, `/setup-vertex`) quitting Claude Code instead of closing the dialog",
+    "Fixed the mouse wheel not scrolling selection lists with hidden options (such as `/model` and `/permissions`) in fullscreen mode",
+    "Fixed Home and End doing nothing in the `/config` settings list and in selection lists such as `/model`, `/memory` and permission prompts",
+    "Improved `/permissions`: focus returns to the rule list after viewing, adding or deleting a rule, and the delete-rule and remove-directory confirmations now default to No",
+    "Improved `/permissions` tab navigation: \u2190/\u2192 and Tab pressed in a rule list now switch tabs without moving focus to the tab bar",
+    "[VSCode] Added a Claude in Chrome dialog (extension status, the install, reconnect and permissions pages, the enabled-by-default setting), opened from the panel menu or by typing `/chrome`",
+    "[VSCode] Fixed the plan approval card never offering auto mode: when auto mode is available, its first option is now \"Yes, and use auto mode\", as in the terminal",
+    "[Claude Code on the web] Fixed auto mode refusing to retry a tool call because an approval prompt that expired unanswered, or was superseded by a newer message, had been recorded as your rejection"
+   ]
+  },
+  {
+   "version": "2.1.281",
+   "published": "2026-09-23T17:01:17.780Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.281",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.281/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.281 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed `claude --bg` starting a background session, and running its project hooks, in a directory that had not passed the workspace trust prompt; it now asks for trust first, or exits when not run interactively",
+    "Fixed `mcp_tool` hooks on blocking events (PreToolUse and similar) being skipped while their MCP server was still connecting; they now wait for it, up to the MCP connect timeout",
+    "Fixed Ctrl+C or Ctrl+D pressed twice quitting Claude Code instead of closing the dialog in the remaining dialogs and pickers, such as `/memory`, `/hooks`, `/mcp` (including a server's sign-in screen), `/export`, `/copy`, `/theme`, and `/teleport`'s uncommitted-changes and login prompts (where Esc also quit)",
+    "Fixed `/hooks` and `/mcp` detail views printing a long value over the row below it in narrow terminals",
+    "Improved `/batch` to run where a WorktreeCreate hook provides the agent worktrees, not only inside a git repository",
+    "Improved plugin hook-failure errors to name the offending plugin, and added a `claude plugin validate` warning when a shell-form hook leaves `${CLAUDE_PLUGIN_ROOT}` unquoted (it breaks on plugin paths with spaces)",
+    "Improved `/hooks`: a hook's detail screen now says what kind of hook it is and where to change it, instead of always pointing at settings.json, and the hooks-disabled, safe mode and managed-hooks-only notices each say what is happening in one plain sentence",
+    "Changed self-hosted runners to pass system prompts to Claude Code as private files instead of command-line text, so large prompts no longer fail the launch; a wrapper or `command` hook that appends `--system-prompt` or `--append-system-prompt` must switch to `--system-prompt-file` or `--append-system-prompt-file`",
+    "[Claude Tag] Fixed a Slack request blocked by your organization's inference hook showing a generic retry notice; the thread now shows the hook's deny message and Claude doesn't retry"
+   ],
+   "other_permission_trust_lines": [
+    "Added Claude apps gateway support for newer Claude Desktop keys in `desktop` policy blocks, including `blockReadsOutsideWorkingDirectories` and `disableBypassPermissionsMode`",
+    "Added an auto mode recommendation to `/insights` that estimates how many permission prompts auto mode could have handled in your recent sessions",
+    "Fixed a session resumed after a restart during a pending permission prompt sending a different history than before, which broke the prompt cache from that point",
+    "Fixed permission dialogs and attachment checks reading a path under macOS's `/.vol`, `/.nofollow` or `/.resolve` (which can reach a network mount) before approval",
+    "Fixed a recursive `rm` whose target is only command-substitution output, such as `rm -rf \"$(pwd)\"`, running unprompted in auto and `--dangerously-skip-permissions` mode; it now asks even with a Bash allow rule, unless run with `CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT=1`",
+    "Fixed a permission rule containing a NUL byte being expanded into a wildcard match; such a rule now matches nothing",
+    "Fixed remote sessions staying on \"needs approval\" with a stale prompt after a permission prompt and a sandbox network-access prompt overlapped and both were answered",
+    "Fixed `1` answering Yes in `/permissions`' delete and remove-directory confirms while the pointer is on No, which let a held `1` remove one workspace directory after another",
+    "Fixed pressing Shift+Tab twice quickly landing on the wrong permission mode",
+    "Fixed the selected tab in tabbed dialogs (`/config`, `/plugin`, `/permissions`) showing no highlight while the tab bar has focus when color is off (`NO_COLOR`)",
+    "Windows: Fixed Bash commands that write to `$TMPDIR/\u2026` failing with \"Permission denied\"",
+    "Improved auto mode after resuming a session in a new process: the permission classifier can now reuse its earlier prompt cache instead of rewriting it",
+    "Improved keyboard navigation in tabbed dialogs such as `/permissions` and `/usage`: \u2191/\u2193 move focus between the tab row and the content, and a list responds to keys only while it has focus",
+    "Improved `/install-github-app`, `/desktop`, the `/permissions` auto mode environment prompts, and the `/plugin` \"Add marketplace?\" and \"Run this command?\" prompts: they now use the standard dialog frame with key hints, and Ctrl+C or Ctrl+D cancels them on the second press like other dialogs",
+    "Changed the dangerous `rm` prompt in `--dangerously-skip-permissions` and auto mode to wait 2 minutes for an answer, then deny the command with a rewrite hint so unattended sessions keep going (`CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT=1` turns this off)",
+    "[Claude Code on the web] Improved the file card shown when a cloud session can't open a file: it now says whether the file no longer exists or the session's permission settings block reading it"
+   ]
+  },
+  {
+   "version": "2.1.290",
+   "published": "2026-10-05T18:12:44.907Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.290",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.290/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.290 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `serverToolUses` to the result of a mod's `turn.step` hook: the tool calls the API ran itself (the advisor), each with its id, name, input, start and end",
+    "Added `agentId` to the `tool.check` event of plugin hooks, so a hook can tell a subagent's permission check from the main session's",
+    "Added `ceiling` to the question and verdict a mod's `tool.check` hook reads, naming the approval an organization requires for a tool",
+    "Added `ThemeKey` and `Color` types to the plugin hooks typings, so an editor lists the theme colors a mod's drawing can name",
+    "Added to `claude plugin validate`: each hook a mod registers at a gating site is listed with whether it has a `.catch` (`gatingHooks` under `--json`)",
+    "Fixed a plugin hook with a `.catch` being unloaded, and its `.catch` skipped, when the hook kept the hooks worker busy on a prompt or tool call",
+    "Fixed `claude plugin validate` and plugin loading refusing a hooks module that destructures an option named like one of its top-level functions",
+    "Fixed plugin hooks reading an empty `answer` on `turn.complete` for a subagent that hands its report back in auto mode",
+    "Fixed a mod's `prompt.submit` hook that drops a prompt after calling `next(e)` being ignored silently: the hook is now reported as failed, by name",
+    "Fixed plugin hooks stalling each redraw when a mod draws a long multi-line text holding non-Latin characters",
+    "Fixed Claude replying in an endless loop when a plugin's async Stop hook passes an unquoted script path under a folder with a space, such as Application Support",
+    "Fixed some permission rules and safety checks not being applied to a tool call after a PreToolUse hook rewrote its input",
+    "Fixed sandboxed Bash commands on Linux running `ConfigChange` hooks and reloading settings mid-command when `.claude/settings.json` or `.claude/settings.local.json` does not exist",
+    "Changed plugin hooks so long text is clipped and logged instead of being refused or dropped silently",
+    "Changed an in-process teammate's `agent_id` in Agent results to its agent ID (its `name@team` address stays in `teammate_id`); TeammateIdle hooks no longer fire from its subagents or forks"
+   ],
+   "other_permission_trust_lines": [
+    "Added a Deny button to the Claude apps gateway's sign-in approval page: it ends the pending sign-in, so the waiting terminal stops within seconds",
+    "Fixed plan mode letting the auto mode classifier approve non-read-only connector tools that carry a server-pushed ask policy",
+    "Fixed a project `CLAUDE.md`, rule or `AGENTS.md` symlinked outside the working directories loading under `permissions.blockReadsOutsideWorkingDirectories` or a `Read` deny rule",
+    "Fixed Claude Code hanging until killed when a `/permissions` tab was clicked while searching in fullscreen mode",
+    "Fixed an image read on macOS and Windows being able to return a file outside what was approved, through a link swapped in mid-read",
+    "Fixed `claude agents` sessions in manual permission mode asking for approval to read an image pasted into a reply or a new agent's prompt",
+    "Fixed auto mode denials suggesting a permission rule that would skip the classifier for a whole tool or that Claude Code would ignore",
+    "Fixed `--channels` permission relay: a reply ID that repeats within a session is now ignored instead of approving a different prompt",
+    "Fixed sandboxed commands that pipe a heredoc into another command (`cat <<EOF | python3`) asking for approval on every run",
+    "Fixed Bash permission checks auto-approving some read-only commands (such as `rg` or `git grep`) whose arguments the shell would still expand as wildcards; these now prompt for approval",
+    "Fixed Bash permission checks auto-approving certain commands whose variable names zsh reads differently from bash; these now prompt for approval",
+    "Fixed sandboxed Monitor tool commands skipping the permission prompt under sandbox auto-allow; they now follow your permission rules",
+    "Fixed files sent from remote sessions sometimes being refused as \"not the one approved\" when four or more were sent at once",
+    "Fixed a freeze when the secret scan or a permission prompt met long token-like text",
+    "Fixed Bash permission checks not applying Read deny rules or the outside-directory read block to a wildcard in some option values of read-only commands",
+    "Fixed background workers honoring `--allow-dangerously-skip-permissions` on respawn without the bypass-permissions disclaimer having been accepted",
+    "Fixed file names containing line breaks being displayed incorrectly in file tool errors and permission prompts",
+    "Fixed edits to the file a symlinked settings file points at running without the settings-file permission question",
+    "Improved permission prompts from background agents to show the Ctrl+X Ctrl+K shortcut that stops all background agents",
+    "Changed the Bash tool to ask for permission before running `pyright`, which is no longer treated as a read-only command",
+    "Changed Bash permission checks so that more forms of the `ps` command ask for approval instead of running without asking",
+    "Changed the `claude-api` skill's Managed Agents examples to turn off the web tools unless the agent needs them and to use the `auto` permission policy",
+    "[VSCode] Fixed a permission prompt that arrived behind an open dialog taking keyboard focus, so a key pressed in the dialog could answer it",
+    "[Claude Tag] Fixed members with the Claude Tag Admin permission getting \"Couldn't load memory files\" on the Activity page's Memory tab; they can now read workspace and channel memory"
+   ]
+  },
+  {
+   "version": "2.1.292",
+   "published": "2026-10-06T17:10:31.715Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.292",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.292/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.292 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `prompt.autocomplete`, an event a mod hooks to add its own rows to the prompt box's autocomplete list",
+    "Added workflow agents to the `agent.spawn` mod hook, with their run and index, so a mod can refuse them",
+    "Security: Fixed PreToolUse hook approvals and auto mode bypassing the permission prompt for file reads from network (UNC) paths",
+    "Fixed plugins whose hooks module makes many `$.state` calls through one const taking minutes to load or validate",
+    "Fixed `claude plugin validate` listing a matcher or state value for a hooks module that the engine reads from elsewhere",
+    "Fixed a plugin's served `$` method restarting the hook origin, which could run a guard hook with a `.catch` above it again without end",
+    "Fixed plugin interface calls made while the plugin hooks worker restarts running without the hooks other plugins put on them",
+    "Fixed a mod's `config.set`, `state.set`, `env.set` or `agent.spawn` hook that denies after calling `next(e)` being answered as a refusal: the hook is now reported as failed, by name",
+    "Fixed `/theme`, the `/config` Theme menu and the first-run theme step saving a theme before a plugin's `config.set` hook was asked",
+    "Fixed a plugin's `tool.check` hook answering allow running a tool that requires your answer (a question, a plan approval) without showing its dialog",
+    "Fixed a mod's start-up prompt, command or subagent being queued a second time when the hooks worker was replaced",
+    "Fixed a mod's hook that called `next(e)` and then failed while the turn was interrupted letting the call through; the call is now rejected",
+    "Fixed tool calls made while the plugin hooks worker restarts being answered without the plugins' permission hooks",
+    "Fixed plugin `tool.call` hooks seeing some tool calls before misnamed parameters were repaired; a hook now sees the arguments the tool will run with",
+    "Fixed a mod's guard hook with a `.catch` being skipped silently for calls another mod's hook makes beneath the guard's own `$` call; its `.catch` is now asked",
+    "Improved hook output handling: `<system-reminder>` tags written in a hook's output are escaped before they reach Claude",
+    "Changed `claude plugin test`: a failed `expect` inside a hook the test registered, or a stub answer the engine refuses, now fails the test instead of passing silently"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed subagent definitions with `permissionMode: auto` entering auto mode when auto mode is unavailable (disabled by settings, circuit breaker, or a model that doesn't support it)",
+    "Fixed a notebook or PDF read on macOS and Windows being able to return a file outside what was approved, through a link swapped in mid-read",
+    "Fixed \"instruction file not loaded\" lines going stale or missing after `/cd` or a permission change, and added a transcript line when a nested one isn't loaded",
+    "Fixed cloud sessions with a large transcript sometimes asking for a permission again after it was approved",
+    "Changed scheduled and Run now routine runs to publish a new artifact only you can see without asking for approval; artifacts that request connectors or other access still ask",
+    "[Cloud sessions] Fixed approval prompts offering \"Always allow\" for connector tools that an organization set to require approval; the choice had no effect",
+    "[Claude Tag] Fixed a session hanging until interrupted when a permission prompt that can't be answered from Slack was denied automatically"
+   ]
+  },
+  {
+   "version": "2.1.295",
+   "published": "2026-10-08T18:22:58.621Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.295",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.295/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.295 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `onFailure: \"block\"` for command and HTTP hooks: a hook that can't start, times out, or exits with an unexpected code blocks the action instead of letting it through",
+    "Fixed a mod's hook being handed a deeply nested tool input cut short with no error, so a guard could pass content it never saw",
+    "Fixed commands and hooks in background sessions inheriting `FORCE_COLOR=3`, which put color escape codes into the output Claude reads",
+    "Fixed calls a mod makes while it reloads during a plugin hooks worker restart getting past another mod's guard hook that has a `.catch`; such calls are now refused",
+    "Fixed plugins whose hooks module nests code thousands of levels deep failing to load or validate with a bare stack-overflow message",
+    "Fixed `claude plugin test` passing a `session.append` hook that removes tool call, tool result or thinking blocks that a real session keeps",
+    "Fixed `/model`, `/fast` and `/output-style` saving their setting without asking a plugin's `config.set` hook",
+    "Fixed an async SessionStart hook's unchanged context being added to the conversation again on every resume",
+    "Fixed variables a SessionStart hook writes to `CLAUDE_ENV_FILE` not reaching the Bash tool after an in-app `/resume` or `/branch`",
+    "Fixed an async hook's JSON output being ignored when it is printed over several lines",
+    "Fixed a prompt that a mod's `prompt.submit` hook rewrote or dropped still being saved as typed to prompt history and to the transcript's queued-prompt records",
+    "Fixed a plugin that adds very large interfaces getting another plugin unloaded when the plugin hooks worker stalls",
+    "Fixed claude.ai-synced plugin hooks failing with \"Plugin directory does not exist\" in long-running sessions after another session synced a plugin update",
+    "Fixed cloud sessions hanging when a mod's `session.receive` hook asked for permission before passing a message on",
+    "Fixed changing the auto-update channel in `/config` saving before a plugin's `config.set` hook was asked",
+    "Improved `claude plugin validate` and plugin loading: when a hooks module is refused over a rebound top-level `var`, the error now names the line that rebinds it, the cause, and a fix",
+    "Fixed web searches and `agent` hook evaluations taking much longer at `xhigh` and `max` effort"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed Bash permission checks for for-loops over glob patterns, improving permission-check accuracy",
+    "Fixed the mod hot-reloading question being asked again every turn for the whole session when it is approved without picking an answer",
+    "Improved the status shown in Remote Control, claude.ai and the desktop app for a session waiting on a permission prompt to name an MCP tool by its server and readable name instead of its `mcp__server__tool` identifier",
+    "Changed the Artifact tool's permission prompts with telemetry disabled to the same five questions other installs get, instead of asking before each read of someone else's artifact and each data edit",
+    "[VSCode] Fixed Ctrl+Shift+Tab, Cmd+Shift+Tab and Alt+Shift+Tab in the chat input also switching the permission mode, and Ctrl+Tab accepting the suggested prompt"
+   ]
+  },
+  {
+   "version": "2.1.296",
+   "published": "2026-10-09T16:58:10.924Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.296",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.296/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.296 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added a note in `/plugin` on a plugin whose hooks are left out because another enabled plugin has the same name",
+    "Fixed managed-settings `PreToolUse` hooks that deny a tool call with `\"continue\": false`, and managed `prompt` hooks that block one, refusing the call but not ending the turn",
+    "Fixed PostToolUse hooks in managed settings not applying `updatedMCPToolOutput` in some sessions",
+    "Fixed hook output being altered when it contained text resembling a plugin hint tag",
+    "Fixed Esc or an interrupt during a `UserPromptSubmit` hook or a mod's `prompt.submit` hook ending headless sessions, clearing the typed prompt, or letting the unchecked prompt through",
+    "Fixed SessionStart hooks of a plugin loaded after a headless session starts being skipped when a different plugin with the same name, or another spelling of it, had already run",
+    "Fixed a plugin's served `$` methods running in the main session's working directory instead of the calling agent's, and ignoring the turn their calling hook holds",
+    "Fixed `$.agent.register` succeeding from a mod's hook that was still running after the mod was reloaded or removed; the call is now refused",
+    "Fixed a prompt sent while SessionStart hooks were still running vanishing when `\u2190` moved the session to the background; it is still not sent, but `\u2191` now brings it back",
+    "Fixed a late-loading plugin's SessionStart hook output reaching the new conversation after `/clear` in headless sessions",
+    "Fixed PowerShell commands not seeing variables that hooks write to CLAUDE_ENV_FILE (when the file holds only plain assignments)",
+    "Improved `--debug` output for hooks: command hooks on tool calls, prompts, SessionStart and Stop now log their command, plugin, outcome and duration when they finish, so a slow hook is identifiable"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed cloud sessions skipping auto mode's checks on Claude in Chrome actions that a saved permission allows when their feature flags had not loaded",
+    "Fixed Bash permission checks auto-approving some commands that assign the `BASH_ARGV0` shell variable and then use it; these now prompt for approval",
+    "Windows: Fixed PowerShell commands longer than about 1 KB always asking for permission, so allow rules and read-only detection now apply up to 32 KB",
+    "Windows: Fixed `rm -rf /c/Users/<name>` in Git Bash not asking in bypass permissions mode",
+    "[Claude Tag] Added creating, editing and deleting workspace and channel memory files on the Activity page's Memory tab for members with the Claude Tag Admin permission"
+   ]
+  },
+  {
+   "version": "2.1.299",
+   "published": "2026-10-14T00:23:19.588Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.299",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.299/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.299 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added `$.prompt.media` so a `prompt.submit` hook of a mod installed by managed settings can read the bytes of an image or document attached to the prompt",
+    "Added `--shutdown-drain-sec` to `claude self-hosted-runner orchestrator`: on SIGTERM it stops polling and gives the poll in flight and running spawn hooks up to that many seconds to finish",
+    "Added the skill's frontmatter, source, plugin name and file path to what a mod's `skill.prompt` hook receives",
+    "Added a `queue` door to the `session.append` mod hook, so a mod can make the transcript's queue records differ from the prompt as sent",
+    "Added a note in `/plugin` and `claude plugin validate` naming a mod's hooks that are skipped where an organization manages Claude Code",
+    "Fixed Edit and Retry in Cowork and claude.ai cloud sessions failing on a message stopped while its `UserPromptSubmit` or mod `prompt.submit` hooks were still running (regression in 2.1.296)",
+    "Fixed a Remote Control prompt that had passed its hooks being dropped from prompt history when Stop interrupted the next queued prompt's hook",
+    "Fixed a mod hook, with or without a `.catch`, being run again without end when it waits on another mod's noun that does its work outside the call",
+    "Fixed `claude plugin test` pausing a hook's time budget while a served `$` method it had called kept making `$` calls after answering",
+    "Fixed plugin hooks being skipped when they pass a very deeply nested tool input or message on with next()",
+    "Fixed a value a mod's hook passes to `next()`, returns, or sends to a `$` method being refused whole when one of its getters throws a `RangeError`; now only that key is refused",
+    "Fixed the `plugin_loaded` telemetry event reporting `has_hooks` as false for plugins whose hooks are a hooks module, built-in plugins included",
+    "Fixed mods loaded from source files being refused when a hook hands `$` to a function declaration imported from another file of the mod",
+    "Fixed mods' hooks being handed values with `__proto__` keys silently removed, which could skip a `tool.check` guard on a tool call another mod made",
+    "Fixed the `agent.spawn` mod hook not running when a finished subagent or a killed teammate is resumed: the hook's event now carries `resume`, and a mod can refuse it",
+    "Fixed plan mode running a write (an MCP tool's, a file's, a shell command's) that a `PreToolUse` hook or a mod's `tool.check` hook allowed",
+    "Fixed a user-installed mod's `$.env.set` changing the environment or shell prefix that command hooks from managed settings start with",
+    "Windows: Fixed PreToolUse and PermissionRequest hooks that set no shell failing open when Git for Windows isn't installed; a guard that fails now blocks the call",
+    "Improved enforcement of managed permission rules, managed hooks and organization MCP tool names against user-installed mods",
+    "Changed plugin hooks and workflow scripts to refuse values they hand back that nest deeper than 28,000 levels, with an error naming the limit (workflow scripts allowed 100,000)",
+    "Changed actions a plugin hook can block to be refused, not let through, when the hook cannot be handed them or cannot hand back its answer; a tool that already ran has its result withheld",
+    "Changed auto mode in Cowork cloud sessions: a `PermissionRequest` hook can no longer approve shell commands or subagents; those prompts wait or are denied",
+    "Changed `UserPromptSubmit` hooks to run before a skill or custom slash command expands, so a hook that blocks the prompt now also stops its embedded shell commands",
+    "Changed a skill's own front-matter `UserPromptSubmit` hook to first run on the prompt after the one that invokes the skill",
+    "Changed the `turn.start` mod hook to also hear subagents' and teammates' turns, not only the main loop's; tell them apart by `e.agentId` (absent on the main loop)"
+   ],
+   "other_permission_trust_lines": [
+    "Added a one-time note when plan mode won't ask before most edits or commands because bypass permissions is available",
+    "Fixed sign-in, MCP servers and project trust appearing lost on Linux after a sandboxed command left an empty `.config.json` in the config directory",
+    "Fixed tools of an MCP server named `constructor` or `toString` asking for permission in auto mode and bypass permissions mode",
+    "Fixed Claude in Chrome asking for permission while no browser is connected; it now says the extension is not connected",
+    "Fixed a cloud session sometimes ignoring the answer to a permission prompt or a question when the answer was given while the session's worker was being replaced",
+    "Fixed a regression in 2.1.296 where cloud and headless sessions could run an approved tool call twice if a new message arrived as the session resumed after a restart",
+    "Fixed Enter answering a question or permission prompt that had been held back while you typed an unsent message",
+    "Fixed permission prompts cutting off or wrapping too early when the reason text contains keycap or joined emoji",
+    "Changed Claude in Chrome in Cowork cloud sessions outside auto mode: an approved-site action the safety classifier flags now asks you instead of being refused, unless managed settings apply"
+   ]
+  },
+  {
+   "version": "2.1.300",
+   "published": "2026-10-14T14:27:26.554Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.300",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.300/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.300 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added support for rewriting a workflow agent's `prompt` and `model` in the `agent.spawn` mod hook, which could only refuse workflow agents before",
+    "Added the `prompt.change` mod hook, raised when the prompt box's text changes without a typed edit: a recalled history entry, a clear, an undo, or a plugin's fill",
+    "Fixed SessionEnd hooks sometimes not running when you exit while a background command is still running",
+    "Fixed plugin `WorktreeCreate` and `WorktreeRemove` hooks not running when Claude Code starts with `--worktree` (not yet with `--tmux`)",
+    "Fixed a prompt that a mod's `prompt.submit` hook rewrote or dropped still being recorded as typed in the OpenTelemetry `user_prompt` event and interaction span, and in session title requests",
+    "Fixed agent hooks ignoring their `model`: aliases like `haiku` now resolve, a subagent's model no longer overrides it, and an unavailable model falls back to the caller's instead of allowing the action",
+    "Fixed a mod's `prompt.edit` hook not being raised for a newline entered with the `chat:newline` keybinding (Ctrl+J, or a rebound Enter)",
+    "Changed `PermissionRequest` hooks in Cowork cloud sessions: a `setMode` update in a hook's allow is now ignored; the rest of the approval still applies",
+    "Changed hooks: `updatedInput` from PreToolUse and PermissionRequest hooks is now validated like Claude's own input: unknown keys are dropped, and input the tool rejects denies the call"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed feature flags and staged rollouts staying stale behind a TLS-inspecting proxy whose certificate is trusted only through the OS certificate store",
+    "Changed background sessions to resume a carried workflow through the Workflow tool's approval instead of running it from the handoff file",
+    "[Cloud sessions] Fixed \"Allow for this task\" missing from Cowork's approval prompts for connector tools where an organization turns off \"Always allow\" (regression in 2.1.292)",
+    "[Claude Tag] Added a private Allow once / Deny card in Slack threads for connector actions that need your approval, so Claude asks instead of refusing; others only see that it's waiting on you"
+   ]
+  },
+  {
+   "version": "2.1.304",
+   "published": "2026-10-19T19:47:15.337Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.304",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.304/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.304 (Claude Code)",
+   "hook_changelog_lines": [
+    "Added a transcript line when a plugin that runs first skips one of your mod's hooks, naming the event and the plugin",
+    "Fixed a PreToolUse hook's deny reason being replaced by a timeout error when an Agent SDK callback hook on the same tool call timed out",
+    "Fixed a skill's `once` hook also removing another skill's identical hook after it ran",
+    "Changed mods' `settings.read` hooks to receive each settings layer and rewrite the merged settings, so a managed mod can make an organization's setting a ceiling, including the `cleanupPeriodDays` the retention sweep uses",
+    "Changed skill hooks: the skills of one source (a repo, your own folder, or a plugin) can register at most 1,024 hooks and 16,384 matcher characters per session",
+    "Changed skills under a policy that allows hooks from plugins only: a skill used in the main conversation whose hooks are kept out no longer gets its `allowed-tools`",
+    "Removed the notes from `claude plugin validate` that predicted where a mod's hooks would run",
+    "[VSCode] Fixed one cause of sessions failing to start with \"Subprocess initialization did not complete within 60000ms\": time a SessionStart command hook spends running no longer counts toward the limit, up to 10 minutes in total"
+   ],
+   "other_permission_trust_lines": [
+    "Added `decider: \"person\"` to a mod's `tool.check` answer: only the permission dialog or a host's callback can approve the ask, and it is refused with the mod's reason where nobody can be asked",
+    "Fixed the organization policy not refreshing until the hourly check after approving an `ANTHROPIC_API_KEY` at startup or switching \"Use custom API key\" in `/config`",
+    "Fixed scheduled Cowork cloud sessions waiting five minutes again for each subagent whose WebFetch needed a URL approval that nobody was there to give",
+    "Fixed agent teams: approving a shutdown request from the main session no longer exits the whole CLI"
+   ]
+  },
+  {
+   "version": "2.1.309",
+   "published": "2026-10-22T20:34:13.713Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.309",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.309/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.309 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed ctrl+enter (send now) only queuing a message when pressed before the response had started, and restarting a prompt's hooks while leaving the message queued when pressed while those hooks were running",
+    "Fixed hooks that run in PowerShell not blocking when the hook's program exits with code 2, and on Windows `PreToolUse` and `PermissionRequest` hooks with `\"shell\": \"powershell\"` failing open when Git for Windows isn't installed",
+    "Fixed a mod's `turn.step` hook that names a model by alias, such as `haiku`, failing every request with a model error: the alias now resolves to its model",
+    "Improved the error when a hooks module is nested too deep to load: it now names the file instead of showing a bare stack-overflow message"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed a disabled MCP server being reconnected by a later permission prompt in print and SDK sessions",
+    "Fixed the Bash permission check trusting a variable set by a command whose redirect can fail to open",
+    "Fixed Bash permission checks not prompting for some compound commands that change directory before running git when the `cd` is wrapped or prefixed, as they do for a plain `cd`",
+    "Fixed Claude asking for permission on each artifact update for the rest of a turn after the conversation was compacted in that turn",
+    "Windows: Fixed PowerShell permission checks auto-approving some `Set-Location` or `cd` commands that target the current directory and carry extra arguments; these now prompt for approval",
+    "Changed `claude ultrareview` to require workspace trust: it asks on a terminal, else refuses; scripts pass `--trust-workspace`, which takes no value (put a PR number or base branch before it), or set `CLAUDE_CODE_DISABLE_ULTRAREVIEW_TRUST_CHECK=1`",
+    "Changed the dangerous `rm` and `rmdir` prompt in bypass permissions mode in the Desktop app and VS Code to deny the command at once with a rewrite hint, so unattended sessions keep going",
+    "[Claude Tag] Fixed Claude in Slack posting a draft you approved for a channel into your DM by mistake; a post with no channel is now refused so it can go to the approved channel",
+    "[Claude Tag] Fixed Allow and Deny on Claude's approval cards in Slack doing nothing when the session had stopped; your answer now restarts the session"
+   ]
+  },
+  {
+   "version": "2.1.314",
+   "published": "2026-10-30T00:12:56.911Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.314",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.314/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.314 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed a PreCompact hook with very large output making compaction fail or repeat; each hook's output is now cut at 10,000 characters",
+    "Fixed shell and MCP calls that auto mode, a deny rule or a PreToolUse hook blocked, or that otherwise did not run, reading as if they ran in a collapsed tool group",
+    "Fixed hooks matching Bash not running on shell commands started by the Monitor tool; such hooks can block or ask, but not approve or rewrite those commands",
+    "Changed auto mode in Cowork cloud sessions: a hook's allow of an MCP tool call now counts as no answer, so the classifier or a permission prompt decides",
+    "Changed hook `if` conditions such as `Monitor(tail *)` to match the Monitor tool's shell commands as `Bash(tail *)` matches Bash's",
+    "[VSCode] Fixed missing spinner and Stop button while a queued message's hooks run"
+   ],
+   "other_permission_trust_lines": [
+    "Added `permissions.blockWritesOutsideWorkingDirectories`: Write, Edit and NotebookEdit refuse paths outside the working directories in every permission mode",
+    "Fixed `claude ultrareview` and `claude remote-control` asking the workspace trust question in a CI job that has a terminal; with `CI` set they now refuse an untrusted folder at once",
+    "Fixed an administrator's TLS trust settings in managed settings not being applied in Claude Desktop sessions",
+    "Fixed a settings file excluded with `--setting-sources` still supplying some settings, such as auto mode rules and saved permission consents",
+    "Fixed auto mode reporting a call as blocked, and listing it in `/permissions`, when its safety check gave no verdict",
+    "Fixed the session name from /rename disappearing while Claude asks for permission or a plan decision, so side-by-side sessions stay identifiable",
+    "Improved `/permissions` review tab, now called Recently blocked: the footer says what Esc will do with marked rows",
+    "Improved auto mode's blocked calls: messages name the command, say Claude may retry and auto mode checks again, and point to `/permissions` to review",
+    "Improved permission prompts: a long reason takes fewer rows, so it pushes the command being approved off the screen on fewer terminals",
+    "Changed `/ultrareview` to check workspace trust before it runs git, as `claude ultrareview` does",
+    "Changed `/permissions` Recently blocked to refuse approving a call you can't read in full, including one the terminal is too short to show",
+    "[Cloud sessions] Fixed the permission mode picker staying on Auto after a running cloud or Remote Control session refused the switch; it now shows the mode in use and tells you",
+    "[Remote Control] Fixed the permission mode button in Remote Control sessions showing the wrong mode until you typed; while your computer is online it now shows the real mode on open"
+   ]
+  },
+  {
+   "version": "2.1.316",
+   "published": "2026-10-31T00:42:05.743Z",
+   "install_path": "<SCRATCH>/releases/claude-code/2.1.316",
+   "binary_path": "<SCRATCH>/releases/claude-code/2.1.316/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude",
+   "packaging": "native-binary-via-optional-dep @anthropic-ai/claude-code-darwin-arm64 (wrapper pkg; postinstall skipped, bin/claude.exe is a stub)",
+   "version_works": true,
+   "version_output": "2.1.316 (Claude Code)",
+   "hook_changelog_lines": [
+    "Fixed PowerShell hooks not blocking on exit code 2 when the command begins with a type cast, `param`, `using` or an attribute"
+   ],
+   "other_permission_trust_lines": [
+    "Fixed a managed `autoMode.allow` list without `\"$defaults\"` getting the built-in exceptions back from a host app's `--settings`, a first rule added in `/permissions`, or `/auto-mode-setup`",
+    "Changed server-managed settings for Team and Enterprise logins: settings fetched from Anthropic's API now apply without an approval prompt, and a stored copy that doesn't verify is refused",
+    "[VSCode] Fixed a conversation coming back in Auto mode after a reload or restart when its plan was approved with \"Yes, and manually approve edits\""
+   ]
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "runner_launches": {
+  "matrix": {
+   "exec_runs": 428,
+   "app_server_hooks_list": 44
+  },
+  "pilot": {
+   "exec_runs": 10,
+   "app_server_hooks_list": 0
+  },
+  "pilot-unprotected": {
+   "exec_runs": 11,
+   "app_server_hooks_list": 0
+  },
+  "pilot-bundled": {
+   "exec_runs": 3,
+   "app_server_hooks_list": 0
+  },
+  "pilot-bundled-superseded": {
+   "exec_runs": 3,
+   "app_server_hooks_list": 0
+  }
+ },
+ "version_probes": {
+  "matrix": 53,
+  "pilot": 1,
+  "pilot-unprotected": 2,
+  "pilot-bundled": 1,
+  "pilot-bundled-superseded": 1
+ },
+ "manual_exploratory_exec_launches": 24,
+ "other_manual_binary_invocations": {
+  "pilot run lost to a runner crash before its row was written": 1,
+  "codex doctor": 1,
+  "app-server hooks/list probe": 1,
+  "app-server generate-json-schema (no model)": 1,
+  "features list (no model)": 2
+ },
+ "totals": {
+  "exec_launches": 480,
+  "app_server_launches": 45,
+  "version_probes": 58,
+  "other_invocations": 4,
+  "all_binary_launches_counted_conservatively": 587
+ },
+ "budget": {
+  "HOOK_FIDELITY_GO_per_invocation": {
+   "pilot-unprotected": "10, then 2 for the resume (a 4 was refused by the runner: 0 launches)",
+   "pilot": 10,
+   "pilot-bundled-superseded": 3,
+   "pilot-bundled": 3,
+   "stage2": 180,
+   "live": 30,
+   "persisted": 44,
+   "sweep1l": 140,
+   "sweep1b": 28,
+   "untrusted_r1": 10
+  },
+  "cap": 600,
+  "all binary starts counted (exec runs, app-server, --version probes, other)": 587
+ },
+ "egress_incident": {
+  "what": "with the default feature set, Codex makes startup requests to chatgpt.com (x2), github.com and api.github.com even with a custom provider, an isolated CODEX_HOME and no login (seen in a logging proxy on 0.165.0 and 0.131.0 in the exploratory probes)",
+  "launches_before_it_was_known_and_gated": "13 exec launches ran with no egress block and the default feature set (1 manual run, 1 pilot run lost to a runner crash, the 11 rows of pilot-unprotected); they may have made those requests",
+  "fix": "[features] apps = false, plugins = false in the stub config (0 proxy hits in the probes, 0 egress attempts in every committed row of the matrix) plus a refusing egress proxy set as HTTP(S)_PROXY for every run from the re-run pilot on (run.py --egress-proxy)"
+ }
+}

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a1940f-ebb8-76d1-afe5-e40fd72f0317"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc '<run>/shim/touch ran-nzc5b0c176.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc '<run>/shim/touch ran-nzc5b0c176.txt'","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"stub done nzc5b0c176"}}
+{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}

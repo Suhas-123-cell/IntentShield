@@ -1,0 +1,3 @@
+{"ts_ns": 1793484463435763000, "method": "start", "instructions_marker": "ISC-INSTR-nz9666acaa"}
+{"ts_ns": 1793484463444552000, "method": "tools/list", "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": false}, "client_info": "codex-mcp-client 0.166.0"}, "lookup_v_calls": 0}
+{"ts_ns": 1793484463575398000, "method": "tools/call", "name": "lookup_v", "arguments": {"word": "alpha"}, "client": {"capabilities": {"sampling": false, "elicitation": true, "roots": false}, "client_info": "codex-mcp-client 0.166.0"}}

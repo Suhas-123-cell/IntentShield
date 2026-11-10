@@ -1,0 +1,13 @@
+check_for_update_on_startup = false
+model = "stub-model"
+model_provider = "stub"
+approval_policy = "never"
+[model_providers.stub]
+name = "stub"
+base_url = "http://127.0.0.1:55129/v1"
+env_key = "STUB_API_KEY"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+[projects."<SCRATCH>/r3/exp/project/work"]
+trust_level = "trusted"

@@ -1,0 +1,18 @@
+{
+ "_note": "Round 4 additions to lane-features.json, used only by derive_table.py --all (the shipped table). The frozen held-out check (ranges-fit-only.json) is derived from lane-features.json alone. Source: results/hook-fidelity/claude/r4-gaps/bisect/runs.jsonl, R3 under M1h shell with Bash pre-approved, n=2 per release; RAN = dropped, BLOCKED = denied. Codex bypass: R1 under --dangerously-bypass-hook-trust, M1 shell, hook invoked 2/2 on 0.141.0 and 0.142.0 (results/hook-fidelity/codex/r4-integration/bisect), against 0/2 on 0.140.0 (round 3).",
+ "claude": {
+  "ask": {
+   "2.1.78": "dropped",
+   "2.1.83": "dropped",
+   "2.1.84": "dropped",
+   "2.1.85": "denied",
+   "2.1.86": "denied"
+  }
+ },
+ "codex": {
+  "bypass": {
+   "0.141.0": "hook-runs",
+   "0.142.0": "hook-runs"
+  }
+ }
+}

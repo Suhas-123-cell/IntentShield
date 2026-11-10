@@ -14,6 +14,12 @@ from intentshield import install
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _no_harness_probe(monkeypatch):
+    """install() records the version of the harness on PATH by running it; a test must not start the developer's real one."""
+    monkeypatch.setattr(install.translation, "probe_and_record", lambda *args, **kwargs: None)
+
+
 def _normalize(command: str, data):
     """The committed example configs name the bare command; the installer names a path."""
     return json.loads(json.dumps(data).replace(command, "intentshield-hook"))
@@ -52,8 +58,8 @@ def test_install_keeps_other_hooks_and_is_idempotent_and_reversible(tmp_path: Pa
     theirs = {"type": "command", "command": "my-linter"}
     path.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]},
                                 "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [theirs]}]}}))
-    install.install("claude", "user", hook="intentshield-hook", review="always", home=home)
-    install.install("claude", "user", hook="intentshield-hook", review="always", home=home)
+    install.install("claude", "user", hook="intentshield-hook", review="always", home=home, translate=False)
+    install.install("claude", "user", hook="intentshield-hook", review="always", home=home, translate=False)
     settings = json.loads(path.read_text())
     assert settings["permissions"] == {"allow": ["Bash(ls)"]}
     assert settings["hooks"]["PreToolUse"][0]["hooks"] == [theirs]

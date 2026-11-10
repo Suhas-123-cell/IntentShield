@@ -1,0 +1,48 @@
+{
+ "source": "round-3 scratch dir r3/exp and r3/debug_launches.txt, copied in round 4, not re-run",
+ "harness": "codex 0.131.0",
+ "argv": "exec --skip-git-repo-check --dangerously-bypass-hook-trust --json hi (+ --enable hooks for toml-enable)",
+ "env": "RUST_LOG=trace, isolated HOME and CODEX_HOME, stub model on loopback, NO_PROXY=127.0.0.1",
+ "tally_in_debug_launches_txt": {
+  "launches_of_one": 11,
+  "trust_step_app_server_starts": 2
+ },
+ "preserved_shapes": [
+  {
+   "shape": "toml",
+   "launches_preserved": 1,
+   "hook_log_exists": false,
+   "sh_witness_exists": false,
+   "stderr_kept": true
+  },
+  {
+   "shape": "toml-sh",
+   "launches_preserved": 1,
+   "hook_log_exists": false,
+   "sh_witness_exists": false,
+   "stderr_kept": false
+  },
+  {
+   "shape": "toml-enable",
+   "launches_preserved": 1,
+   "hook_log_exists": false,
+   "sh_witness_exists": false,
+   "stderr_kept": false
+  },
+  {
+   "shape": "json",
+   "launches_preserved": 1,
+   "hook_log_exists": false,
+   "sh_witness_exists": false,
+   "stderr_kept": false
+  },
+  {
+   "shape": "project",
+   "launches_preserved": 1,
+   "hook_log_exists": false,
+   "sh_witness_exists": false,
+   "stderr_kept": true
+  }
+ ],
+ "launches_without_artifact": 6
+}

@@ -1,0 +1,14 @@
+[
+ {
+  "harness": "claude",
+  "version": "2.1.316",
+  "cell": "allow-on",
+  "rep": 0
+ },
+ {
+  "harness": "gemini",
+  "version": "0.66.0",
+  "cell": "allow-on",
+  "rep": 0
+ }
+]

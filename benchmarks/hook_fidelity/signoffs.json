@@ -1,0 +1,200 @@
+{
+ "_readme": "Sign-offs for configs.unverified_items(): id -> {reader, archive, sha256, retrieved, note}, or for an 'all:' item {by_harness: {harness: entry}} (one entry per harness, because the claim is checked per harness). A reader other than the committer checks the item against a vendor document archived as a file inside this repository; sha256 is the file's hash, retrieved an ISO date. An entry of kind 'measured' (no vendor document says it; a preflight proves it before every run) names an evidence file instead of an archive. run --execute checks them (run.signoff_problems), refuses an entry whose note starts with NOT SUPPORTED, and stores the hash of this set in every row. EVERY reader here is an AI agent of a round-3 lane (Claude Code, Codex, Gemini lanes) reading archived text and checking its own measurements: author self-review, not an independent or human reader. The integrator merged the lanes' files; Cursor has no sign-offs and is refused.",
+ "matcher:claude:resource": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/tools-reference.md",
+  "sha256": "9ae5dd8849a7fd22565136df6267aff95c0cbadb06afefb0fe48ccb727bdc72d",
+  "retrieved": "2026-11-01",
+  "quote": "| `ReadMcpResourceTool` | Reads a specific MCP resource by URI | No |",
+  "measured": "results/hook-fidelity/claude/pilot/summary.json: the stub log of a resource cell is not part of the pilot; offered_tools is checked by the first claude-core runs",
+  "note": "the exact tool name; hooks.md says the matcher is evaluated against tool_name"
+ },
+ "timeout:claude": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/hooks.md",
+  "sha256": "8e4d5d8c03b5a4cd0e6fe15cc8d71d782a5acc29cf738c584337d024ff1e4ca1",
+  "retrieved": "2026-11-01",
+  "quote": "Seconds before canceling. ... Defaults: 600 for `command`, `http`, and `mcp_tool`",
+  "note": "unit is seconds; measured that R9 is cut at 3 s only in the matrix (timeout_observation)"
+ },
+ "mode:claude:M2": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/cli-reference.md",
+  "sha256": "9a68c8f3c42d6b42031f6b3080f9a6c32e86aac6fb3f2ffb1aaae1abeb3d4f07",
+  "retrieved": "2026-11-01",
+  "quote": "| `--dangerously-skip-permissions` | Skip permission prompts. Equivalent to `--permission-mode bypassPermissions`.",
+  "note": "flag name present in claude-help-2.1.316.txt and in every release's help"
+ },
+ "mode:claude:M1h": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/cli-reference.md",
+  "sha256": "9a68c8f3c42d6b42031f6b3080f9a6c32e86aac6fb3f2ffb1aaae1abeb3d4f07",
+  "retrieved": "2026-11-01",
+  "quote": "Tools that execute without prompting for permission ... With the default `host`, Claude Code sends them to the Agent SDK host or the `--permission-prompt-tool` tool.",
+  "note": "M1h = -p --allowedTools X with no --permission-prompts flag: the documented default (host). headless.md: 'In a `-p` run with no host, these requests are denied either way'"
+ },
+ "mode:claude:M0h": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/headless.md",
+  "sha256": "208eeb28afce5a433539821ec42ad3b077bb76420ee7ce6e21ce9cbe08cc2054",
+  "retrieved": "2026-11-01",
+  "quote": "In a `-p` run with no host, these requests are denied either way",
+  "note": "no --allowedTools: the native permission flow sees every call (this is the doc statement for a -p run with no permission host)"
+ },
+ "claude:onFailure-key": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/hooks.md",
+  "sha256": "8e4d5d8c03b5a4cd0e6fe15cc8d71d782a5acc29cf738c584337d024ff1e4ca1",
+  "retrieved": "2026-11-01",
+  "quote": "Whether the action that triggered the hook goes ahead when the hook fails: `\"continue\"` or `\"block\"`. ... Requires Claude Code v2.1.295 or later",
+  "note": "the config text 'introduced by this repo, not a documented key' is out of date: the key is documented (hooks.md lines 447, 499, 904)"
+ },
+ "claude:tools-empty": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/cli-reference.md",
+  "sha256": "9a68c8f3c42d6b42031f6b3080f9a6c32e86aac6fb3f2ffb1aaae1abeb3d4f07",
+  "retrieved": "2026-11-01",
+  "quote": "Restrict which built-in tools Claude can use. Use `\"\"` to disable all",
+  "measured": "results/hook-fidelity/claude/pilot/run-06-R0-mcp/requests.jsonl: with --tools '' the offered tools were [mcp__notes__search_notes] and the call ran (mcp_calls=1)",
+  "note": "docs cover built-ins; that MCP tools stay available is measured"
+ },
+ "claude:no-session-persistence": {
+  "reader": "r3-claude lane agent",
+  "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+  "archive": "results/hook-fidelity/vendor-archive/claude/cli-reference.md",
+  "sha256": "9a68c8f3c42d6b42031f6b3080f9a6c32e86aac6fb3f2ffb1aaae1abeb3d4f07",
+  "retrieved": "2026-11-01",
+  "quote": "| `--no-session-persistence` | Disable session persistence so sessions are not saved to disk and cannot be resumed. Print mode only.",
+  "note": "absent from 2.0.41 (help/2.0.41.txt): dropped for it by configs.CLAUDE_FLAGS_SINCE"
+ },
+ "matcher:codex:shell": {
+  "reader": "r3-codex lane",
+  "archive": "results/hook-fidelity/vendor-archive/codex/hooks-page.txt",
+  "sha256": "58fb63115eb94aa2371e42c95cb63c2b88ac8c0b791472de21cf2ba1ecc4c980",
+  "retrieved": "2026-10-31",
+  "note": "hooks page 'Tool coverage': 'Unified exec (exec_command) ... Match as Bash' and 'Shell commands ... Match as Bash'; the generated matcher is exactly Bash. Measured too: the PreToolUse payload of exec_command carries tool_name Bash (results/hook-fidelity/codex/pilot.md)."
+ },
+ "timeout:codex": {
+  "reader": "r3-codex lane",
+  "archive": "results/hook-fidelity/vendor-archive/codex/hooks-page.txt",
+  "sha256": "58fb63115eb94aa2371e42c95cb63c2b88ac8c0b791472de21cf2ba1ecc4c980",
+  "retrieved": "2026-10-31",
+  "note": "hooks page: 'timeout is in seconds. If timeout is omitted, Codex uses 600 seconds for most hooks.' The generated key is timeout = 3. Whether the key is honoured is not signed here: R9 rows record timeout_observation."
+ },
+ "codex:hooks-table": {
+  "reader": "r3-codex lane",
+  "archive": "results/hook-fidelity/vendor-archive/codex/hooks-page.txt",
+  "sha256": "58fb63115eb94aa2371e42c95cb63c2b88ac8c0b791472de21cf2ba1ecc4c980",
+  "retrieved": "2026-10-31",
+  "note": "hooks page 'Where Codex looks for hooks' lists inline [hooks] tables in config.toml and 'Hooks are enabled by default' ([features] hooks = false turns them off). That is the CURRENT documentation; whether each installed release 0.131.0 to 0.166.0 reads the table is established per release by the neutral control R1 (hook_invoked in every run), not by this document."
+ },
+ "mode:codex:M2": {
+  "reader": "r3-codex lane",
+  "archive": "results/hook-fidelity/vendor-archive/codex/cli-reference-excerpt.txt",
+  "sha256": "b8a0cf6bac546c3f4ff0a49d8222f99b1f925570976d16d1261e608c02aca409",
+  "retrieved": "2026-10-31",
+  "note": "CLI reference flag table lists --dangerously-bypass-approvals-and-sandbox, --yolo and --dangerously-bypass-hook-trust; 'codex exec --help' of every installed release 0.131.0 to 0.166.0 lists --dangerously-bypass-approvals-and-sandbox (checked by running --help, no model)."
+ },
+ "matcher:gemini:mcp": {
+  "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+  "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/hooks-reference.md",
+  "sha256": "103bab9f0f8fd7251b97d06c6b7c4e52752427bf23cbacd1379f2aecaaf26e4c",
+  "retrieved": "2026-11-01",
+  "note": "hooks-reference.md 'Matchers and tool names': BeforeTool matcher is a regex compared with the tool name; MCP tools are named mcp_<server_name>_<tool_name>. Measured: layer C of the core sweep (HookPlanner.matchesToolName is an unanchored RegExp.test) selects mcp_notes_search_notes and notes__search_notes with '.*search_notes.*' in every sampled release; the stub's offered_tools list on the 0.66.0 smoke run names mcp_notes_search_notes."
+ },
+ "matcher:gemini:write": {
+  "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+  "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/hooks-reference.md",
+  "sha256": "103bab9f0f8fd7251b97d06c6b7c4e52752427bf23cbacd1379f2aecaaf26e4c",
+  "retrieved": "2026-11-01",
+  "note": "hooks-reference.md 'Matchers and tool names': built-in tool names and regex support ('read_.*' example). 'write_file|replace' is a regex alternation; layer C selects write_file and not run_shell_command in every sampled release. The tool names write_file and replace are in the stub's offered_tools list (0.66.0 smoke run)."
+ },
+ "timeout:gemini": {
+  "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+  "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/hooks-reference.md",
+  "sha256": "103bab9f0f8fd7251b97d06c6b7c4e52752427bf23cbacd1379f2aecaaf26e4c",
+  "retrieved": "2026-11-01",
+  "note": "hooks-reference.md configuration table: `timeout` is an execution timeout in milliseconds (default 60000); configs.TIMEOUT_KEYS writes 3 x 1000 = 3000. Measured: layer C, a hook configured with timeout 1500 that sleeps 30 s returns no decision in 1.5 s in every sampled release (decision none, proceeds yes)."
+ },
+ "gemini:hooks-enabled": {
+  "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+  "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/configuration.md",
+  "sha256": "4b86e73ee6da5b18ec0515c3fbf12b9b72fb07fbb545fa93362507596cbc64f4",
+  "retrieved": "2026-11-01",
+  "note": "configuration.md `hooksConfig.enabled` default true (v0.66.0 text). Release-dependent, from the installed CLI packages: 0.26.0 settingsSchema has hooksConfig.enabled default true; 0.24.5 has `hooks.enabled` default false, so configs._gemini writes hooks.enabled=true below 0.26.0."
+ },
+ "gemini:stream-json": {
+  "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+  "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/headless.md",
+  "sha256": "42718e00f5acac2ab039091fab282ed9b3d992ae9f49afc64ec7636fbf6fa6ec",
+  "retrieved": "2026-11-01",
+  "note": "headless.md lists the stream-json event types including tool_use (tool call requests with arguments). Measured on the 0.66.0 smoke run: {'type':'tool_use','tool_name':'run_shell_command','parameters':{'command':...}} followed by a tool_result event."
+ },
+ "all:isolated-home-login": {
+  "by_harness": {
+   "claude": {
+    "reader": "r3-claude lane agent",
+    "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+    "archive": "results/hook-fidelity/vendor-archive/claude/env-vars.md",
+    "sha256": "c6af9335007280dfe50572702d0025e0d4bb8dc28554f607cb739614b7b5c096",
+    "retrieved": "2026-11-01",
+    "quote": "API key sent as `X-Api-Key` header. When set, this key is used instead of your Claude Pro, Max, Ultra, Team, or Enterprise subscription even if you are logged in. In non-interactive mode (`-p`), the key is always used when present.",
+    "measured": "results/hook-fidelity/claude/pilot/run-00-R0-shell/stdout.txt: init event apiKeySource ANTHROPIC_API_KEY, 10/10 pilot runs exit 0 with no login prompt",
+    "note": "the fake key is accepted and no login is asked under an isolated HOME"
+   },
+   "gemini": {
+    "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+    "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/configuration.md",
+    "sha256": "4b86e73ee6da5b18ec0515c3fbf12b9b72fb07fbb545fa93362507596cbc64f4",
+    "retrieved": "2026-11-01",
+    "note": "configuration.md: GEMINI_API_KEY, GEMINI_CLI_HOME, GOOGLE_GEMINI_BASE_URL are the documented variables. Measured on the 0.66.0 smoke run under an isolated HOME and GEMINI_CLI_HOME with the fake key and the stub URL: the run reached the stub (x-goog-api-key redacted in its log), no login or auth prompt, no real-HOME read. Gemini part only: Claude and Cursor have their own login sign-off.",
+    "reader_kind": "AI agent of the r3-gemini lane: author self-review, not an independent or human reader"
+   },
+   "codex": {
+    "reader": "r3-codex lane",
+    "archive": "results/hook-fidelity/vendor-archive/codex/config-reference-excerpt.txt",
+    "sha256": "151aa0af9912c171f35c7e0f9f2d4463f5e64c874d71bc507a7ee4707c84a710",
+    "retrieved": "2026-10-31",
+    "note": "for Codex there is no login: the stub arm uses model_providers.<id>.env_key ('Environment variable supplying the provider API key') and requires_openai_auth defaults to false; CODEX_HOME and HOME are the run's own. configs.HOME_LOGIN for codex is empty.",
+    "reader_kind": "AI agent of the r3-codex lane: author self-review, not an independent or human reader"
+   }
+  }
+ },
+ "all:path-shim": {
+  "by_harness": {
+   "claude": {
+    "reader": "r3-claude lane agent",
+    "reader_kind": "agent reader: r3-claude lane (a Claude Code subagent). Not the committer and not the author of the earlier-round config text; NOT a human reader.",
+    "archive": "results/hook-fidelity/vendor-archive/claude/tools-reference.md",
+    "sha256": "9ae5dd8849a7fd22565136df6267aff95c0cbadb06afefb0fe48ccb727bdc72d",
+    "retrieved": "2026-11-01",
+    "quote": "Aliases and shell functions defined in your shell startup file are available.",
+    "measured": "results/hook-fidelity/claude/pilot/summary.json: 4 of 4 pilot shell runs that ran the touch left a marker carrying the shim attestation (runs 00, 01, 03, 09)",
+    "note": "the docs say nothing about PATH; measured: Claude Code's Bash tool resolved the run's PATH shim"
+   },
+   "gemini": {
+    "reader": "claude-sonnet-5-5, r3-gemini lane (an AI reader, not the human committer; the check is the archived text plus the measured evidence named in the note)",
+    "archive": "docs/hook-fidelity-archive/gemini-v0.66.0/tools-shell.md",
+    "sha256": "7e9649ff91274b23cc05c0af8e4aec31f2d832439d448e61e5b47f964c2de5dd",
+    "retrieved": "2026-11-01",
+    "note": "tools-shell.md: on non-Windows platforms commands run with `bash -c` (a non-login shell). Measured on the 0.66.0 smoke run: the marker written by `touch` in the run's shim PATH carried the attestation token. Gemini part only.",
+    "reader_kind": "AI agent of the r3-gemini lane: author self-review, not an independent or human reader"
+   },
+   "codex": {
+    "kind": "measured",
+    "reader": "r3-codex lane",
+    "reader_kind": "AI agent of the r3-codex lane: author self-review, not an independent or human reader",
+    "retrieved": "2026-10-31",
+    "evidence": "results/hook-fidelity/codex/pilot.md",
+    "note": "MEASURED, NOT DOCUMENTED: the vendor docs are silent on the shell's PATH, and Codex ran the command as /bin/zsh -lc, which reorders PATH on macOS, so the PATH touch shim was skipped (first stub run). The Codex stub arm calls the shim by absolute path (configs.stub_script shim_dir) and run.shim_smoke(absolute=True) must attest before every shell run. The earlier sign-off text 'NOT SUPPORTED for Codex as worded' is why this entry is a measured one and no vendor document is cited."
+   }
+  }
+ }
+}

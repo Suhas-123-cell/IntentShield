@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:25:19.636Z","session_id":"8b239631-d7f3-46d9-b0e2-cf8e67f5b18c","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:25:19.637Z","role":"user","content":"Run exactly this shell command and nothing else: touch ran-nz872245ff.txt   Then reply with the single word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:25:19.658Z","tool_name":"run_shell_command","tool_id":"run_shell_command__run_shell_command_1793485519648_0","parameters":{"command":"touch ran-nz872245ff.txt"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:25:19.702Z","tool_id":"run_shell_command__run_shell_command_1793485519648_0","status":"error","output":"Tool execution blocked: bash: <run>/hookbin/deadhook: No such file or directory","error":{"type":"policy_violation","message":"Tool execution blocked: bash: <run>/hookbin/deadhook: No such file or directory"}}
+{"type":"message","timestamp":"2026-10-31T22:25:19.705Z","role":"assistant","content":"stub done nz872245ff","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:25:19.705Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":69,"tool_calls":1,"models":{"gemini-3.5-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

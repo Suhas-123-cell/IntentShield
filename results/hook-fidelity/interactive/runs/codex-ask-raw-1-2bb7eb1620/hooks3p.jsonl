@@ -1,0 +1,3 @@
+{"run_id": "2bb7eb1620", "ts_ns": 1793502894936035000, "pid": 22874, "harness": "codex", "event": "UserPromptSubmit", "tool": "", "tool_input": "\"\"", "decision_event": false, "reply": "RP", "exit_code": 0, "sleep": 0.0}
+{"run_id": "2bb7eb1620", "ts_ns": 1793502894970815000, "pid": 22875, "harness": "codex", "event": "PreToolUse", "tool": "Bash", "tool_input": "{\"command\": \"<run>/shim/touch ran-nzaeda9841.txt\"}", "decision_event": true, "reply": "RP", "exit_code": 0, "sleep": 0.0}
+{"run_id": "2bb7eb1620", "ts_ns": 1793502895379620000, "pid": 22880, "harness": "codex", "event": "PostToolUse", "tool": "Bash", "tool_input": "{\"command\": \"<run>/shim/touch ran-nzaeda9841.txt\"}", "decision_event": false, "reply": "RP", "exit_code": 0, "sleep": 0.0}

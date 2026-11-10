@@ -1,0 +1,34 @@
+{
+ "rows": 37,
+ "agree": 37,
+ "by_group": {
+  "hidepid": {
+   "agree": 1,
+   "n": 1,
+   "mode_equal": 1,
+   "sources": [
+    "none"
+   ],
+   "disagree": []
+  },
+  "matrix": {
+   "agree": 28,
+   "n": 28,
+   "mode_equal": 28,
+   "sources": [
+    "none",
+    "proc"
+   ],
+   "disagree": []
+  },
+  "pid1": {
+   "agree": 8,
+   "n": 8,
+   "mode_equal": 8,
+   "sources": [
+    "proc"
+   ],
+   "disagree": []
+  }
+ }
+}

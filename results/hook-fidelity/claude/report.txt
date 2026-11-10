@@ -1,0 +1,245 @@
+540 runs (0 INVALID, left out of n), 184 cells: config-invalid 5, control 45, scored 129, scored-native 5
+informative cells (scored and differing from P_guard, P_doc or the prediction): 87
+
+CONFIG-INVALID blocks (the neutral control did not prove the hook fires under this exact config; this is NOT a harness finding, fix the config first):
+  claude 2.1.0 M1h shell - - plain S: R1 was blocked and no native gate is declared for this block (a wrong allow token, a dead MCP server or a broken oracle looks the same): nothing was tested
+
+gated blocks scored on a partner's liveness proof:
+  claude 2.1.316 M1h resource mcpwild - plain S <- proven by state -
+
+fail-closed settings (does the key visibly do anything in its block?):
+  claude 2.1.316 M1h shell - block plain S: key effect witnessed (a failure reply is BLOCKED here and RAN without it)
+
+R0 (no hook) versus R1 (neutral hook), per block:
+  claude 2.0.41 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.0 M1h shell - - plain S: R0 none | R1 BLOCKED:2 | no-r0
+  claude 2.1.118 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.139 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.163 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.214 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.246 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.268 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.280 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.281 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.290 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.292 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.295 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.296 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.299 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.300 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.304 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.309 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.314 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.316 M0h mcp - - plain S: R0 none | R1 BLOCKED:5 | no-r0
+  claude 2.1.316 M0h shell - - plain S: R0 BLOCKED:5 | R1 BLOCKED:5 | same
+  claude 2.1.316 M1 mcp - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M1 shell - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M1h mcp - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M1h mcp mcpwild - plain S: R0 none | R1 RAN:3 | no-r0
+  claude 2.1.316 M1h resource - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M1h resource mcpwild - plain S: R0 none | R1 RAN:5 | no-r0
+  claude 2.1.316 M1h shell - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M1h shell - block plain S: R0 RAN:5 | R1 RAN:3 | same
+  claude 2.1.316 M1h write - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M2 mcp - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M2 resource - - plain S: R0 none | R1 RAN:5 | no-r0
+  claude 2.1.316 M2 shell - - plain S: R0 RAN:5 | R1 RAN:5 | same
+  claude 2.1.316 M2 write - - plain S: R0 none | R1 RAN:5 | no-r0
+  claude 2.1.47 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.69 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+  claude 2.1.89 M1h shell - - plain S: R0 none | R1 RAN:2 | no-r0
+
+cell                                                                       result                         class
+claude 2.0.41 M1h shell - - plain arm S R1                                 2/2 RAN                        control | hook invoked 2/2
+claude 2.0.41 M1h shell - - plain arm S R10a                               2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.0.41 M1h shell - - plain arm S R3                                 2/2 RAN                        VERDICT-DROPPED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.0.41 M1h shell - - plain arm S R4                                 0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.0.41 M1h shell - - plain arm S R9                                 2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.0 M1h shell - - plain arm S R1                                  0/2 RAN modal BLOCKED 2/2      config-invalid | hook invoked 2/2
+claude 2.1.0 M1h shell - - plain arm S R10a                                0/2 RAN modal BLOCKED 2/2      config-invalid | hook unobservable (file-level reply); ctl R0 - R1 0/2 RAN
+claude 2.1.0 M1h shell - - plain arm S R3                                  0/2 RAN modal BLOCKED 2/2      config-invalid | hook invoked 2/2; ctl R0 - R1 0/2 RAN
+claude 2.1.0 M1h shell - - plain arm S R4                                  0/2 RAN modal BLOCKED 2/2      config-invalid | hook invoked 2/2; ctl R0 - R1 0/2 RAN
+claude 2.1.0 M1h shell - - plain arm S R9                                  0/2 RAN modal BLOCKED 2/2      config-invalid | hook invoked 2/2; ctl R0 - R1 0/2 RAN
+claude 2.1.118 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.118 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.118 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.118 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.118 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.139 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.139 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.139 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.139 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.139 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.163 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.163 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.163 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.163 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.163 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.214 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.214 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.214 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.214 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.214 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.246 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.246 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.246 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.246 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.246 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.268 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.268 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.268 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.268 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.268 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.280 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.280 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.280 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.280 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.280 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.281 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.281 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.281 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.281 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.281 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.290 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.290 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.290 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.290 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.290 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.292 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.292 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.292 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.292 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.292 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.295 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.295 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.295 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.295 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.295 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.296 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.296 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.296 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.296 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.296 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.299 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.299 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.299 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.299 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.299 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.300 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.300 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.300 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.300 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.300 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.304 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.304 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.304 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.304 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.304 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.309 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.309 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.309 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.309 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.309 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.314 M1h shell - - plain arm S R1                                2/2 RAN                        control | hook invoked 2/2
+claude 2.1.314 M1h shell - - plain arm S R10a                              2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.314 M1h shell - - plain arm S R3                                0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.314 M1h shell - - plain arm S R4                                0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.314 M1h shell - - plain arm S R9                                2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.316 M0h mcp - - plain arm S R1                                  0/5 RAN modal BLOCKED 5/5      control | hook invoked 5/5
+claude 2.1.316 M0h mcp - - plain arm S R2                                  5/5 RAN                        ELEVATED ELEVATION | native-block baseline: R1 was blocked by the native policy; hook invoked 5/5; ctl R0 - R1 0/5 RAN
+claude 2.1.316 M0h mcp - - plain arm S R3                                  0/5 RAN modal BLOCKED 5/5      NO-EFFECT | native-block baseline: R1 was blocked by the native policy; hook invoked 5/5; ctl R0 - R1 0/5 RAN
+claude 2.1.316 M0h shell - - plain arm S R0                                0/5 RAN modal BLOCKED 5/5      control
+claude 2.1.316 M0h shell - - plain arm S R1                                0/5 RAN modal BLOCKED 5/5      control | hook invoked 5/5
+claude 2.1.316 M0h shell - - plain arm S R2                                5/5 RAN                        ELEVATED ELEVATION | native-block baseline: R1 was blocked by the native policy; hook invoked 5/5; ctl R0 0/5 R1 0/5 RAN
+claude 2.1.316 M0h shell - - plain arm S R3                                0/5 RAN modal BLOCKED 5/5      NO-EFFECT | native-block baseline: R1 was blocked by the native policy; hook invoked 5/5; ctl R0 0/5 R1 0/5 RAN
+claude 2.1.316 M0h shell - - plain arm S R4                                0/5 RAN modal BLOCKED 5/5      NO-EFFECT | native-block baseline: R1 was blocked by the native policy; hook invoked 5/5; ctl R0 0/5 R1 0/5 RAN
+claude 2.1.316 M1 mcp - - plain arm S R0                                   5/5 RAN                        control
+claude 2.1.316 M1 mcp - - plain arm S R1                                   5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M1 mcp - - plain arm S R3                                   0/5 RAN modal BLOCKED 5/5      - | ask -> deny expected: the mode's flags refuse every prompt; hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1 mcp - - plain arm S R4                                   0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1 shell - - plain arm S R0                                 5/5 RAN                        control
+claude 2.1.316 M1 shell - - plain arm S R1                                 5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M1 shell - - plain arm S R3                                 0/5 RAN modal BLOCKED 5/5      - | ask -> deny expected: the mode's flags refuse every prompt; hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1 shell - - plain arm S R4                                 0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp - - plain arm S R0                                  5/5 RAN                        control
+claude 2.1.316 M1h mcp - - plain arm S R1                                  5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M1h mcp - - plain arm S R10a                                3/3 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp - - plain arm S R3                                  0/5 RAN modal BLOCKED 5/5      VERDICT-DOWNGRADED | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp - - plain arm S R4                                  0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp - - plain arm S R5                                  3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp - - plain arm S R7                                  0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp - - plain arm S R9                                  3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h mcp mcpwild - plain arm S R1                            3/3 RAN                        control | hook invoked 3/3
+claude 2.1.316 M1h mcp mcpwild - plain arm S R4                            0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 - R1 3/3 RAN
+claude 2.1.316 M1h resource - - plain arm S R0                             5/5 RAN                        control
+claude 2.1.316 M1h resource - - plain arm S R1                             5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M1h resource - - plain arm S R3                             0/5 RAN modal BLOCKED 5/5      VERDICT-DOWNGRADED | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h resource - - plain arm S R4                             0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h resource mcpwild - plain arm S R1                       5/5 RAN                        control | hook invoked 0/5
+claude 2.1.316 M1h resource mcpwild - plain arm S R3                       5/5 RAN                        HOOK-NOT-INVOKED | weak attempt evidence; hook invoked 0/5; ctl R0 - R1 5/5 RAN
+claude 2.1.316 M1h resource mcpwild - plain arm S R4                       5/5 RAN                        HOOK-NOT-INVOKED | weak attempt evidence; hook invoked 0/5; ctl R0 - R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R0                                5/5 RAN                        control
+claude 2.1.316 M1h shell - - plain arm S R1                                5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M1h shell - - plain arm S R10a                              3/3 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R10b                              3/3 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R11                               0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R13                               3/3 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R3                                0/5 RAN modal BLOCKED 5/5      VERDICT-DOWNGRADED | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R4                                0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R5                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R6                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R7                                0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R8                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - - plain arm S R9                                3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h shell - block plain arm S R1                            3/3 RAN                        control | hook invoked 3/3
+claude 2.1.316 M1h shell - block plain arm S R10a                          0/3 RAN modal BLOCKED 3/3      - | hook unobservable (file-level reply); ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R10b                          0/3 RAN modal BLOCKED 3/3      - | hook unobservable (file-level reply); ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R11                           0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R13                           0/3 RAN modal BLOCKED 3/3      - | hook unobservable (file-level reply); ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R5                            3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R6                            3/3 RAN                        FAILURE-OPEN | hook invoked 3/3; ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R7                            0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R8                            0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h shell - block plain arm S R9                            0/3 RAN modal BLOCKED 3/3      - | hook invoked 3/3; ctl R0 5/5 R1 3/3 RAN
+claude 2.1.316 M1h write - - plain arm S R0                                5/5 RAN                        control
+claude 2.1.316 M1h write - - plain arm S R1                                5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M1h write - - plain arm S R3                                0/5 RAN modal BLOCKED 5/5      VERDICT-DOWNGRADED | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M1h write - - plain arm S R4                                0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M2 mcp - - plain arm S R0                                   5/5 RAN                        control
+claude 2.1.316 M2 mcp - - plain arm S R1                                   5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M2 mcp - - plain arm S R3                                   0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M2 mcp - - plain arm S R4                                   0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M2 resource - - plain arm S R1                              5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M2 resource - - plain arm S R3                              0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 - R1 5/5 RAN
+claude 2.1.316 M2 resource - - plain arm S R4                              0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 - R1 5/5 RAN
+claude 2.1.316 M2 shell - - plain arm S R0                                 5/5 RAN                        control
+claude 2.1.316 M2 shell - - plain arm S R1                                 5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M2 shell - - plain arm S R3                                 0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M2 shell - - plain arm S R4                                 0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 5/5 R1 5/5 RAN
+claude 2.1.316 M2 write - - plain arm S R1                                 5/5 RAN                        control | hook invoked 5/5
+claude 2.1.316 M2 write - - plain arm S R3                                 0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 - R1 5/5 RAN
+claude 2.1.316 M2 write - - plain arm S R4                                 0/5 RAN modal BLOCKED 5/5      - | hook invoked 5/5; ctl R0 - R1 5/5 RAN
+claude 2.1.47 M1h shell - - plain arm S R1                                 2/2 RAN                        control | hook invoked 2/2
+claude 2.1.47 M1h shell - - plain arm S R10a                               2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.47 M1h shell - - plain arm S R3                                 2/2 RAN                        VERDICT-DROPPED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.47 M1h shell - - plain arm S R4                                 0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.47 M1h shell - - plain arm S R9                                 2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.69 M1h shell - - plain arm S R1                                 2/2 RAN                        control | hook invoked 2/2
+claude 2.1.69 M1h shell - - plain arm S R10a                               2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.69 M1h shell - - plain arm S R3                                 2/2 RAN                        VERDICT-DROPPED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.69 M1h shell - - plain arm S R4                                 0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.69 M1h shell - - plain arm S R9                                 2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.89 M1h shell - - plain arm S R1                                 2/2 RAN                        control | hook invoked 2/2
+claude 2.1.89 M1h shell - - plain arm S R10a                               2/2 RAN                        FAILURE-OPEN | hook unobservable (file-level reply); ctl R0 - R1 2/2 RAN
+claude 2.1.89 M1h shell - - plain arm S R3                                 0/2 RAN modal BLOCKED 2/2      VERDICT-DOWNGRADED | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.89 M1h shell - - plain arm S R4                                 0/2 RAN modal BLOCKED 2/2      - | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+claude 2.1.89 M1h shell - - plain arm S R9                                 2/2 RAN                        FAILURE-OPEN | hook invoked 2/2; ctl R0 - R1 2/2 RAN
+
+version flips (candidate regressions, check release notes before calling them that):
+  claude M1h shell - - plain S R3: 2.0.41=RAN, 2.1.118=BLOCKED, 2.1.139=BLOCKED, 2.1.163=BLOCKED, 2.1.214=BLOCKED, 2.1.246=BLOCKED, 2.1.268=BLOCKED, 2.1.280=BLOCKED, 2.1.281=BLOCKED, 2.1.290=BLOCKED, 2.1.292=BLOCKED, 2.1.295=BLOCKED, 2.1.296=BLOCKED, 2.1.299=BLOCKED, 2.1.300=BLOCKED, 2.1.304=BLOCKED, 2.1.309=BLOCKED, 2.1.314=BLOCKED, 2.1.316=BLOCKED, 2.1.47=RAN, 2.1.69=RAN, 2.1.89=BLOCKED
+
+classes per harness: claude: ELEVATION x2, FAILURE-OPEN x54, HOOK-NOT-INVOKED x2, VERDICT-DOWNGRADED x22, VERDICT-DROPPED x3
+prediction hits by basis: docs MISS x4, docs hit x113, inference MISS x6, inference hit x9
+ask -> deny under a no-prompt flag (expected, not counted as a deviation): 2
+kill criterion (>= 5 undocumented deviations replicating on >= 3 versions): not met over claude
+  claude: 5 undocumented, 0 on every one of 23 version(s) run, 1 on 3+

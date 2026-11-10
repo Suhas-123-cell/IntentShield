@@ -1,0 +1,379 @@
+[
+ {
+  "run": "run-00-R0-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": false,
+     "text": "(Bash completed with no output)"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 1,
+  "marker_attested": true,
+  "hook_events": 0,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-01-R1-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": false,
+     "text": "(Bash completed with no output)"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 1,
+  "marker_attested": true,
+  "hook_events": 1,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-02-R4-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": true,
+     "text": "PreToolUse:Bash hook error: stubhook fixed reply"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 0,
+  "marker_attested": false,
+  "hook_events": 1,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-03-R5-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": false,
+     "text": "(Bash completed with no output)"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 1,
+  "marker_attested": true,
+  "hook_events": 1,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-04-R7-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": true,
+     "text": "PreToolUse:Bash hook error: [<home>/Documents/IntentShield/.venv/bin/python <home>/Documents/IntentShield/.claude/worktrees/r3-claude/benchmarks/hook_fidelity/stubhook.py --harness c"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 0,
+  "marker_attested": false,
+  "hook_events": 1,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-05-R3-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": true,
+     "text": "Permission for this tool use was denied. It requires approval, and this session has no approval surface \u2014 nobody can answer a permission prompt here \u2014 so it was denied automatically. The action was NO"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 0,
+  "marker_attested": false,
+  "hook_events": 1,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-06-R0-mcp",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": false,
+     "text": "{\"result\":\"Note 'Quarterly plan': ship v2 in Q4.\"}"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 0,
+  "marker_attested": false,
+  "hook_events": 0,
+  "mcp_calls": 1
+ },
+ {
+  "run": "run-07-R1-mcp",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": false,
+     "text": "{\"result\":\"Note 'Quarterly plan': ship v2 in Q4.\"}"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 0,
+  "marker_attested": false,
+  "hook_events": 1,
+  "mcp_calls": 1
+ },
+ {
+  "run": "run-08-R4-mcp",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": true,
+     "text": "PreToolUse:mcp__notes__search_notes hook error: stubhook fixed reply"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 0,
+  "marker_attested": false,
+  "hook_events": 1,
+  "mcp_calls": 0
+ },
+ {
+  "run": "run-09-R1-shell",
+  "stub": {
+   "requests": 2,
+   "by_path": {
+    "POST /v1/messages": 2
+   },
+   "generate": 2,
+   "count_tokens": 0,
+   "tool_less_calls": [],
+   "tool_call_rows": 1,
+   "call_index_max": 1,
+   "scripted_tool_offered": true,
+   "offered_tools": [
+    "Bash",
+    "mcp__notes__search_notes"
+   ],
+   "tool_results": [
+    {
+     "is_error": false,
+     "text": "(Bash completed with no output)"
+    }
+   ],
+   "decisions": [
+    "tool_call",
+    "text:after-tool-result"
+   ],
+   "statuses": [
+    200,
+    200
+   ],
+   "user_agent": "claude-cli/2.1.316 (external, sdk-cli)"
+  },
+  "markers": 1,
+  "marker_attested": true,
+  "hook_events": 1,
+  "mcp_calls": 0
+ }
+]

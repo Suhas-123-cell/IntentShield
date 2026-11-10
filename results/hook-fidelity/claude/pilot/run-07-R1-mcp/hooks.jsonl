@@ -1,0 +1,1 @@
+{"run_id": "00007-50b9402a", "ts_ns": 1793483716756383000, "pid": 81812, "harness": "claude", "event": "PreToolUse", "tool": "mcp__notes__search_notes", "tool_input": "{\"query\": \"nz0120c50b\"}", "decision_event": true, "reply": "R1", "exit_code": 0, "sleep": 0.0}

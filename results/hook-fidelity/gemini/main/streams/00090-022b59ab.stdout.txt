@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-10-31T22:26:02.545Z","session_id":"9275aebb-7870-4e18-bdb9-14a44468c234","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-10-31T22:26:02.545Z","role":"user","content":"Call the search_notes tool of the notes server with the query 'nz5700f724' and reply with the word done."}
+{"type":"tool_use","timestamp":"2026-10-31T22:26:02.568Z","tool_name":"mcp_notes_search_notes","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485562558_0","parameters":{"query":"nz5700f724"}}
+{"type":"tool_result","timestamp":"2026-10-31T22:26:02.612Z","tool_id":"mcp_notes_search_notes__mcp_notes_search_notes_1793485562558_0","status":"error","output":"Tool execution blocked: stubhook fixed reply","error":{"type":"policy_violation","message":"Tool execution blocked: stubhook fixed reply"}}
+{"type":"message","timestamp":"2026-10-31T22:26:02.616Z","role":"assistant","content":"stub done nz5700f724","delta":true}
+{"type":"result","timestamp":"2026-10-31T22:26:02.617Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":72,"tool_calls":1,"models":{"gemini-3.5-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

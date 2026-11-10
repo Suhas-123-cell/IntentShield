@@ -1,0 +1,488 @@
+[
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "control",
+  "reply": "R1",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 4
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 4
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 4
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 4
+ },
+ {
+  "arm_kind": "is",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "IS-ON",
+  "rep": 0
+ },
+ {
+  "arm_kind": "is",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "IS-ON",
+  "rep": 1
+ },
+ {
+  "arm_kind": "is",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "ask",
+  "reply": "IS-ON",
+  "rep": 2
+ },
+ {
+  "arm_kind": "is",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "IS-ON",
+  "rep": 0
+ },
+ {
+  "arm_kind": "is",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "IS-ON",
+  "rep": 1
+ },
+ {
+  "arm_kind": "is",
+  "harness": "claude",
+  "version": "2.1.316",
+  "mode": "M1h",
+  "cell": "timeout",
+  "reply": "IS-ON",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "control",
+  "reply": "R1",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "R3",
+  "rep": 4
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "deny",
+  "reply": "R4",
+  "rep": 4
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "R9",
+  "rep": 4
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 0
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 1
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 2
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 3
+ },
+ {
+  "arm_kind": "generic",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "malformed",
+  "reply": "R6",
+  "rep": 4
+ },
+ {
+  "arm_kind": "is",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "IS-ON",
+  "rep": 0
+ },
+ {
+  "arm_kind": "is",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "IS-ON",
+  "rep": 1
+ },
+ {
+  "arm_kind": "is",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "ask",
+  "reply": "IS-ON",
+  "rep": 2
+ },
+ {
+  "arm_kind": "is",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "IS-ON",
+  "rep": 0
+ },
+ {
+  "arm_kind": "is",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "IS-ON",
+  "rep": 1
+ },
+ {
+  "arm_kind": "is",
+  "harness": "codex",
+  "version": "0.166.0",
+  "mode": "M1",
+  "cell": "timeout",
+  "reply": "IS-ON",
+  "rep": 2
+ }
+]

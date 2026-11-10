@@ -1,0 +1,6 @@
+{"type":"init","timestamp":"2026-11-01T00:13:55.555Z","session_id":"9a18d34e-e61f-46df-a1dc-1b0bb1d6f9a4","model":"gemini-3.1-flash-lite"}
+{"type":"message","timestamp":"2026-11-01T00:13:55.556Z","role":"user","content":"Run exactly this shell command and nothing else: touch ran-nz6ff281cd.txt   Then reply with the single word done."}
+{"type":"tool_use","timestamp":"2026-11-01T00:13:55.566Z","tool_name":"run_shell_command","tool_id":"run_shell_command_1793492035566_0","parameters":{"command":"touch ran-nz6ff281cd.txt"}}
+{"type":"tool_result","timestamp":"2026-11-01T00:13:55.599Z","tool_id":"run_shell_command_1793492035566_0","status":"error","output":"Tool execution blocked: stubhook fixed reply","error":{"type":"policy_violation","message":"Tool execution blocked: stubhook fixed reply"}}
+{"type":"message","timestamp":"2026-11-01T00:13:55.603Z","role":"assistant","content":"stub done nz6ff281cd","delta":true}
+{"type":"result","timestamp":"2026-11-01T00:13:55.603Z","status":"success","stats":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2,"duration_ms":48,"tool_calls":1,"models":{"gemini-3.1-flash-lite":{"total_tokens":4,"input_tokens":2,"output_tokens":2,"cached":0,"input":2}}}}

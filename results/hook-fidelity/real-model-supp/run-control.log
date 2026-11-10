@@ -1,0 +1,5 @@
+2 launches, GO=2, model qwen2.5:7b at http://127.0.0.1:11435
+version probe (no model): codex 'codex-cli 0.166.0'
+generic codex  control   #0 -> RAN attempted=True hooks=1 (15.42 s) 
+version probe (no model): claude '2.1.316 (Claude Code)'
+generic claude control   #0 -> RAN attempted=True hooks=1 (16.6 s) 

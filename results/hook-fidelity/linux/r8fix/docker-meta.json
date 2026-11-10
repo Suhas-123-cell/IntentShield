@@ -1,0 +1,186 @@
+{
+ "image": "python:3.12-slim",
+ "round": "r8fix",
+ "worktree_commit": "1c9fc19",
+ "started_at": "2026-11-01T05:41:48Z",
+ "network": "none (docker run --network none)",
+ "mounts": "worktree read-only at /work, pytest and its pure-Python dependencies read-only at /deps, results at /out",
+ "flags": "--read-only --tmpfs /tmp:exec --memory 1g --pids-limit 256",
+ "runs": {
+  "matrix": {
+   "extra_docker_flags": [
+    "--init"
+   ],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "matrix",
+    "/out/matrix.jsonl"
+   ],
+   "exit": 0
+  },
+  "hidepid": {
+   "extra_docker_flags": [
+    "--cap-add",
+    "SYS_ADMIN",
+    "--init"
+   ],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "hidepid",
+    "/out/hidepid.jsonl"
+   ],
+   "exit": 0
+  },
+  "pid1-native-p-notty": {
+   "extra_docker_flags": [],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-native-p-notty.json",
+    "native",
+    "1"
+   ],
+   "exit": 0
+  },
+  "pid1-native-bare-notty": {
+   "extra_docker_flags": [],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-native-bare-notty.json",
+    "native",
+    "0"
+   ],
+   "exit": 0
+  },
+  "pid1-node-p-notty": {
+   "extra_docker_flags": [],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-node-p-notty.json",
+    "node",
+    "1"
+   ],
+   "exit": 0
+  },
+  "pid1-node-bare-notty": {
+   "extra_docker_flags": [],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-node-bare-notty.json",
+    "node",
+    "0"
+   ],
+   "exit": 0
+  },
+  "pid1-native-p-tty": {
+   "extra_docker_flags": [
+    "-t"
+   ],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-native-p-tty.json",
+    "native",
+    "1"
+   ],
+   "exit": 0
+  },
+  "pid1-native-bare-tty": {
+   "extra_docker_flags": [
+    "-t"
+   ],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-native-bare-tty.json",
+    "native",
+    "0"
+   ],
+   "exit": 0
+  },
+  "pid1-node-p-tty": {
+   "extra_docker_flags": [
+    "-t"
+   ],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-node-p-tty.json",
+    "node",
+    "1"
+   ],
+   "exit": 0
+  },
+  "pid1-node-bare-tty": {
+   "extra_docker_flags": [
+    "-t"
+   ],
+   "command_in_container": [
+    "python3",
+    "/work/benchmarks/hook_fidelity/linux_probe.py",
+    "pid1",
+    "/out/pid1-node-bare-tty.json",
+    "node",
+    "0"
+   ],
+   "exit": 0
+  },
+  "pytest-init": {
+   "extra_docker_flags": [
+    "--init"
+   ],
+   "command_in_container": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--noconftest",
+    "--rootdir=/work",
+    "-rs",
+    "/work/tests/test_translation_ancestry.py",
+    "/work/tests/test_wrap_hook.py"
+   ],
+   "exit": 0
+  },
+  "pytest-pid1": {
+   "extra_docker_flags": [],
+   "command_in_container": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--noconftest",
+    "--rootdir=/work",
+    "-rs",
+    "/work/tests/test_translation_ancestry.py",
+    "/work/tests/test_wrap_hook.py"
+   ],
+   "exit": 0
+  }
+ },
+ "image_id": "sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159",
+ "image_digest": "python@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159",
+ "docker_server": "29.5.2 linux/arm64",
+ "uname": "Linux 6.12.76-linuxkit aarch64",
+ "python": "Python 3.12.16",
+ "ps_in_image": "absent",
+ "script_in_image": "/usr/bin/script",
+ "finished_at": "2026-11-01T05:42:09Z",
+ "containers_started": 16
+}

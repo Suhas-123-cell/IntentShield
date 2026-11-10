@@ -1,0 +1,1 @@
+{"nonce": "nz0120c50b", "call": {"name": "mcp__notes__search_notes", "args": {"query": "nz0120c50b"}}, "by_api": {"openai": {"namespace": "mcp__notes__", "name": "search_notes", "args": {"query": "nz0120c50b"}}, "gemini": {"name": "mcp_notes_search_notes", "args": {"query": "nz0120c50b"}}}, "final_text": "stub done nz0120c50b"}

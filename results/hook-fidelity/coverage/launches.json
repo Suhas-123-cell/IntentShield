@@ -1,0 +1,25 @@
+{
+ "cap": 150,
+ "hook_fidelity_go_per_invocation": "set to the exact planned launches of each invocation (see ledger.jsonl hook_fidelity_go and planned_this_invocation)",
+ "launches_in_rows": 94,
+ "codex_0.131_trust_step_app_server_launches_inside_rows": 14,
+ "preliminary_and_debug_launches_not_in_rows": {
+  "smoke_claude_2.1.316": 3,
+  "smoke_codex_0.166.0": 3,
+  "smoke_gemini_0.66.0": 3,
+  "smoke_gemini_0.37.1": 1,
+  "smoke_claude_2.1.69_2.1.139_2.1.246": 3,
+  "smoke_codex_0.131.0_wrong_namespace_hooks_absent": 1,
+  "smoke_codex_0.131.0_flat_name": 2,
+  "debug_codex_0.131.0_hooks_absent_strict_config": 1,
+  "debug_codex_0.131.0_hook_config_variants_json_toml_toml-sh_toml-enable": 4,
+  "debug_codex_0.131.0_RUST_LOG_runs": 3,
+  "debug_codex_0.131.0_project_hooks_json": 1,
+  "debug_codex_0.131.0_app_server_hooks_list": 1,
+  "smoke_codex_0.131.0_persisted_trust_rows_and_2_trust_steps": 4
+ },
+ "preliminary_total": 30,
+ "total_harness_binary_launches": 138,
+ "paid_spend_usd": 0.0,
+ "note": "every launch used the local stub (127.0.0.1), a fake key and an isolated HOME; the trust-step launches are model-free `codex app-server` runs that only list hooks. Preliminary rows are excluded from every k/n because configuration was still being fixed (wrong Codex namespace, Codex 0.131 hooks untrusted)."
+}

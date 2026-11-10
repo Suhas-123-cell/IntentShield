@@ -1,0 +1,212 @@
+{
+ "_fetched": "2026-11-01",
+ "_source": "api.github.com/repos/<owner>/<repo>, unauthenticated",
+ "cc-safe-setup": {
+  "stars": 9,
+  "forks": 1,
+  "pushed_at": "2026-09-25T08:16:07Z",
+  "archived": false,
+  "created_at": "2026-03-20T00:57:09Z",
+  "license": "MIT"
+ },
+ "dcg": {
+  "stars": 6235,
+  "forks": 262,
+  "pushed_at": "2026-10-30T21:42:52Z",
+  "archived": false,
+  "created_at": "2026-01-07T22:27:34Z",
+  "license": "NOASSERTION"
+ },
+ "safety-net": {
+  "stars": 1872,
+  "forks": 89,
+  "pushed_at": "2026-10-30T12:33:32Z",
+  "archived": false,
+  "created_at": "2025-12-25T17:52:57Z",
+  "license": "MIT"
+ },
+ "malanta-trustgate": {
+  "stars": 2,
+  "forks": 0,
+  "pushed_at": "2026-10-12T11:00:25Z",
+  "archived": false,
+  "created_at": "2026-07-30T20:10:55Z",
+  "license": "MIT"
+ },
+ "ggshield": {
+  "stars": 2011,
+  "forks": 221,
+  "pushed_at": "2026-10-30T17:02:20Z",
+  "archived": false,
+  "created_at": "2020-04-20T15:36:24Z",
+  "license": "MIT"
+ },
+ "tool-gate-hook": {
+  "stars": 41,
+  "forks": 6,
+  "pushed_at": "2026-10-12T08:14:31Z",
+  "archived": false,
+  "created_at": "2025-10-10T15:12:45Z",
+  "license": "MIT"
+ },
+ "hol-guard": {
+  "stars": 1041,
+  "forks": 227,
+  "pushed_at": "2026-10-31T22:18:28Z",
+  "archived": false,
+  "created_at": "2026-03-28T19:02:15Z",
+  "license": "Apache-2.0"
+ },
+ "ai-guardian": {
+  "stars": 17,
+  "forks": 9,
+  "pushed_at": "2026-10-30T21:24:48Z",
+  "archived": false,
+  "created_at": "2026-03-23T16:55:42Z",
+  "license": "NOASSERTION"
+ },
+ "defenseclaw": {
+  "stars": 899,
+  "forks": 162,
+  "pushed_at": "2026-10-31T22:11:31Z",
+  "archived": false,
+  "created_at": "2026-03-23T00:51:19Z",
+  "license": "Apache-2.0"
+ },
+ "balerx": {
+  "stars": 1,
+  "forks": 0,
+  "pushed_at": "2026-10-25T16:36:27Z",
+  "archived": false,
+  "created_at": "2026-10-21T01:16:59Z",
+  "license": "Apache-2.0"
+ },
+ "agent-edict": {
+  "stars": 1,
+  "forks": 0,
+  "pushed_at": "2026-10-31T16:56:44Z",
+  "archived": false,
+  "created_at": "2026-10-17T20:42:05Z",
+  "license": "Apache-2.0"
+ },
+ "axonflow-codex": {
+  "stars": 3,
+  "forks": 2,
+  "pushed_at": "2026-09-25T13:16:54Z",
+  "archived": false,
+  "created_at": "2026-04-06T09:11:21Z",
+  "license": "MIT"
+ },
+ "oh-my-harness": {
+  "stars": 17,
+  "forks": 2,
+  "pushed_at": "2026-10-10T11:01:50Z",
+  "archived": false,
+  "created_at": "2026-03-16T00:43:43Z",
+  "license": "MIT"
+ },
+ "vaibot-cursor": {
+  "stars": 0,
+  "forks": 0,
+  "pushed_at": "2026-10-11T00:44:53Z",
+  "archived": false,
+  "created_at": "2026-07-06T06:00:08Z",
+  "license": "MIT"
+ },
+ "gemini-intrupt-hook": {
+  "stars": 0,
+  "forks": 0,
+  "pushed_at": "2026-07-15T07:48:38Z",
+  "archived": false,
+  "created_at": "2026-07-11T22:05:24Z",
+  "license": "Apache-2.0"
+ },
+ "railway-guard": {
+  "stars": 2,
+  "forks": 0,
+  "pushed_at": "2026-06-25T17:39:40Z",
+  "archived": false,
+  "created_at": "2026-06-25T17:01:41Z",
+  "license": "MIT"
+ },
+ "prevent-destructive": {
+  "stars": 0,
+  "forks": 0,
+  "pushed_at": "2025-12-25T23:15:10Z",
+  "archived": false,
+  "created_at": "2025-12-25T22:42:58Z",
+  "license": "Apache-2.0"
+ },
+ "block-no-verify": {
+  "stars": 7,
+  "forks": 4,
+  "pushed_at": "2026-10-24T00:33:19Z",
+  "archived": false,
+  "created_at": "2026-01-09T21:47:01Z",
+  "license": "MIT"
+ },
+ "tob-codex-config": {
+  "stars": 30,
+  "forks": 1,
+  "pushed_at": "2026-10-18T21:09:18Z",
+  "archived": false,
+  "created_at": "2026-04-20T04:47:45Z",
+  "license": null
+ },
+ "endor-cursor-hooks": {
+  "stars": 2,
+  "forks": 0,
+  "pushed_at": "2026-03-12T19:41:58Z",
+  "archived": false,
+  "created_at": "2025-12-17T22:21:37Z",
+  "license": null
+ },
+ "hookify": {
+  "stars": 45568,
+  "forks": 4747,
+  "pushed_at": "2026-10-31T17:02:18Z",
+  "archived": false,
+  "created_at": "2025-11-20T18:36:20Z",
+  "license": "Apache-2.0"
+ },
+ "knox": {
+  "stars": 7,
+  "forks": 0,
+  "pushed_at": "2026-08-10T10:20:58Z",
+  "archived": false,
+  "created_at": "2026-04-14T08:17:10Z",
+  "license": null
+ },
+ "skillgate": {
+  "stars": 8,
+  "forks": 1,
+  "pushed_at": "2026-10-28T13:08:06Z",
+  "archived": false,
+  "created_at": "2026-06-14T11:58:28Z",
+  "license": "MIT"
+ },
+ "claude-codex-settings": {
+  "stars": 1194,
+  "forks": 112,
+  "pushed_at": "2026-10-31T10:33:33Z",
+  "archived": false,
+  "created_at": "2025-07-09T07:46:08Z",
+  "license": "Apache-2.0"
+ },
+ "riphook": {
+  "stars": 45,
+  "forks": 1,
+  "pushed_at": "2026-02-05T22:16:56Z",
+  "archived": false,
+  "created_at": "2026-02-04T05:26:35Z",
+  "license": "Apache-2.0"
+ },
+ "rtk": {
+  "stars": 85142,
+  "forks": 5437,
+  "pushed_at": "2026-10-31T21:59:54Z",
+  "archived": false,
+  "created_at": "2026-01-22T16:54:16Z",
+  "license": "Apache-2.0"
+ }
+}
