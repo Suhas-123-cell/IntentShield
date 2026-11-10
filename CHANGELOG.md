@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Dangerous-command rules (review of the merged code, nine findings):** `wget -O - URL | sh` and `curl -o - URL | sh`
+  are read as a fetch piped into a shell (the `-O -` was taken for a file write and they got no verdict); a command
+  over 50,000 characters asks, where the unread rest used to pass; `echo`/`printf` piped into a shell and
+  `bash <<< '...'` are read as commands; `rm -rf "${HOME:?}"/*` denies. False refusals removed: the key named by
+  `scp -i` or `rsync -e "ssh -i ..."` is no longer a file being sent; text in single quotes and quoted here-documents
+  (a commit message or PR body that quotes `rm -rf /`) is data unless a shell or interpreter runs it; `git branch -d`
+  and `git restore --staged` get no verdict and `git branch -D` of a protected name asks. With `--gemini-ask`, asks on
+  Gemini's file tools are asks again, not MCP refusals; Cursor's `beforeReadFile` allows a read the text rules only
+  ask about, with the note; `wrap-hook` reads Cursor's shell events as shell; a malformed `harness-versions.json` or
+  `INTENTSHIELD_HOOK_DEADLINE` no longer crashes `doctor`, `install` or the hook. The study's 7,639 recorded
+  IntentShield decisions on its fixtures recompute unchanged. Still open: a payload written to a plain file with
+  `echo '...' > x.sh` and run later, and `echo $'...' | sh`.
+- **Docs and repository:** the guide covers what to do when the guard blocks something legitimate, troubleshooting,
+  the built-in tool rules and `wrap-hook`; `CITATION.cff`, `NOTICE`, a code of conduct and a pull-request template
+  are added; the Anthropic and OpenAI documentation pages the study read are cited by source and sha256, not copied.
+
 - **Hook fidelity study, round 9 (documentation only; no product code, test or result file changed):** the out-of-category generalisation test of the round-8 built-in-tool rules did not run. The branch `r9-general` has no commits and `results/hook-fidelity/detect/general/` does not exist, so nothing was scored and the critic's verdict is refuted for lack of evidence (`docs/hook-fidelity-study.md` section 6f). The study's comparative sentence stands as written with no new evidence either way, and its section 0 now says the comparison was not tested outside the six categories the rules were written from and is not evidence that IntentShield detects more than `safety-net` or `knox` in general. No launches, no model or paid calls.
 - **Hook fidelity study, round 8 (measurement only; no product code changed):** a decision comparison of IntentShield and 10 other guards on 467 pre-declared
   fixtures (`benchmarks/hook_fidelity/detect_*.py`, `results/hook-fidelity/detect/`, `docs/hook-fidelity-study.md` section 6c). On the held-out set IntentShield's

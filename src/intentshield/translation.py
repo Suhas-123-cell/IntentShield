@@ -133,6 +133,8 @@ def record_version(harness: str, version: str, binary: str, home: Path | None = 
         data = json.loads(cache.read_text())
     except (OSError, ValueError):
         data = {}
+    if not isinstance(data, dict):  # a file that holds a list or null is no record
+        data = {}
     try:
         st = os.stat(binary)
         stamp = {"size": st.st_size, "mtime": st.st_mtime}
@@ -174,9 +176,13 @@ def recorded_version(harness: str, home: Path | None = None) -> tuple[Version | 
         return None, "no version recorded (run `intentshield doctor`)"
     try:
         st = os.stat(entry["binary"])
-    except (OSError, KeyError):
+    except (OSError, KeyError, TypeError, ValueError):
         return None, "the recorded binary is gone (run `intentshield doctor`)"
-    if "size" in entry and (st.st_size != entry["size"] or abs(st.st_mtime - entry["mtime"]) > 1):
+    try:
+        changed = "size" in entry and (st.st_size != entry["size"] or abs(st.st_mtime - entry["mtime"]) > 1)
+    except (KeyError, TypeError):
+        changed = True
+    if changed:
         return None, "the harness changed since its version was recorded (run `intentshield doctor`)"
     path = entry.get("path")
     if isinstance(path, str) and path and os.path.realpath(path) != entry["binary"]:
@@ -525,7 +531,7 @@ class Semantics:
             try:
                 entry = json.loads(_cache(self.home).read_text())[self.harness]
                 stale = os.path.realpath(running) != entry.get("binary")
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 stale = True
         if not stale:
             return
@@ -552,15 +558,17 @@ class Semantics:
                 return "ask", ""
             return "deny", f"Claude Code {_show(self.version)}: a hook's ask is not measured to be enforced (class {ask}){note}"
         if self.harness == "gemini":
-            if kind == "shell" and ask == "hangs" and gemini_ask:
-                return "ask", ""
-            if kind != "shell":
+            if kind == "mcp":
                 return "deny", "Gemini CLI drops an ask for a trusted MCP tool, so an ask is not a guard there"
+            if ask == "hangs" and gemini_ask:   # a built-in tool (shell, read, write...) gets the shell's measured behaviour
+                return "ask", ""
             return "deny", f"Gemini CLI {_show(self.version)}: an ask is {ask}{note}; --gemini-ask is the opt-in"
         if self.harness == "codex":
             return "deny", "Codex CLI does not support a hook's ask (the call runs)"
         if self.harness == "cursor":
-            return ("ask", "") if kind == "shell" else ("deny", "Cursor ran an ask on an allowlisted MCP tool")
+            if kind == "mcp":
+                return "deny", "Cursor ran an ask on an allowlisted MCP tool"
+            return ("ask", "") if kind == "shell" else ("deny", "Cursor's ask is measured only for a shell command")
         return "deny", "unknown harness"
 
 
