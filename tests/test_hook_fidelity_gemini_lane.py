@@ -127,6 +127,7 @@ def test_stub_summary_counts_requests_and_keeps_the_first_tool_list(tmp_path):
     assert got["stub_request_kinds"] == ["streamGenerateContent", "generateContent"]
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="arm S runs under sandbox-exec, which is macOS only")
 def test_execute_one_arm_s_starts_a_stub_points_the_harness_at_it_and_records_what_it_saw(tmp_path, monkeypatch):
     """A stand-in 'gemini' that only prints its stub URL and exits: nothing is scored RAN, but the arm S plumbing is exercised
     (the stub process, the loopback URL in the environment, the stub fields in the row, no stub left behind)."""
