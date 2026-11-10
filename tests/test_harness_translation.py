@@ -239,10 +239,13 @@ def test_the_launcher_turns_every_failure_into_exit_2_with_a_reason(tmp_path):
         path.chmod(0o755)
     passed = _sh(translation.launcher(str(ok)))
     assert (passed.returncode, passed.stdout.strip(), passed.stderr) == (0, '{"ok": 1}', "")
-    for command, code in ((str(dead), 126), (str(tmp_path / "missing"), 127), ("sh -c 'exit 1'", 1), ("sh -c 'kill -9 $$'", 137)):
+    # A dead interpreter is 126 under bash (macOS /bin/sh) and 127 under dash (Debian and Ubuntu /bin/sh).
+    for command, codes in ((str(dead), (126, 127)), (str(tmp_path / "missing"), (127,)), ("sh -c 'exit 1'", (1,)),
+                           ("sh -c 'kill -9 $$'", (137,))):
         failed = _sh(translation.launcher(command))
         assert failed.returncode == 2, command
-        assert f"exit code {code}" in failed.stderr and "refused" in failed.stderr, (command, failed.stderr)
+        assert any(f"exit code {code}" in failed.stderr for code in codes), (command, failed.stderr)
+        assert "refused" in failed.stderr, (command, failed.stderr)
     kept = _sh(translation.launcher(str(refuses)))
     assert kept.returncode == 2 and kept.stderr.strip() == "because"        # the hook's own reason is not buried
 
