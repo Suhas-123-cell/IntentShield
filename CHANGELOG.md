@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.3
+
+The hook verdict fidelity study (`docs/hook-fidelity-study.md`) and the opt-in features that came with it, a review
+of that code, and fixes to input handling in the hook, `scan`, `wrap` and `unwrap`.
 
 - **Dangerous-command rules (review of the merged code, nine findings):** `wget -O - URL | sh` and `curl -o - URL | sh`
   are read as a fetch piped into a shell (the `-O -` was taken for a file write and they got no verdict); a command

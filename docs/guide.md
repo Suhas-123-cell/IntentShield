@@ -622,7 +622,7 @@ user actually sees (the README table has the hook configuration):
 
 | harness | an ask | a deny |
 |---|---|---|
-| Claude Code | in an interactive session, Claude Code's own permission prompt, with the hook's reason as its text; you answer yes or no there. In a headless run (`claude -p`) nobody can answer: on `main` (not yet in a PyPI release) the hook sends the ask as a refusal that says so, and Claude Code 2.1.85 and later refuses an ask nobody answers by itself | the call does not run; the model is shown the reason |
+| Claude Code | in an interactive session, Claude Code's own permission prompt, with the hook's reason as its text; you answer yes or no there. In a headless run (`claude -p`) nobody can answer: since 0.4.3 the hook sends the ask as a refusal that says so, and Claude Code 2.1.85 and later refuses an ask nobody answers by itself | the call does not run; the model is shown the reason |
 | Codex CLI | never a prompt: Codex runs a call its hook asked about, so an ask is sent as a refusal that tells the agent not to retry | the same refusal |
 | Cursor | an MCP call: a refusal (Cursor ran an allowlisted MCP call its hook asked about). A shell command with `--builtin-tools`: Cursor's own approval prompt | `permission: deny`, with the reason as the user message |
 | Gemini CLI | by default a refusal. With `install gemini --gemini-ask` (Gemini CLI 0.66 or later, interactive, shell commands only) a prompt; an MCP ask is always refused. After the third refusal since your last prompt the hook also ends the agent's turn, so it stops retrying | the same refusal |
