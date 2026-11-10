@@ -1458,7 +1458,7 @@ Incidents, disclosed:
 
 16. **Round 9 (section 6f)**: the generalisation test did not run. The branch `r9-general` has no commits and no `results/hook-fidelity/detect/general/` exists, so merging it was a no-op ("Already up to date"). This integration ran no harness and made no model, paid or network call, and left no background process; the full suite (4013 passed, 3 skipped, attached, 154 s) and `ruff check src tests benchmarks` were run on the study branch with no code change. Real-HOME snapshots were not taken because nothing was launched. The launch total is unchanged.
 
-Product changes that came in with this merge and are not measurement (see `CHANGELOG.md` Unreleased): the verdict-translation layer, the
+Product changes that came in with this merge and are not measurement (see `CHANGELOG.md` 0.4.3): the verdict-translation layer, the
 deadline and launcher written by default into installed hooks (`--no-translate` and `INTENTSHIELD_HOOK_TRANSLATE=off` restore the old hook),
 version-aware `doctor` output, and `GEMINI_ASK_TESTED` wording. Round 7 added `intentshield wrap-hook` and the `ps`-free mode detector with its `unknown` mode (`CHANGELOG.md`); the wrap-hook measurement and the detector measurement each had a critic,
 the product decisions (the Gemini refusal in unknown mode, the default `--on-empty deny`, the note appended to every ask reason) did not, and **the shipped behaviour still needs a human review before a release**.
@@ -1589,7 +1589,7 @@ Round 7:
   stands: a lane-sandbox defect repaired, a tie and not a gain, and unknown mode reached only by force.
 - **A novelty check (3.7).** The Codex trust-flag finding is downgraded to a reproduction of a fixed public bug (openai/codex #26383); the contribution statement (section 0) is now the hedged measurement-artifact sentence, and the mechanism-level novelty
   is stated to be nil. DefenseClaw is the closest prior art, and on Codex it demotes an ask to an alert and does not block.
-- **Product** (`CHANGELOG.md` Unreleased): `intentshield wrap-hook`; the `ps`-free detector and the `unknown` mode; a diagnostic note on every ask reason. Round-7 shipped behaviour has not been through a human review.
+- **Product** (`CHANGELOG.md` 0.4.3): `intentshield wrap-hook`; the `ps`-free detector and the `unknown` mode; a diagnostic note on every ask reason. Round-7 shipped behaviour has not been through a human review.
 - Not changed: the matrix measurements, the kill criterion, the venue fit. Round 7 makes the mitigation a reference implementation that also works as a shim and removes a cost round 6 found; it does not turn it into a validated table or a research result.
   The round-6 objections are **not all closed**: closed are the wrapped-guard control, the allow and deny-all arms (thinly), the Codex raw ask and the `ps` blindness for the cell that produced it; partly closed are the third-party interactive cells
   (a tie on one build) and the detector's ground truth (n=1 per harness); open are Claude auto mode and yolo, Gemini without `--gemini-ask`, Codex hook trust interactively, the Linux and Windows readers, and the Gemini and Codex replays.
@@ -1601,7 +1601,7 @@ Round 8:
 - **The wrapped re-run and the `--on-empty allow` cells (6a.1).** No outcome changed on the merged code (a regression check); only a silent exit 0 runs under `--on-empty allow`; the default shim refuses 12/17 benign captures that silent-allow guards pass.
 - **A narrow real-model arm (6d).** 61/61 and 10/10 valid runs equal to the stub outcome, with a prompt that forbids a retry; the limitation is "measured on a narrow slice, no divergence seen", not lifted.
 - **A Linux reader run (6b.1).** 27/27 constructed trees plus a control and `hidepid` 1/1 in Docker; a PID-1 defect (0/8; fixed afterwards, see the fixes below) and a node-launched-Claude blindness on macOS (not fixed; product code untouched in round 8 proper).
-- **Product**: none. Round 8 added measurement code, tests and results only (`CHANGELOG.md` Unreleased notes the benchmark additions).
+- **Product**: none. Round 8 added measurement code, tests and results only (`CHANGELOG.md` 0.4.3 notes the benchmark additions).
 - Not changed: the matrix measurements, the kill criterion, the venue fit (workshop paper or short measurement note, plus the artifact). The round-7 final reviewer's gaps are closed (stale evidence, `--on-empty allow`, Linux reader), partly closed (false-deny and false-allow, real model, second OS) or open (a real person); section 0 has the table.
 
 After round 8 (the fixes, section 6e; a refuting critic of the fresh set and the rules):
