@@ -12,8 +12,9 @@ person, other builds, other platforms or Cursor (not run).
 
 Files: `runs.jsonl` (one row per launch, 40, including the failed attempts), `table.md` (derived by `pty_lane.py table`, from the rows and the
 saved screen text), `ledger.jsonl` (one line per harness execution, written before it starts), `plan.json` and `plan-controls.json`,
-`runs/<harness>-<cell>-<rep>-<id>/` (the screen text the driver saw, the first 6 KB of raw terminal bytes, the hook observer's log and the
-stub's request log; paths scrubbed). Driver: `benchmarks/hook_fidelity/pty_lane.py`, observer: `pty_hook.py`, tests:
+`runs/<harness>-<cell>-<rep>-<id>/` (the screen text the driver saw, the hook observer's log and the stub's request log; paths scrubbed.
+The runner also wrote the first 6000 raw terminal bytes of each run as `transcript-head.bin`; those 61 files are **not committed**, so a run
+directory holds no raw bytes, and `table.md` regenerates from the rows and the saved screen text alone). Driver: `benchmarks/hook_fidelity/pty_lane.py`, observer: `pty_hook.py`, tests:
 `tests/test_hook_fidelity_pty.py` (38 tests, none launches a harness).
 
 ## Result (k/n; build, mode, reply and evidence on every line)

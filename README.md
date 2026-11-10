@@ -46,6 +46,12 @@ its entry's `env` names plus basics such as `PATH` and `HOME`, not the rest of y
 name any other variable it needs (a proxy setting, `AWS_*`, `SSH_AUTH_SOCK`) in `env`. See
 [What each layer sees and stops](#what-each-layer-sees-and-stops) for what each layer does.
 
+When the guard refuses or asks about something legitimate, or `intentshield doctor` reports a problem, see
+[When the guard blocks or asks about something legitimate](docs/guide.md#when-the-guard-blocks-or-asks-about-something-legitimate)
+and [Troubleshooting](docs/guide.md#troubleshooting). On `main`, not yet in a PyPI release, `intentshield wrap-hook`
+puts the same fail-closed launcher and deadline in front of a third-party hook
+([Wrapping a third-party hook](docs/guide.md#wrapping-a-third-party-hook)).
+
 Optional LLM judge: `intentshield install <harness> --judge groq` adds a second-stage check (Groq's
 free tier, `openai/gpt-oss-120b`) on tool descriptions the rules pass and on each read-only call;
 it asks for the key once and stores it in `~/.intentshield/.env`. `--judge ollama` (`qwen2.5:7b`)
@@ -88,9 +94,11 @@ data and send data out. The toxic-flow roles come from tool names, descriptions 
 treat that check as a prompt to look, not a verdict. Tool hashes are kept in
 `~/.intentshield/scan-pins.json`, and a description that changes is reported on every scan until you
 accept it with `--update-pins`. The command exits 1 when any error-level finding remains. No API key is
-needed and nothing leaves the machine. Servers in a project's own config (`.mcp.json`, `.cursor/mcp.json`,
-`.vscode/mcp.json`, ...) are commands the repository chose, so they are checked as configs but started
-only with `--connect-project`.
+needed and nothing leaves the machine. Servers in a project's own config that `scan` finds by itself
+(`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, ... in the current directory) are commands the repository
+chose, so they are checked as configs but started only with `--connect-project`. A file you name yourself
+(`intentshield scan .mcp.json`) is taken as your own choice and its servers are started; `--no-connect` starts
+none.
 
 ## Quickstart from a clone
 
@@ -143,7 +151,7 @@ when the model routes calls through `intentshield_call` and states the intent it
 | layer | how it is wired | sees | stops |
 |---|---|---|---|
 | **Hooks** (`intentshield-hook <harness>`, via `intentshield install`) | Claude Code, Codex CLI, Cursor, Gemini CLI hook events; per-session SQLite at `~/.intentshield/hooks.db` | the user's prompt, every MCP call and result, MCP resource reads | sends self-disclosure parameters (`llm_name`, `system_prompt`, ...) empty; denies a call whose arguments carry injected instructions or a value that came from an injected output and not from the user; asks before a call carries a credential the user did not give (GitHub, AWS, Slack, Stripe, OpenAI, Anthropic, Google, Groq and Hugging Face token formats, private keys, JWTs), and denies it once the session is tainted; scans every result and taints the session; asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before state-changing calls once tainted (`--review always\|tainted\|never`). A crashing or missing hook denies the call where the harness has a flag for it (Claude Code `onFailure: block`, Cursor `failClosed`; Codex CLI and Gemini CLI have none, so there a crash is a missing opinion). Built-in tools (shell, file and web tools) are left to the harness unless installed with `--builtin-tools` (below). |
-| **Built-in tools** (opt-in: `intentshield install <harness> --builtin-tools`) | Claude Code `Bash`, `WebFetch`, `WebSearch`, `Read`, `Write`, `Edit`; Codex CLI's shell tool; Gemini CLI `run_shell_command`, `web_fetch`, `google_web_search`, `read_file`, `write_file`, `replace`; Cursor `beforeShellExecution`, `beforeReadFile` and `afterShellExecution` | shell commands (parsed: pipes, `&&`, redirections, `sh -c`, `$(...)`, here-documents), fetched pages, search results, file reads and writes | denies a command or fetch that reaches an address from an injected output; asks before a command sends data (upload flags, POST, stdin into a network tool, `scp`/`rsync` push, `git push`) to an address that came only from a tool output, or pipes a fetched script from one into a shell; asks before a command reads secrets (`.env`, `~/.ssh`, `.aws/credentials`, `printenv`) and sends data out, unless the user named the destination; once an output tried to instruct the agent, asks before any command that is not read-only (a plain `curl` or `wget -qO-` download counts as read-only only when every host it reaches was named by the user), any read of a credential store, and writes to shell startup files, SSH, git hooks or a harness's settings. Pages, search results and the output of `curl`, `gh` or other remote commands flag the session; the user's own files and local command output only warn (the rules fire on ordinary auth code and LLM prompts). On Cursor, a command with no objection gets `{}` (an empty JSON object, never a truly empty reply, which a fail-closed Cursor hook treats as a failure), which leaves it to Cursor's own approval (measured: an explicit `allow` did not skip it either). |
+| **Built-in tools** (opt-in: `intentshield install <harness> --builtin-tools`) | Claude Code `Bash`, `WebFetch`, `WebSearch`, `Read`, `Write`, `Edit`; Codex CLI's shell tool; Gemini CLI `run_shell_command`, `web_fetch`, `google_web_search`, `read_file`, `write_file`, `replace`; Cursor `beforeShellExecution`, `beforeReadFile` and `afterShellExecution` | shell commands (parsed: pipes, `&&`, redirections, `sh -c`, `$(...)`, here-documents), fetched pages, search results, file reads and writes | denies a command or fetch that reaches an address from an injected output; asks before a command sends data (upload flags, POST, stdin into a network tool, `scp`/`rsync` push, `git push`) to an address that came only from a tool output, or pipes a fetched script from one into a shell; asks before a command reads secrets (`.env`, `~/.ssh`, `.aws/credentials`, `printenv`) and sends data out, unless the user named the destination; once an output tried to instruct the agent, asks before a command that is neither read-only nor an ordinary local build, test or version-control command (`pytest`, `git status` and `git commit` pass; `rm`, `sed -i` and `pip install` ask; under `--review always`, or when the command names a path that sets up code a later session runs, an ordinary command asks too; a plain `curl` or `wget -qO-` download counts as read-only only when every host it reaches was named by the user), any read of a credential store, and writes to shell startup files, SSH, git hooks or a harness's settings. Pages, search results and the output of `curl`, `gh` or other remote commands flag the session; the user's own files and local command output only warn (the rules fire on ordinary auth code and LLM prompts). On Cursor, a command with no objection gets `{}` (an empty JSON object, never a truly empty reply, which a fail-closed Cursor hook treats as a failure), which leaves it to Cursor's own approval (measured: an explicit `allow` did not skip it either). On `main`, not yet in a PyPI release, text rules for dangerous commands (a recursive delete of home, a force-push of a shared branch, a read of an SSH key, `curl \| sh`, ...) also run when the session rules allow; they are opt-in text rules, and what the study measured about their misses is in [the guide](docs/guide.md#built-in-tools-and-the-dangerous-command-rules). |
 | **Transparent proxy** (`intentshield-mcp --transparent`, via `intentshield wrap`, stdio only) | wraps each MCP server the client launches; no harness support needed | the upstream's descriptions, schemas, annotations and results | hides tools whose description matches poisoning rules or that changed after connect (rug pull, fails closed until restart); removes self-disclosure parameters from schemas and scans schema text; flags injected results and error results; refuses tools the config prohibits or does not allow; with a judge, withholds a description until it is judged. Servers reached over HTTP (`"url"`) are not launched by the client, so `wrap` leaves them alone. |
 | **Gateway** (`intentshield-mcp --transport streamable-http` or `stdio`) | exposes five `intentshield_*` tools; the model creates a run with the user's intent and calls tools through `intentshield_call` with the exact schema hash | intent as stated by the model, the guarded catalog, every call and result | the full `PolicyEngine`: allow/prohibit lists, schema binding, budgets, grounding, provenance, idempotency, and human approval of mutations over a bearer-protected control endpoint. `BLOCK` and `REVIEW` never contact the upstream. |
 
@@ -382,7 +390,24 @@ every key is explained in [docs/guide.md](docs/guide.md#configure-another-upstre
 - [docs/benchmarks.md](docs/benchmarks.md): protocols, every table, live harness checks, replayed incidents and the limits of each benchmark.
 - [docs/detectors.md](docs/detectors.md): the learned detectors, their training, evaluation, negative results and how the operator teaches them.
 - [docs/architecture-and-testing.md](docs/architecture-and-testing.md): module map, test inventory and failure diagnosis.
+- [docs/hook-fidelity-study.md](docs/hook-fidelity-study.md): the hook verdict fidelity study (below).
 - [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md).
+
+### The hook verdict fidelity study
+
+The repository also holds a measurement study that began as a check of IntentShield's own hooks: what Claude Code,
+Codex CLI and Gemini CLI do with the verdict a `PreToolUse` hook returns (allow, ask, deny, or a crash, a timeout, an
+empty reply). It ran on macOS against a scripted stub model, mostly headless, with a pseudo-terminal lane for
+interactive sessions, on sampled builds of each harness (not every release); Cursor was not measured (its free
+plan ran out). In those runs a parsed `deny` was enforced wherever the hook ran; an `ask` with no one to answer it
+was refused by Claude Code from 2.1.85, ignored by Codex CLI, and run or left hanging by Gemini CLI depending on
+the build; and a hook that crashed, timed out or printed nothing let the call run on most builds. It does not show
+that any of this lets an attacker bypass a guard. The study's own verdict is a measurement note and an artifact,
+not a paper: most behaviours are documented by the vendors or were already reported, the stub is not a real agent,
+and its comparison of what IntentShield and other guards decide is mixed (IntentShield trails one of them on
+denies alone) and rests on one author's fixtures. Account and caveats:
+[docs/hook-fidelity-study.md](docs/hook-fidelity-study.md); data and how to regenerate it:
+[results/hook-fidelity/README.md](results/hook-fidelity/README.md).
 
 ## License
 
