@@ -38,7 +38,7 @@ from typing import Any
 
 from . import credentials
 from .harness import is_mutation
-from .install import _HOOK, server_stem
+from .install import _HOOK, server_stem, strip_json_comments
 from .mcp_inspect import scan_description, scan_server, self_disclosure_fields, tool_text
 
 ERROR, WARNING, NOTE = "error", "warning", "note"
@@ -131,8 +131,14 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
             continue
         seen.add(resolved)
         try:
-            data = tomllib.loads(path.read_text("utf-8")) if path.suffix == ".toml" else \
-                json.loads(path.read_text("utf-8"))
+            text = path.read_text("utf-8")
+            if path.suffix == ".toml":
+                data = tomllib.loads(text)
+            else:
+                try:
+                    data = json.loads(text)
+                except ValueError:  # Gemini CLI settings and VS Code's mcp.json may hold comments
+                    data = json.loads(strip_json_comments(text))
         except (OSError, ValueError) as exc:
             found.append(Server(client, path, "(config)", {}, error=f"unreadable: {exc}", project=project))
             continue
@@ -187,7 +193,11 @@ def upstream_config(server: Server) -> dict[str, Any] | None:
 async def _list_tools(server: Server, timeout: float) -> None:
     from .mcp_upstream import MCPUpstream, MCPUpstreamConfig
 
-    config = upstream_config(server)
+    try:
+        config = upstream_config(server)
+    except (TypeError, ValueError, AttributeError) as exc:  # "env" as a list, "args" as a number
+        server.error = f"malformed entry: {type(exc).__name__}: {credentials.mask(str(exc))[:200]}"
+        return
     if config is None:
         server.error = "no stdio command or Streamable HTTP URL (SSE servers are not scanned)"
         return
@@ -447,6 +457,10 @@ def save_pins(path: Path, pins: dict[str, str]) -> None:
 
 def run(args: argparse.Namespace) -> int:
     home, cwd = Path.home(), Path.cwd()
+    absent = [str(path) for path in args.files or [] if not Path(path).is_file()]
+    if absent:  # a named file that is not there must not end as a green "no MCP configs found"
+        print("intentshield scan: no such file: " + ", ".join(absent), file=sys.stderr)
+        return 2
     servers = discover(home, cwd, args.files or None)
     saved = load_pins(args.pins) if not args.no_pins else {}
     pins: dict[str, str] = {} if args.update_pins else saved
@@ -481,4 +495,6 @@ def run(args: argparse.Namespace) -> int:
     if any(f.level == ERROR for f in findings):
         return 1
     # Servers were found but none was started or read: a green exit would say they were checked.
+    if any(s.error and s.name == "(config)" for s in servers):  # a config that could not be read was not checked
+        return 2
     return 2 if servers and not args.no_connect and all(s.error or s.skipped for s in servers) else 0

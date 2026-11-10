@@ -11,6 +11,12 @@
   blocked the call; `~/.intentshield/.env` may hold `export KEY=value` lines and bytes that are not UTF-8.
 - **Built-in tools:** `.env.example`, `.env.sample`, `.env.template` and `.env.dist` are templates, not secrets,
   so committing and pushing one no longer asks.
+- **Wrap, unwrap and scan:** a wrapped server whose entry sets an empty `env` value starts again (the proxy
+  refused the empty variable); `unwrap` leaves a hand-written proxy entry with several upstreams alone and names
+  an entry with no `--config`, where it used to replace the first with its first upstream and fail on the second;
+  `scan` reports a malformed entry (`env` as a list, `args` as a number) as not scanned instead of stopping with
+  a traceback, reads configs with comments, and exits 2 on a named file that does not exist or a config it could
+  not read, where it used to exit 0.
 
 ## 0.4.2
 

@@ -597,7 +597,10 @@ def proxy_config(name: str, server: dict[str, Any], out_dir: Path, scope: str = 
     if "args" in server:  # kept exactly (even empty) so unwrap restores the entry as it was
         upstream["args"] = list(server.get("args") or [])
     if env:
-        upstream["env_from_env"] = {key: key for key in env}
+        # An empty value is not forwarded: the proxy refuses to start on an empty referenced variable.
+        forwarded = {key: key for key, value in env.items() if str(value).strip()}
+        if forwarded:
+            upstream["env_from_env"] = forwarded
     return {"upstreams": [upstream], "database_path": str(out_dir / f"{server_id}.db"),
             "threat_memory_path": os.getenv("INTENTSHIELD_THREAT_DB") or str(out_dir.parent / "threats.db"),
             # The hooks read this for tool hints and the operator's read-only decisions, and every
@@ -726,13 +729,22 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
             if (servers and name not in servers) or not isinstance(server, dict) or not _is_wrapped(server):
                 continue
             args = server.get("args") or []
-            config = Path(args[args.index("--config") + 1])
+            if "--config" not in args or args.index("--config") + 1 >= len(args):
+                missing.append(f"{_label(name, scope)} (its entry names no --config)")
+                continue
+            config = Path(str(args[args.index("--config") + 1]))
             try:
                 generated = json.loads(config.read_text())
                 upstream = generated["upstreams"][0]
-            except (OSError, ValueError, KeyError, IndexError):
+            except (OSError, ValueError, KeyError, IndexError, TypeError):
                 generated = {}
                 upstream = _backed_up_server(path, scope, name)
+            # wrap writes one upstream per config; a config with several is hand-written, and restoring its
+            # first upstream would drop the proxy, the other upstreams and their policy.
+            if isinstance(generated, dict) and len(generated.get("upstreams") or []) > 1:
+                missing.append(f"{_label(name, scope)} (its proxy config {config} has several upstreams, so wrap "
+                               "did not write it; edit the entry by hand)")
+                continue
             if upstream is None:
                 missing.append(f"{_label(name, scope)} (its proxy config {config} is missing or unreadable, and "
                                f"{_backup_path(path, None)} holds no copy of the entry)")
