@@ -64,13 +64,28 @@ def load_env_file(path: Path | None = None) -> None:
     the hook imports only the standard library. ``ENV_FILE`` is read at call time so a test
     or an operator can point it elsewhere."""
     try:
-        lines = (path or ENV_FILE).read_text().splitlines()
+        lines = (path or ENV_FILE).read_text(errors="replace").splitlines()
     except OSError:
         return
     for line in lines:
-        key, sep, value = line.strip().partition("=")
+        key, sep, value = line.strip().removeprefix("export ").partition("=")
+        key = key.strip()
         if sep and key and not key.startswith("#") and key not in os.environ:
             os.environ[key] = value.strip().strip("'\"")
+
+
+def _no_surrogates(value: Any) -> Any:
+    """The event with lone surrogates replaced: JSON may carry one (half of a cut emoji), and SQLite and
+    UTF-8 encoding refuse it, which lost the prompt or failed the hook."""
+    if isinstance(value, str):
+        return value.encode("utf-8", "replace").decode() if not value.isascii() else value
+    if isinstance(value, list):
+        return [_no_surrogates(v) for v in value]
+    if isinstance(value, dict):
+        return {_no_surrogates(k): _no_surrogates(v) for k, v in value.items()}
+    return value
+
+
 SESSION_TTL = 7 * 86_400  # seconds an idle session's prompts are kept; every hook event of it renews them
 FLAGGED_TTL = 30 * 86_400  # a session with taint or a flag is forgotten only after this much idle time
 
@@ -1277,7 +1292,7 @@ def main(argv: list[str] | None = None) -> None:
             parser.error(f"INTENTSHIELD_HOOK_JUDGE_OUTPUTS must be on or off, not {raw!r}")
     event: dict[str, Any] = {}
     try:
-        event = json.loads(sys.stdin.read())
+        event = _no_surrogates(json.loads(sys.stdin.read()))
         if not isinstance(event, dict):
             raise ValueError("event is not a JSON object")
     except Exception as exc:  # empty, malformed or too deeply nested: it may be a call, so fail closed
