@@ -362,8 +362,15 @@ def signoff_problems(entry: object, committer: str, root: Path = configs.ROOT) -
         problems.append("no archive path")
     else:
         resolved = (root / archive).resolve()
-        if root.resolve() not in resolved.parents or not resolved.is_file():
+        if root.resolve() not in resolved.parents:
             problems.append("archive is not a file inside the repository")
+        elif not resolved.is_file():
+            # A vendor page with no licence to redistribute is not committed: the README of its directory records the
+            # source and the hash of the file the reader read, and the entry must carry that same hash.
+            record = resolved.parent / "README.md"
+            listed = record.read_text() if record.is_file() else ""
+            if not any(resolved.name in line and str(entry.get("sha256")) in line for line in listed.splitlines()):
+                problems.append("archive is not a file inside the repository")
         elif hashlib.sha256(resolved.read_bytes()).hexdigest() != entry.get("sha256"):
             problems.append("archive sha256 does not match the entry")
     return problems

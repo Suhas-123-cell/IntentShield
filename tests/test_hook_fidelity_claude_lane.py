@@ -179,7 +179,11 @@ def test_claude_signoffs_are_complete_for_every_lane_stage():
         if entry is None or "claude" not in item_id and "r3-claude" not in entry.get("reader", ""):
             continue
         assert "agent" in entry["reader_kind"] and "not a human" in entry["reader_kind"].lower()
-        archive = (configs.ROOT / entry["archive"]).read_text(errors="replace")
+        path = configs.ROOT / entry["archive"]
+        if not path.is_file():   # a vendor page that is not redistributed: its directory's README records the hash
+            assert entry["sha256"] in (path.parent / "README.md").read_text()
+            continue
+        archive = path.read_text(errors="replace")
         for segment in entry["quote"].split(" ... "):
             assert segment.strip() in archive, (item_id, segment[:60])
 
