@@ -41,7 +41,9 @@ executable by absolute path, and leaves every other setting alone. `wrap` works 
 that launches stdio servers from an `mcpServers` file (Claude Code `.mcp.json`, Cursor `mcp.json`,
 Gemini CLI `settings.json`, Windsurf, Claude Desktop, ...): each server entry is rewritten to launch
 `intentshield-mcp --transparent` with a generated config in `~/.intentshield/proxies/`, and literal
-`env` secrets stay in the client's file and are forwarded by name only. See
+`env` secrets stay in the client's file and are forwarded by name only. A wrapped server gets the variables
+its entry's `env` names plus basics such as `PATH` and `HOME`, not the rest of your shell's environment, so
+name any other variable it needs (a proxy setting, `AWS_*`, `SSH_AUTH_SOCK`) in `env`. See
 [What each layer sees and stops](#what-each-layer-sees-and-stops) for what each layer does.
 
 Optional LLM judge: `intentshield install <harness> --judge groq` adds a second-stage check (Groq's
