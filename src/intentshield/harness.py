@@ -1229,12 +1229,28 @@ def _server_of(tool: str) -> str:
     return tool.partition(":")[0]
 
 
+def _call_dir(event: dict[str, Any]) -> str:
+    """The directory a call runs in: the event's ``cwd``, or for a shell tool the directory the call names (Codex's ``workdir``,
+    Gemini's ``dir_path``), which is read from ``cwd`` when it is relative. A relative path of the command is read from here."""
+    cwd = str(event.get("cwd") or "")
+    tool = event.get("tool_name")
+    if isinstance(tool, str) and _BUILTIN.get(tool, ("",))[0] == "shell":
+        arguments = _as_dict(event.get("tool_input"))
+        for key in ("workdir", "dir_path"):
+            where = arguments.get(key)
+            if isinstance(where, str) and where.strip() and not where.startswith("~"):
+                joined = posixpath.join(cwd, where) if cwd.startswith("/") else where
+                return posixpath.normpath(joined) if joined.startswith("/") else cwd
+    return cwd
+
+
 def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:
     """One hook event in, the harness's JSON reply out (None: no opinion)."""
     name = event.get("hook_event_name") or ""
     session = _session_key(event)
     guard.cwd = str(event.get("cwd") or "")
-    guard.touch(session, harness)
+    guard.touch(session, harness)   # records the event's directory
+    guard.cwd = _call_dir(event)
     if denial := _unnamed_call(harness, event, guard.builtin_tools):
         return denial
     if harness in ("claude", "codex"):
@@ -1259,6 +1275,8 @@ def _claude(harness: str, name: str, session: str, event: dict[str, Any],
     """Claude Code and Codex CLI share one hook format; they differ in what a reply can do."""
     if name == "UserPromptSubmit":
         return _prompt_hint(name, session, event, guard)
+    if unreadable := _unreadable_tool_name(name, event, guard.builtin_tools):
+        return _claude_reply(harness, session, "builtin:unreadable", event, guard, Verdict("deny", unreadable))
     split = _split_claude(event.get("tool_name", ""))
     if split is None and event.get("tool_name") in _RESOURCE_TOOLS:
         split = (str(_as_dict(event.get("tool_input")).get("server") or "mcp"), _RESOURCE_TOOLS[event["tool_name"]])
@@ -1281,6 +1299,22 @@ def _claude(harness: str, name: str, session: str, event: dict[str, Any],
         return _claude_call(harness, session, tool, event, guard)
     if name in _CLAUDE_RESULT_EVENTS:
         return _claude_result(harness, name, session, tool, event, guard)
+    return None
+
+
+def _unreadable_tool_name(name: str, event: dict[str, Any], builtin_tools: bool) -> str | None:
+    """The reason to refuse a Claude or Codex call whose ``tool_name`` is not text, or (with ``--builtin-tools``) is missing or
+    empty: a changed event schema must not read as an allow, and the refusal says what was wrong. Other events are not calls, so
+    they get no reason here."""
+    if name != "PreToolUse":
+        return None
+    tool = event.get("tool_name", "")
+    if not isinstance(tool, str):
+        return (f"IntentShield could not read the tool name of this call (it is {type(tool).__name__}, not text), so it is "
+                "refused.")
+    if builtin_tools and not tool:
+        return ("IntentShield could not read this call (it has no tool_name), so it is refused rather than let through "
+                "unchecked.")
     return None
 
 
@@ -1459,6 +1493,12 @@ def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
         return _prompt_hint(name, session, event, guard)
     if "mcp_context" not in event:  # a built-in tool, not MCP
         builtin = str(event.get("tool_name") or "")
+        if name == "BeforeTool" and builtin.startswith("mcp_") and builtin not in _BUILTIN:
+            # Named like an MCP tool but with no mcp_context: not readable, so refused like the same call with one.
+            reason = (f"IntentShield could not read this call to {_show(builtin, 80)} (an MCP tool comes with an mcp_context), "
+                      "so it is refused rather than let through unchecked.")
+            print(reason, file=sys.stderr)
+            return _gemini_decision(session, Verdict("deny", reason), guard, "mcp")
         if guard.builtin_tools and builtin in _BUILTIN:
             return _gemini_builtin(name, session, builtin, event, guard)
         if guard.builtin_tools and name == "BeforeTool" and (command := _unlisted_command(event)) is not None:

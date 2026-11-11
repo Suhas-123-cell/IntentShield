@@ -626,16 +626,25 @@ def _add_control_routes(app: Any, runtime: MCPProxyRuntime, control_token: str) 
 
 def _refused_line(line: str) -> tuple[Any, int, str] | None:
     """(id, error code, message) when a line of the wire cannot be answered by the protocol layer, else None: a request whose
-    ``params`` is not an object (the SDK drops it and the client waits for a reply that never comes) or text that is not JSON."""
+    ``params`` is not an object (the SDK drops it and the client waits for a reply that never comes), text that is not JSON, and
+    JSON that is not a request, a notification or a response (``{}``, ``null``, a batch, an id that is an object)."""
     try:
         message = json.loads(line)
     except ValueError:
         return None, -32700, "Parse error: the line is not JSON"
-    if not isinstance(message, dict) or "method" not in message or "params" not in message:
-        return None
+    if not isinstance(message, dict):
+        return None, -32600, "Invalid Request: a message is one JSON object (batches are not supported)"
+    if "method" not in message:
+        if "result" in message or "error" in message:
+            return None  # the client's answer to a request of the server
+        return None, -32600, "Invalid Request: the message has no method"
+    if not isinstance(message["method"], str):
+        return None, -32600, "Invalid Request: method must be a string"
     request_id = message.get("id")
-    if request_id is None or isinstance(request_id, bool) or not isinstance(request_id, (int, str)):
-        return None  # a notification (no reply is allowed) or an id that cannot be echoed
+    if request_id is not None and (isinstance(request_id, bool) or not isinstance(request_id, (int, str))):
+        return None, -32600, "Invalid Request: id must be a string or a number"
+    if request_id is None or "params" not in message:
+        return None  # a notification (no reply is allowed), or a request without params
     params = message["params"]
     if params is None or isinstance(params, dict):
         return None

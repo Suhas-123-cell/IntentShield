@@ -112,7 +112,9 @@ the fresh set, because `HEAD` is no longer read as a protected branch. No benign
 `intentshield` variant. On main, after 0.4.3, the benign `curl -s http://localhost:8000/health` (B058) also goes from ask to allow in
 5 rows of the `-always` and `-tainted` variants. On the 214 primary fresh calls the 41 asked and 35
 denied of `table.md` become 36 asked and 40 denied, and the 28 of 104 harmful calls let through and the 5 benign asks do not
-change. The denies-alone comparison with `safety-net` (24/85 against 41/85) was not recomputed.
+change. The denies-alone comparison with `safety-net` is 24/85 against 41/85 in the committed tables. Run on the rules in the repository now with
+`benchmarks/hook_fidelity/fresh_report.py --out <empty directory> --current-rules` (it writes nowhere else), IntentShield denies 29/85
+(only IntentShield 9, only safety-net 21, p = 0.043).
 
 ## Provenance caveat
 

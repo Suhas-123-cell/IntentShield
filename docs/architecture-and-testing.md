@@ -330,14 +330,14 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --group dev --frozen` and has none of those variables set.
 
-Expect every test to pass. Measured on 2026-11-11 at the working tree after `bb1eb71` (the v0.4.3 tag plus the changes listed under
+Expect every test to pass. Measured on 2026-11-11 at the working tree after `f39199b` (the v0.4.3 tag plus the changes listed under
 "Unreleased" in the changelog):
 
 | platform | result |
 |---|---|
-| macOS, Python 3.14 | 5837 passed, 6 skipped |
-| macOS, Python 3.11, with `--cov` (91.7% covered; the floor is 85%) | 5837 passed, 6 skipped |
-| the lowest allowed versions of the direct dependencies, Python 3.11, on a copy of the tracked files | 5836 passed, 7 skipped |
+| macOS, Python 3.14 | 5997 passed, 5 skipped |
+| macOS, Python 3.11, with `--cov` (91.8% covered; the floor is 85%) | 5997 passed, 5 skipped |
+| the lowest allowed versions of the direct dependencies, Python 3.11, on a copy of the tracked files | 5996 passed, 6 skipped |
 
 The totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The number of
 skips depends on the machine (a handful on macOS, more on Linux, which skips the platform-specific tests) and on whether the optional
@@ -387,6 +387,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_mcp_http_e2e.py` | a real Streamable HTTP process with stdio and HTTP upstreams, 401 rejection, shutdown (opt-in: `INTENTSHIELD_RUN_HTTP_E2E=1`) |
 | `test_mcp_guardrail.py`, `test_lenient_reads.py` | description and output scanners, quarantine, rug pull, output taint, argument provenance, self-disclosure redaction, lenient reads |
 | `test_mcp_proxy_schema_quarantine.py`, `test_mcp_proxy_regressions.py` | proxy regressions: washed values, unscanned schema text, taint that matched only exact strings, error and transparent-mode results, cache TTL, limits |
+| `test_mcp_proxy_trusted_tools.py` | a tool whose description only names a secret file can be trusted by name and is not taught to the threat memory as an attack |
 | `test_provenance.py` | a recipient, URL, account or path the user never gave needs review on any side-effecting call, flagged output or not |
 | `test_api_env_file_loading.py`, `test_proxy_runtime_control_plane.py`, `test_proxy_unread_tool_view_and_pins.py` | which `.env` files may configure the app; the runtime and control plane; pins and unread tools |
 | `test_dos_limits.py` | inputs a hostile server or page controls that made a rule or a parser slow, and the caps that bound a session's state |
@@ -400,6 +401,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_hook_loopback_and_internal_hosts.py`, `test_hook_after_flagged_result.py`, `test_hook_url_hosts_and_persistence.py` | what a flagged session may still do (build, test, commit) and which writes set up code that later sessions run |
 | `test_hook_regressions.py` | hook, scan and installer regressions: failed-call results, session expiry, credentials, installer files |
 | `test_harness_event_handling.py` | the hook: built-in events it cannot read are refused with `--builtin-tools`, `Grep` is covered, the `--deadline` range, and the record of whether the harness or a person fed the hook an event |
+| `test_harness_unreadable_tool_names.py` | a call whose tool name is missing, empty, not text or named like an MCP tool without the MCP part is refused with a reason, not allowed |
 | `test_builtin_tools.py`, `test_builtin_live_score.py` | `--builtin-tools` for the four harnesses and `doctor`; scoring of the live built-in-tool runs on synthetic rows |
 | `test_harness_fail_closed_and_installer_ownership.py`, `test_review_gate.py` | fail-closed modes, installer ownership, provenance of bare hosts; the CI gate on benign review load |
 | `test_zz_no_key_leak.py` | runs last: no earlier test may leave a judge key in the environment |
@@ -419,6 +421,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_install.py` | `install`, `uninstall`, `wrap` and `unwrap` for the hook and proxy installers |
 | `test_install_validation.py` | installer and `scan` input checks: ephemeral paths, `wrap` validating every entry first, `--judge` dry runs, the "Next:" line, the address the bare command prints |
 | `test_doctor_install_and_wrap.py` | what `doctor`, `install`, `wrap` and `unwrap` say and do |
+| `test_doctor_home_prefix.py`, `test_install_and_scan_messages.py` | `doctor` writes `~` only where a path starts, so a printed `wrap` command can be copied; what `install`, `wrap` and `scan` say when a file or a server is not what they expected |
 | `test_scan.py`, `test_scan_surface.py`, `test_mcp_scan_command.py` | credential egress and `intentshield scan`; rules reading line breaks, tabs and Unicode tricks in structured values; scan edge cases |
 | `test_cli_first_run_messages.py` | what a person sees on a first run: the "Next:" line, a settings file that does not parse, `unwrap` of a missing file, `doctor` with nothing installed, a wrapped server whose command is gone, `wrap-hook --print-entry` |
 | `test_first_run_output_and_guard_replies.py` | the doctor right after an install, wrap's next step and exit status, the Codex TOML error, a project install of Claude Code's hooks (`settings.local.json`), the scan's rule detail, the proxy's log line for a hidden tool, loosening settings in the hook's reply, long results, a wrap-hook guard that repeats a key, and the two demo proxy configs |
@@ -448,6 +451,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_dangerous_powershell.py` | the PowerShell tool is read as the POSIX commands its cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content` of a credential file, an `Invoke-WebRequest` upload, a download run with `Invoke-Expression`); other cmdlets are not read, and the tests say so |
 | `test_builtin_shell_tools.py` | `PowerShell`, `Monitor` and `apply_patch` run through the shell tool get the same rules as `Bash` with `--builtin-tools` |
 | `test_dangerous_guard_files_and_credential_paths.py` | `dangerous/` beyond a plain read or delete: the guard's own programs, package and wrapped client files, a key named by a program that no rule reads, a key fixture in the project's test directory, and the path and command arguments of an MCP tool (`--builtin-tools` only) |
+| `test_dangerous_relative_paths_and_ssh_files.py` | `dangerous/`: a relative path means the same target as the absolute one, files in `~/.ssh` are told apart by what they are, and a redirect over a key asks like the Write tool |
 | `test_dangerous_control_flow.py` | `dangerous/` and the hook: one-line control keywords, a deny that wins over a session ask, softening only for an exact target, `cd` and variables inside one command line, the guard's own files |
 | `test_shell_parser.py`, `test_shell_linear.py`, `test_shell_shifts.py` | `shell.py`: newlines, here-documents, variables, wrappers, indirection, send detection, linear cost on long input |
 
@@ -477,9 +481,9 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_msb_scoring.py`, `test_paper_numbers.py` | MSB scoring on synthetic traces; the headline cells replayed from the committed traces in `results/msb` |
 | `test_injection_eval.py`, `test_adaptive_attacker.py`, `test_self_disclosure_eval.py` | injection evaluation corpus and per-family scoring; the adaptive-attacker protocol; self-disclosure stripping over recorded catalogs |
 | `test_docs_inventory.py`, `test_docs_links.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository, and the README links to its own sections by `#anchor` |
-| `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, no paragraph in the front-door documents or the guide is longer than 900 characters (500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
-| `test_docs_figures.py` | the README stays under 230 lines; the reading path's word counts are `wc -w` counts; the split of the exemplar detector's 18.1% and the upper bounds beside 0.0% cells match the committed data; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
-| `test_docs_unreleased.py` | a statement in `README.md` or `docs/guide.md` about a feature under "Unreleased" in `CHANGELOG.md` says "on main, after 0.4.3" until it is released; a new "Added" entry has to be listed in the test |
+| `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, no paragraph in the front-door documents or the guide is longer than 900 characters (700 in the README, 500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
+| `test_docs_figures.py` | the README stays under 260 lines; the reading path's word counts and the stated size of the product documentation are `wc -w` counts; the split of the exemplar detector's 18.1% and the upper bounds beside 0.0% cells match the committed data; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
+| `test_docs_unreleased.py` | the README has one note that PyPI has an older version and links the changelog while "Unreleased" is not empty, and no inline "on main, after 0.4.3"; a statement in `docs/guide.md` about a feature under "Unreleased" says "on main, after 0.4.3" until it is released; a new "Added" entry has to be listed in the test |
 | `test_import_declarations.py` | every third-party package that `src/intentshield` imports is declared in `pyproject.toml` |
 | `test_workflow_files.py` | the workflow files parse (no `: ` in a plain step name), nothing installs the removed `dev` extra, and every supported Python has a classifier and a CI job |
 | `test_coverage_study.py`, `test_security_review_counts.py` | coverage-study instrumentation; `docs/security-review.md` table counts equal its finding rows |
@@ -493,9 +497,9 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_hook_fidelity_claude_lane.py`, `test_hook_fidelity_gemini_lane.py`, `test_hook_fidelity_cursor.py`, `test_hook_fidelity_codex_matrices.py` | per-harness cell lists, run modes, budgets and sign-off files; the Codex matrices and report |
 | `test_hook_fidelity_pty.py`, `test_hook_fidelity_pty_plan_and_observer.py` | the interactive terminal lane: terminal-text cleaner, plan, outcome classifier, driver against a fake terminal |
 | `test_hook_fidelity_compare.py`, `test_hook_fidelity_compare_arms.py`, `test_hook_fidelity_compare_rerun_and_shim.py`, `test_hook_fidelity_guards.py` | the head-to-head runner, the wrapped, allow and deny-all arms, `--on-empty allow` cells, guard byte capture and replay |
-| `test_hook_fidelity_detect.py`, `test_hook_fidelity_fresh_report.py` | the decision comparison: fixtures, reply classification, metrics; a guard never run on a row is excluded, not scored |
+| `test_hook_fidelity_detect.py`, `test_hook_fidelity_fresh_report.py` | the decision comparison: fixtures, reply classification, metrics; a guard never run on a row is excluded, not scored; `--current-rules` scores IntentShield with the code in the checkout; `overlap_check.py` names an item that matches the tests and is not pinned |
 | `test_hook_fidelity_coverage.py`, `test_hook_fidelity_linux_probe.py` | the coverage re-run tooling; the Linux `/proc` probe's case matrix and committed rows |
-| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` carries the matrix and build counts of `benchmarks/hook_fidelity/report_numbers.py` and stays under 2,000 words beside its appendix, which embeds exactly the script's output; the 467-fixture set is rescored without the items now in the rules' tests; one build count per harness is used in every document; the report carries its limits and no process wording, every percentage next to its k/n is the rounding of that k/n, and the old "registered in advance" wording does not return |
+| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` carries the matrix and build counts of `benchmarks/hook_fidelity/report_numbers.py` and stays under 2,450 words beside its appendix, which embeds exactly the script's output; the 467-fixture set is rescored without the items now in the rules' tests; one build count per harness is used in every document; the report carries its limits and no process wording, every percentage next to its k/n is the rounding of that k/n, and the old "registered in advance" wording does not return |
 | `test_hook_fidelity_study_numbers.py`, `test_hook_fidelity_reproduce.py` | every figure the study cites, recomputed from committed rows; a clean clone regenerates the detection tables without the guard clones |
 
 Example:

@@ -393,7 +393,7 @@ Optional extras:
 
 - `requirements-ml.txt` (torch, transformers, sentencepiece, protobuf) is needed for the local
   DeBERTa intent and injection classifiers and the exemplar embedder. Install it with
-  `uv pip install --python .venv/bin/python -r requirements-ml.txt` from a clone. A plain `uv sync` removes it again.
+  `uv pip install --python .venv/bin/python -r requirements-ml.txt` from a clone. A plain `uv sync` removes it again. No trained model ships in the package.
 - `--extra learning` (numpy) is needed for the exemplar detector and for learning from operator
   labels.
 - The `dev` dependency group (pytest, numpy, the linters; not published with the package) is what CI installs: `uv sync --group dev --frozen`.

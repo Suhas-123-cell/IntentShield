@@ -8,7 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "benchmarks" / "hook_fidelity"))
-sys.path.insert(0, str(ROOT / "src"))
 
 import fresh_report as fr  # noqa: E402
 
@@ -120,3 +119,58 @@ def test_the_214_call_set_scored_without_seven_items_still_trails_safety_net_on_
     assert (without["intentshield_all_items"]["ask"], without["intentshield_all_items"]["deny"]) == (39, 31)
     shell = without["safety-net"]
     assert (shell["n"], shell["guard"]["deny"], shell["intentshield_on_the_same_items"]["deny"]) == (82, 40, 22)
+
+
+def test_current_rules_scores_intentshield_with_this_checkout_and_leaves_the_other_guards_as_committed(tmp_path, monkeypatch):
+    seen: list[str] = []
+
+    def fake(rows, variant):
+        seen.append(variant)
+        return [{"guard": variant, "row_id": r["id"], "item_id": r["item_id"], "harness": r["harness"], "invoked": True, "class": "deny", "subtype": "json"}
+                for r in rows]
+
+    monkeypatch.setattr(fr, "decide_intentshield", fake)
+    label = fr.GUARD_LABEL[fr.IS]
+    assert fr.main(["--out", str(tmp_path / "now"), "--current-rules"]) == 0
+    assert seen == ["intentshield"] and fr.GUARD_LABEL[fr.IS] == label
+    summary = json.loads((tmp_path / "now" / "summary.json").read_text())
+    committed = json.loads((FRESH / "summary.json").read_text())
+    same, was = summary["same_items"]["safety-net"], committed["same_items"]["safety-net"]
+    assert same[fr.IS]["deny"] == same["harmful_n"] == 85 and was[fr.IS]["deny"] == 24
+    assert same["safety-net"] == was["safety-net"]
+    assert "the rules in this checkout" in (tmp_path / "now" / "table.md").read_text()
+
+
+def test_the_overlap_check_names_items_that_drifted_from_its_pin():
+    pinned = {k: {"items": {i: "x" for i in oc.PINNED[k]}} for k in ("fixtures_467_set", "fresh_214_call_set")}
+    assert oc.drift(pinned) == {"pinned_items_missing_now": [], "matched_now_but_not_pinned": []}
+    more = {**pinned, "fixtures_467_set": {"items": {**pinned["fixtures_467_set"]["items"], "H9999": "x"}}}
+    assert oc.drift(more) == {"pinned_items_missing_now": [], "matched_now_but_not_pinned": ["H9999"]}
+    first = oc.PINNED["fresh_214_call_set"][0]
+    fewer = {**pinned, "fresh_214_call_set": {"items": {i: "x" for i in oc.PINNED["fresh_214_call_set"] if i != first}}}
+    assert oc.drift(fewer) == {"pinned_items_missing_now": [first], "matched_now_but_not_pinned": []}
+
+
+def test_the_current_rules_figures_the_documents_quote_are_what_the_script_prints(tmp_path):
+    """The denies-alone figures for the rules in the repository now (README, report, appendix, contribution.md) are the script's output."""
+    import re
+
+    assert fr.main(["--out", str(tmp_path), "--current-rules"]) == 0
+    same = json.loads((tmp_path / "summary.json").read_text())["same_items"]
+    net, knox = same["safety-net"], same["knox"]
+    deny, ask, harmful = net[fr.IS]["deny"], net[fr.IS]["ask"], net["harmful_n"]
+    paired = net["paired_deny_only"]
+    p = f"{paired['sign_p']:.3f}"
+
+    def flat(name: str) -> str:
+        return re.sub(r"\s+", " ", (ROOT / name).read_text())
+
+    assert f"gives {deny} of {harmful} (p = {p})" in flat("README.md")
+    report = flat("docs/hook-fidelity-report.md")
+    assert f"IntentShield denies {deny} of the {harmful} and asks on {ask}" in report
+    assert f"{paired['only_other']} items that only safety-net denied and {paired['only_intentshield']} that only IntentShield denied (p = {p})" in report
+    both = knox["paired_deny_only"]
+    assert f"on knox's items {both['only_other']} only knox and {both['only_intentshield']} only IntentShield" in report
+    assert f"is {deny}/{harmful} for IntentShield" in flat("docs/hook-fidelity-report-appendix.md")
+    assert f"IntentShield denies {deny}/{harmful}" in flat("results/hook-fidelity/README.md")
+    assert f"{deny} of {harmful} with the rules in the repository now" in flat("docs/contribution.md")

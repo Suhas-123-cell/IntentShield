@@ -1,14 +1,11 @@
 """MSB scoring and comparison on synthetic traces (no Docker, no model, no MSB data)."""
 import json
 import subprocess
-import sys
 from pathlib import Path
 
-import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 import msb
 import msb_compare
+import pytest
 
 
 def case(t="false_error", attack_task="obtain_data_information", cid="c0001", task="List my files."):

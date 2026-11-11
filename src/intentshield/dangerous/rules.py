@@ -16,6 +16,7 @@ from .paths import (
     _norm,
     _protected,
     _system,
+    overwrite_level,
     persistence_path,
 )
 from .selfguard import guard_surface
@@ -279,6 +280,8 @@ def _mode_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
     if not pos:
         return None
     mode, targets = pos[0], pos[1:]
+    if name == "chattr":  # +i, -i and =a are the attributes; every other word is a file
+        mode, targets = "", [a for a in pos if not a.startswith(("+", "="))]
     if name == "chmod" and mode.startswith("-") and len(pos) > 1:
         mode, targets = pos[1], pos[2:]
     if name == "chmod":  # a mode such as -w or -x is read as an option by the parser above, but chmod takes it as the mode
@@ -319,6 +322,32 @@ def _mode_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
     return None
 
 
+_RSYNC_DELETES = ("--delete", "--delete-before", "--delete-during", "--delete-after", "--delete-delay", "--delete-excluded",
+                  "--del", "--remove-source-files")
+
+
+def _wipe_hit(name: str, argv: list[str]) -> Hit | None:
+    """``rsync --delete`` of an empty directory onto a root, home or system directory (the classic wipe), and ``tar
+    --remove-files`` of one: they remove what ``rm -rf`` of the same target does."""
+    args = argv[1:]
+    if name == "rsync" and any(_is_opt(a, *_RSYNC_DELETES) for a in args):
+        valued = _SSH_VALUED["rsync"]
+        pos = [a for k, a in enumerate(args) if not a.startswith("-") and (k == 0 or args[k - 1] not in valued)]
+        removes_source = any(_is_opt(a, "--remove-source-files") for a in args)
+        # what is deleted: the destination (the last path), and with --remove-source-files the sources as well
+        for target in (pos[-1:] if not removes_source else pos):
+            if _protected(target):
+                return Hit(DENY, f"rsync {'--remove-source-files' if removes_source else '--delete'} empties {target}, a root, "
+                                 "home or system directory.", target)
+        return None
+    if name == "tar" and any(_is_opt(a, "--remove-files") for a in args):
+        for target in (a for a in args if not a.startswith("-")):
+            if _protected(target):
+                return Hit(DENY, f"tar --remove-files deletes what it archives from {target}, a root, home or system directory.",
+                           target)
+    return None
+
+
 _PERSIST_WRITERS = frozenset({"cp", "mv", "ln", "install", "rsync", "ditto", "dd"})
 
 
@@ -352,7 +381,7 @@ def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
     elif name == "defaults" and "write" in args and any("LoginItems" in a or "loginwindow" in a for a in args):
         return Hit(ASK, "defaults write sets up a login item.")
     for t in targets:
-        hit = persistence_path(t) or guard_surface(t)
+        hit = persistence_path(t) or guard_surface(t) or overwrite_level(t)
         if hit:
             return Hit(hit[0], f"writes {t}, {hit[1]}.", t)
     return None

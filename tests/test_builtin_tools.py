@@ -420,8 +420,6 @@ def test_doctor_reports_missing_events_bare_names_missing_judge_keys_and_unwrapp
 def test_the_benign_shell_fixture_asks_only_for_an_env_read_and_a_workflow_edit():
     """benchmarks/shell_replay.py's fixture of typical dev sessions: the review load gate for built-in tools. The two
     asks are by design (dangerous.py: reading a .env file, writing a CI workflow): 2 of 35 calls."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
     import shell_replay
     tally = shell_replay.Tally()
     shell_replay.replay(shell_replay.fixture_sessions(), tally)

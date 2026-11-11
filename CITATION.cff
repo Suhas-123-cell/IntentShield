@@ -1,6 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it using these metadata."
 type: software
+abstract: "A local guard for the tool calls of AI coding agents. It reads MCP (Model Context Protocol) tool calls, descriptions and results with rules, and returns allow, ask or deny, through the hooks of Claude Code, Codex CLI, Cursor and Gemini CLI or through a proxy in front of MCP servers."
 title: "IntentShield: an offline-first guardrail for MCP tool calls"
 authors:
   - family-names: "Maddali"
@@ -9,3 +10,10 @@ version: "0.4.3"
 date-released: "2026-11-11"
 license: Apache-2.0
 repository-code: "https://github.com/Suhas-123-cell/IntentShield"
+url: "https://github.com/Suhas-123-cell/IntentShield"
+keywords:
+  - MCP
+  - Model Context Protocol
+  - prompt injection
+  - AI agents
+  - guardrails

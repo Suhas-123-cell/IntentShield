@@ -33,10 +33,12 @@ from .paths import (
     _cred_args,
     _cred_level,
     _device,
+    _from_workdir,
     _in_order,
     _named_secret,
     _norm,
     _protected,
+    overwrite_level,
     persistence_path,
 )
 from .powershell import _POWERSHELLS, _ps_command_text, _ps_posix
@@ -59,6 +61,7 @@ from .rules import (
     _persist_hit,
     _remote_hosts,
     _rm_hit,
+    _wipe_hit,
 )
 from .runners import _stdin_of, _unwrap
 from .selfguard import _erase_hit, _guard_hit, _guard_text, guard_surface
@@ -136,50 +139,56 @@ def _ps_hits(text: str, intent: str, depth: int, state: dict[str, Any], sudo: bo
     return _inner_hits([("code", posix)], intent, depth, state, sudo)
 
 
-def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
-    bare, extras = _unwrap(stage)
-    argv = bare.argv
-    out: list[Hit] = _inner_hits(extras, intent, depth, state, bare.sudo)
-    if not argv:
-        for op, target in bare.redirects:
-            if op.startswith(">"):
-                if _device(target):
-                    out.append(Hit(DENY, f"redirect into the block device {target}.", target))
-                elif (p := persistence_path(target) or guard_surface(target)):
-                    out.append(Hit(p[0], f"writes {target}, {p[1]}.", target))
-            elif op == "<" and (level := _cred_level(target)) and level[0] == DENY:  # $(< file), a loop fed from a file
-                out.append(Hit(DENY, f"the shell reads {target}, {level[1]}.", target))
-        return out
-    if bare.xargs and (fed := [w for op, t in bare.redirects if op == "<<<" for w in t.split()]):
-        out.extend(_stage_hits(_Stage([*argv, *fed], [], False, 0, bare.sudo, list(bare.assigns)), intent, depth, dict(state)))
+def _bare_redirect_hits(redirects: list[tuple[str, str]]) -> list[Hit]:
+    """A command line that is only redirects (``> file``, ``$(< file)``): what it overwrites or reads."""
+    out: list[Hit] = []
+    for op, target in redirects:
+        if op.startswith(">"):
+            if _device(target):
+                out.append(Hit(DENY, f"redirect into the block device {target}.", target))
+            elif (p := persistence_path(target) or guard_surface(target) or overwrite_level(target)):
+                out.append(Hit(p[0], f"writes {target}, {p[1]}.", target))
+        elif op == "<" and (level := _cred_level(target)) and level[0] == DENY:  # $(< file), a loop fed from a file
+            out.append(Hit(DENY, f"the shell reads {target}, {level[1]}.", target))
+    return out
+
+
+def _expanded_argv(argv: list[str]) -> tuple[list[str], str, bool]:
+    """(the words with their brace lists expanded, the program's name, True when a list was too long to expand in full)."""
     cut: list[bool] = []
     if "{" in argv[0] and "," in argv[0]:  # {rm,-rf,/} is the words rm -rf /
         argv = [*_braces(argv[0], 0, cut), *argv[1:]]
     name = _bin(argv[0])
-    sudo = bare.sudo
     if name in _EXPANDED and any("{" in a for a in argv[1:]):
         words = [argv[0], *(w for a in argv[1:] for w in _braces(a, 0, cut))]
         if len(words) > _MAX_WORDS:
             cut.append(True)
         argv = words[:_MAX_WORDS]
-    if cut:
-        out.append(Hit(ASK, "a brace list in the command is too long to expand in full (over 300 characters, 16 alternatives, "
-                            "64 words or 4 levels); check the paths it names."))
-    # text a shell runs: bash -c '...', eval ..., su -c
-    if name in _SHELLS or name in ("su", "eval"):
-        code = None
-        if name == "eval":
-            code = " ".join(argv[1:])
-        else:
-            for k, a in enumerate(argv[1:], 1):
-                if a.startswith("-") and not a.startswith("--") and "c" in a[1:] and k + 1 < len(argv):
-                    code = argv[k + 1]
-                    break
-        if code and depth < _MAX_DEPTH:
-            out.extend(_analyse(code, intent, depth + 1, state, sudo))
-        elif code:
-            out.append(Hit(ASK, _TOO_DEEP))
-    for op, target in bare.redirects:
+    return argv, name, bool(cut)
+
+
+def _shell_text_hits(name: str, argv: list[str], intent: str, depth: int, state: dict[str, Any], sudo: bool) -> list[Hit]:
+    """The text a shell runs: ``bash -c '...'``, ``eval ...``, ``su -c``."""
+    if name not in _SHELLS and name not in ("su", "eval"):
+        return []
+    code = None
+    if name == "eval":
+        code = " ".join(argv[1:])
+    else:
+        for k, a in enumerate(argv[1:], 1):
+            if a.startswith("-") and not a.startswith("--") and "c" in a[1:] and k + 1 < len(argv):
+                code = argv[k + 1]
+                break
+    if code and depth < _MAX_DEPTH:
+        return _analyse(code, intent, depth + 1, state, sudo)
+    return [Hit(ASK, _TOO_DEEP)] if code else []
+
+
+def _redirect_hits(name: str, argv: list[str], redirects: list[tuple[str, str]], intent: str, depth: int, state: dict[str, Any],
+                   sudo: bool) -> list[Hit]:
+    """What the redirects of a command do: into a block device, a here-string a shell runs, a credential file fed to a program."""
+    out: list[Hit] = []
+    for op, target in redirects:
         if op.startswith(">"):
             if _device(target):
                 out.append(Hit(DENY, f"redirect into the block device {target}.", target))
@@ -192,7 +201,14 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
             # the readers show it or send it on; another program (``gh secret set X < key``) is only asked about
             shows = name in _READERS or name in _NET_SINKS or name in _SHELL_READS
             out.append(Hit(DENY if shows else ASK, f"{name} reads {target}, {level[1]}.", target))
-    # destruction
+    return out
+
+
+def _destruction_hits(name: str, argv: list[str], bare: _Stage, intent: str, depth: int, state: dict[str, Any],
+                      sudo: bool) -> list[Hit]:
+    """What a command removes, moves or changes, and the programs that run another command (``find -exec``, ``fd -x``,
+    PowerShell, ``ssh host command``)."""
+    out: list[Hit] = []
     if name == "rm" or name == "unlink" or name == "rmdir":
         hit = _rm_hit(argv, sudo)
         if hit:
@@ -220,17 +236,20 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
         hit = _git_hit(argv, bare.assigns)
         if hit:
             out.append(hit)
-    elif name in ("chmod", "chown", "chgrp"):
+    elif name in ("chmod", "chown", "chgrp", "chattr"):
         hit = _mode_hit(name, argv, sudo)
         if hit:
             out.append(hit)
-    hit = _disk_hit(name, argv, sudo)
-    if hit:
-        out.append(hit)
-    for hit in (_erase_hit(name, argv), _guard_hit(name, argv, bare)):
+    for hit in (_disk_hit(name, argv, sudo), _wipe_hit(name, argv), _erase_hit(name, argv), _guard_hit(name, argv, bare)):
         if hit:
             out.append(hit)
-    # credential reads
+    return out
+
+
+def _credential_read_hits(name: str, argv: list[str], state: dict[str, Any]) -> list[Hit]:
+    """A reader or an interpreter given a credential file, and the CLIs that print credentials; marks ``state`` as holding a
+    secret (``secret``) or a weak one (``weak_secret``) for the stages that come after."""
+    out: list[Hit] = []
     cred = None
     if name in _READERS or name in _INTERPRETERS:
         cred = _cred_args(argv) if name in _READERS and name not in _NET_SINKS else None  # those are read by _net_hit
@@ -255,6 +274,27 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
             out.append(Hit(decision, f"{' '.join(needle)} prints credentials."))
             state["secret"] = state.get("secret") or decision == DENY
             break
+    return out
+
+
+def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
+    bare, extras = _unwrap(stage)
+    argv = bare.argv
+    out: list[Hit] = _inner_hits(extras, intent, depth, state, bare.sudo)
+    if not argv:
+        out.extend(_bare_redirect_hits(bare.redirects))
+        return out
+    if bare.xargs and (fed := [w for op, t in bare.redirects if op == "<<<" for w in t.split()]):
+        out.extend(_stage_hits(_Stage([*argv, *fed], [], False, 0, bare.sudo, list(bare.assigns)), intent, depth, dict(state)))
+    argv, name, too_long = _expanded_argv(argv)
+    sudo = bare.sudo
+    if too_long:
+        out.append(Hit(ASK, "a brace list in the command is too long to expand in full (over 300 characters, 16 alternatives, "
+                            "64 words or 4 levels); check the paths it names."))
+    out.extend(_shell_text_hits(name, argv, intent, depth, state, sudo))
+    out.extend(_redirect_hits(name, argv, bare.redirects, intent, depth, state, sudo))
+    out.extend(_destruction_hits(name, argv, bare, intent, depth, state, sudo))
+    out.extend(_credential_read_hits(name, argv, state))
     # exfiltration, persistence
     hit = _net_hit(name, bare, argv, bool(state.get("secret") or (bare.piped and state.get("prev_secret"))), intent)
     if hit:
@@ -452,7 +492,9 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
         return hits
     state_pipe_secret = False
     env: dict[str, list[str]] = {}
-    where: dict[str, Any] = {"cwd": None, "stack": []}   # the directory after the cd and pushd of this command line
+    # The directory after the cd and pushd of this command line, from where the command runs: a relative path means the same
+    # target as the absolute one (``cat etc/shadow`` from ``/``, ``rm -rf ../..`` from a project).
+    where: dict[str, Any] = {"cwd": state["cwd"] if "cwd" in state else _start_dir(), "stack": []}
     for k, st in enumerate(stages):
         if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
             hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
@@ -461,6 +503,7 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
             hits.append(Hit(ASK, _TOO_DEEP))
         local = dict(state)
         local["prev_secret"] = state_pipe_secret
+        local["cwd"] = where["cwd"]   # a shell this stage starts reads its relative paths from here
         st.sudo = st.sudo or sudo
         loop_notes: list[str] = []
         variants = _expand_vars(st, env, loop_notes)
@@ -499,6 +542,13 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     if len(spans) > _MAX_SUBSTITUTIONS:
         hits.append(Hit(ASK, f"the command has more than {_MAX_SUBSTITUTIONS} command substitutions, too many to read in full."))
     return hits
+
+
+def _start_dir() -> str | None:
+    """The working directory the call runs in as the rules spell paths (``~`` for the home directory), or None when the event
+    carried none or not an absolute one."""
+    cwd = _WORKDIR.get()
+    return _norm(cwd) if cwd.startswith("/") else None
 
 
 def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
@@ -556,7 +606,8 @@ def _assess_file(path: str, content: Any, write: bool, intent: str) -> Hit | Non
         if cred:
             hit = Hit(cred[0], f"reading {path}, {cred[1]}.", path)
             return _worst([hit], intent)
-        if _norm(path) == "~":  # a search of the whole home directory reaches ~/.ssh and ~/.aws as well
+        if _norm(path) == "~" or (resolved := _from_workdir(path)) is not None and _norm(resolved) == "~":
+            # a search of the whole home directory reaches ~/.ssh and ~/.aws as well
             return _worst([Hit(ASK, f"reading {path}, the whole home directory, which holds ~/.ssh and ~/.aws.", path)], intent)
         return None
     pers = persistence_path(path)
@@ -566,9 +617,8 @@ def _assess_file(path: str, content: Any, write: bool, intent: str) -> Hit | Non
         hits.append(Hit(pers[0], f"writing {path}, {pers[1]}.", path))
         if _MALICIOUS_CONTENT.search(text) or any(h.decision == DENY or h.escalate for h in _analyse(text, intent, 1, {})):
             hits.append(Hit(DENY, f"the new text of {path} downloads and runs code, opens a shell or sends data out."))
-    cred = _cred_level(path)
-    if cred and cred[0] == DENY and path.strip():
-        hits.append(Hit(ASK, f"writing {path}, {cred[1]}.", path))
+    if cred := overwrite_level(path):
+        hits.append(Hit(cred[0], f"writing {path}, {cred[1]}.", path))
     own = guard_surface(path)
     if own:
         hits.append(Hit(own[0], f"writing {path}, {own[1]}.", path))

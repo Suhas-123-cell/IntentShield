@@ -66,22 +66,28 @@ class Report:
         self.warnings = 0
         self.verbose = verbose
         self._home = str(home) if home else ""
-        self._seen: set[tuple[str, str, str]] = set()
+        homes = {self._home, os.path.realpath(self._home)} - {""} if home else set()
+        # ``~`` replaces the home directory only where a path starts: a path that merely contains it (the same directory by
+        # its resolved name, ``/private`` before ``/var/...``) stays whole.
+        self._home_prefix = (re.compile(r"(?<![\w/.~-])(?:" + "|".join(re.escape(h) for h in sorted(homes, key=len, reverse=True))
+                                        + ")/") if homes else None)
+        self._seen: set[tuple[str, str, str, str]] = set()
 
-    def line(self, level: str, subject: str, message: str) -> None:
+    def line(self, level: str, subject: str, message: str, command: str = "") -> None:
         """One line of the report. The same line is printed and counted once (two hook commands can name one program). A path in
         the home directory is written ``~/...``, and a note (a fact about a harness that IntentShield already works around) is
-        printed only with ``--verbose``: it is counted either way."""
-        if (level, subject, message) in self._seen:
+        printed only with ``--verbose``: it is counted either way. ``command`` is added as it is, so that what the user is told
+        to run can be copied."""
+        if (level, subject, message, command) in self._seen:
             return
-        self._seen.add((level, subject, message))
+        self._seen.add((level, subject, message, command))
         self.problems += level == "FAIL"
         self.notes += level == "note"
         self.warnings += level == "warn"
         if level == "note" and not self.verbose:
             return
         text = f"{level:<4} {subject}: {message}"
-        print(text.replace(self._home + "/", "~/") if self._home else text)
+        print((self._home_prefix.sub("~/", text) if self._home_prefix else text) + command)
 
 
 def _hooks(harness: str, path: Path) -> dict[str, list[dict[str, Any]]]:
@@ -490,8 +496,8 @@ def _check_servers(report: Report, path: Path, connect: list[tuple[Path, str, di
                                      "`intentshield doctor --connect` does")
     if bare:
         report.line("warn", str(path), f"{len(bare)} stdio server(s) not behind the transparent proxy, so their tool "
-                                       f"descriptions go unchecked: {', '.join(sorted(bare))}. "
-                                       f"Run `intentshield wrap {path}`")
+                                       f"descriptions go unchecked: {', '.join(sorted(bare))}. ",
+                    command=f"Run `intentshield wrap {shlex.quote(str(path))}`")
     return wrapped
 
 

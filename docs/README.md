@@ -2,25 +2,39 @@
 
 Start with the [README](../README.md) in the repository root. The files here are the reference behind it.
 
+**Which files are which.** Word counts are from `wc -w`.
+
+- **Product documentation** (using, checking and changing the tool), about 68,300 words in all: the [README](../README.md),
+  [guide.md](guide.md), [layers.md](layers.md), [gateway.md](gateway.md), [detectors.md](detectors.md), [benchmarks.md](benchmarks.md),
+  [security-review.md](security-review.md), [architecture-and-testing.md](architecture-and-testing.md),
+  [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md) and [CHANGELOG.md](../CHANGELOG.md). A user needs only the
+  README and the guide, about 14,400 words.
+- **Research write-ups** (what the measurements support), about 13,700 words: [contribution.md](contribution.md), the
+  [hook study report](hook-fidelity-report.md) and its [appendix](hook-fidelity-report-appendix.md), [related-work.md](related-work.md)
+  and [coverage-study.md](coverage-study.md).
+- **Archived working notes**, about 119,400 words in 18 Markdown files, which a reviewer need not read: [research-notes/](research-notes/README.md)
+  (the study's working record, the earlier long version of the verdict and superseded drafts) and `hook-fidelity-archive/` (copies of
+  vendor documentation pages). They are kept so that a number can be traced to the runs behind it. Nothing in the product documentation
+  depends on reading them. The data they refer to is under [`results/`](../results/README.md).
+
 **A reading path** for someone judging the work. Word counts are from `wc -w`; times assume 250 words a minute.
 
 | step | what you get | words | minutes |
 |---|---|---|---|
-| the [README](../README.md) down to Results | what it does, how to install it, what it stops and does not stop, what is stored locally | 1,430 | 6 |
-| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,220 | 5 |
-| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,170 | 9 |
-| all three | | 4,820 | 19 |
+| the [README](../README.md) down to Results | what it does, its threat model, how to install it, what it stops and does not stop, what is stored locally | 1,730 | 7 |
+| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,270 | 5 |
+| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,600 | 10 |
+| all three | | 5,600 | 22 |
 
-The first two steps alone take 11 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
-and its [appendix](hook-fidelity-report-appendix.md) (5,100 words) holds the denominators, the per-build detail and the long caveats. Everything
+The first two steps alone take 12 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
+and its [appendix](hook-fidelity-report-appendix.md) (5,240 words) holds the denominators, the per-build detail and the long caveats. Everything
 else is reference to look up a number or a protocol.
 
 Where to go next, by what you want:
 
 - **To use the tool:** [guide.md](guide.md) for running it and [layers.md](layers.md) for what each part sees and stops.
-- **To judge the research:** [contribution.md](contribution.md) says what the work supports and does not, and
-  [hook-fidelity-report.md](hook-fidelity-report.md) is the report of the one study. The working notes in
-  `research-notes/` are the full record and history behind those two; read them only to audit a number.
+- **To judge the research:** the reading path above, then [Background and research](#background-and-research). The archived
+  working notes are the full record behind it; read them only to audit a number.
 - **To change the code:** [CONTRIBUTING.md](../CONTRIBUTING.md), then [architecture-and-testing.md](architecture-and-testing.md).
 
 ## Using IntentShield
@@ -52,12 +66,12 @@ can be traced to the runs behind it. They are in [research-notes/hook-fidelity/]
 - [hook-fidelity-stub-feasibility.md](research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md): the model-free stub endpoint, how each harness is pointed at it, and what the harnesses did with it.
 - [hook-fidelity-coverage-rerun.md](research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md): which MCP surfaces reach a hook, per harness build, without a model.
 
-## Research notes, not user docs
+## Background and research
 
-- [research-notes/](research-notes/README.md): historical drafts, not current claims: the artifact-paper skeleton, the earlier complete-mediation draft (its claim is not supported) and the demo-track paper source.
 - [contribution.md](contribution.md): the verdict, what is claimed and not claimed, and the route that remains (two pages). The long earlier version is [research-notes/contribution-history.md](research-notes/contribution-history.md).
 - [related-work.md](related-work.md): literature survey and the adaptivity plan.
 - [coverage-study.md](coverage-study.md): which MCP channels a hook-scoped guard sees versus a proxy, measured with benign markers.
+- [research-notes/](research-notes/README.md): archived. Historical drafts, not current claims: the artifact-paper skeleton, the earlier complete-mediation draft (its claim is not supported) and the demo-track paper source.
 
 ## Files that are not in the repository
 

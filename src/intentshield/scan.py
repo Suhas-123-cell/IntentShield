@@ -217,13 +217,22 @@ def _server_stderr() -> Iterator[Any]:
         capture.close()
 
 
+def _clip(text: str, limit: int = 300) -> str:
+    """``text`` cut at the last space before ``limit`` characters, with ``...`` after it: a message that stops in the middle of a
+    word reads as the end of the message."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rpartition(" ")[0] or text[:limit]
+    return cut.rstrip(" ,;:") + "..."
+
+
 def _stderr_reason(text: str) -> str:
     """One line of a server's stderr that says why it died: the first, or for a traceback its last."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return ""
     line = lines[-1] if lines[0].startswith("Traceback") else lines[0]
-    return credentials.mask(line)[:200]
+    return _clip(credentials.mask(line))
 
 
 async def _list_tools(server: Server, timeout: float) -> None:
@@ -232,7 +241,7 @@ async def _list_tools(server: Server, timeout: float) -> None:
     try:
         config = upstream_config(server)
     except (TypeError, ValueError, AttributeError) as exc:  # "env" as a list, "args" as a number
-        server.error = f"malformed entry: {type(exc).__name__}: {credentials.mask(str(exc))[:200]}"
+        server.error = f"malformed entry: {type(exc).__name__}: {_clip(credentials.mask(str(exc)))}"
         return
     if config is None:
         server.error = "no stdio command or Streamable HTTP URL (SSE servers are not scanned)"
@@ -248,7 +257,7 @@ async def _list_tools(server: Server, timeout: float) -> None:
                                  "input_schema": t.input_schema, "annotations": t.annotations or {}}
                                 for t in await upstream.list_tools()]
     except Exception as exc:  # one broken server must not stop the scan of the others
-        server.error = f"{type(exc).__name__}: {credentials.mask(str(exc))[:200]}"
+        server.error = f"{type(exc).__name__}: {_clip(credentials.mask(str(exc)))}"
 
 
 def _config_findings(servers: list[Server]) -> list[Finding]:
@@ -435,7 +444,7 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
             lines.append(f"  {server.name}  {server.path}  [{status}]")
     if not_started:  # one hint for all of them, not the same sentence on every line
         lines.append("Servers named by a config in the current directory are code the repository chose, so they are not started; "
-                     "pass --connect-project to start them.")
+                     "pass --connect-project to start them, or name the file (`intentshield scan .mcp.json`).")
     for f in sorted(findings, key=lambda f: ("error", "warning", "note").index(f.level)):
         if f.rule != "not_scanned":
             lines.append(f"{f.level.upper():7} {f.rule}: {f.server}{':' + f.tool if f.tool else ''}: {f.message}")

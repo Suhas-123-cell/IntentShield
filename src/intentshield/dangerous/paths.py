@@ -16,8 +16,11 @@ _BRACKET = re.compile(r"\[[^\]/\s]{1,30}\]")
 
 def _glob_only(segment: str) -> bool:
     """A path part made of glob characters alone (``?``, ``[a-z]*``, ``[!x]``): every name of that shape in the directory,
-    so at the root ``/[a-z]*`` and ``/?`` are the entries of the root."""
+    so at the root ``/[a-z]*`` and ``/?`` are the entries of the root. A dot first and a star later (``.[a-z]*``, ``.??*``) is
+    the same as ``.*`` for the entries of a home directory: nearly all of its hidden ones."""
     rest = _BRACKET.sub("", segment)
+    if rest[:1] == "." and "*" in rest[1:] and set(rest[1:]) <= {"?", "*"}:
+        return True
     return bool(segment) and set(rest) <= {"?", "*"} and (rest != segment or "?" in segment or "*" in segment)
 _SYSTEM_ROOTS = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/var", "/boot", "/System", "/Library", "/opt", "/private",
                  "/dev", "/sys", "/proc", "/Applications", "/srv", "/mnt", "/Volumes", "/Users", "/home", "/root", "/snap",
@@ -183,6 +186,61 @@ def _test_fixture(path: str, n: str) -> bool:
     return here.startswith(project.rstrip("/") + "/")
 
 
+# What a file in ~/.ssh is, by its name. A key is named like one (``id_ed25519``, ``work_rsa``, ``deploy.pem``) or holds the
+# text that starts a private key; the names below are lists of hosts, options and public keys that hold no secret.
+_SSH_KEYISH = re.compile(r"^(?:id_|identity)|[_.-](?:rsa|dsa|ecdsa|ed25519)(?:[_.-]|$)|\.(?:pem|key|ppk|p12|pfx)$|private|secret")
+_SSH_PLAIN = re.compile(r"^(?:config|known_hosts|authorized_keys2?)(?:\.[\w.-]{1,40}|~)?$|^(?:allowed_signers|environment|rc)$")
+_PRIVATE_KEY_TEXT = re.compile(r"-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----|PuTTY-User-Key-File")
+_SSH_OTHER = "a file in the SSH directory that is not a known public one, so it may be a private key"
+
+
+def _from_workdir(path: str) -> str | None:
+    """``path`` read from the working directory of the call, when it is relative and the directory is known (absolute)."""
+    cwd = _WORKDIR.get()
+    path = path.strip().strip("\"'")
+    if not cwd.startswith("/") or not path or path.startswith(("/", "~", "$", "-")) or "://" in path:
+        return None
+    return posixpath.normpath(posixpath.join(cwd, path))
+
+
+def _file_of(path: str) -> str | None:
+    """The file a path names on this machine (``~`` and ``$HOME`` spelled out, a relative path from the working directory), or
+    None when it is a glob, has a variable or is not a regular file."""
+    path = path.strip().strip("\"'")
+    if re.match(r"^\$\{?HOME\}?(?=/|$)", path):
+        path = "~" + re.sub(r"^\$\{?HOME\}?", "", path)
+    if "$" in path or any(c in path for c in "*?["):
+        return None
+    full = os.path.expanduser(path) if path.startswith("~") else _from_workdir(path) or path
+    return full if full.startswith("/") and os.path.isfile(full) else None
+
+
+def _holds_private_key(path: str) -> bool:
+    """The file exists and starts like a private key (a PEM or OpenSSH header, a PuTTY key file)."""
+    full = _file_of(path)
+    if full is None:
+        return False
+    try:
+        with open(full, "rb") as handle:
+            return bool(_PRIVATE_KEY_TEXT.search(handle.read(4096).decode("latin-1")))
+    except OSError:
+        return False
+
+
+def _ssh_level(path: str, n: str, base: str, raw: str) -> tuple[str, str] | None:
+    """The verdict on a path in ``~/.ssh``. A key by its name, or by the text it holds when the file is there to read, is a deny.
+    A list of hosts, an options file or a public-key list is not secret. Any other name could be a key, and is asked about."""
+    if base == ".ssh" or n.endswith(".ssh/*") or raw.endswith(".ssh/*"):
+        return DENY, "the SSH directory"
+    if _KEY_NAME.match(base) or _SSH_KEYISH.search(base):
+        return DENY, "an SSH private key"
+    if any(c in base for c in "*?[") and "/config.d/" not in "/" + n:
+        return DENY, "the SSH directory"   # a glob over the directory reaches its keys
+    if _SSH_PLAIN.match(base) or "/config.d/" in "/" + n or n.startswith("config.d/"):
+        return (DENY, "an SSH private key") if _holds_private_key(path) else None
+    return (DENY, "an SSH private key") if _holds_private_key(path) else (ASK, _SSH_OTHER)
+
+
 def _cred_level(path: str) -> tuple[str, str] | None:
     """(decision, what) when ``path`` names a credential store. A path over ``_PATH_CAP`` characters (after repeated slashes are
     collapsed) is not read: it is asked about, never passed as safe."""
@@ -194,9 +252,12 @@ def _cred_level(path: str) -> tuple[str, str] | None:
     n = _norm(path).lower() if path.startswith(("~", "$", "/")) else posixpath.normpath(path.strip()).lower()
     raw = path.strip().lower()
     base = n.rpartition("/")[2]
-    if _ETC_SECRET.match(n) or _PROC_SECRET.match(n):
+    anchored = [n]   # the system files are named from the root, so a relative path is also read from the working directory
+    if (resolved := _from_workdir(path)) is not None:
+        anchored.append(_norm(resolved).lower())
+    if any(_ETC_SECRET.match(a) or _PROC_SECRET.match(a) for a in anchored):
         return DENY, "a system secret file"
-    if _SUDOERS.match(n):
+    if any(_SUDOERS.match(a) for a in anchored):
         return ASK, "the sudo rules"
     if base.endswith(".pub"):
         return None
@@ -207,9 +268,7 @@ def _cred_level(path: str) -> tuple[str, str] | None:
     if _SOFT_DIR.search(n):
         return ASK, "a directory of credential files"
     if "/.ssh/" in "/" + n + "/" or n.endswith("/.ssh") or n == ".ssh" or n.startswith(".ssh/"):
-        if base in ("known_hosts", "config", "authorized_keys", "known_hosts.old") or n.endswith(".ssh/*"):
-            return (DENY, "the SSH directory") if n.endswith(".ssh/*") or raw.endswith(".ssh/*") else None
-        return DENY, "an SSH private key" if base != ".ssh" else "the SSH directory"
+        return _ssh_level(path, n, base, raw)
     if _KEY_NAME.match(base):
         if _test_fixture(path, n):   # tests/fixtures/id_rsa, relative or absolute: a sample key
             return ASK, "a file named like an SSH private key, in a test directory"
@@ -228,6 +287,15 @@ def _cred_level(path: str) -> tuple[str, str] | None:
         private = bool(re.search(r"priv|secret", base))
         if private or (base.endswith(".pem") and not _PUBLIC_NAME.search(base)):
             return ASK, "a key or secret file"
+    return None
+
+
+def overwrite_level(path: str) -> tuple[str, str] | None:
+    """(ASK, what) when writing, appending to or emptying ``path`` would replace a key or a cloud credential (or a file of
+    ``~/.ssh`` that may be one): a write is never a deny, since the user may be installing the file."""
+    cred = _cred_level(path) if path.strip() else None
+    if cred and (cred[0] == DENY or cred[1] == _SSH_OTHER):
+        return ASK, cred[1]
     return None
 
 
@@ -335,7 +403,7 @@ def _named_secret(argv: list[str]) -> tuple[str, str, str] | None:
         for c in [*_candidates(a), a[7:] if a.lower().startswith("file://") else a]:
             c = c.strip("\"'")
             hit = _cred_level(c) if _pathlike(c) and "://" not in c else None
-            if hit and hit[0] == DENY:
+            if hit and (hit[0] == DENY or hit[1] == _SSH_OTHER):
                 return ASK, hit[1], c
     return None
 

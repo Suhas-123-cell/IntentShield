@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import gzip
 import json
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "benchmarks"))
+import self_disclosure_eval as sde
 
-import self_disclosure_eval as sde  # noqa: E402
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_scan_counts_stripped_parameters_by_role_and_harm_through_them(tmp_path: Path):

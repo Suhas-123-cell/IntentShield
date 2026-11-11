@@ -138,7 +138,7 @@ def victim_endpoint(model: str) -> tuple[str, str, str, dict[str, Any]]:
     if model.startswith("deepseek:"):
         url, env, _default, extra = judge_module.PROVIDERS["deepseek"]
         return url, os.environ[env], model.partition(":")[2], extra
-    return judge_module._ollama_url(), "ollama", model, {}
+    return judge_module.ollama_url(), "ollama", model, {}
 
 
 def reaches(canary: str, to: Any) -> bool:
@@ -214,7 +214,7 @@ def attacker_client(spec: str, usage: dict[str, Any]) -> Callable[[str, str], di
     url, key_env, default, extra = PROVIDERS[provider]
     model = model or default
     if key_env is None:
-        url, key = judge_module._ollama_url(), "ollama"
+        url, key = judge_module.ollama_url(), "ollama"
     else:
         import os
         key = os.environ.get(key_env) or sys.exit(f"{provider} needs {key_env}")

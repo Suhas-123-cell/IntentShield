@@ -306,6 +306,10 @@ evidence; no model output can authorize a call. The full diagram and component t
 - **Fails closed:** a hook that cannot start or crashes is refused by the launcher `install` writes (see the hooks section above); an output
   scan that never finishes leaves the session flagged; catalog drift blocks the tool until restart; a dead upstream
   is an error result, never a silent allow. Arguments are validated against the schema bound at connect.
+- **Trusted:** you and your prompts, your machine, the harness and IntentShield's own rules.
+- **Not covered:** an attacker who already has your shell or controls the harness; the code of the MCP servers themselves; the harness's
+  shell, file and web tools unless installed with `--builtin-tools` (best effort); plain-language injections the rules do not read.
+  [SECURITY.md](../SECURITY.md#out-of-scope) lists what is out of scope for a report.
 
 ## Configure an upstream
 

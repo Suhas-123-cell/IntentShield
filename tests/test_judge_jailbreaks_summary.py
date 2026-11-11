@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "benchmarks"))
+import judge_jailbreaks as jj
 
-import judge_jailbreaks as jj  # noqa: E402
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _row(label: str, send: str, warned: bool = False) -> dict:

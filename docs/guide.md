@@ -16,6 +16,8 @@ describes the main branch of the repository and is not in the 0.4.3 package on P
 | understand a refusal or a prompt, or stop a false positive | [When the guard blocks or asks about something legitimate](#when-the-guard-blocks-or-asks-about-something-legitimate) |
 | run another guard's hook with a deadline and a fail-closed launcher | [Wrapping a third-party hook](#wrapping-a-third-party-hook) |
 | check the MCP servers you already use | [Scan the servers you use](#scan-the-servers-you-use) |
+| see what `install` changes in a harness's settings | [What `install` writes](#what-install-writes) |
+| upgrade the package, or remove IntentShield completely | [Upgrading and removing IntentShield](#upgrading-and-removing-intentshield) |
 | check that the install works, or fix it | [Troubleshooting](#troubleshooting) |
 | let the guard learn attacks, or ship new rules as data | [Adaptive threat memory and threat packs](#adaptive-threat-memory-and-threat-packs) |
 | run the gateway, the dashboard or the REST API, or set tokens and limits | [gateway.md](gateway.md) |
@@ -61,7 +63,7 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   fails closed until restart. Hooks never see tool descriptions, so this layer covers what
   they cannot.
 
-`intentshield install <harness>` writes the hook entries below into the harness's settings
+`intentshield install <harness>` writes the hook entries into the harness's settings
 file (`--scope project` for the current directory, which for Claude Code is `.claude/settings.local.json` on main, after 0.4.3, and
 `.claude/settings.json` in 0.4.3; `--review always` for a harness that
 cannot ask; `--gemini-ask` for interactive Gemini CLI 0.66 or later, see [layers.md](layers.md#what-each-harness-lets-the-guard-do)); `intentshield uninstall <harness>` removes them. The same entries are in
@@ -140,11 +142,18 @@ sandbox:
 - Mode and owner, and `find`: a recursive `chmod` or `chown` of root or a system directory whatever the mode (`chmod -R 644 /`,
   `chown -R me /usr/lib`), and of the home directory with `sudo` or a zero or world-writable mode; `find ~ -delete` and
   `find / -delete` with no test on the name (`-type`, `-mtime` and `-size` do not count); a write to a block device, `mkfs`,
-  `wipefs`; a fork bomb.
+  `wipefs`; a fork bomb. On main, after 0.4.3, the other programs that empty the same targets are read too: `rsync --delete` (or
+  `--remove-source-files`) onto root, the home directory or a system directory, `tar --remove-files` of one, `chattr -R` of one, and a
+  glob that matches nearly every hidden entry of the home directory (`~/.[a-z]*`, `~/.??*`) like `~/.*`.
 - Git: a force-push or deletion of a shared branch (`main`, `master`, `develop`, `release`, `release/...`, `release-1.2`,
   `hotfix`, ...), also by refspec (`HEAD:main`).
 - Credentials: a read of an SSH private key, a cloud credential file, `/etc/shadow`, `~/.netrc` or a keychain; a sensitive file sent
-  to a network destination; a write to `authorized_keys` or sudoers.
+  to a network destination; a write to `authorized_keys` or sudoers. A file in `~/.ssh` is a private key when it is named like one
+  (`id_*`, `identity`, `*_rsa`, `*_ed25519`, `.pem`, `.key`, `.ppk`, a copy such as `id_rsa.bak`) or, when the file is there to read,
+  when it starts with a private-key header. The reason says "an SSH private key". On main, after 0.4.3, `config`, `config.d/*`,
+  `known_hosts`, `authorized_keys`, `allowed_signers`, `environment`, `rc` and `*.pub`, and their backups (`config.bak`, `config~`,
+  `known_hosts.old`), are not held (0.4.3 denied every other file of the directory, a backup of the config included); any other
+  file in `~/.ssh` is an ask whose reason says it is not a known public file and may be a private key.
 - The directory of a credential store, or a glob over it: `cat ~/.ssh`, `cat ~/.ssh/*`, and (on main, after 0.4.3) `cat ~/.aws`,
   `cat ~/.aws/*`, `cat ~/.aws/c*` and `~/.gnupg`. A key read into a command by `$(< ~/.ssh/id_rsa)` or by a loop fed from one is a
   deny too (on main, after 0.4.3).
@@ -193,7 +202,8 @@ sandbox:
 - Persistence and the guard: a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow
   (`.zshrc` and `.zshrc.local` ask; a copy that nothing runs, `.zshrc.bak`, `.bashrc.orig` or `.bashrc~`, does not, on main,
   after 0.4.3);
-  deleting or emptying a key or an access file; anything that changes the guard itself (below).
+  deleting or emptying a key or an access file, by `rm`, `truncate`, `shred`, the Write tool, or (on main, after 0.4.3) a redirect
+  (`> ~/.ssh/id_rsa`, `echo x >> ~/.aws/credentials`) or a copy over it; anything that changes the guard itself (below).
 - Too big to read: a path, a command, a brace list or a loop past a limit (next sections).
 
 **What the parser reads.**
@@ -203,6 +213,11 @@ sandbox:
 - Inside one command line it follows `cd`, `pushd` and `popd` (`cd ~ && rm -rf Documents` deletes the home directory's
   `Documents`), variables set earlier in that line (`RM=rm; $RM -rf /`, `for d in / b; do rm -rf "$d"; done`), `$'...'` quoting and
   brace lists (`rm -rf {/,}`, `{rm,-rf,/}`). The directory a `cd` went to is not known across two calls.
+- A relative path starts from the working directory of the call, on main, after 0.4.3: the event's `cwd`, or for a shell call the
+  `workdir` (Codex CLI) or `dir_path` (Gemini CLI) it names. So `cat etc/shadow` from `/`, `rm -rf ../../usr` from `/tmp/proj` and
+  `rm -rf ../../..` from a project three levels below `/` get the verdict of the absolute path. An event with no absolute directory
+  leaves a relative path a project file, and a `cd` in the command moves the start. 0.4.3 did not start a relative path from the
+  call's directory for these rules.
 - The program behind a **wrapper** is the command that is judged, so a deny keeps its verdict in front of any of them. 0.4.3 read
   through a few, such as `sudo` and `env`; the list below, of about 80, is on main, after 0.4.3.
   - The wrappers are the programs that run another program, read from the manual pages of coreutils (`env`, `nice`, `nohup`,
@@ -307,7 +322,9 @@ approve the ask. Without `--builtin-tools` none of this is checked.
   - a download run with `Invoke-Expression` (`iex`), in a pipe or around it; and `pwsh -Command` or `-EncodedCommand`.
   Parameters may be cut short as PowerShell accepts it (`-r`, `-fo`). Other cmdlets are **not read**: `Set-Content`, `Out-File` and
   `Copy-Item` to a startup file, `Start-Process`, .NET calls such as `[IO.File]::Delete`, and scripts.
-- A tool name that starts with `mcp__` but has no server or no tool part is refused (on main, after 0.4.3).
+- A tool name that starts with `mcp__` but has no server or no tool part is refused (on main, after 0.4.3). So is a Gemini CLI tool
+  named like an MCP tool (`mcp_...`) that has no `mcp_context`, a call with no `tool_name` or an empty one (with `--builtin-tools`),
+  and a `tool_name` that is not text; the reply says what was wrong.
 - A tool with another name that runs a command (a future tool, or one a plugin adds) is not matched by name. Claude Code's matcher
   names the tools it sends to the hook, so such a tool never reaches it. Codex CLI's and Gemini CLI's send every tool, and there
   (on main, after 0.4.3) a tool the hook has no name for whose input holds a `command` or `cmd` text is read as a shell call.
@@ -346,7 +363,8 @@ in `results/hook-fidelity/detect/fresh/`):
   planned did not run).
 - The comparison with two other guards is mixed. `safety-net` let through 44/85 harmful calls on its shell scope and `knox` 44/73 on
   its scope, where IntentShield let through 25/85 and 18/73, but **on denies alone IntentShield trails `safety-net` (24/85 against
-  41/85) and ties `knox` (28/73 against 29/73)**.
+  41/85) and ties `knox` (28/73 against 29/73)**, with the rules as they were when scored. Scored again with the rules on main, after
+  0.4.3 (`fresh_report.py --current-rules`), IntentShield denies 29/85 and still trails.
 - The remaining misses are discovery-only commands, cloud-CLI destruction (`aws s3 rb --force`,
   `kubectl delete namespace kube-system`), `node -e` and `python3 -c` one-liners, reads of an instance-metadata address or a
   Kubernetes service-account token, and a few others listed in the study.
@@ -537,7 +555,7 @@ scores the same on every survival cell. So this shows that verdict delivery can 
 not that the wrapped guard is better, and nothing was measured about a guard's detection. See
 `results/hook-fidelity/compare/README.md`.
 
-### What `install` writes
+## What `install` writes
 
 `intentshield install` runs `<harness> --version` and records it in `~/.intentshield/harness-versions.json`, then
 writes two things into the hooks that check a call (Claude Code, Codex and Gemini; Cursor keeps `failClosed`): the
@@ -562,6 +580,33 @@ parameters, shadowed names, credentials written into a config, and tools that ch
 error-level finding remains (also when no MCP config is found), 1 when one does, and 2 when a named file is missing or unreadable
 or no server could be started or read. The full description and exit codes are in
 [layers.md](layers.md#scan-the-mcp-servers-you-already-use).
+
+## Upgrading and removing IntentShield
+
+**Upgrade** the package the way you installed it, then install again, so that each hook entry gets what the new version writes:
+
+```sh
+uv tool upgrade intentshield-mcp      # or: pipx upgrade intentshield-mcp
+intentshield install claude           # repeat for each harness, with the options you used before (--builtin-tools, --scope project, ...)
+intentshield doctor                   # after you have started the harness and sent a prompt
+```
+
+A reinstall prints which options it dropped, if any (on main, after 0.4.3). Wrapped servers keep working and need no new `wrap`. What changes for you in a
+release is in [CHANGELOG.md](../CHANGELOG.md), under "Upgrading from" the version you had.
+
+**Remove everything.** Undo the changes to your files before you remove the package, because a hook entry that names a program that no longer
+exists makes the launcher refuse each call the hook guards, and a wrapped server whose proxy is gone does not start. `intentshield doctor` shows
+which harnesses have hooks and which files are wrapped.
+
+```sh
+intentshield uninstall claude         # repeat for codex, cursor and gemini; add --scope project for a project install
+intentshield unwrap .mcp.json         # for each file you wrapped: ~/.claude.json, .cursor/mcp.json, ~/.codex/config.toml, ...
+uv tool uninstall intentshield-mcp    # or: pipx uninstall intentshield-mcp, or pip uninstall intentshield-mcp
+rm -r ~/.intentshield                 # last: the databases, a judge key, the proxy configs and the backups the first two commands read
+```
+
+`uninstall` and `unwrap` put each file back as `install` and `wrap` found it. They leave `~/.intentshield` in place, which is why it is
+removed last. [SECURITY.md](../SECURITY.md#what-is-stored-locally) lists what is in it.
 
 ## Troubleshooting
 
@@ -622,7 +667,9 @@ server's own stderr line when it has one, and the proxy's stderr is on its termi
 
 **A client request the proxy cannot parse gets an error.** In transparent mode (`intentshield-mcp --config ...`) a request
 whose `params` is not an object is answered with error -32602 and its id, and a line that is not JSON with -32700 and a null
-id; the proxy keeps serving. Before 0.4.3 the protocol library dropped these silently and the client waited. The other
+id; the proxy keeps serving. Before 0.4.3 the protocol library dropped these silently and the client waited. On main, after 0.4.3,
+JSON that is not a request gets -32600 and a null id in the same way: `{}`, `null`, a batch, a message with no method or a method that
+is not text, and an id that is an object. A reply from the client to a request of the server is passed on as before. The other
 transports were not checked for this.
 
 **A command that needs a package that is not installed.** After `pip install --no-deps intentshield-mcp` only the hooks,
@@ -635,7 +682,8 @@ everything with: pip install intentshield-mcp", and exit with status 2.
 do too, as they do for files in a `.vscode` folder or VS Code's user folder (on main, after 0.4.3). Writing the file back drops the comments and trailing commas; the original text is saved and `intentshield uninstall`
 (or `unwrap`) puts it back byte for byte, comments included. A settings file of another harness, which is strict JSON,
 that does not parse stops the command with a message that says what to do: remove the comments and trailing commas, or add the entries by hand
-from the output of `intentshield install <harness> --dry-run`.
+from the output of `intentshield install <harness> --dry-run`. A file that starts with a byte order mark does not parse either, and on
+main, after 0.4.3, the message says so: save the file as UTF-8 without it.
 
 **`install --scope project` and `wrap` write absolute paths.** The project file then holds the path of the hook program on this
 machine, so do not commit it. `install` prints a note after a project-scope install, and `wrap` prints one when the file is
@@ -677,7 +725,9 @@ pause.
 **A tool has gone from the client's list.** Through `wrap`, the proxy hides a tool whose description matched a poisoning rule, and a
 call to it by name is answered "... is quarantined: its description matched poisoning rules". `intentshield scan` on the same config names the rules that matched (for example `hidden_directive`), and
 the proxy's audit database records an `MCP_TOOLS_QUARANTINED` event. The proxy also logs one warning for each tool it hides, with the
-rules that matched (on main, after 0.4.3).
+rules that matched (on main, after 0.4.3). If the only rule is `sensitive_target` (the description names a key or a secrets file) and the
+tool is one you trust, such as one that reads your project's `.env`, add `"server:tool"` to the `trusted_tools` list in its proxy config under
+`~/.intentshield/proxies/` (`server` is the `server_id` in that file); every other rule still hides it (on main, after 0.4.3).
 
 **Every ask is refused, or a hook seems slow.** Check the `[IntentShield read this session as ...]` note first (see
 above). A refusal that names a 30 s deadline means the judge or the database was slow; a hosted judge on a free

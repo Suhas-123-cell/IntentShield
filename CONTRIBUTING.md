@@ -52,6 +52,18 @@ There is no discussion board or chat.
   command that reproduces it (the hook event piped into `intentshield-hook <harness>`, or the `intentshield scan` run),
   the harness and version, and the decision and reason it printed. Use benign markers, not real data. A ready-to-paste event is in
   [Try it from a clone](docs/layers.md#try-it-from-a-clone). These are the most useful.
+  - A shell command the `--builtin-tools` rules ask about or deny, as a hook event (it prints `permissionDecision`, here `ask`) and
+    as the rule's own verdict:
+
+    ```sh
+    echo '{"hook_event_name":"PreToolUse","session_id":"fp","tool_name":"Bash","tool_input":{"command":"git reset --hard HEAD~1"}}' \
+      | INTENTSHIELD_HOOK_DB=/tmp/fp.db uv run intentshield-hook claude --builtin-tools
+    uv run python -c "from intentshield.dangerous import assess_shell; print(assess_shell('git reset --hard HEAD~1', ''))"
+    ```
+
+    With `INTENTSHIELD_HOOK_DB` set, the reply ends with a note that the variable moves the session database; that is expected. A
+    harmless command that is wrongly asked about goes in the `ALLOW` list of `tests/test_dangerous_rules.py`
+    (`test_benign_near_misses_are_left_alone`), with the rule change that stops the ask.
 - **New detection rules, with a measured benign check.** A rule is accepted with the texts it should flag, a count of what
   it flags in the repository's benign corpora, and no new false positive on them; a rule with no benign check is not
   accepted. Say plainly what it does not catch. [Add a detection rule](#add-a-detection-rule) gives the commands, and they
@@ -144,7 +156,7 @@ area and how to diagnose a failure are in [docs/architecture-and-testing.md](doc
 
 ## Changelog
 
-A change a user can see (a flag, a message, a decision, a fix) gets one line in [CHANGELOG.md](CHANGELOG.md) under `## Unreleased`, in the group it belongs to: Added, Changed or Fixed (a release entry may also carry Upgrading, Internal, and Study and benchmarks sections). Say what changed for the user, not how the code changed. The maintainer moves the entries under a version heading and a date at release. A pull request that changes nothing a user can see needs no entry.
+A change a user can see (a flag, a message, a decision, a fix) gets one line in [CHANGELOG.md](CHANGELOG.md) under `## Unreleased`, in the group it belongs to: Added, Changed or Fixed (a release entry may also carry Upgrading, Internal, and Study and benchmarks sections). Say what changed for the user, not how the code changed. One or two lines per change; put the detail in the guide and link it. The maintainer moves the entries under a version heading and a date at release. A pull request that changes nothing a user can see needs no entry.
 
 ## Releasing
 
@@ -152,7 +164,7 @@ For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the
 
 1. Set the version in `pyproject.toml` and in `CITATION.cff` (`version` and `date-released`), then run `uv lock` and commit `uv.lock`: the lock records the package's own version, and a later non-frozen `uv sync` would otherwise rewrite it and leave the tree dirty.
 2. In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z - YYYY-MM-DD` and start a new empty `## Unreleased` above it.
-3. Check that no document still calls a released feature unreleased: `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
+3. Check that no document still calls a released feature unreleased: delete the note under Install in `README.md` that says PyPI has an older version, and make sure `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
 4. Run the tests, `ruff` and `mypy` as above, and check the wheel's rendered description on TestPyPI: PyPI does not rewrite the README's relative links.
 
 ## Benchmark numbers

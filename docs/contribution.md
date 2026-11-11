@@ -19,7 +19,7 @@ are off by default or evidence-only ([detectors.md](detectors.md)).
    - A `deny` was enforced on every build and in every mode where the hook ran. Whether the hook ran depended on state outside its
      reply: trust, matchers and flags.
    - An `ask` with nobody to answer it is handled three different ways, and one of them changed between two adjacent Claude Code
-     releases.
+     releases (2.1.84 and 2.1.85). That sweep ran with Bash pre-approved; with nothing pre-approved the cell ran on one build only.
    - A hook that runs past its timeout let the call run on every build tested with the default hook configuration. Claude Code's
      documented `onFailure: "block"` setting, which IntentShield's `install` writes, blocked it on 2.1.316 (3 of 3 runs) and had no
      effect on 2.1.281 (2 of 2 RAN).
@@ -50,9 +50,11 @@ are off by default or evidence-only ([detectors.md](detectors.md)).
 - That IntentShield detects more than other guards. On the author's 467 fixtures its hook is behind: it let through 137 of 166
   held-out harmful items before the built-in tool rules. On a second set of 214 calls, built by the same model family from the same
   six categories the rules were written from, it lets through fewer calls than safety-net and knox but trails safety-net on denies
-  alone, and nothing was tested outside those categories (the report's section 5; the gain is post hoc and fits its own categories). The surveyed MCP guards publish no detection numbers
-  to compare against, and on AgentDojo, the one benchmark where defences do publish, IntentShield's row (a 7B agent, 15.6% residual
-  attack success, 5 of 32, from a local run whose rows are not committed) is far behind LlamaFirewall's published 1.75% with GPT-4o. So the claim is not "best performing".
+  alone: 24 of 85 against 41 of 85 with the rules as they were when scored, and 29 of 85 with the rules in the repository now (the
+  report's section 5). Nothing was tested outside those categories; the gain is post hoc and fits its own categories.
+- That IntentShield beats published defences. The surveyed MCP guards publish no detection numbers to compare against, and on
+  AgentDojo, the one benchmark where defences do publish, IntentShield's row (a 7B agent, 15.6% residual attack success, 5 of 32, from a
+  local run whose rows are not committed) is far behind LlamaFirewall's published 1.75% with GPT-4o. So the claim is not "best performing".
 - That any tool lets an attacker bypass a guard, or what a real model or a person at a terminal does at scale.
 - That the hook study's expectations were fixed before the runs, beyond the author's statement: the commits that would show the order
   are not in `main`'s history, and the timestamps do not settle it (the report's Limits).

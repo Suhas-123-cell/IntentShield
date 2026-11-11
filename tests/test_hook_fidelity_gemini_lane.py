@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 BENCH = Path(__file__).resolve().parents[1] / "benchmarks"
-sys.path.insert(0, str(BENCH))
 from hook_fidelity import cells, configs, gemini_lane, run  # noqa: E402
 
 sys.path.insert(0, str(BENCH / "hook_fidelity" / "gemini_core_sweep"))

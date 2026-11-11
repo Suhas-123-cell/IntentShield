@@ -1664,22 +1664,23 @@ def parse(command: str, depth: int = 0, env: dict[str, str] | None = None,
     return found
 
 
-def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset[str]) -> Command:
-    found = Command()
-    if depth == 0:
-        _state.budget = _MAX_EXPANSION
-        _state.carry = _MAX_CARRIED_TOTAL
-    if len(command) > _MAX_COMMAND or sum(command.count(c) for c in _OPERATOR_CHARS) > _MAX_OPERATORS:
-        return _unreadable(command, found)  # not worth tokenizing; read the raw text
+def _read_nested(command: str, depth: int, env: dict[str, str] | None, loops: frozenset[str],
+                 found: Command) -> tuple[dict[str, str], frozenset[str], str, bool, list[str]] | None:
+    """The commands that run inside ``command`` (``bash -c`` text, ``$(...)``, a here-document body) merged into ``found``.
+    Returns what the read of the words needs: the variables, the loop variables, the text as the shell reads it, whether code is
+    made from a command's output, and the tokens. None when the command is not read word by word (``found`` is then complete).
+    """
     text, bodies = _prepare(command)
     text, values, ambiguous = _expand(text, env or {})
     clean = text.translate(_AS_WRITTEN)  # what the shell would read, for the scans that look at plain text
     loopvars = loops | frozenset(re.findall(r"\bfor\s+(\w+)\s+in\b", text))
     parts = _substitutions(text)
     if len(bodies) > _MAX_PARTS or parts is None:  # too many to read one by one
-        return _unreadable(command, found, clean)
+        _unreadable(command, found, clean)
+        return None
     if any(kind == "opaque" for kind, _ in bodies):  # bash 5.3 ${ cmd; }, or a ${ that is never closed
-        return _unreadable(command, found, clean)
+        _unreadable(command, found, clean)
+        return None
     for kind, body in bodies:
         if depth >= 3:
             continue
@@ -1691,7 +1692,8 @@ def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset
             for inner in _inner(body) or []:
                 _merge(found, parse(inner, depth + 1, None, loopvars))
     if ambiguous:  # a variable's value at its use is not known: read the raw text
-        return _unreadable(command, found, clean)
+        _unreadable(command, found, clean)
+        return None
     _defaults(clean, found)
     hidden = False  # code made from the output of a command (eval "$(...)", bash <(...)): not known until it runs
     for start, inner in parts:  # $(...) and `...` run first, and their output goes anywhere
@@ -1705,11 +1707,26 @@ def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset
     _masked_hosts(clean, found)
     tokens = _tokens(text)
     if tokens is None:  # unbalanced quotes
-        return _unreadable(command, found, clean)
+        _unreadable(command, found, clean)
+        return None
     for match in _DEV_TCP.finditer(clean):  # a bash network socket
         found.destinations |= network_values(match[1])
         found.remote |= any(not is_loopback(v) for v in found.destinations)
         found.sends = True
+    return values, loopvars, clean, hidden, tokens
+
+
+def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset[str]) -> Command:
+    found = Command()
+    if depth == 0:
+        _state.budget = _MAX_EXPANSION
+        _state.carry = _MAX_CARRIED_TOTAL
+    if len(command) > _MAX_COMMAND or sum(command.count(c) for c in _OPERATOR_CHARS) > _MAX_OPERATORS:
+        return _unreadable(command, found)  # not worth tokenizing; read the raw text
+    inner_read = _read_nested(command, depth, env, loops, found)
+    if inner_read is None:
+        return found
+    values, loopvars, clean, hidden, tokens = inner_read
     pieces = [piece for token in tokens
               for piece in (_SPLIT_OPERATORS.findall(token) if len(token) > 1 and set(token) <= _PUNCTUATION
                             else [token])]
