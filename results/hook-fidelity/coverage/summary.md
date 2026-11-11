@@ -1,6 +1,6 @@
 # Coverage re-run: which MCP surfaces reach a hook, per harness build (no model)
 
-Every cell is k/n with a Wilson 95% interval in brackets (percent, computed here from k and n). n counts valid launches of one stub-model run; the stub model is deterministic, so n=3 shows run-to-run stability of the harness, not sampling variance of a model. See `docs/hook-fidelity-coverage-rerun.md` for the method and limits.
+Every cell is k/n with a Wilson 95% interval in brackets (percent, computed here from k and n). n counts valid launches of one stub-model run; the stub model is deterministic, so n=3 shows run-to-run stability of the harness, not sampling variance of a model. See `docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md` for the method and limits.
 
 ## claude 2.0.41
 

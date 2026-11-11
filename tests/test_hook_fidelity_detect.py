@@ -24,7 +24,7 @@ DETECT = ROOT / "results/hook-fidelity/detect"
 
 # Running a guard, and checking that every row was decided by a guard that ran, reads the other guards' hook entries from clones
 # of their repositories, which are not committed: ``benchmarks/hook_fidelity/fetch_corpus.py`` clones them into HF_SCRATCH
-# (the directory that holds ``corpus/``, docs/hook-fidelity-corpus.md). Reporting from the committed decisions needs no clone.
+# (the directory that holds ``corpus/``, docs/research-notes/hook-fidelity/hook-fidelity-corpus.md). Reporting from the committed decisions needs no clone.
 needs_corpus = pytest.mark.skipif(not (dc.CLONES / "cc-safe-setup" / "repo" / "hooks" / "hooks.json").exists(),
                                   reason="needs the guard corpus clones under HF_SCRATCH")
 

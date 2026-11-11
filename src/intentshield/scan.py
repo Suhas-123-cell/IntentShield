@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import credentials
+from . import credentials, translation
 from .harness import is_mutation
 from .install import _HOOK, server_stem, strip_json_comments
 from .mcp_inspect import scan_description, scan_server, self_disclosure_fields, tool_text
@@ -490,7 +490,7 @@ def load_pins(path: Path) -> dict[str, str]:
 
 def save_pins(path: Path, pins: dict[str, str]) -> None:
     """Atomic and private (0600): a scan interrupted or run twice at once never leaves half a baseline."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    translation.private_dir(path.parent)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
         with os.fdopen(fd, "w") as handle:

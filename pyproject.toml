@@ -60,7 +60,7 @@ signing = [
   "cryptography>=43",
 ]
 # The exemplar detector and learning from operator labels (exemplars.py, learning.py); its
-# embedder also needs the ML requirements (requirements-ml.txt).
+# embedder also needs requirements-ml.txt.
 learning = [
   "numpy>=1.26,<3",
 ]
@@ -176,8 +176,10 @@ target-version = "py312"
 extend-exclude = ["artifacts", "results", "benchmarks/hook_fidelity/prevalence"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP"]
-ignore = ["E741", "E731", "B008", "B023", "B904", "B905", "UP035", "UP037"]
+# Beyond the base set (E, F, W, I, B, UP): the families the whole tree already passes, so that they stay clean (shadowed builtins,
+# logging calls, debugger statements, version checks, banned relative-import tricks, blanket noqa and type: ignore, __future__).
+select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT"]
+ignore = ["E741", "E731", "B008", "B023", "B905", "UP035", "UP037"]
 
 [tool.ruff.lint.per-file-ignores]
 # The corpus readings are prose data (long quoted lines, printf-style row builders): not code style.

@@ -10,7 +10,7 @@ consults the table; there was no allow scenario; 24 of the 42 "no regression" pa
 What it does show: a reasoned deny turns an ask into a refusal on the stub builds where the old hook let the call run or hang; the in-hook
 deadline answers before a 3 s harness timeout; the launcher turns a dead interpreter into a refusal. Round 4 added the controls the critic
 asked for (section "Round 4 controls"). Interactive use, the mode detector's accuracy against ground truth, and a real model after a refusal
-remain unmeasured. Every component also has precedent in the guard corpus (`docs/hook-fidelity-corpus.md`: Malanta TrustGate degrades an ask
+remain unmeasured. Every component also has precedent in the guard corpus (`docs/research-notes/hook-fidelity/hook-fidelity-corpus.md`: Malanta TrustGate degrades an ask
 to a deny below a Cursor version floor; dcg, cc-safety-net and others branch on harness and, for Claude Code, on permission mode; skillgate
 appends `|| exit 2`; gemini-intrupt-hook turns a crash into a deny). What is new is the measured per-release table, the ancestry-based mode
 detection and the doctor integration in one guard: **a reference implementation of the study's recommendations, not a research result.**
@@ -140,7 +140,7 @@ ask cells never consult the table at all (see the round 4 no-record cells).
 
 ## Round 4 controls (the critic's fatal objection)
 
-The critic (`docs/hook-fidelity-study.md` section 9) re-launched 14 OFF/ON pairs (28 launches, n=1) and all 28 outcomes matched the committed
+The critic (`docs/research-notes/hook-fidelity/hook-fidelity-study.md` section 9) re-launched 14 OFF/ON pairs (28 launches, n=1) and all 28 outcomes matched the committed
 rows; it then showed the scenarios could not separate the translation from "refuse everything". Round 4 ran 36 launches (n=1 per cell, same
 stub, loopback sandbox, isolated HOME; `mitigation_eval.py plan-r4`, rows and `table.md` in `results/hook-fidelity/mitigation/eval-r4/`; one
 Codex cell crashed in the runner before launching, was moved to `runner-errors.jsonl` and rerun, so 35 + 1 launches):
@@ -167,7 +167,7 @@ the Gemini MCP ask is refused for every server although `trust: true` is per ser
 
 ## Round 6: head-to-head and interactive cells
 
-Two lanes answered the round-4 critic's remaining objections; both critics narrowed what they show. Account and evidence: `docs/hook-fidelity-study.md` sections 6a and 6b,
+Two lanes answered the round-4 critic's remaining objections; both critics narrowed what they show. Account and evidence: `docs/research-notes/hook-fidelity/hook-fidelity-study.md` sections 6a and 6b,
 `results/hook-fidelity/compare/` and `results/hook-fidelity/interactive/`.
 
 - **Head-to-head against six captured guards' replayed bytes** (209 launches): on the 18 (cell, build) pairs where at least one shipped third-party guard's intended verdict did
@@ -189,7 +189,7 @@ without `--gemini-ask`, Codex hook trust interactively, a real person or model, 
 
 ## Round 7: the wrap-hook shim and the `ps`-free detector
 
-Two lanes and three critics (wrap shim, detector, novelty). Account and evidence: `docs/hook-fidelity-study.md` sections 3.7, 6a.1 and 6b.1, `results/hook-fidelity/compare/` (round 7) and `results/hook-fidelity/interactive/` (round 7).
+Two lanes and three critics (wrap shim, detector, novelty). Account and evidence: `docs/research-notes/hook-fidelity/hook-fidelity-study.md` sections 3.7, 6a.1 and 6b.1, `results/hook-fidelity/compare/` (round 7) and `results/hook-fidelity/interactive/` (round 7).
 
 **`intentshield wrap-hook`** (`src/intentshield/wrap_hook.py`, also `intentshield-wrap-hook`; 39 unit tests with fixture replies, no third-party guard run as a program). It puts the translation in front of a hook IntentShield did not write.
 The harness runs it in place of the guard; it pipes the harness's event to the guard and sends the harness **one** reply in the harness's own shape (`translation.native_reply`).
@@ -218,7 +218,7 @@ The last row is the cost. Most guards print nothing for an allow (6 of the 8 cap
 silent-allow guard**, and `--on-empty allow` **re-opens the empty-reply fail-open path** the study measured. In round 7 no failure cell had been run under `--on-empty allow`; **round 8 ran them** (below): only a silent exit 0 runs. Events that do not check a call are passed to the guard and its exit code, stdout and stderr returned unchanged. The deadline is 30 s by default (under Gemini's 60 s default hook timeout) and, with
 `--hook-timeout`, one second under the entry's timeout; without that hint it does not beat a shorter shipped timeout (regime B: blocked 2/2 with the hint, 0/2 without).
 
-What was measured (headless, local stub, macOS, n=1 or 2, captured bytes replayed; `docs/hook-fidelity-study.md` 6a.1): on the 12 launched (build, cell) pairs where a shipped captured guard's verdict did not survive, the same bytes behind the shim were blocked
+What was measured (headless, local stub, macOS, n=1 or 2, captured bytes replayed; `docs/research-notes/hook-fidelity/hook-fidelity-study.md` 6a.1): on the 12 launched (build, cell) pairs where a shipped captured guard's verdict did not survive, the same bytes behind the shim were blocked
 12/12, IntentShield's installed hook 11/11 on pairs with a result, a launcher alone reproduced the 9 dead and crash pairs (5/5 launched), and a deny-all hook scores the same on every survival cell. The allow cell ran 12/12 reps (IntentShield's hook) and a
 captured silent allow through the shim with `--on-empty allow` ran; the Codex row of that arm is a guard fail-open, not an allow. **Read it as a thin generic wrapper delivering verdicts, mostly through the launcher, not as a better guard**; the shim shares `translation.py`
 with the hook, whose table was fitted to these builds, so the agreement is by construction.
@@ -247,7 +247,7 @@ detector; Claude Code auto mode and yolo, Gemini without `--gemini-ask`, Codex h
 
 ## Round 8: what the mitigation costs, what it decides, and where its detector is blind
 
-Three lanes and three critics, a stub, local Ollama and one paid model; no product code changed in round 8 (`git diff 0ab7470..0ba026b -- src` is empty). Account and evidence: `docs/hook-fidelity-study.md` sections 6a.1, 6b.1, 6c and 6d.
+Three lanes and three critics, a stub, local Ollama and one paid model; no product code changed in round 8 (`git diff 0ab7470..0ba026b -- src` is empty). Account and evidence: `docs/research-notes/hook-fidelity/hook-fidelity-study.md` sections 6a.1, 6b.1, 6c and 6d.
 
 **The failure cells under `--on-empty allow` (15 launches, n=1 per cell, Claude 2.1.316 `-p`, Codex 0.166.0 `exec`, Gemini 0.66.0 yolo).** Only the failure the shim cannot tell from a silent allow lets the call run: exit 0 with nothing on stdout **RAN 3/3** (Wilson [44, 100]); a dead interpreter
 (exit 126), a crash (exit 1), a reply past the 2 s deadline and a truncated-JSON reply were refused, **0/12 ran** [0, 24]. The critic's reading: the 3/3 is close to tautological, it prices the flag. A guard that fails inside a `try` and exits 0, or that prints only to stderr and exits 0 (reasoned, not run),

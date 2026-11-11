@@ -1,10 +1,10 @@
 """Verdict translation: what the guard means -> the reply the harness, in its version and mode, is measured to honour.
 
 IntentShield decides allow, ask or deny. A harness does not always do what the matching reply says (the hook-fidelity study,
-docs/hook-fidelity-study.md): Codex CLI drops an ask and runs the call, Gemini CLI waits on one in a headless yolo
-run (to the 90 s to 900 s caps measured; no answer came), Claude Code before 2.1.85 ran a pre-approved call its hook asked
-about, a hook that dies or is slow is let through by every harness measured. This module keeps those findings as data, by
-(harness, version range, mode), and answers four questions:
+docs/research-notes/hook-fidelity/hook-fidelity-study.md): Codex CLI drops an ask and runs the call, Gemini CLI waits on one
+in a headless yolo run (to the 90 s to 900 s caps measured; no answer came), Claude Code before 2.1.85 ran a pre-approved call
+its hook asked about, a hook that dies or is slow is let through by every harness measured. This module keeps those findings as
+data, by (harness, version range, mode), and answers four questions:
 
 * ``ask_reply``: send an ask as an ask, or as a deny that tells the user what was wanted;
 * ``launcher``: the command suffix that turns a hook that cannot run (exit 126, 127, a crash) into a refusal;
@@ -129,13 +129,23 @@ def lookup(harness: str, feature: str, version: Version | None) -> str:
         if kind == "gap" and _v(lo) < version < _v(hi):
             return cls
     if version > _v(spans[-1][2]) and spans[-1][0] == "run":
-        return spans[-1][3]  # a release newer than the newest measured one: assumed unchanged (``newer_than_measured`` says so)
+        return spans[-1][3]  # a release newer than the newest measured one: assumed unchanged
     return "unmeasured"
 
 
-def newer_than_measured(harness: str, feature: str, version: Version | None) -> bool:
-    spans = RANGES.get(harness, {}).get(feature, [])
-    return bool(version and spans and version > _v(spans[-1][2]))
+def private_dir(directory: Path) -> None:
+    """Creates ``directory``. A ``.intentshield`` directory, or one inside it (prompts, API keys, tool catalogs, backups), is
+    created readable by its owner only, and an existing one that this user owns is tightened to that."""
+    state = next((p for p in (directory, *directory.parents) if p.name == ".intentshield"), None)
+    if state is not None and not state.exists():
+        state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    directory.mkdir(parents=True, exist_ok=True)
+    if state is not None and os.name == "posix":
+        try:
+            if state.stat().st_mode & 0o077 and state.stat().st_uid == os.getuid():
+                state.chmod(0o700)
+        except OSError:  # the files in it are 0600 either way
+            pass
 
 
 # ---------------------------------------------------------------------------------------------------- version and mode
@@ -161,7 +171,7 @@ def record_version(harness: str, version: str, binary: str, home: Path | None = 
     except OSError:
         stamp = {}
     data[harness] = {"version": version, "binary": binary, "checked": time.time(), **stamp, **({"path": path} if path else {})}
-    cache.parent.mkdir(parents=True, exist_ok=True)
+    private_dir(cache.parent)
     tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(data, indent=1))
     os.replace(tmp, cache)
@@ -698,38 +708,39 @@ def native_reply(harness: str, decision: str, reason: str) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------------------------------- findings for doctor
 def findings(harness: str, version: Version | None, gemini_ask: bool = False) -> list[tuple[str, str]]:
-    """(level, message) for the fail-open conditions measured for ``version`` of ``harness``; level is "warn" or "FAIL"."""
+    """(level, message) for the fail-open conditions measured for ``version`` of ``harness``. Level is "note" for a fact about the
+    harness that IntentShield already works around (nothing to do) and "warn" for a setting of the user's that has a cost."""
     out: list[tuple[str, str]] = []
     shown = _show(version)
     if version is None:
-        out.append(("warn", f"{harness}: version unknown, so no measured behaviour applies; run `intentshield doctor` with "
+        out.append(("note", f"{harness}: version unknown, so no measured behaviour applies; run `intentshield doctor` with "
                             f"{harness} on PATH to record it. Until then asks are sent as refusals"))
     if harness == "codex":
         bypass = lookup("codex", "bypass", version)
         if bypass in ("hook-skipped", "uncertain"):
-            out.append(("warn", f"Codex CLI {shown}: `codex exec --dangerously-bypass-hook-trust` is measured to NOT run hooks "
+            out.append(("note", f"Codex CLI {shown}: `codex exec --dangerously-bypass-hook-trust` is measured to NOT run hooks "
                                 "through 0.140.0 (it runs them from 0.141.0, the next release). Trust the hooks in "
                                 "`codex` once instead"))
-        out.append(("warn", f"Codex CLI {shown}: a hook's ask, an empty reply, malformed JSON, exit 1, 126, 127 and a timeout "
+        out.append(("note", f"Codex CLI {shown}: a hook's ask, an empty reply, malformed JSON, exit 1, 126, 127 and a timeout "
                             "all let the call run, and a hook nobody trusted is skipped without a word in `codex exec`. "
                             "IntentShield sends refusals only as a reasoned deny or exit 2 with stderr"))
     elif harness == "claude":
         ask = lookup("claude", "ask", version)
         if ask in ("dropped", "uncertain"):
             between = " (this version lies between the measured releases 2.1.84 and 2.1.85)" if ask == "uncertain" else ""
-            out.append(("warn", f"Claude Code {shown}: a hook's ask did not stop a pre-approved Bash call through 2.1.84"
+            out.append(("note", f"Claude Code {shown}: a hook's ask did not stop a pre-approved Bash call through 2.1.84"
                                 f"{between}; IntentShield sends a deny instead"))
         if version is None or version < (2, 1, 295):
-            out.append(("warn", f"Claude Code {shown}: `onFailure: block` is documented from 2.1.295 on and was measured to be "
+            out.append(("note", f"Claude Code {shown}: `onFailure: block` is documented from 2.1.295 on and was measured to be "
                                 "ignored on 2.1.281 (honoured on 2.1.316); before it a hook that fails or times out lets the "
                                 "call run. The launcher turns a hook that cannot start into exit 2; the hook's own deadline "
                                 "keeps it under its timeout"))
-        out.append(("warn", f"Claude Code {shown}: a hook that prints nothing or malformed JSON allows the call, with or without "
+        out.append(("note", f"Claude Code {shown}: a hook that prints nothing or malformed JSON allows the call, with or without "
                             "`onFailure: block` (measured on 2.1.316)"))
     elif harness == "gemini":
         ask = lookup("gemini", "ask", version)
         if ask in ("dropped", "uncertain"):
-            out.append(("warn", f"Gemini CLI {shown}: a hook's ask runs the shell call in yolo mode (0.24.5 to 0.37.2); "
+            out.append(("note", f"Gemini CLI {shown}: a hook's ask runs the shell call in yolo mode (0.24.5 to 0.37.2); "
                                 "IntentShield sends a deny instead"))
         if ask in ("hangs", "uncertain", "unmeasured") and gemini_ask:
             out.append(("warn", f"Gemini CLI {shown}: --gemini-ask is on, and a headless yolo run (gemini -p) waits for an "
@@ -737,11 +748,11 @@ def findings(harness: str, version: Version | None, gemini_ask: bool = False) ->
                                 "the hook sends a deny there when it can tell the mode"))
         dead = lookup("gemini", "dead", version)
         if dead == "runs":
-            out.append(("warn", f"Gemini CLI {shown}: a hook that cannot start (exit 126, a dead interpreter) lets "
+            out.append(("note", f"Gemini CLI {shown}: a hook that cannot start (exit 126, a dead interpreter) lets "
                                                      "the call run before 0.30.0; the launcher refuses it"))
         elif dead == "uncertain":
-            out.append(("warn", f"Gemini CLI {shown}: lies between measured releases 0.29.7 (a hook that cannot start lets the "
+            out.append(("note", f"Gemini CLI {shown}: lies between measured releases 0.29.7 (a hook that cannot start lets the "
                                 "call run) and 0.30.0 (it blocks the call); the launcher refuses it either way"))
-        out.append(("warn", f"Gemini CLI {shown}: a trusted MCP server (trust: true) drops a hook's ask; a hook that exits 2 "
+        out.append(("note", f"Gemini CLI {shown}: a trusted MCP server (trust: true) drops a hook's ask; a hook that exits 2 "
                             "with no text, or exits 126 or 127 with no output, allows the call"))
     return out

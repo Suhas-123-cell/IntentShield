@@ -109,5 +109,22 @@ def test_a_custom_token_variable_in_a_searched_env_stops_the_gateway(tmp_path: P
     monkeypatch.setattr("intentshield.mcp_server.load_dotenv", dotenv.load_dotenv)
     monkeypatch.delenv("MY_GATEWAY_TOKEN", raising=False)
     with pytest.raises(SystemExit, match="MY_GATEWAY_TOKEN"):
-        mcp_server.main(["--config", "unused.json", "--control-token-env", "MY_GATEWAY_TOKEN"])
+        mcp_server.main(["--config", "unused.json", "--transport", "streamable-http", "--control-token-env", "MY_GATEWAY_TOKEN"])
     assert "MY_GATEWAY_TOKEN" not in os.environ
+
+
+def test_a_token_only_a_searched_env_held_does_not_stop_a_stdio_proxy(tmp_path: Path, monkeypatch, clean_env, capsys):
+    """Only the HTTP endpoint reads the tokens. A repository's .env that names one must not make the proxy a harness starts
+    over stdio exit before it serves (the failure showed up as a demo that printed FAIL in a checkout with such a .env)."""
+    from intentshield import mcp_server
+
+    env = tmp_path / ".env"
+    env.write_text("INTENTSHIELD_CONTROL_TOKEN=known\n")
+    monkeypatch.setattr("intentshield.envfile.find_dotenv", lambda *a, **k: str(env))
+    monkeypatch.setattr("intentshield.mcp_server.load_dotenv", dotenv.load_dotenv)
+    monkeypatch.delenv("INTENTSHIELD_CONTROL_TOKEN", raising=False)
+    with pytest.raises(SystemExit) as stopped:
+        mcp_server.main(["--config", str(tmp_path / "missing.json")])  # stdio is the default transport
+    assert stopped.value.code == 1  # the missing config, not the token
+    assert "cannot set it" not in capsys.readouterr().err
+    assert "INTENTSHIELD_CONTROL_TOKEN" not in os.environ

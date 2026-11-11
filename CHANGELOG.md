@@ -6,161 +6,105 @@ User-visible changes go under `## Unreleased` (see [CONTRIBUTING.md](CONTRIBUTIN
 
 ## 0.4.3 - 2026-11-11
 
-Verdict translation in the hook, a `wrap-hook` command, opt-in rules for dangerous built-in tool calls
-(`--builtin-tools`), and fixes to input handling in the hook, `scan`, `wrap` and `unwrap`. These came out of the hook
-verdict fidelity study ([short report](docs/hook-fidelity-report.md)). What the new rules deny and ask is listed in
-[docs/guide.md](docs/guide.md#built-in-tools-and-the-dangerous-command-rules), not here.
+- The hook no longer lets an ask nobody can answer run the call, and a hook that cannot start or runs too long is refused,
+  not allowed (verdict translation, a fail-closed launcher and a 30 s deadline, written by `install`).
+- New `intentshield wrap-hook` runs any third-party hook under the same launcher and translation.
+- New opt-in dangerous-command rules for the harness's own shell, file and web tools (`--builtin-tools`). What they deny and ask is in
+  [docs/guide.md](docs/guide.md#built-in-tools-and-the-dangerous-command-rules), not here.
+
+### Upgrading from 0.4.2
+
+Run `intentshield install <harness>` again to get the launcher and the deadline. Behaviour that changes for you:
+
+- **Everyone:** `install` writes a hook deadline (`--deadline`, default 30 s) and a fail-closed launcher. `--no-translate` or
+  `INTENTSHIELD_HOOK_TRANSLATE=off` restores the old hook.
+- **Everyone:** an ask that is not known to reach a person becomes a deny with a reason on Claude Code (it was an ask), Codex
+  (already a deny) and Gemini.
+- **Everyone:** the default databases of `Storage()`, `IntentShieldService.default()`, `create_mcp_server()` and a proxy config with no
+  `database_path` are in `~/.intentshield`, not the working directory. `INTENTSHIELD_DB`, an explicit path and a database already
+  in the working directory still win.
+- **Everyone:** a command that needs a package that is not installed (after `pip install --no-deps`) prints one line naming it and
+  exits 2, not a traceback.
+- **Everyone:** `doctor` prints the measured fail-open conditions for the detected version, fails a wrapped server whose command
+  does not exist, does not count a hand-piped event as a run, and says plainly when nothing is installed (exit 0). Facts about the
+  harness that need no action print as `note`. Its exit status is in `doctor --help`.
+- **Everyone:** the hook prints a note on stderr for each loosening `INTENTSHIELD_HOOK_*` or `INTENTSHIELD_THREAT_*` variable in its
+  environment (`INTENTSHIELD_HOOK_REVIEW=never`, `_TRANSLATE=off`, `_DEADLINE=0`, `_SOURCED_READS=allow`, `INTENTSHIELD_THREAT_MEMORY=0`,
+  or a moved database, pack or catalog path), because a project's settings can set them. A flag on the command line suppresses the note.
+- **Everyone:** `intentshield-mcp` over stdio starts when a control or agent token appears only in a `.env` found by searching (a
+  checkout's own). 0.4.2 stopped there too, although stdio reads no token. Over `--transport streamable-http`, and in the web API, a
+  token that only such a file holds still stops the start.
+- **Everyone:** `intentshield wrap-hook` reads every verdict key in a reply (`hookSpecificOutput`, the top level, `continue: false`) and
+  sends the strictest of deny, ask and allow. A malformed key anywhere is a deny.
+- **Only with `--builtin-tools`:** a deny beats an ask. When the session rules ask and the dangerous-command rules deny, the call is
+  denied.
 
 ### Added
 
-- **`intentshield wrap-hook`** (also `intentshield-wrap-hook`) runs any third-party hook under the fail-closed launcher, a
-  deadline and the verdict translation ([guide](docs/guide.md#wrapping-a-third-party-hook)). A silent guard (exit 0, no
-  output) is refused unless `--on-empty allow`. `--print-entry` prints the entry to paste in, with the absolute path of the
-  program. There is no installer for third-party entries yet.
-- **Dangerous-command rules** (`src/intentshield/dangerous.py`) run with `--builtin-tools` on every shell command, file
-  read and file write that the session rules allow. They read the text only, nothing is run, and parsing is linear-time.
-- **A call that would switch the guard off asks,** even in a clean session (`uninstall`, `unwrap`, writes to `hooks.db` or
-  a harness's settings and hooks). It is a speed bump, not protection.
-- **`PowerShell` and `Monitor` are guarded like `Bash`,** and `apply_patch` run through a shell tool is read as the patch
-  it is, with `--builtin-tools`. `Monitor` is read as a shell command because its input has a `command`; that comes from the
-  tool's schema, not from the vendor pages archived here.
-- **`Grep` is covered, and unreadable events are refused,** with `--builtin-tools`. `Glob`, `LS`, `list_directory` and
-  `glob` return names, not content, and are not covered. An unknown event name, or a missing or non-text command, path or
-  URL, is denied.
-- **A mode note ends every reply that came from an ask:** `[IntentShield read this session as <mode>: <how> [ancestry: <source>]]`.
-  `INTENTSHIELD_ANCESTRY_SOURCES` (`proc`, `libproc`, `ps`, `none`) restricts the sources the detector reads.
-- **`doctor`** prints the measured fail-open conditions for the detected version, flags hooks installed without the
-  launcher, says when the recorded version is stale, fails a wrapped server whose command does not exist, and says plainly
-  when nothing is installed (exit 0). Its exit status is in `doctor --help`.
-- **`doctor` does not count a hand-piped event as a run** and warns instead (Cursor cannot be told apart). Its Gemini exit
-  126 warning follows the measured boundary: the call runs through 0.29.7 and is blocked from 0.30.0.
-- **`install` and `wrap` refuse an ephemeral path** (a `uvx`, `pipx run` or `npx` cache) and name
-  `uv tool install intentshield-mcp`; `--allow-ephemeral` overrides it. `install` ends with a "Next:" line ("start the
-  harness and send any prompt"), warns that a `--scope project` file holds absolute paths and must not be committed (`wrap`
-  does the same inside a git working tree), and the bare `intentshield` command prints the dashboard address before it serves.
-- **A command that needs a package that is not installed** (after `pip install --no-deps`) prints one line naming it and exits
-  2, not a traceback. Only the hooks, `install`, `uninstall`, `doctor`, `wrap-hook` and `scan --no-connect` run without them.
-- **Docs and packaging:** the guide covers blocked calls, troubleshooting, the built-in tool rules and `wrap-hook`, and the
-  repository has `CITATION.cff`, `NOTICE`, a code of conduct and a pull-request template. The wheel is marked typed (`py.typed`) and its classifiers say macOS and Linux. `anyio`, `starlette` and
-  `httpx2`, which the code imports, are now declared, and `cryptography` is the `signing` extra (Ed25519 threat packs). CI runs
-  `mypy` (near-strict, with per-module exceptions), a macOS job, a coverage floor of 85% (91% measured) and a dependency audit
-  (weekly; it fails only for an advisory that has a fix). The PyPI upload waits for the full CI run on the tagged commit. The
-  source distribution holds the package and its configs, not tests.
+- **`intentshield demo`** sends three sample shell calls to the real hook and prints allow, ask and deny. Nothing runs and nothing
+  is written outside a temporary directory. It needs no harness.
+- **`intentshield wrap-hook`** (also `intentshield-wrap-hook`): a silent guard (exit 0, no output) is refused unless `--on-empty allow`;
+  `--print-entry` prints the entry to paste in. There is no installer for third-party entries yet
+  ([guide](docs/guide.md#wrapping-a-third-party-hook)).
+- **Dangerous-command rules** (`--builtin-tools`) run on every shell command, file read and file write that the session rules allow.
+  They read the text only, nothing is run, and parsing is linear-time. A call that would switch the guard off asks, even in a clean
+  session (a speed bump, not protection). `PowerShell`, `Monitor` and `Grep` are covered; unreadable events are denied.
+- **A mode note** ends every reply that came from an ask, saying how the harness mode was read. `INTENTSHIELD_ANCESTRY_SOURCES`
+  restricts the sources the detector reads.
+- **`install` and `wrap` refuse an ephemeral path** (a `uvx`, `pipx run` or `npx` cache) and name `uv tool install intentshield-mcp`;
+  `--allow-ephemeral` overrides it. `install` ends with a "Next:" line and warns that a `--scope project` file holds absolute paths.
 
 ### Changed
 
-- **`install`** runs `<harness> --version` and writes a hook deadline (`--deadline`, 0 to 3600 s, default 30 s) and a
-  fail-closed launcher by default. `--no-translate` or `INTENTSHIELD_HOOK_TRANSLATE=off` restores the old hook. A set but
-  invalid `INTENTSHIELD_HOOK_DEADLINE` means the 30 s default with a note on stderr.
-- **An ask that is not known to reach a person becomes a deny with a reason** on Claude Code (it was an ask), Codex
-  (already a deny) and Gemini. On Gemini an ask on MCP is always refused, and shell asks are kept only with
-  `--gemini-ask` from 0.38.0.
-- **The mode detector** reads ancestry from `/proc` on Linux and from `libproc` plus `sysctl kern.procargs2` on macOS (no new
-  dependency, no process spawned), then `ps`. It reads the headless flag from the harness's own arguments, not from a
-  prompt that says `-p`. A missing or stale version record is refreshed from the running binary, and stderr says when
-  `INTENTSHIELD_HARNESS_MODE` or `INTENTSHIELD_HARNESS_VERSION` overrides what would be detected.
-- **When no source can read the ancestry the mode is unknown, not headless.** An ask is then passed on unchanged on Claude
-  Code 2.1.85 and later and refused on older or unmeasured Claude Code, Codex, Gemini and Cursor. On Windows only the `ps`
-  source exists (not measured there). `INTENTSHIELD_HARNESS_MODE=interactive` restores a Gemini prompt.
-- **A deny beats an ask:** when the session rules ask and the dangerous-command rules deny, the call is denied. A secrets
-  file sent out (`.env`, npmrc) asks; a key or cloud credential still denies.
-- **A deny is softened to an ask only on an exact target:** the prompt must name the whole path or host (not a parent
-  directory, not `notevil.com` for `evil.com`), must not negate it, and every deny of the command must be named.
-- **Shell reading:** one-line control structures, `cd` and variables set earlier in the line, `$'...'` strings and brace
-  lists are read as bash reads them. Certificates (`cert.pem`, `fullchain.pem`, CA bundles, `*.asc`) are not secrets;
-  `.azure/credentials` and `cat .env` in a clean session ask.
-- **Default databases are in `~/.intentshield`,** not the working directory, for `Storage()`, `IntentShieldService.default()`,
-  `create_mcp_server()` and a proxy config with no `database_path`. `INTENTSHIELD_DB`, an explicit path and a database
-  already in the working directory still win. This applies to everyone, not only `--builtin-tools`.
-- **"Could not connect to MCP server" gives the cause** where it can be told (command not found or not executable, ended
-  before answering, no answer in time), in `scan`, the proxy and `doctor`. A guard that fails closed on an agent error logs
-  the exception class at warning level, never its message.
-- **Dangerous-command verdicts, `--builtin-tools`:** reading a harness's credential file asks (the list is in the guide);
-  `find` with a name test is allowed under home and asked elsewhere; `rm -rf` of `/$X`, `~/$X` and `$HOME/$X` asks; making a key
-  with `openssl` or `ssh-keygen` is not a read; `git clean -n` is allowed; `sudo curl ... | sh` and a script from `localhost`
-  ask, and `curl | sudo sh` denies.
-- **`wrap` checks every entry first,** reports `skipped <name>: command must be a string` (or args, env), and writes the
-  files only when all pass. `unwrap` warns when an entry changed. `install --judge custom:m --dry-run` fails as the real
-  install does, and `--judge-url` without `--judge` is an error.
-- **`scan` output:** exit codes are in `scan --help`, and one hint replaces a line per server that did not start, with the
-  server's own stderr line added to "not scanned".
-- **Stored prompts hold a hash in place of a credential** the guard recognises (`[credential:<hex>]`), and `~/.intentshield`
-  is created with mode 0700 (an existing one you own is tightened). Retention is unchanged. On Cursor, `beforeReadFile`
-  allows a read the text rules only ask about, with a note.
+- **The mode detector** reads ancestry from `/proc` on Linux and from `libproc` on macOS (no new dependency, no process spawned), then
+  `ps`, and reads the headless flag from the harness's own arguments. When no source can read it the mode is unknown, not headless.
+- **A deny is softened to an ask only on an exact target:** the prompt must name the whole path or host and must not negate it.
+- **Shell reading** follows bash for one-line control structures, `cd` and variables set earlier in the line, `$'...'` strings and
+  brace lists. Certificates (`cert.pem`, `fullchain.pem`, CA bundles) are not secrets.
+- **Help texts** of the top-level command and `wrap-hook` are plain text, with no internal names or repository paths; the `wrap`
+  message for an HTTP server gives the guide's URL. `intentshield-mcp-verify --demo` removes its temporary directory and, on a failed
+  run, prints the types of the exceptions and the proxy's own last stderr lines.
+- **`import intentshield` no longer reads package metadata** (`__version__` is read when first used), which shortens each hook start.
+- **Error messages give the cause** where it can be told ("Could not connect to MCP server": command not found, ended before
+  answering, no answer in time). `wrap` checks every entry before it writes any file. `scan` exit codes are in `scan --help`.
+- **Stored prompts hold a hash in place of a credential** the guard recognises, and `~/.intentshield` is created with mode 0700
+  (an existing one you own is tightened). Retention is unchanged.
 
 ### Fixed
 
-- **Interactive asks read as headless** when `ps` cannot run (under `sandbox-exec`, in a container without procps, on
-  Windows) or the harness is PID 1 (`docker run -it image claude`): the ask became a refusal with no prompt. On Linux the
-  walk now reads PID 1; on macOS it still stops at `launchd`.
+- **`intentshield-mcp-verify --demo --stdio` failed in a checkout** whose own `.env` held `INTENTSHIELD_CONTROL_TOKEN`, because the
+  proxy refused that token (see Upgrading).
+- **Interactive asks read as headless** when `ps` cannot run (under `sandbox-exec`, in a container without procps, on Windows) or
+  the harness is PID 1: the ask became a refusal with no prompt.
 - **Threat memory:** approving a call the hook asked about no longer clears that server's hostile record across sessions.
-  The hook now never clears a source; the proxy already required an explicit `trust_source`.
-- **Hook input:** a prompt or argument holding a lone surrogate (half of a cut emoji) no longer loses the prompt or fails the
-  hook. A judge reply that is valid JSON of the wrong shape is no opinion, not a crash. `~/.intentshield/.env` may hold
-  `export KEY=value` lines and bytes that are not UTF-8.
-- **`wrap` and `unwrap`:** a wrapped server whose entry sets an empty `env` value starts again. A hand-written proxy entry
-  with several upstreams is left alone and an entry with no `--config` is named, where `unwrap` used to fail on the second.
-- **The transparent proxy answers what it cannot parse:** a request whose `params` is not an object gets error -32602 and one that
-  is not JSON gets -32700, and it keeps serving; the protocol library dropped both and the client waited. Other transports were
-  not checked.
-- **Gemini `settings.json` with comments and trailing commas** is read as Gemini reads it; the original text is restored byte for
-  byte on `uninstall`. Another harness's file that does not parse stops with a message that says what to do. `unwrap` of a
-  missing file says so.
-- **`scan`:** a malformed entry (`env` as a list, `args` as a number) is reported as not scanned instead of a traceback,
-  configs with comments are read, and a named file that does not exist or cannot be read exits 2, where it used to exit 0.
-- **Spellings of one command:** a line continuation, tabs, form feed, `${IFS}`, empty quotes, a backslash inside a word, a
-  comment after the command and a brace list in the command word read as the plain command. A command over 400 stages, 20,000
-  words or 3 nesting levels asks, as the 50,000-character cap does, and `echo "$(rm -rf / $(date))"` is no longer allowed.
-- **Dangerous-command rules:** `wget -O - URL | sh` and `curl -o - URL | sh` are read as a fetch piped into a shell, a command
-  over 50,000 characters asks (the unread rest used to pass), `echo` or `printf` piped into a shell and `bash <<< '...'`
-  are read as commands, `rm -rf "${HOME:?}"/*` denies, and `git branch -D` of a protected name asks.
-- **False refusals removed:** the key named by `scp -i` or `rsync -e "ssh -i ..."` is not a file being sent, `git branch -d`
-  and `git restore --staged` get no verdict, `.env.example` and its `.sample`, `.template` and `.dist` forms are templates,
-  and text in single quotes or quoted here-documents (a commit message that quotes `rm -rf /`) is data.
-- **Smaller fixes:** `wrap-hook` reads Cursor's shell events as shell and refuses a tool event with no name. A malformed
-  `harness-versions.json` or `INTENTSHIELD_HOOK_DEADLINE` no longer crashes `doctor`, `install` or the hook. `uninstall`
-  no longer warns of an edit when the only difference is an empty top-level `hooks` object.
+- **Hook input:** a prompt or argument holding a lone surrogate no longer loses the prompt or fails the hook; a judge reply that is
+  valid JSON of the wrong shape is no opinion, not a crash; `~/.intentshield/.env` may hold `export KEY=value` lines.
+- **`wrap`, `unwrap` and `scan`:** a wrapped server whose entry sets an empty `env` value starts again; a malformed `scan` entry is
+  reported as not scanned instead of a traceback; a named file that does not exist exits 2, where it used to exit 0; a Gemini
+  `settings.json` with comments is read as Gemini reads it and restored byte for byte on `uninstall`.
+- **The transparent proxy answers what it cannot parse** (error -32602 or -32700) and keeps serving; the protocol library used to
+  drop the request and the client waited.
+- **Dangerous-command rules:** many spellings of one command (line continuations, tabs, `${IFS}`, empty quotes, comments, brace
+  lists) read as the plain command; a command over 50,000 characters, 400 stages, 20,000 words or 3 nesting levels asks; and several
+  false refusals are removed (`scp -i`, `git branch -d`, `.env.example`, text in single quotes or quoted here-documents).
 - **Still open:** a payload written to a plain file with `echo '...' > x.sh` and run later, and `echo $'...' | sh`.
+
+### Internal
+
+- The wheel is marked typed (`py.typed`) and its classifiers say macOS and Linux. `anyio`, `starlette` and `httpx2`, which the code
+  imports, are declared, and `cryptography` is the `signing` extra (Ed25519 threat packs).
+- CI runs `mypy` (near-strict, with per-module exceptions), a macOS job, a coverage floor of 85% (91% measured) and a dependency
+  audit (weekly; it fails only for an advisory that has a fix). The PyPI upload waits for the full CI run on the tagged commit. The
+  source distribution holds the package and its configs, not tests.
+- The repository has `CITATION.cff`, `NOTICE`, a code of conduct and a pull-request template.
 
 ### Study and benchmarks
 
-Measurements on a stub model, in `benchmarks/hook_fidelity/`, `results/hook-fidelity/` and
-[the study](docs/hook-fidelity-study.md). The runs are small; read each entry with the limits it states.
-
-- **Verdict fidelity study:** Claude Code, Codex CLI and Gemini CLI were run against a local stub model, with a stub hook
-  and with replayed bytes of real guards (headless, macOS). Cursor could not be measured (free-plan limit).
-- **Result:** `deny` was enforced everywhere it was tested. An `ask` with no human is denied on Claude Code 2.1.85 and
-  later (the change lies between 2.1.84 and 2.1.85), fails open on Codex, and on Gemini runs silently before 0.38.0 and hangs
-  from 0.38.0 under yolo or with the shell allow-listed. The kill criterion is not met (the author says it was written before
-  the runs; the repository cannot show the order), so this is a measurement note and an artifact, not a paper. Disclosure drafts exist and nothing was sent to a vendor.
-- **Translation regression check** ([mitigation](docs/hook-fidelity-mitigation.md)): across 12 harness builds, 24 distinct
-  (build, scenario) cells where the old hook let a call run or hang ended blocked with the translation on (48 paired runs,
-  n=2, deterministic stub). It is a regression check, not an effectiveness result. Controls:
-  the call ran with the translation on in 11 of 11 evaluable builds, a deny-everything hook was blocked where it ran (6 of 6),
-  the 30 s deadline blocked 3 of 3 at about 30 s, and an ask with no version recorded was blocked 3 of 3.
-- **`wrap-hook` against six guards** (`results/hook-fidelity/compare/`): on the 18 pairs where a shipped guard's verdict did
-  not survive, translation on delivered a refusal in 18 of 18 and translation off in 5 of 18. That is mostly the fail-closed
-  launcher, which a guard author can add, so it shows verdict delivery, not guard quality. Headless, macOS, n=1 to 2.
-- **Interactive terminal cells** (`results/hook-fidelity/interactive/`): on Claude Code 2.1.316 and Gemini CLI 0.66.0 the
-  translation kept an ask as a prompt (2/2 each). They exposed the mode-detector defect fixed above, which the study's own
-  `sandbox-exec` profile produced; no real user is shown to lack `ps`.
-- **Decision comparison with 10 other guards** on 467 fixtures the author says were declared before the runs: on the held-out set IntentShield's
-  hook misses 137/166 harmful calls and flags none of the destructive, git, credential-read, pipe-to-shell or rc/CI-write
-  items, where `safety-net` misses 31/130 on its scope. Its one distinctive flag is an MCP call whose destination came from
-  an earlier tool result (provenance, not injection detection), also raised on 20 of 24 benign calls.
-- **Dangerous-command rules, scored:** a post hoc re-score on the 166 held-out items (12 reclassified after the fact) gives false-allow 6/166
-  (137/166 before the rules), which is not a clean held-out test; on the 178 declared items it is 6/178 against 137/178. On a fresh set of 214 calls
-  (`results/hook-fidelity/detect/fresh/`), IntentShield with `--builtin-tools` lets through 28/104 harmful calls, against
-  44/85 for `safety-net` on its shell scope and 44/73 for `knox` on its scope, where it lets through 25/85 and 18/73. On
-  denies alone it trails `safety-net` (24/85 against 41/85). Nine of the 214 are discovery-only items by the author's own reading;
-  without them it lets through 19/95. One author and the same six categories as the rules: this shows
-  the rules work on their own categories, not that IntentShield detects more in general.
-- **Not run, and changed since:** the planned test outside those categories has no result
-  (`results/hook-fidelity/detect/general/` does not exist). The committed results are the rules as they stood when the study
-  ran. Re-running the committed fixtures through the code of this release changes 45 `intentshield` decisions from ask to deny
-  (27 of the 467 set, 9 items; 18 of the fresh set, 6 items): all harmful exfiltration, none benign, none to allow.
-- **Also measured:** a local-model arm (qwen2.5:7b, 61/61 valid runs equal to the stub outcome), one paid-model arm
-  (deepseek-flash, 10/10), and the `/proc` mode reader run in Docker (27/27 constructed trees).
+The verdict translation came out of a measurement study of Claude Code, Codex CLI and Gemini CLI on a stub model (macOS, one
+author; a measurement note, not a paper). Its results, limits and reproduction commands are in the
+[short report](docs/hook-fidelity-report.md); the committed rows are in `results/hook-fidelity/`. Re-running the committed fixtures
+through this release's rules changes 51 `intentshield` decisions: 48 from ask to deny (harmful credential-exfiltration rows) and 3
+from deny to ask (`git push -f origin HEAD`); the report says which sets. Overhead of the hook is measured in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## 0.4.2 - 2026-10-31
 
@@ -309,259 +253,64 @@ still open in `docs/security-review.md`. Behaviour changes, so read the list bef
   at 4 false asks of 12. The adaptive attacker evaded on 0 of 24 seeds (1 of 24 with the old prompt), but
   got 34 of 120 pages past the qwen judge; the agent followed none of them.
 
-## 0.3.6 - 2026-10-30
+## Earlier releases
 
-- The LLM judge can read tool results too (`--judge-outputs` for the hooks and `intentshield install`,
-  `"judge_outputs": true` for the proxy; off by default). It is told the user's request and asked whether
-  the result addresses the agent with something beyond it, which is how plain-language injections with no
-  marker get caught; a request between people in a mailbox or a chat is not. An objection is evidence
-  only: the agent is warned and values from that result ask before use. On the corpus's test split,
-  Gemini 3.5 Flash-Lite caught 77.8% of plain-language injections at 3.4% benign false flags, and local
-  qwen2.5:7b 24.3% at 0.6% (`benchmarks/judge_outputs_eval.py`, `results/judge/`).
+Releases before 0.4.0, each in at most three lines. The full text is in the repository's git history.
 
-## 0.3.5 - 2026-10-29
+### 0.3.6 - 2026-10-30
 
-- The override rule reads "ignore the previous instructions" with one typo in one of its three words
-  ("Ignore your previous iunstructions", "Ingore all previous instructions"). A comparison with Meta's
-  Prompt Guard 2 showed the rules missing AgentDojo's 27 misspelled cases, which Prompt Guard caught; they
-  now catch them, and the comparison is in `docs/detectors.md`.
-- `intentshield scan` finds the MCP servers configured for Claude Code, Claude Desktop, Cursor, Gemini CLI,
-  Codex CLI, Windsurf and VS Code (or the files named), starts each one, lists its tools without calling
-  any, and checks them offline: poisoned descriptions, split instructions, self-disclosure parameters,
-  shadowing, shared tool names, credentials written into a config, a config with one that others can read,
-  and toxic flows (untrusted content, private data and a way out within one client). It pins each tool's
-  hash and keeps reporting a changed one until `--update-pins`. Output as text, JSON or SARIF; exit 1 on
-  an error-level finding.
-- A credential the user did not give, leaving in a tool call's arguments, now asks in the hooks
-  (`REVIEW_CREDENTIAL_EGRESS` in the proxy and gateway) and is denied once an injected output was seen.
-  Credentials are recognised by their providers' formats and only ever shown masked.
+- The LLM judge can read tool results too (`--judge-outputs`, off by default), to catch plain-language injections with no marker.
+  On a test split Gemini 3.5 Flash-Lite caught 77.8% at 3.4% benign false flags, local qwen2.5:7b 24.3% at 0.6%.
 
-## 0.3.4 - 2026-10-29
+### 0.3.5 - 2026-10-29
 
-- The output and description rules read "ignore the previous instructions" and "new task:" in German, Spanish,
-  French, Portuguese, Italian, Dutch, Russian, Chinese, Japanese, Korean and Hindi, and read leetspeak words as
-  letters (`1gn0r3 4ll pr3v10u5 1n5truct10n5`). Addresses, paths and ids are never rewritten, so the threat
-  memory learns no address the attacker did not send. The translations run only on text that could match them
-  and compile on first use, so scanning other text costs about what it did.
-- New output rules: text addressed to the AI that asks for data to leave (`agent_address`), text speaking for
-  the user that sends data to an address (`user_proxy`), a JSON tool call with an order to run it
-  (`forged_tool_call`), and a markdown image whose URL carries a placeholder to fill (`image_exfiltration`).
-  `role_marker` also reads Llama 3, Phi and Gemma template tokens and Alpaca's `### Instruction:`, and text
-  after a right-to-left override is read in the order it is shown. Scanning a 4 KB result takes about
-  0.4 ms more.
+- New `intentshield scan` (finds and checks the MCP servers you already use, offline); the override rule tolerates one typo; a credential
+  the user did not give asks in the hooks and is denied once an injected output was seen.
 
-## 0.3.3 - 2026-10-29
+### 0.3.4 - 2026-10-29
 
-Fixes found by a new end-to-end check of the installed wheel:
+- The rules read "ignore the previous instructions" and "new task:" in 11 languages and in leetspeak; new output rules for text
+  addressed to the AI, forged tool calls and image exfiltration.
 
-- `intentshield install` then `uninstall` now gives back a JSON settings file byte for byte whatever its
-  formatting. Before, only a file already written with two-space indents came back unchanged; any other was
-  reformatted and its non-ASCII text escaped (`"naïve"` became `"na\u00efve"`). The original is kept in
-  `~/.intentshield/backups/` until uninstall; if the file was edited in between, the edit is kept and the
-  non-ASCII text stays as written. `wrap` and `unwrap` do the same for the `mcpServers` file.
-- The proxy's control routes answer 422, not 500, to a JSON body nested deeper than the parser allows, to a
-  `decision` that is a list or object, and (instead of 409) to a body that is not UTF-8.
+### 0.3.3 - 2026-10-29
 
-- PyPI metadata: the summary now starts "IntentShield for MCP" and names prompt injection; more keywords
-  (`intentshield`, `mcp-security`, `llm-security`, ...), Python 3.14 and AI classifiers, and a Documentation link.
-- Internal cleanup with no change in behaviour: the hook handler is split per harness, the proxy's control
-  routes moved out of `run_mcp_server` and share one error mapping, and an over-engineering pass removed
-  duplicated helpers and dead code (net about 160 lines). `python -m intentshield.install` is gone; use
-  `intentshield install`.
+- `install` then `uninstall` restores a JSON settings file byte for byte (so does `wrap`/`unwrap`); the proxy's control routes answer 422,
+  not 500, to a bad body; PyPI metadata and internal cleanup.
 
-## 0.3.2 - 2026-10-29
+### 0.3.2 - 2026-10-29
 
-- The proxy's judge now has a time budget for tool descriptions at connect
-  (`judge_catalog_budget_seconds`, default 20). Before, it read every description one by one at up to
-  30 s each, so a large catalog could hold the client's `initialize` for hours. Descriptions it does not
-  reach get no opinion, as on a judge error, and are listed in an `MCP_JUDGE_BUDGET_SPENT` event.
+- The proxy's judge has a time budget for tool descriptions at connect (`judge_catalog_budget_seconds`, default 20), so a large catalog
+  can no longer hold the client's `initialize` for hours.
 
-## 0.3.1 - 2026-10-29
+### 0.3.1 - 2026-10-29
 
-- Cursor: a call resent with a self-disclosure field already empty, as the hook's denial asks, is no
-  longer denied again. Before, an empty field still counted as redacted, so on Cursor (which cannot
-  rewrite arguments) the call could never go through. Found in the first live Cursor run.
-- `benchmarks/harness_live/run_cursor.sh` runs Cursor CLI headless against the attack server (no guard,
-  hooks, proxy, both); results in `results/harness-live-cursor/` and `docs/benchmarks.md`.
+- Cursor: a call resent with a self-disclosure field already empty is no longer denied again. First live Cursor run
+  (`benchmarks/harness_live/run_cursor.sh`).
 
-## 0.3.0 - 2026-10-29
+### 0.3.0 - 2026-10-29
 
-Breaking:
+- Breaking: the dashboard needs `INTENTSHIELD_AGENT_TOKEN` when `INTENTSHIELD_PROXY_CONFIG` is set, `intentshield.api` builds no app at import
+  (use `create_app()`), and `intentshield.detector` is gone. Hooks fail closed on an output scan that never finishes; Codex hooks need one trust.
 
-- With `INTENTSHIELD_PROXY_CONFIG` set, the web dashboard refuses to start without
-  `INTENTSHIELD_AGENT_TOKEN` (it already required the control token), and `/api/tools`,
-  `/api/metrics` and `/api/security/status` need the agent token whenever one is set.
-- `intentshield.api` no longer builds an app at import (`intentshield.api.app` is gone); use
-  `create_app()`, or `uvicorn --factory intentshield.api:create_app`.
-- `intentshield.detector` is removed; `SecuritySignals` is in `intentshield.models`.
-- `HarnessGuard` takes its options as keyword arguments only.
-- The built-in gateway and the dashboard default their database to `~/.intentshield/gateway.db`
-  instead of the working directory.
-- Codex CLI: hooks run only after you trust them once in Codex; `intentshield install codex` says so.
+### 0.2.3 - 2026-10-29
 
-Fixes from a second five-critic pass (code quality, guard security, tests and CI, docs and
-first-run experience, benchmark rigor); every behaviour change has a regression test.
+- The same code as 0.2.2, with the judge recommendation restored in the README.
 
-- Hooks fail closed on an output scan that never finishes: the session is flagged before the
-  scan and unflagged only when it completes clean, so a harness timeout on a huge result no
-  longer leaves later state-changing calls running as if the output were clean. Values from
-  tool outputs that appear in a denial or confirmation reason are escaped and capped at 80
-  characters (a URL carrying terminal escape codes can no longer drive the terminal).
-  `load_env_file` resolves `~/.intentshield/.env` at call time.
-- Proxy: one lock guards the session state (taint, observed values, drift) that the event
-  loop and the `to_thread` workers both update; a hung upstream call is cancelled on the loop
-  after `read_timeout_seconds` instead of leaking a task; an upstream that dies mid-session
-  answers the agent with one bounded `is_error` line (`Upstream MCP server failed (<code>)`)
-  and the proxy keeps serving; the security supervisor queues concurrent calls for a worker
-  slot within the same deadline instead of scoring them as timeouts at random; `close()`
-  stops the supervisor's threads and the threat memory's reader; the judge cache is bounded
-  (5,000 answers) and the proxy's judge gets one 15 s attempt like the hooks.
-- Gateway storage opens SQLite in WAL mode with a busy timeout; two `assert`s on security
-  invariants are explicit `RuntimeError`s (they survive `python -O`); the FastAPI app is no
-  longer built at import (`uvicorn --factory`), and `.env` is read from the working directory.
-- Installer: `--review` and `--judge` are validated and shell-quoted; a settings file that is
-  a symlink is written through to its target; a Cursor `hooks.json` that already existed keeps
-  its own `version` key, so install then uninstall restores every harness file byte for byte;
-  `uninstall` removes a file that held only IntentShield's hooks; `wrap` names a missing file and
-  reports the HTTP servers it skips.
-- CLI: `intentshield --version`; help text on every `intentshield-mcp` and `intentshield-threats`
-  argument; `intentshield-mcp` prints one line (not an exception-group traceback) when its
-  config or a credential variable is missing; `intentshield-mcp-verify` names a missing config
-  file; the built-in gateway and dashboard default their database to `~/.intentshield/` instead
-  of the working directory.
-- Tests and CI: `GROQ_API_KEY`/`GOOGLE_API_KEY` are stripped like `GEMINI_API_KEY`; the two
-  tests that depended on the working directory use a generated demo config; the wall-clock and
-  sleep-based assertions are gone; CI runs the suite on Python 3.12 and 3.13; new tests cover a
-  dead upstream (transparent and gateway), a hung upstream, 20 concurrent calls, Claude Code
-  block mode, the Cursor prompt path, the install round trip on every harness and scope, and a
-  wrapped server with an `env` block.
-- Docs: the README is a 250-line user guide (install, quickstart, what each layer sees and
-  stops, one headline table with its caveat, limitations); the operator material moved to
-  `docs/guide.md`, the numbers to `docs/benchmarks.md` and `docs/detectors.md`, with
-  `docs/README.md` separating user docs from research notes; `SECURITY.md`, `CONTRIBUTING.md`
-  and issue templates added. Numbers corrected from the committed traces: 8–14 (not 9–14)
-  points of task completion across the four agents, qwen gateway task-tool-executed 39.4%
-  (86/218), paired n stated as 218/220/216, self-disclosure denominators labelled as unpaired
-  harmful calls, and the injection-detection tables now say which families the rules were
-  written on (on the independent families: rules 2.1%, rules+exemplars 18.1%). The Gemini
-  adaptive attacker (42/42 evasions; provenance still held every canary) is in the detector
-  docs, and the DeBERTa advisory row is marked unconfirmed.
-- Second code pass: the proxy lock covers only the merge into the session state, so a slow
-  learned detector in a worker no longer stalls the event loop (test: `create_run` returns while
-  a detector sleeps); Prompt Guard gets the judge's 15 s / one-retry bound; a judge back-off
-  never outlives its budget (`Retry-After: 120` no longer holds a hook); the built-in regex
-  security agents run on the caller's thread, so a busy worker pool cannot score a benign call
-  as a timeout (threads and the deadline remain for a classifier or custom agent); the legacy
-  `detector.py` heuristic is gone, unregistered tools get fixed fail-closed signals; upstream
-  close lets cancellation propagate unchanged; the catalog directory is scanned once per
-  connect, not once per tool; the judge and Prompt Guard caches are bounded and locked; hook
-  transactions roll back on error and the guard can be closed; the control routes share one
-  auth wrapper and answer a malformed body with 422.
-- Third pass: result scans are counted in flight per session, so two parallel hook processes can
-  no longer let a clean scan un-flag a session an injected result just flagged (regression test
-  interleaves the two); a hook that fails before it can scan an output flags the session through a
-  throwaway connection; the hook guard is closed on exit. Behind the web proxy the agent token is
-  now mandatory and the tool list, metrics and security-status routes need it too. `create_app`
-  calls python-dotenv correctly again (the previous pass broke `intentshield serve`; a test now
-  runs the real call). The missing-credential error names the variables; `wrap`/`unwrap` report
-  "already wrapped", restore an empty `args` list exactly, name the generated files they leave
-  behind and give one line for invalid JSON; every remaining argument has help text. Tests cover
-  the upstream catalog limits and call failures through the fake SDK client, a real child that
-  prints garbage and exits, fail-closed for every harness, and eight hook processes sharing one
-  database. CI also runs Python 3.14. The README opens with what is not covered and states the
-  security boundary in plain words.
-- Fourth pass: the MSB case grid is committed (`results/msb/cases.jsonl`, MSB commit recorded in
-  the manifest), so `paper_numbers.py` and its test run from a clean clone and in CI; the README's
-  provenance sentence now says exactly which rows replay offline; the headline scopes the
-  review-queue claim to the gateway (hooks leave 5/2/3 cases); the Gemini review-queue cell,
-  three stale MCPTox cells (1.2%, 34.8%, 1.7%) and two unsourced detector cells are corrected
-  from committed reports; the adaptive attacker carries its judge-leniency caveats;
-  `results/README.md` lists what does not replay offline. Control routes treat only a non-object
-  body as 422 (other errors surface), run events are written off the event loop, dropped close
-  errors are logged, and the signed-pack test can no longer skip silently.
-- Fifth pass: a crashed output scan leaves the session flagged, and an interrupted one says so in
-  the confirmation reason; hook migrations only tolerate a concurrent "duplicate column". The test
-  conftest now really restores the judge keys after each test (it used to leave a key a test wrote
-  in place), and a session-end check fails the run if one leaks. The sdist's own test run is
-  green (it ships `benchmarks/coverage`, and the review-gate baseline test skips without
-  `results/`). `unwrap` keeps each entry's key order; the README headline is two plain sentences.
-- Live Codex CLI check (`benchmarks/harness_live/run_codex.sh`, local qwen2.5:7b, no cost): unguarded the
-  notes reached the attacker in 3/3 runs; with the hooks installed but not trusted, also 3/3, because
-  Codex 0.165 silently skips hooks nobody has trusted; with the transparent proxy, 0/3 (the
-  agent did not call `send_email` after the proxy's warning on the injected result).
-  `intentshield install codex` now says the hooks must be trusted once in Codex before they run. With
-  the hooks trusted, the `PreToolUse` hook denied the attacker's `send_email` in 3/3 runs.
-- Benchmarks: `paper_numbers.py` also prints task-tool-executed, truncated and Wilson cells and
-  the README headline strings, with a test; the MCPTox replay was regenerated on current code
-  (quarantine+provenance 19/1579 = 1.2%); the injection evaluation inputs and the Gemini judge
-  report are committed under `results/`.
+### 0.2.2 - 2026-10-29
 
-## 0.2.3 - 2026-10-29
+- The same code as 0.2.1, with the final judge results in the package description.
 
-- Same code; the README's judge results now carry their recommendation, which the 0.2.2
-  description lacked after the results restructure.
+### 0.2.1 - 2026-10-29
 
-## 0.2.2 - 2026-10-29
+- The PyPI name is `intentshield-mcp`. Fixes from a five-reviewer pass: an unknown `--review` or `--outputs` value fails closed; an
+  `ollama` judge; hook ownership by executable name in the installer; scanner, proxy and threat-memory fixes; the judge measured on held-out
+  descriptions (`results/judge/`).
 
-- Same code as 0.2.1; the package description carries the final judge results (Groq
-  `gpt-oss-120b` measured) and recommendation, which 0.2.1 was built before.
+### 0.2.0 - 2026-10-28
 
-## 0.2.1 - 2026-10-29
+- `intentshield install` and `uninstall` register hooks in Claude Code, Codex CLI, Cursor and Gemini CLI; `wrap` and `unwrap` put the
+  transparent proxy in front of every stdio server in an `mcpServers` file; the wheel bundles a demo config; PyPI packaging.
 
-- PyPI distribution name is `intentshield-mcp`; the plain name belongs to an unrelated project.
+### 0.1.0
 
-Fixes from a five-reviewer pass (security, silent failures, Python quality, over-engineering,
-competitor gap analysis), each with a regression test in `tests/test_harness_fail_closed_and_installer_ownership.py`:
-
-- Hooks: an unknown `--review`/`--outputs` value from the environment now fails closed (exit 2)
-  instead of silently disabling every review branch; a read-verb tool name with a destructive
-  verb (`get_and_purge`, `query_and_drop`) counts as state-changing; output values are written in
-  one transaction (about 55x faster on large results).
-- Judge: `ollama` provider (local, no key); hooks give it one 10 s attempt and then report it
-  unavailable in the model's context and on stderr, instead of minutes of free-tier back-off.
-- Installer: ownership of a hook entry is decided by the executable's basename, so `uninstall`
-  removes only IntentShield's handler and `install` repairs a stale path; the Codex block is a
-  properly escaped TOML string; the command is shell-quoted; settings files are written
-  atomically; `wrap` names are injective across servers and client files, reject `__`, validate
-  the generated config before touching the client file, and share one threat-memory file with the
-  hooks (`~/.intentshield/threats.db`).
-- Scanner: a user-typed prompt exempts only the whole sentence it contains, not any match whose
-  trigger words appear somewhere in the prompt; `process.env` is not a sensitive target; bare
-  hosts, IPv4 addresses and host:port are traced values (MCPTox quarantine+provenance 1.3% to
-  1.2%); the shadowing check tokenizes once (no 19 s start-up past 512 tools); ASCII text skips
-  normalization.
-- Proxy and gateway: a re-seen provenance value is no longer evicted ahead of fresh ones; a
-  failing result inspector no longer leaves an executed mutation unaudited; bearer tokens compare
-  as bytes (a non-ASCII header was a 500); the gateway database is created 0600.
-- Threat memory: long texts are scanned head and tail, so padding cannot hide a payload from pack
-  rules and fingerprints.
-- New: `benchmarks/self_disclosure_eval.py` and `results/self-disclosure.{md,json}`, the
-  precision and harm-share measurement of self-disclosure parameter stripping.
-- Architecture review fixes: an agent-written gateway intent no longer exempts values the proxy
-  had already seen in a tool output (`trusted_intent` restores the old behaviour for trusted
-  channels); the hook takes the operator's read-only decision from the proxy catalog; wrapped
-  proxies read each other's catalogs for cross-server shadowing; hook sessions are pruned after
-  7 days; the classifier import is lazy; two unused storage helpers are gone.
-- Judge: measured on the held-out descriptions Groq `gpt-oss-120b` (99.7% recall, 2.8% clean flagged,
-  the default), local `ollama:qwen2.5:7b` (99.0%, 3.7%, offline alternative) and `llama3.1:8b`
-  (unusable, 19.4% clean flagged); `results/judge/`. `intentshield install <harness> --judge` stores
-  the Groq key once in `~/.intentshield/.env`, and a hook with a judge but no key says so and lets
-  the rules decide.
-
-## 0.2.0 - 2026-10-28
-
-- `intentshield install <harness>` registers the hooks in Claude Code, Codex CLI, Cursor or Gemini CLI
-  (user or project scope); `intentshield uninstall` removes them again.
-- `intentshield wrap <mcp.json>` puts the transparent proxy in front of every stdio server in an
-  `mcpServers` file, with one generated proxy config per server; `intentshield unwrap` restores them.
-  This works for any MCP client that launches stdio servers from such a file.
-- `intentshield` now takes subcommands; with none it still runs the local dashboard (`serve`).
-- The wheel bundles a demo proxy config, so `intentshield-mcp-verify` runs from a plain
-  `pip install` without the repository.
-- Packaging: PyPI metadata, a trimmed sdist, `ruff` in the dev extra with a committed config, and a
-  publish workflow that builds, smoke-tests the wheel and releases on `v*` tags via trusted publishing.
-
-## 0.1.0
-
-- Everything before packaging: the gateway, transparent proxy, four harness hooks, detectors,
-  threat memory and packs, benchmarks and papers. See the README and `docs/`.
+- Everything before packaging: the gateway, transparent proxy, four harness hooks, detectors, threat memory and packs, benchmarks and papers.

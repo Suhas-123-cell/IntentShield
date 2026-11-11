@@ -1,4 +1,4 @@
-"""Builds docs/hook-fidelity-corpus.md and results/hook-fidelity/corpus.json from guards.py and rules.py.
+"""Builds docs/research-notes/hook-fidelity/hook-fidelity-corpus.md and results/hook-fidelity/corpus.json from guards.py and rules.py.
 
     python3 benchmarks/hook_fidelity/corpus_build/build.py
 
@@ -21,7 +21,7 @@ from guards import GUARDS  # noqa: E402
 from rules import RULES  # noqa: E402
 
 ROOT = HERE.parents[2]
-OUT_MD = ROOT / "docs" / "hook-fidelity-corpus.md"
+OUT_MD = ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-corpus.md"
 OUT_JSON = ROOT / "results" / "hook-fidelity" / "corpus.json"
 GENERATED = "2026-11-01"
 GITHUB_META = HERE / "github_meta.json"

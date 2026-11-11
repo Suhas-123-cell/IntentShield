@@ -353,3 +353,58 @@ def test_a_custom_judge_url_only_in_the_installing_shell_is_stored_and_checked(t
     monkeypatch.delenv("INTENTSHIELD_JUDGE_URL")
     with pytest.raises(ValueError, match="--judge-url"):
         install.ensure_judge_key("custom:m", home / "third", api_key="k-1")
+
+
+# --- what the lines say and how often -------------------------------------------------------------------------------------
+
+def test_a_missing_hook_executable_is_one_line_and_one_problem(tmp_path: Path, home: Path, capsys, monkeypatch):
+    monkeypatch.setattr(doctor, "_harness_version", lambda harness, home: (2, 1, 316))
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    exe = _exe(tmp_path)
+    install.install("claude", home=home, cwd=cwd, hook=exe)  # the default install puts the launcher in front of every call hook
+    Path(exe).unlink()
+    _ran(_db(home), "claude", time.time() + 5)
+    rc, out = _doctor(home, cwd, capsys)
+    assert rc == 1
+    assert out.count("does not exist") == 1
+    assert "\n1 problem(s)" in out
+
+
+def test_facts_about_the_harness_are_notes_and_a_clean_install_prints_no_warning(tmp_path: Path, home: Path, capsys, monkeypatch):
+    monkeypatch.setattr(doctor, "_harness_version", lambda harness, home: (2, 1, 316))
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path))
+    _ran(_db(home), "claude", time.time() + 5)
+    rc, out = _doctor(home, cwd, capsys)
+    assert rc == 0
+    lines = out.splitlines()
+    assert any(line.startswith("note claude") and "prints nothing or malformed JSON" in line for line in lines)
+    assert not any(line.startswith(("warn", "FAIL")) for line in lines)
+    assert any(line.startswith("ok   claude") for line in lines)
+    assert "need no action" in out and "no problems found" in out
+
+
+def test_a_setting_of_the_users_that_has_a_cost_stays_a_warning(tmp_path: Path, home: Path, capsys, monkeypatch):
+    monkeypatch.setattr(doctor, "_harness_version", lambda harness, home: (0, 66, 0))
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    install.install("gemini", home=home, cwd=cwd, hook=_exe(tmp_path), gemini_ask=True)
+    _ran(_db(home), "gemini", time.time() + 5)
+    _rc, out = _doctor(home, cwd, capsys)
+    assert any(line.startswith("warn gemini") and "--gemini-ask is on" in line for line in out.splitlines())
+
+
+def test_the_module_text_names_no_flag_that_the_command_does_not_have(capsys):
+    assert "--home" not in doctor.__doc__
+    parser = __import__("argparse").ArgumentParser()
+    sub = parser.add_subparsers()
+    doctor.add_subcommand(sub)
+    with pytest.raises(SystemExit):
+        parser.parse_args(["doctor", "--home", "x"])
+    capsys.readouterr()
+    flags = {"--db"}
+    for word in doctor.__doc__.split():
+        if word.startswith("--") and word.rstrip("].,)") not in flags:
+            raise AssertionError(f"doctor's text names {word}")

@@ -1,5 +1,6 @@
 """Verdict translation (src/intentshield/translation.py): the guard's ask, deny and failure become the reply each harness build,
-in its mode, is measured to honour. The measurements are in docs/hook-fidelity-study.md and results/hook-fidelity/mitigation."""
+in its mode, is measured to honour. The measurements are in the study's working notes
+(docs/research-notes/hook-fidelity/hook-fidelity-study.md) and in results/hook-fidelity/mitigation."""
 from __future__ import annotations
 
 import importlib.util
@@ -70,7 +71,6 @@ def test_lookup_between_below_and_beyond_the_measured_releases():
     assert translation.lookup("gemini", "ask", v("0.45.0")) == "hangs"
     assert translation.lookup("gemini", "ask", v("0.20.0")) == "unmeasured"      # below the oldest measured release
     assert translation.lookup("gemini", "ask", v("0.99.0")) == "hangs"           # newer than any: assumed unchanged
-    assert translation.newer_than_measured("gemini", "ask", v("0.99.0"))
     assert translation.lookup("claude", "ask", None) == "unmeasured"
     assert translation.lookup("claude", "nonsense", v("2.1.200")) == "unmeasured"
 

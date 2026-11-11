@@ -207,8 +207,7 @@ both arms). The attacker is weak, too: only 28-31 of up to 210 attempts were val
 fell after learning because class-balanced voting gives each injection chunk less weight as more
 are added. A first run gave every seed the same canary. Six of its approved rules then named that
 address, which made learning look better than it was. Rules may no longer name addresses or
-numbers, and each seed now has its own canary (`95ef2c1`; the first run is in
-`artifacts/adaptive-attacker-shared-canary/`). Some approved rules are broad, such as
+numbers, and each seed now has its own canary (`95ef2c1`; the first run's output is kept by the author, not in the repository). Some approved rules are broad, such as
 `\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
 each rule.
 

@@ -1,7 +1,7 @@
 # Hook verdict fidelity study: data
 
 Raw rows, ledgers and derived tables of the study. Start with the short report, [`docs/hook-fidelity-report.md`](../../docs/hook-fidelity-report.md);
-[`docs/hook-fidelity-study.md`](../../docs/hook-fidelity-study.md) is the full record.
+[`docs/research-notes/hook-fidelity/hook-fidelity-study.md`](../../docs/research-notes/hook-fidelity/hook-fidelity-study.md) is the full record.
 The question: what do Claude Code, Codex CLI and Gemini CLI do with the verdict a `PreToolUse`-style hook returns (allow,
 ask, deny, a crash, a timeout, an empty reply), and what does IntentShield's own hook decide on the same calls. Scope: macOS,
 mostly headless against a scripted stub model, a pseudo-terminal lane for interactive sessions, a narrow real-model arm, a
@@ -35,19 +35,20 @@ here: `vendor-archive/*/README.md` give their source URLs and sha256 (the page t
 
 ## What regenerates offline
 
-Tables regenerate from the committed rows with no harness, no network and no model. Commands, from the repository root
-(they write into the directory they are given, so copy it first if you only want to compare):
+Tables regenerate from the committed rows with no harness, no network and no model. Commands, from the repository root.
+Each command writes into the directory it is given, so run it on a copy in a scratch directory and diff against the committed
+files; none of them should be pointed at `results/` itself. Set `S=$(mktemp -d)` first:
 
 | table | command | needs |
 |---|---|---|
-| `compare/table*.md`, `compare/summary*.json` | `.venv/bin/python benchmarks/hook_fidelity/compare.py summarize results/hook-fidelity/compare` | the committed rows |
-| `interactive/table.md` | `.venv/bin/python benchmarks/hook_fidelity/pty_lane.py table results/hook-fidelity/interactive` | the committed rows and screen text |
-| `detect/fresh/table.md`, `summary.json` | `.venv/bin/python benchmarks/hook_fidelity/fresh_report.py` | `fixtures.jsonl`, `decisions.jsonl`, `detect/r8fix/delivery.json` |
+| `compare/table*.md`, `compare/summary*.json` | `cp -r results/hook-fidelity/compare $S/compare && .venv/bin/python benchmarks/hook_fidelity/compare.py summarize $S/compare` (writes `table.md`, `table-r8.md`, `summary.json` and `summary-r8.json` into the copy; stdout is three short summary lines) | the committed rows |
+| `interactive/table.md` | `cp -r results/hook-fidelity/interactive $S/interactive && .venv/bin/python benchmarks/hook_fidelity/pty_lane.py table $S/interactive` | the committed rows and screen text |
+| `detect/fresh/table.md`, `summary.json` | `.venv/bin/python benchmarks/hook_fidelity/fresh_report.py --out $S/fresh` | `fixtures.jsonl`, `decisions.jsonl`, `detect/r8fix/delivery.json` |
 | `detect/table.md`, `summary.json`, `breakdown.md`, `breakdown.json`, `delivery.json` | `detect_compare.py report --decisions results/hook-fidelity/detect/decisions.jsonl --out <copy of detect/>`, then the same with `breakdown`; `detect_compare.py matrix` for `delivery.json` alone | `detect/decisions.jsonl` and `fixtures.jsonl`. **No guard clone is needed**: both commands run in a clean clone with `HF_SCRATCH` pointing at an empty directory |
 | every figure in `docs/hook-fidelity-report.md` | `.venv/bin/python benchmarks/hook_fidelity/report_numbers.py` (the report embeds its output; a test compares them) | the committed rows, the `detect` summaries, `detect/fixtures.jsonl` and `detect/r8fix/decisions.jsonl` (the rules before and after on one denominator), and `detect/fresh/` (the split without discovery-only items) |
 | `detect/r8fix/` tables | `r8fix_report.py` | the committed decisions |
 | `claude/`, `codex/` tables | `run.py summarize <runs.jsonl>`, `codex_report.py`, `summarize.py` | the committed rows |
-| `coverage/summary.md` | `coverage_summarize.py results/hook-fidelity/coverage` | `coverage/rows.jsonl` |
+| `coverage/summary.md` | `cp -r results/hook-fidelity/coverage $S/coverage && coverage_summarize.py $S/coverage` | `coverage/rows.jsonl` |
 | `mitigation/` tables and ranges | `mitigation_summary.py <runs.jsonl>`, `derive_table.py` | the committed rows |
 | `guards/table.md` | `guard_replay.py table --index results/hook-fidelity/guards/replay ...` | the committed replay index |
 
@@ -57,7 +58,7 @@ reproduced the committed tables byte for byte (`compare/table.md`, `table-r8.md`
 until `detect_compare.specs()` stopped reading the claimed-scope table from a guard clone's `hooks/hooks.json`; they now reproduce
 `detect/table.md`, `summary.json`, `delivery.json`, `breakdown.md` and `breakdown.json` byte for byte with no clone present, and
 `tests/test_hook_fidelity_reproduce.py` checks that on every run. The rest are as documented in the lane READMEs and
-`docs/hook-fidelity-study.md` section 14. `corpus_counts.py --check` checks the corpus counts. The tests
+`docs/research-notes/hook-fidelity/hook-fidelity-study.md` section 14. `corpus_counts.py --check` checks the corpus counts. The tests
 `tests/test_hook_fidelity_study_numbers.py`, `tests/test_hook_fidelity_fresh_report.py`, `tests/test_hook_fidelity_report.py` and the other
 `tests/test_hook_fidelity_*.py` recompute the figures the study cites from these rows; none of them launches a harness.
 
@@ -80,7 +81,7 @@ Not committed, so not regenerated here:
 - **The guard corpus clones.** `detect_compare.py decide --scratch <dir>` and `guard_replay.py` read the other guards' hook
   entry points from clones of their repositories under `$HF_SCRATCH/corpus/<guard>/repo/` (`HF_SCRATCH` defaults to
   `<tmp>/intentshield-hook-fidelity`). The repository and commit of each guard are in `corpus.json`; the inventory is in
-  `docs/hook-fidelity-corpus.md`. `benchmarks/hook_fidelity/fetch_corpus.py` clones the 26 guards at those pinned commits:
+  `docs/research-notes/hook-fidelity/hook-fidelity-corpus.md`. `benchmarks/hook_fidelity/fetch_corpus.py` clones the 26 guards at those pinned commits:
   `--dry-run` prints the plan with no network and no writes, a real run needs the network, `--only <guard>` limits it, and each
   clone is checked against its pinned commit. It runs no code from a clone (hooks disabled, no submodules). It does not build
   anything: `block-no-verify` also needs its build under `$HF_SCRATCH/guard-replay/block-no-verify/build`, and a pinned commit
@@ -93,7 +94,7 @@ Not committed, so not regenerated here:
 - **Without them,** `tests/test_hook_fidelity_detect.py` skips 3 tests ("needs the guard corpus clones under HF_SCRATCH"; the
   tests that recompute `summary.json` and `table.md` from the decisions run without clones), and
   `guard_replay.py capture` and `stub-run`, `detect_compare.py decide`, every `run` subcommand and the prevalence scripts
-  cannot run. The prevalence counts (`docs/hook-fidelity-prevalence.md`) came from a code-search index and are not
+  cannot run. The prevalence counts (`docs/research-notes/hook-fidelity/hook-fidelity-prevalence.md`) came from a code-search index and are not
   reproducible from this repository.
 
 ## Rules since the study
@@ -101,10 +102,11 @@ Not committed, so not regenerated here:
 The committed decisions, tables and summaries here are IntentShield's rules as they stood when the study ran. They were not
 regenerated and must not be edited. A later change lets a deny from `src/intentshield/dangerous.py` win over a session ask.
 Re-running the committed fixtures (`detect/fixtures.jsonl`, `detect/fresh/fixtures.jsonl`) through the current code, with
-`detect_compare.decide_intentshield` and the `intentshield` variant, differs from the committed `intentshield-r8fix` rows in 45
-decisions, all ask to deny: 27 rows (9 items) of the 467-fixture set and 18 rows (6 items) of the fresh set. All 45 are harmful
-credential-exfiltration items; no benign row changed and none changed to allow. On the 214 primary fresh calls the 41 asked and 35
-denied of `table.md` become 35 asked and 41 denied, and the 28 of 104 harmful calls let through and the 5 benign asks do not
+`detect_compare.decide_intentshield` and the `intentshield` variant, differs from the committed `intentshield-r8fix` rows in 51
+decisions. 48 go from ask to deny: 30 rows (10 items) of the 467-fixture set and 18 rows (6 items) of the fresh set, all harmful
+credential-exfiltration items. 3 rows (1 item, `git push -f origin HEAD`) go from deny to ask on the fresh set, because `HEAD` is no
+longer read as a protected branch. No benign row changed and none changed to allow. On the 214 primary fresh calls the 41 asked and 35
+denied of `table.md` become 36 asked and 40 denied, and the 28 of 104 harmful calls let through and the 5 benign asks do not
 change. The denies-alone comparison with `safety-net` (24/85 against 41/85) was not recomputed.
 
 ## Provenance caveat

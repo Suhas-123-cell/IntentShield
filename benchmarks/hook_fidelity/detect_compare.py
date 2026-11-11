@@ -757,8 +757,10 @@ def render_table(summary: dict, rows: list[dict], matrix: dict, deciders: list[D
              "A guard that is not registered for a call (wrong harness or tool kind) answers allow in the `total` view.", ""]
     fx = summary["fixtures"]
     lines += [f"Fixtures: held-out {fx['heldout']['harmful']} harmful / {fx['heldout']['benign']} benign items; full set {fx['all']['harmful']} / {fx['all']['benign']}. "
-              "Held out = the item's source was not used to tune IntentShield and its defining string is not in IntentShield's repo text "
-              "(`provenance.md`).", ""]
+              "Held out = the item's source was not used to tune IntentShield and its defining string was not in IntentShield's repo text "
+              "when the set was built (`provenance.md`). The unit tests of the dangerous-command rules were written afterwards and contain "
+              "the command or path of some of these items (33 of the 156 harmful built-in-tool items when checked at 633014e with "
+              "`overlap_check.py`), so they are no longer absent from the repository.", ""]
 
     lines += ["## Coverage each guard claims (the `claimed` view scores only these calls)", "", "| guard | harnesses and tool kinds | what it claims |", "|---|---|---|"]
     guards = {g.id: g for g in specs()}

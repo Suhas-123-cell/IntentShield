@@ -68,3 +68,38 @@ def test_a_harmless_patch_through_the_shell_is_allowed(tmp_path):
 
 def test_a_patch_header_in_a_command_that_is_not_apply_patch_is_not_read_as_a_patch(tmp_path):
     assert decision(tmp_path, "claude", "Bash", command="echo '*** Add File: .ssh/authorized_keys'") == "allow"
+
+
+# --- what a harness sends that the text rules must still read ------------------------------------------------------------
+
+def test_a_nul_byte_in_a_shell_command_or_a_path_does_not_hide_it(tmp_path):
+    assert decision(tmp_path, "claude", "Bash", command="rm -rf /\x00") == "deny"
+    assert decision(tmp_path, "claude", "Bash", command="r\x00m -rf /") == "deny"
+    assert decision(tmp_path, "claude", "Bash", command="git push --for\x00ce origin main") == "deny"
+    assert decision(tmp_path, "claude", "Read", file_path="/Users/x/.ssh/id_r\x00sa") == "deny"
+
+
+def test_a_padded_path_is_not_a_way_around_the_file_tools(tmp_path):
+    padded = "/Users/x/.ssh/" + "./" * 600 + "id_rsa"
+    assert decision(tmp_path, "claude", "Read", file_path=padded) == "deny"
+    assert decision(tmp_path, "claude", "Read", file_path="/Users/x/" + "d/" * 600 + "notes.txt") == "ask"
+    settings = "/Users/x/.claude/" + "/" * 1200 + "settings.json"
+    assert decision(tmp_path, "claude", "Write", file_path=settings, content="{}") == "ask"
+    assert decision(tmp_path, "claude", "Bash", command="cat ~/.aws/" + "./" * 600 + "credentials") == "deny"
+
+
+def test_a_patch_that_touches_more_than_eight_special_files_is_still_read_whole(tmp_path):
+    from intentshield import harness
+
+    def verdict(patch: str) -> str:
+        g = HarnessGuard(tmp_path / "hooks.db", builtin_tools=True)
+        try:
+            return harness._patch_verdict(g, "s", "builtin:apply_patch", f"*** Begin Patch\n{patch}*** End Patch\n").decision
+        finally:
+            g.close()
+
+    special = "".join(f"*** Add File: /Users/x/.github/workflows/w{i}.yml\n+x\n" for i in range(9))
+    keys = "*** Add File: /Users/x/.ssh/authorized_keys\n+x\n"
+    assert verdict("".join(f"*** Add File: notes/f{i}.md\n+x\n" for i in range(12))) == "allow"
+    assert verdict(special) == "ask"
+    assert verdict(special + keys) == "deny"  # the tenth special file is past the eight the guard reads one by one

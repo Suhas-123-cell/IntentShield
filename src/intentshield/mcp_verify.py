@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -515,6 +516,22 @@ async def _behavior_checks(
     return checks
 
 
+def _stdio_target(path: Path, config: MCPProxyConfig) -> StdioServerParameters:
+    """How the stdio wire check starts the proxy."""
+    # The child starts with the SDK's few safe variables; pass on only the credentials the
+    # config names, never the whole environment.
+    names = {name for upstream in config.upstream_configs
+             for name in (*upstream.env_from_env.values(), *upstream.headers_from_env.values())}
+    names |= {"GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} if config.judge or config.prompt_guard else set()
+    # the proxy's own tokens as exported here, for an HTTP endpoint that is started this way
+    names |= {"INTENTSHIELD_CONTROL_TOKEN", "INTENTSHIELD_AGENT_TOKEN"}
+    return StdioServerParameters(
+        env={**get_default_environment(), **{name: os.environ[name] for name in names if name in os.environ}},
+        command=sys.executable,
+        args=["-m", "intentshield.mcp_server", "--transport", "stdio", "--config", str(path)],
+    )
+
+
 async def verify_mcp(
     config_path: str | Path,
     *,
@@ -531,25 +548,7 @@ async def verify_mcp(
     if verification_mode == "in_process_preflight":
         target: Any = create_proxy_mcp_server(config)
     elif verification_mode == "stdio_wire":
-        # The child starts with the SDK's few safe variables; pass on only the credentials the
-        # config names, never the whole environment.
-        names = {name for upstream in config.upstream_configs
-                 for name in (*upstream.env_from_env.values(), *upstream.headers_from_env.values())}
-        names |= {"GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} if config.judge or config.prompt_guard else set()
-        # the proxy's own tokens as exported here: a token only a searched .env holds stops the child
-        names |= {"INTENTSHIELD_CONTROL_TOKEN", "INTENTSHIELD_AGENT_TOKEN"}
-        target = StdioServerParameters(
-            env={**get_default_environment(), **{name: os.environ[name] for name in names if name in os.environ}},
-            command=sys.executable,
-            args=[
-                "-m",
-                "intentshield.mcp_server",
-                "--transport",
-                "stdio",
-                "--config",
-                str(path),
-            ],
-        )
+        target = _stdio_target(path, config)
     else:
         target = url
     invoked_tools: list[str] = []
@@ -725,6 +724,38 @@ def _failure_report(config_path: str | Path, exc: Exception) -> dict[str, Any]:
     }
 
 
+def _type_chain(exc: BaseException) -> str:
+    """The class names of an exception and of what it wraps (an exception group's members, its cause), never their text: a
+    configuration error can quote a key."""
+    names: list[str] = []
+    seen: set[int] = set()
+
+    def walk(error: BaseException | None) -> None:
+        if error is None or id(error) in seen or len(names) >= 12:
+            return
+        seen.add(id(error))
+        names.append(type(error).__name__)
+        for member in getattr(error, "exceptions", ()):
+            walk(member)
+        walk(error.__cause__ or (None if error.__suppress_context__ else error.__context__))
+
+    walk(exc)
+    return " > ".join(names)
+
+
+def _child_stderr_tail(config_path: str | Path, lines: int = 8) -> str:
+    """What the stdio proxy prints when it is started the way the check starts it and its input ends at once: a proxy that
+    cannot start says why on stderr and exits, which the wire client reports only as a closed connection."""
+    try:
+        path = Path(config_path).expanduser().resolve()
+        target = _stdio_target(path, MCPProxyConfig.from_file(path))
+        done = subprocess.run([target.command, *target.args], env=target.env, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, errors="replace", timeout=20)
+    except Exception as exc:  # a diagnostic must not raise
+        return f"(the proxy could not be started for a second look: {type(exc).__name__})"
+    return "\n".join(done.stderr.strip().splitlines()[-lines:])
+
+
 def demo_config_path() -> Path:
     """The demo proxy config: inside the package when installed from a wheel, else the repo's configs/."""
     packaged = Path(__file__).with_name("configs") / "mcp-proxy.demo.json"
@@ -765,8 +796,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Verify an already-running IntentShield Streamable HTTP MCP endpoint",
     )
     args = parser.parse_args(argv)
-    if args.demo:
-        args.config = str(demo_config(Path(tempfile.mkdtemp(prefix="intentshield-demo-"))))
+    if args.demo:  # the demo's files live in a directory that goes away with the run
+        with tempfile.TemporaryDirectory(prefix="intentshield-demo-") as directory:
+            args.config = str(demo_config(Path(directory)))
+            return _verify_and_print(args)
+    return _verify_and_print(args)
+
+
+def _verify_and_print(args: argparse.Namespace) -> int:
     mode = (
         "stdio_wire"
         if args.stdio
@@ -780,6 +817,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     except Exception as exc:  # CLI boundary: always emit a machine-readable report.
         report = _failure_report(args.config, exc)
+        # The report on stdout redacts values; stderr says which kind of failure it was and what the proxy printed.
+        print(f"intentshield-mcp-verify: FAIL: {_type_chain(exc)}", file=sys.stderr)
+        if mode == "stdio_wire":
+            tail = _child_stderr_tail(args.config)
+            if tail:
+                print(f"intentshield-mcp-verify: the proxy, started on its own, printed:\n{tail}", file=sys.stderr)
     print(json.dumps(report, sort_keys=True, separators=(",", ":")))
     return 0 if report["status"] == "PASS" else 1
 

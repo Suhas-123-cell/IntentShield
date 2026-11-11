@@ -1,16 +1,18 @@
 # What three coding-agent CLIs do with the verdict a hook returns
 
 A report on a measurement study of Claude Code, Codex CLI and Gemini CLI, with IntentShield's own hook as one of the things measured.
-The full record (every set of runs, every re-check, the launch accounting) is [`hook-fidelity-study.md`](hook-fidelity-study.md); the data are
+The full record (every set of runs, every re-check, the launch accounting) is [`hook-fidelity-study.md`](research-notes/hook-fidelity/hook-fidelity-study.md); the data are
 under [`results/hook-fidelity/`](../results/hook-fidelity/README.md). Read this page first. It is a measurement note, not a paper, and
 it is not a vulnerability report.
 
 **In one paragraph.** A hook that returns `deny` was enforced on every build and in every mode where the hook ran. Whether the hook ran
 depended on state outside its reply: trust, matchers and flags. An `ask` with no human at the keyboard is handled three different ways
 by the three tools, and one of them changed between two adjacent releases. A hook that fails by running past its timeout let the
-guarded call run on every build tested. The other failure replies were tested on far fewer builds. IntentShield's own hook decides
-worse than some other guards on one test set and better on another, and the better result comes from a test built from the same
-categories as its rules. Everything was measured against a scripted stub model on macOS.
+guarded call run on every build tested with the default hook configuration; Claude Code's documented `onFailure: "block"` setting,
+which IntentShield's `install` writes, blocked it on the one later build run (finding 3). The other failure replies were tested
+on far fewer builds. IntentShield's own hook, before its dangerous-command rules, let more harmful calls through than two other guards
+on one test set. With the opt-in rules it fits its own rule categories on a second set (a post hoc result) and is behind
+safety-net on denies alone. Everything was measured against a scripted stub model on macOS.
 
 ## 1. Question
 
@@ -64,10 +66,10 @@ launches that reached the model, so no Cursor row is scored.
 - *Deviation*: a cell whose outcome differs from its documentation-based expectation, or where the documentation says nothing.
 - *Sign-off*: an entry in `benchmarks/hook_fidelity/signoffs.json` that records which vendor document backs a claim about how a cell is set up.
 - *Kill criterion*: the test that the author says was written down before the runs for whether the results amount to a paper (section 4).
-- *Held-out*: an item whose source was not used while IntentShield's rules were written.
+- *Held-out*: an item whose source was not used while IntentShield's rules were written, and whose command or path was not in the repository when the set was built (this is no longer true of every item; see section 5).
 - *Post hoc*: scored after the author had already seen the result on the same data.
 - *Scope* of a guard: the harnesses and tool kinds that the guard's own README says it covers.
-- *yolo*: Gemini CLI's approval mode that runs every tool call without asking.
+- *yolo*: Gemini CLI's approval mode that runs every tool call without asking. Other general terms are in the [glossary](layers.md#terms).
 
 **Scale.** 1,342 committed stub rows (the 8 Gemini smoke rows left out) in 507 cells: 361 scored, 122 controls, 16 invalid by control
 and 8 scored against a native block. The author's expectations, written from the documentation before the runs according to the author
@@ -122,10 +124,17 @@ independent (a deterministic stub, two to five repeats per cell), so the build c
 
 **Finding 1. A deny was enforced wherever the hook ran, and the hook did not always run.**
 
-> deny enforced where the hook ran: 66 of 66 builds, 220/220 [98.3, 100.0]% rows (0 let the call run); the rows are 84 deterministic cells on 66 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 273 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2)
+> deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 deterministic cells on 65 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 271 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2)
 
-Read the first figure, 66 of 66 builds. The 220 rows are 84 cells repeated two to five times on a deterministic stub, so the interval on
+Read the first figure, 65 of 65 builds. The 218 rows are 83 cells repeated two to five times on a deterministic stub, so the interval on
 rows says how repeatable the stub is and nothing about how often a deny is enforced across hooks, builds or users.
+
+The 65 here and the 27 + 12 + 26 = 65 of the matrix in section 3 are two different counts that happen to agree. This finding counts
+distinct builds on which a deny reply ran the hook in any trust state and for any tool kind: Claude Code 22, Codex CLI 17 and Gemini CLI
+26. The matrix counts builds per reply for the guarded shell command only: Claude Code 27 (the 22 plus five releases installed to
+bisect the `ask` change, which ran that one cell), Codex CLI 12 (hooks trusted by the bypass flag; five more builds, 0.131.0 to
+0.140.0, ran only with persisted trust) and Gemini CLI 26. Claude Code 2.1.0 is in neither count: it blocked the neutral control too,
+so a deny there shows nothing.
 
 The 47 are three causes: a Codex hook the user had not trusted is skipped without any signal in `codex exec` (40 rows, 12 builds); a
 Claude Code hook scoped with the natural `mcp__.*` matcher does not see a resource read, which goes through a built-in tool name (5
@@ -139,7 +148,7 @@ This does not show that an attacker can bypass a guard: nothing here shows a tri
 - Gemini ask: RAN on 13, HUNG on 15 of 28 builds; last RAN 0.37.2, first HUNG 0.38.0. Under yolo the call runs silently until 0.37.2 and, from 0.38.0, waits until the wall-clock cap. "Hung" means no
   progress at the cap (90 to 900 s depending on the cell), not that it waits for ever.
 
-**Finding 3. Failure replies: timeouts fail open on every build tested; the rest were tested on few builds.**
+**Finding 3. Failure replies: with the default hook configuration a timeout fails open on every build tested; the rest were tested on few builds.**
 - R9, hook runs past its timeout: Claude Code RAN on 22 of 22; Codex CLI RAN on 12 of 12; Gemini CLI RAN on 1 of 1
 - R5, empty reply: Claude Code RAN on 1 of 1; Codex CLI RAN on 2 of 2; Gemini CLI RAN on 1 of 1
 - R7, exit 2: Claude Code BLOCKED on 1 of 1; Codex CLI BLOCKED on 12 of 12
@@ -148,6 +157,17 @@ The Gemini result for a missing interpreter is the safe direction (the documenta
 0.30.0. Malformed JSON and exit 1 were run on the same one Claude Code and two Codex builds as the empty reply and also let the call
 run. Timeouts are the only failure class measured across the whole sweep for Claude Code and Codex. A sentence such as "a hook that
 crashed let the call run on most builds" would go beyond these counts.
+
+**The one setting that changes this.** Claude Code documents an `onFailure: "block"` key on a hook entry (from 2.1.295). The matrix
+above ran with no such key. The key was run in separate cells: on 2.1.316 (3 runs per reply, in
+`results/hook-fidelity/claude/all-runs.jsonl`) R9 (timeout), R7 (exit 2), R8 (exit 1), R10a (hook file not executable), R10b (missing
+interpreter), R11 (exit 2, empty stderr) and R13 (missing hook file) were BLOCKED in 3 of 3 runs each. R5 (empty reply) and R6
+(malformed JSON, exit 0) still RAN in 3 of 3, so the key does not cover them. On 2.1.281, before the documented version, the key had no
+effect: R9 and R8 RAN in 2 of 2 runs each (`results/hook-fidelity/claude/r4-gaps/onfailure/runs.jsonl`). IntentShield's `install`
+writes `"onFailure": "block"` on Claude Code's `PreToolUse` entry (`src/intentshield/install.py`). Since 0.4.3 it also wraps the hook
+in a launcher that refuses the call when the hook cannot start, and gives the hook a 30 s deadline of its own, shorter than the
+harnesses' timeouts, so a slow hook answers before the harness gives up. Only one build was run with the key after its documented
+version, so "blocks on Claude Code 2.1.295 and later" is the documentation's statement, not a sweep result.
 
 **Finding 4. State outside the hook's reply decides more than the reply does.**
 - Codex untrusted hooks: 70 rows, hook ran in 0, call ran in 70, 12 builds. The tool prints nothing.
@@ -187,6 +207,18 @@ The 178 are the items declared held out. The 166 leave out 12 items of one MCP a
 rule in the MCP inspector was written from that family's own misspelling, so they are not held out. The 156 leave out all 22 MCP calls,
 which the built-in tool rules never see; they are decided the same with and without the rules. Of the 156 built-in tool calls the rules
 still let 6 through. The rules are opt-in (`--builtin-tools`).
+
+**Held out when the sets were built, not now.** Both sets were held out when they were built: no item's source was used to write a
+rule, and its command or path was not in the repository's text at that time. The unit tests of the dangerous-command rules were
+written afterwards and contain the command or path of some of the harmful items: 7 of the 104 harmful items of the 214-call set and
+33 of the 156 harmful built-in-tool items of the 467 set (a plain substring match at `633014e`, so short strings such as `~/.bashrc` can
+match by chance; `benchmarks/hook_fidelity/overlap_check.py` lists them). The strings are canonical dangerous commands, and the rules
+were written from category lists, so it may be coincidence, but the tests contain them. What it means for the comparison: scored without
+those 7 items, IntentShield with the rules lets through 27 of 97 harmful calls (28 of 104 with them), asks on 39 and denies 31 (41 and
+35 with them). On safety-net's shell scope (82 items) safety-net denies 40 and IntentShield 22 (41 and 24 of 85 with them), so
+IntentShield still trails safety-net on denies alone; on knox's scope (69 items) knox denies 28 and IntentShield 25 (29 and 28 of 73 with
+them). The committed tables and the figures above are the study's and were not changed; the 467-set figures were not rescored without
+the overlap.
 
 **How to read the two together.** The rules were written from six harmful categories and the 214 items sample the same six. The
 author built the set, and the rules and the labels come from the same model family. The rules file existed on disk while the fixtures
@@ -234,10 +266,11 @@ how the rules generalise is made in either direction.
   "written before the runs" as the author's statement. The documentation pages are recorded by URL and hash, not copied.
 - **The rules have changed since the study ran.** The committed results are the rules as they stood then, and are not
   regenerated. Since then a deny from the dangerous-command rules wins over a session ask. Re-running the committed fixtures through
-  today's code (2026-11-11) changes 45 IntentShield decisions from ask to deny: 27 of the 467-fixture set (9 items) and 18 of the
-  214-call set (6 items). All 45 are harmful credential-exfiltration rows. No benign row changed and none changed to allow. On the
-  214-call set the 41 asked and 35 denied become 35 asked and 41 denied; 28 of 104 harmful calls are still let through and the 5
-  benign asks stay. The figures in section 5 are the study's, not these, and the denies-alone count (24/85) was not recomputed.
+  today's code (2026-11-11) changes 51 IntentShield decisions. 48 go from ask to deny: 30 rows (10 items) of the 467-fixture set and
+  18 rows (6 items) of the 214-call set, all harmful credential-exfiltration items. 3 rows (1 item, `git push -f origin HEAD`) go from
+  deny to ask on the 214-call set, because a force-push to `HEAD` is now an ask, not a deny. No benign row changed and none changed to
+  allow. On the 214-call set the 41 asked and 35 denied become 36 asked and 40 denied; 28 of 104 harmful calls are still let through
+  and the 5 benign asks stay. The figures in section 5 are the study's, not these, and the denies-alone count (24/85) was not recomputed.
 - **One author, a conflict of interest.** The author maintains IntentShield, whose hook is one of the things measured.
 - **Findings age.** Vendors update their tools. Gemini CLI's consumer tiers were reported (unverified) to end on 2026-06-18, so 28 releases of a
   possibly retiring tool carry two of the three replicating deviations.
@@ -253,17 +286,21 @@ enforced. The drafts describe observed hook behaviour with benign markers and no
 
 ## 8. Reproduce it offline
 
-Everything below needs no harness, no model and no network. From the repository root:
+Everything below needs no harness, no model and no network. From the repository root, with a scratch directory so that nothing
+under `results/` is overwritten:
 
 ```
-.venv/bin/python benchmarks/hook_fidelity/report_numbers.py          # the matrix and every figure in sections 3 to 5
-.venv/bin/python benchmarks/hook_fidelity/detect_compare.py report --decisions results/hook-fidelity/detect/decisions.jsonl --out <copy of detect/>
-.venv/bin/python benchmarks/hook_fidelity/fresh_report.py            # the 214-item tables
+S=$(mktemp -d)
+.venv/bin/python benchmarks/hook_fidelity/report_numbers.py          # the matrix and every figure in sections 3 to 5 (prints only)
+cp -r results/hook-fidelity/detect $S/detect
+.venv/bin/python benchmarks/hook_fidelity/detect_compare.py report --decisions results/hook-fidelity/detect/decisions.jsonl --out $S/detect
+.venv/bin/python benchmarks/hook_fidelity/fresh_report.py --out $S/fresh     # the 214-item tables
+.venv/bin/python benchmarks/hook_fidelity/overlap_check.py           # which items are now in tests/ or src/ (section 5; prints only)
 .venv/bin/pytest -q tests/test_hook_fidelity_*.py                    # recomputes the figures the documents cite
 ```
 
 `detect_compare.py report` and `breakdown` work in a clean clone: they read `detect/decisions.jsonl` and no guard clone. They write into
-the directory they are given, so copy `results/hook-fidelity/detect/` first if you only want to compare. The other tables and their
+the directory they are given, which is why the commands above give them a copy. The other tables and their
 commands are in [`results/hook-fidelity/README.md`](../results/hook-fidelity/README.md).
 
 What needs more: the guard decisions need clones of the 26 guards at their pinned commits (`benchmarks/hook_fidelity/fetch_corpus.py
@@ -303,7 +340,7 @@ The output of `report_numbers.py`, for checking this page against the data (a te
 builds excluded (neutral control did not run the hook): {'Claude Code': ['2.1.0'], 'Codex CLI': ['0.131.0', '0.133.0', '0.134.0', '0.136.0', '0.140.0'], 'Gemini CLI': []}
 
 [findings]
-deny: deny enforced where the hook ran: 66 of 66 builds, 220/220 [98.3, 100.0]% rows (0 let the call run); the rows are 84 deterministic cells on 66 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 273 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2)
+deny: deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 deterministic cells on 65 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 271 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2)
 ask_claude: Claude Code ask: RAN on 6 builds, BLOCKED on 21 of 27 measured; last RAN 2.1.84, first BLOCKED 2.1.85
 ask_codex: Codex ask: RAN on 12 of 12 builds
 ask_gemini: Gemini ask: RAN on 13, HUNG on 15 of 28 builds; last RAN 0.37.2, first HUNG 0.38.0

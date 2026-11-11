@@ -32,9 +32,37 @@ _MAX = 50_000        # characters of one command or file read here
 _MAX_STAGES = 400    # simple commands examined
 _MAX_TOKENS = 20_000  # words examined
 _MAX_DEPTH = 3      # nested bash -c / eval / $(...)
+_MAX_WORDS = 400    # words of one command after its brace lists are expanded
 _TOO_DEEP = "nested more than three levels deep (bash -c, eval, $(...)), too deep to read in full."
 
+_PATH_CAP = 1000      # characters of one path read by the file rules, after repeated slashes are collapsed
+_PATH_CAP_WHY = f"a path longer than {_PATH_CAP} characters, too long to check"
+
 DENY, ASK = "deny", "ask"
+
+
+def _is_opt(arg: str, *names: str) -> bool:
+    """True when ``arg`` spells one of the long options ``names`` whole or cut short, as getopt_long and git's option parser
+    accept it (``--recursive``, ``--rec``, ``--rec=x``): ``--`` and at least one more character. A cut that two options share is an
+    error in the real program, so reading it as the option only makes the guard ask about a command that would not run."""
+    if len(arg) < 3 or not arg.startswith("--"):
+        return False
+    head = arg.partition("=")[0]
+    return any(name.startswith(head) for name in names)
+
+
+def _canon(arg: str, names: tuple[str, ...]) -> str:
+    """``arg`` as the full spelling of the long option of ``names`` it abbreviates (the value after ``=`` kept), else unchanged."""
+    if len(arg) >= 3 and arg.startswith("--"):
+        head, eq, value = arg.partition("=")
+        if head not in names:
+            for name in names:
+                if name.startswith(head):
+                    return name + eq + value
+    return arg
+
+
+_LONG_WORD = re.compile(r"\S{121,}")
 
 
 @dataclass
@@ -43,6 +71,10 @@ class Hit:
     reason: str
     trigger: str = ""   # the path or text a user may have asked for, to soften a deny to an ask
     escalate: bool = False  # an ask that is a deny where the text is written to a file that runs later, unseen
+
+    def __post_init__(self) -> None:
+        if len(self.reason) > 400:  # a reason that quotes a padded path stays readable
+            self.reason = _LONG_WORD.sub(lambda m: m[0][:60] + "..." + m[0][-30:], self.reason)
 
 
 @dataclass
@@ -53,6 +85,7 @@ class _Stage:
     pipeline: int = 0
     sudo: bool = False
     assigns: list[str] = field(default_factory=list)
+    xargs: bool = False      # the program is run by xargs: its last arguments come from its stdin
 
 
 # --- parsing ---------------------------------------------------------------------------------------------------
@@ -70,7 +103,14 @@ _WRAPPERS = frozenset({"nohup", "time", "command", "exec", "nice", "ionice", "se
 # Shell reserved words that start a command on the same line (``if x; then rm -rf /; fi``, ``{ rm -rf /; }``, ``! rm``):
 # the command is what follows them.
 _KEYWORDS = frozenset({"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}", "time", "coproc"})
-_SUDO_VALUED = frozenset({"-u", "-g", "-h", "-p", "-C", "-r", "-t", "-D", "-U", "-T", "--user", "--group", "--host"})
+_SUDO_LONG = ("--user", "--group", "--host", "--prompt", "--chdir", "--close-from", "--role", "--type", "--other-user",
+              "--command-timeout")
+_SUDO_VALUED = frozenset({"-u", "-g", "-h", "-p", "-C", "-r", "-t", "-D", "-U", "-T", *_SUDO_LONG})
+_ENV_LONG = ("--unset", "--chdir", "--split-string", "--argv0")
+_NICE_LONG = ("--adjustment", "--class", "--classdata")
+_TIMEOUT_LONG = ("--signal", "--kill-after")
+_XARGS_VALUED = frozenset({"-n", "-I", "-L", "-P", "-s", "-d", "-E", "-a", "-J", "--max-args", "--replace", "--max-lines",
+                           "--max-procs", "--max-chars", "--delimiter", "--eof", "--arg-file"})
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish", "ash", "csh", "tcsh"})
 _INTERPRETERS = frozenset({"python", "python3", "python2", "perl", "ruby", "node", "php", "deno", "bun", "lua", "pwsh"})
 _FETCHERS = frozenset({"curl", "wget", "fetch", "aria2c", "lwp-download", "http", "https", "xh"})
@@ -333,10 +373,23 @@ def _lexical(text: str, comments: bool) -> str:
     return "".join(out)
 
 
+# Variables a shell has set, so that a default after ``:-`` does not apply and ``${HOME:-/x}`` is still the home directory.
+_SET_VAR = r"(?!(?:HOME|USERPROFILE|PWD|USER|LOGNAME|SHELL|PATH)\b)"
+_EMPTY_EXPANSION = re.compile(r"\$[@*]|\$\(\s*(?:(?:true|false|:)\s*)?\)|`\s*(?:true|false|:)\s*`|\$\{" + _SET_VAR + r"[A-Za-z_]\w{0,40}:?[-=]\}")
+_DEFAULT_EXPANSION = re.compile(r"\$\{" + _SET_VAR + r"[A-Za-z_]\w{0,40}:?[-=]([^}$`'\"\\\s]{1,60})\}")
+
+
 def _normalise(text: str) -> str:
-    """The text as the shell reads it: line continuations joined (``rm \\<newline> -rf /``), form feed and vertical tab read as
-    blanks, ``$IFS`` read as a blank and empty quotes inside words dropped."""
+    """The text as the shell reads it: NUL bytes dropped (bash ignores them in a script), line continuations joined
+    (``rm \\<newline> -rf /``), form feed and vertical tab read as blanks, ``$IFS`` read as a blank, the expansions that are empty
+    where they stand (``$@``, ``$()``, ``${X:-}``) dropped, a default that is spelled out (``${RM:-rm}``) read as that word, and
+    empty quotes inside words dropped."""
+    if "\x00" in text:
+        text = text.replace("\x00", "")
     text = _CONTINUATION.sub(r"\1", text)
+    if "$" in text or "`" in text:
+        text = _EMPTY_EXPANSION.sub("", text)
+        text = _DEFAULT_EXPANSION.sub(r"\1", text)
     if "\x0b" in text or "\x0c" in text:
         text = text.replace("\x0b", " ").replace("\x0c", " ")
     if "IFS" in text:
@@ -344,6 +397,48 @@ def _normalise(text: str) -> str:
     if "''" in text or '""' in text or "\\" in text:
         text = _lexical(text, comments=False)
     return text
+
+
+_SUBST_SAFE = re.compile(r"[^\w ./~@:=,+-]")
+
+
+def _wrap_substitutions(text: str) -> str:
+    """``text`` with each ``$(...)`` that stands in a word outside quotes put in double quotes, with only plain characters kept
+    inside, so that the parentheses do not end the command: ``rm -rf $(echo x) /`` is ``rm -rf`` of two words, not ``rm -rf $`` and
+    a command ``/``. The code inside is read on its own from the unchanged text."""
+    if "$(" not in text:
+        return text
+    out: list[str] = []
+    quote = ""
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\" and quote != "'":
+            out.append(text[i:i + 2])
+            i += 2
+        elif quote:
+            if c == quote:
+                quote = ""
+            out.append(c)
+            i += 1
+        elif c in "'\"":
+            quote = c
+            out.append(c)
+            i += 1
+        elif c == "$" and text.startswith("$(", i) and not text.startswith("$((", i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                depth += (text[j] == "(") - (text[j] == ")")
+                j += 1
+            if depth:  # never closed: left as it is
+                out.append(text[i:])
+                break
+            out.append('"$(' + _SUBST_SAFE.sub("_", text[i + 2:j - 1]) + ')"')
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
 
 
 def _stages(text: str, notes: list[str] | None = None) -> list[_Stage] | None:
@@ -356,6 +451,7 @@ def _stages(text: str, notes: list[str] | None = None) -> list[_Stage] | None:
     text = text.replace("\r", " ").replace("\n", " ; ")
     if "$'" in text:
         text = _ANSI_C.sub(_decode_ansi_c, text)
+    text = _wrap_substitutions(text)
     lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     lexer.commenters = ""
@@ -426,6 +522,7 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[str]]:
     ``-c`` or ``eval`` runs is returned in ``inner``)."""
     argv = list(stage.argv)
     sudo, assigns = stage.sudo, list(stage.assigns)
+    xargs = stage.xargs
     inner: list[str] = []
     for _ in range(8):
         argv = _strip_keywords(argv)
@@ -438,13 +535,31 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[str]]:
             break
         argv.pop(0)
         sudo = sudo or name in ("sudo", "doas")
+        xargs = xargs or name == "xargs"
         while argv and argv[0].startswith("-") and argv[0] != "--":
             flag = argv.pop(0)
+            if name in ("sudo", "doas"):
+                flag = _canon(flag, _SUDO_LONG)
+            elif name == "env":
+                flag = _canon(flag, _ENV_LONG)
+            elif name in ("nice", "ionice"):
+                flag = _canon(flag, _NICE_LONG)
+            elif name == "timeout":
+                flag = _canon(flag, _TIMEOUT_LONG)
             if name in ("sudo", "doas") and flag in _SUDO_VALUED and argv:
                 argv.pop(0)
-            elif name in ("env",) and flag in ("-u", "-C", "-S") and argv:
+            elif name == "env" and flag in ("-S", "--split-string") and argv:  # the program and its arguments, as one word
+                try:
+                    argv = [*shlex.split(argv.pop(0)), *argv]
+                except ValueError:
+                    pass
+            elif name == "env" and flag in ("-u", "-C", "--unset", "--chdir", "-a", "--argv0") and argv:
                 argv.pop(0)
-            elif name in ("nice", "ionice") and flag in ("-n", "-c") and argv:
+            elif name in ("nice", "ionice") and flag in ("-n", "-c", "-p", "--adjustment", "--class") and argv:
+                argv.pop(0)
+            elif name == "timeout" and flag in ("-s", "-k", "--signal", "--kill-after") and argv:
+                argv.pop(0)
+            elif name == "xargs" and flag in _XARGS_VALUED and argv:
                 argv.pop(0)
         if argv and argv[0] == "--":
             argv.pop(0)
@@ -452,13 +567,21 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[str]]:
             argv.pop(0)
         if name == "nice" and argv and argv[0].lstrip("+-").isdigit():
             argv.pop(0)
-    return _Stage(argv, stage.redirects, stage.piped, stage.pipeline, sudo, assigns), inner
+    return _Stage(argv, stage.redirects, stage.piped, stage.pipeline, sudo, assigns, xargs), inner
 
 
 # --- paths -----------------------------------------------------------------------------------------------------
 
 _HOME = re.compile(r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|~[\w.-]{0,32}|/Users/[^/]+|/home/[^/]+|/root|/var/root)(?=/|$)")
 _GLOB_TAIL = re.compile(r"/(?:\.?\*{1,2}|\.\[!\.\]\*|\.\[\^\.\]\*|\.\?\*)$")
+_BRACKET = re.compile(r"\[[^\]/\s]{1,30}\]")
+
+
+def _glob_only(segment: str) -> bool:
+    """A path part made of glob characters alone (``?``, ``[a-z]*``, ``[!x]``): every name of that shape in the directory,
+    so at the root ``/[a-z]*`` and ``/?`` are the entries of the root."""
+    rest = _BRACKET.sub("", segment)
+    return bool(segment) and set(rest) <= {"?", "*"} and (rest != segment or "?" in segment or "*" in segment)
 _SYSTEM_ROOTS = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/var", "/boot", "/System", "/Library", "/opt", "/private",
                  "/dev", "/sys", "/proc", "/Applications", "/srv", "/mnt", "/Volumes", "/Users", "/home", "/root", "/snap")
 _PROTECTED = frozenset({"/", "~", *_SYSTEM_ROOTS, "/usr/bin", "/usr/lib", "/usr/local", "/usr/local/bin", "/usr/sbin",
@@ -491,13 +614,16 @@ def _norm(path: str) -> str:
         p = "/".join(["~", *stack])
     else:
         p = posixpath.normpath("/" + p.lstrip("/")) if p.startswith("/") else posixpath.normpath(p)
-        m = _HOME.match(p)
-        if m:
-            p = "~" + p[m.end():]
+        home = _HOME.match(p)
+        if home:
+            p = "~" + p[home.end():]
     for _ in range(3):
         stripped = _GLOB_TAIL.sub("", p)
         if stripped == p:
-            break
+            parent, slash, segment = p.rpartition("/")
+            if not (slash and _glob_only(segment)):
+                break
+            stripped = parent
         p = stripped or "/"
     return p or "/"
 
@@ -527,7 +653,7 @@ def _device(path: str) -> bool:
 
 
 # A variable that alone (or after ``/``, ``~/`` or ``$HOME/``) is the target: when it is empty the target is the root or home directory.
-_EMPTY_VAR = re.compile(r"\"?(?:/|~/|\$\{?(?:HOME|USERPROFILE)\}?/)?\$\{?[A-Za-z_]\w{0,40}\}?\"?(?:/\*?)?")
+_EMPTY_VAR = re.compile(r"\"?(?:/\*?|~/?|\$\{?(?:HOME|USERPROFILE)\}?/)?\$\{?[A-Za-z_]\w{0,40}\}?\"?(?:/\*?)?")
 _DEFAULTED = re.compile(r"\$\{[A-Za-z_]\w{0,40}:?-([^}]{0,60})\}(/?\*?)")
 
 
@@ -570,10 +696,31 @@ _APP_SECRET = re.compile(r"(?:^|/)(?:credentials\.json|client_secrets?[\w-]{0,20
                          r"secrets\.(?:ya?ml|json|toml)|terraform\.tfstate|[\w-]{1,30}\.tfvars)$")
 
 
+_SLASHES = re.compile(r"/(?:\.?/)+")
+_TEST_DIRS = frozenset({"test", "tests", "testdata", "fixtures", "fixture", "__fixtures__", "spec", "specs", "__tests__"})
+
+
+def _clean_path(path: str) -> str:
+    """``path`` without NUL bytes (the shell ignores them) and with repeated slashes and ``/./`` collapsed, which is how the
+    system reads them: ``~/.ssh//./id_rsa`` is ``~/.ssh/id_rsa``."""
+    if "\x00" in path:
+        path = path.replace("\x00", "")
+    return _SLASHES.sub("/", path) if "/" in path else path
+
+
+def _pathlike(word: str) -> bool:
+    """A word that is probably a path rather than a pattern, a program text or a URL."""
+    return word.startswith(("/", "~", "$", ".")) or ("/" in word and "://" not in word and not any(c.isspace() for c in word))
+
+
 def _cred_level(path: str) -> tuple[str, str] | None:
-    """(decision, what) when ``path`` names a credential store."""
-    if not path or len(path) > 1000:
+    """(decision, what) when ``path`` names a credential store. A path over ``_PATH_CAP`` characters (after repeated slashes are
+    collapsed) is not read: it is asked about, never passed as safe."""
+    if not path:
         return None
+    path = _clean_path(path)
+    if len(path) > _PATH_CAP:
+        return (ASK, _PATH_CAP_WHY) if _pathlike(path) else None
     n = _norm(path).lower() if path.startswith(("~", "$", "/")) else posixpath.normpath(path.strip()).lower()
     raw = path.strip().lower()
     base = n.rpartition("/")[2]
@@ -588,6 +735,8 @@ def _cred_level(path: str) -> tuple[str, str] | None:
             return (DENY, "the SSH directory") if n.endswith(".ssh/*") or raw.endswith(".ssh/*") else None
         return DENY, "an SSH private key" if base != ".ssh" else "the SSH directory"
     if _KEY_NAME.match(base):
+        if not path.startswith(("/", "~", "$")) and _TEST_DIRS & set(n.split("/")[:-1]):  # tests/fixtures/id_rsa: a sample key
+            return ASK, "a file named like an SSH private key, in a test directory"
         return DENY, "an SSH private key"
     if base in (".netrc", "_netrc"):
         return DENY, "~/.netrc"
@@ -635,9 +784,15 @@ _CLI_SECRETS = (
 )
 
 
+# Long options of the programs in ``_CLI_SECRETS`` that the program accepts cut short, with the shortest cut it takes for that one
+# option alone (gpg: ``--export-secret-k``, since ``--export`` and ``--export-secret-subkeys`` are options of their own).
+_CUT_OPTIONS = {"--export-secret-keys": 17}
+
+
 def _in_order(argv: list[str], needle: tuple[str, ...]) -> bool:
     it = iter(argv)
-    return all(any(token == want for token in it) for want in needle)
+    return all(any(token == want or (shortest := _CUT_OPTIONS.get(want)) is not None and len(token) >= shortest
+                   and want.startswith(token) for token in it) for want in needle)
 
 
 def _candidates(arg: str) -> list[str]:
@@ -695,7 +850,7 @@ _REVERSE_STRICT = re.compile(r"(?:\bbash|\bsh|\bzsh)\s{1,4}-i\s{1,4}>&?\s{0,3}/d
 
 _RM_SHORT_RECURSIVE = frozenset("rR")
 _PROTECTED_BRANCH = re.compile(r"^(?:main|master|develop|development|dev|trunk|prod|production|stable|staging|release|"
-                               r"release[/-][\w.-]{1,40}|releases/[\w.-]{1,40}|hotfix|next|latest|HEAD)$")
+                               r"release/[\w.-]{1,40}|release-v?\d[\w.-]{0,40}|releases/[\w.-]{1,40}|hotfix|next|latest)$")
 _WORLD_WRITABLE = re.compile(r"^[0-7]?[0-7]{2}[2367]$|(?:^|,)(?:[ao]|ugo)[+=][rwxXst]{0,4}w|^a[+=]rwx|^[+=]rwx")
 _SETUID = re.compile(r"^[4-7][0-7]{3}$|(?:^|,)[ugo]{0,3}\+[rwxXt]{0,3}s")
 _CRON = re.compile(r"(?:^|/)(?:etc/(?:cron[\w.]*|anacrontab)|var/(?:spool/cron|at/tabs)|crontab)(?:/|$)")
@@ -717,8 +872,11 @@ _MALICIOUS_CONTENT = re.compile(
 
 def persistence_path(path: str) -> tuple[str, str] | None:
     """(decision, why) when writing ``path`` sets up code that runs later or changes who can log in."""
+    path = _clean_path(path)
+    if len(path) > _PATH_CAP:
+        return (ASK, _PATH_CAP_WHY) if _pathlike(path) else None
     n = _norm(path).lower() if path.startswith(("~", "$", "/")) else path.strip().replace("\\", "/").lower()
-    if not n or len(n) > 1000:
+    if not n:
         return None
     if _PERSIST_DENY.search(n):
         return DENY, "an access file (authorized_keys, sudoers, passwd)"
@@ -767,7 +925,7 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
         return Hit(ASK, "git run with a hooks path or fsmonitor override, which bypasses or replaces the repository's hooks.")
     if any(a.split("=")[0].upper() in ("HUSKY", "HUSKY_SKIP_HOOKS", "SKIP", "PRE_COMMIT_ALLOW_NO_CONFIG") for a in assigns):
         return Hit(ASK, "git run with the hook-skipping environment variable set.")
-    if sub in ("commit", "push", "merge", "am", "cherry-pick", "rebase", "revert") and "--no-verify" in args:
+    if sub in ("commit", "push", "merge", "am", "cherry-pick", "rebase", "revert") and any(_is_opt(a, "--no-verify") for a in flags):
         return Hit(ASK, f"git {sub} --no-verify skips the repository's hooks.")
     if sub == "commit":
         for a in flags:
@@ -783,14 +941,14 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
     if sub == "push":
         pos = [a for a in args if not a.startswith("-")]
         refs = pos[1:]
-        forced = any(a in ("-f", "--force") or a.startswith(("--force-with-lease", "--force-if-includes")) for a in flags) or any(
+        forced = any(a == "-f" or _is_opt(a, "--force", "--force-with-lease", "--force-if-includes") for a in flags) or any(
             len(a) > 1 and a[0] == "-" and a[1] != "-" and "f" in a[1:] and "n" not in a[1:] for a in flags) or any(
             r.startswith("+") for r in refs)
-        deleting = "--delete" in flags or "-d" in flags or any(r.startswith(":") for r in refs)
+        deleting = "-d" in flags or any(_is_opt(a, "--delete") for a in flags) or any(r.startswith(":") for r in refs)
         branches = {_branch(r) for r in refs}
         protected = any(_PROTECTED_BRANCH.match(b) for b in branches) or any(
             _PROTECTED_BRANCH.match(b) for b in {_branch(r.partition(":")[0]) for r in refs if ":" in r})
-        if "--mirror" in flags:
+        if any(_is_opt(a, "--mirror") for a in flags):
             return Hit(ASK, "git push --mirror overwrites every ref of the remote.")
         if (forced or deleting) and protected:
             return Hit(DENY, "force-push or deletion of a shared branch rewrites history others build on.")
@@ -798,23 +956,23 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
             return Hit(ASK, "git force-push or branch deletion on the remote rewrites or removes history; confirm it.")
     if sub in ("filter-branch", "filter-repo"):
         return Hit(ASK, f"git {sub} rewrites the whole history.")
-    if sub == "reset" and "--hard" in args:
+    if sub == "reset" and any(_is_opt(a, "--hard") for a in flags):
         return Hit(ASK, "git reset --hard discards uncommitted work and moves the branch.")
     if sub == "clean" and any(a.startswith("-") and not a.startswith("--") and "f" in a for a in args) or (
-            sub == "clean" and "--force" in args):
-        dry = "--dry-run" in args or any(a.startswith("-") and not a.startswith("--") and "n" in a for a in args)
+            sub == "clean" and any(_is_opt(a, "--force") for a in flags)):
+        dry = any(_is_opt(a, "--dry-run") for a in flags) or any(a.startswith("-") and not a.startswith("--") and "n" in a for a in args)
         return None if dry else Hit(ASK, "git clean -f deletes untracked files for good.")
-    if sub == "reflog" and "expire" in args or sub == "gc" and any(a.startswith("--prune=now") for a in args):
+    if sub == "reflog" and "expire" in args or sub == "gc" and any(_is_opt(a, "--prune") and a.partition("=")[2] == "now" for a in flags):
         return Hit(ASK, "this removes the reflog or unreachable commits, the way back from a bad rewrite.")
     if sub == "update-ref" and "-d" in args:
         return Hit(ASK, "git update-ref -d deletes a ref.")
-    if sub == "branch" and any(a in ("--delete", "-d", "-D") or a[:1] == "-" and a[1:2] != "-" and set("dD") & set(a) for a in flags):
+    if sub == "branch" and any(_is_opt(a, "--delete") or a in ("-d", "-D") or a[:1] == "-" and a[1:2] != "-" and set("dD") & set(a) for a in flags):
         # a local delete: -d refuses an unmerged branch itself, -D (or -d -f) drops it whatever it holds
-        force = any(a == "--force" or a[:1] == "-" and a[1:2] != "-" and ("D" in a or "f" in a) for a in flags)
+        force = any(_is_opt(a, "--force") or a[:1] == "-" and a[1:2] != "-" and ("D" in a or "f" in a) for a in flags)
         if force and any(_PROTECTED_BRANCH.match(a) for a in args if not a.startswith("-")):
             return Hit(ASK, "git branch -D deletes a shared branch locally, even with commits that are not merged.")
-    if sub == "restore" and ("--staged" in args or "-S" in args) and not (
-            "--worktree" in args or "-W" in args or any(a[:1] == "-" and a[1:2] != "-" and "W" in a for a in flags)):
+    if sub == "restore" and (any(_is_opt(a, "--staged") for a in flags) or "-S" in args) and not (
+            any(_is_opt(a, "--worktree") for a in flags) or any(a[:1] == "-" and a[1:2] != "-" and "W" in a for a in flags)):
         return None  # only unstages
     if sub == "checkout" and args and args[-1] in (".", "--") or sub == "restore" and "." in args:
         return Hit(ASK, "this discards every uncommitted change in the tree.")
@@ -830,17 +988,20 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
             flags.append(a)
         else:
             targets.append(a)
-    recursive = any(a in ("--recursive",) or (not a.startswith("--") and any(c in _RM_SHORT_RECURSIVE for c in a[1:])) for a in flags)
-    force = any(a == "--force" or (not a.startswith("--") and "f" in a[1:]) for a in flags)
-    if "--no-preserve-root" in flags and any(_norm(t) == "/" for t in targets):
+    recursive = any(_is_opt(a, "--recursive") or (not a.startswith("--") and any(c in _RM_SHORT_RECURSIVE for c in a[1:])) for a in flags)
+    force = any(_is_opt(a, "--force") or (not a.startswith("--") and "f" in a[1:]) for a in flags)
+    if any(_is_opt(a, "--no-preserve-root") for a in flags) and any(_norm(t) == "/" for t in targets):
         return Hit(DENY, "rm --no-preserve-root on /.", "/")
     if not recursive and not (force and len(targets) > 0 and any(_norm(t) in ("/", "~") for t in targets)):
         return None
+    small_system = None
     for t in targets:
         if _protected(t) or (default := _default_target(t)) and _protected(default):
             return Hit(DENY, f"recursive delete of {t}, a root, home or system directory.", t)
-        if sudo and _system(t) and _norm(t).count("/") <= 2:
-            return Hit(DENY, f"sudo recursive delete inside the system directory {t}.", t)
+        if sudo and _system(t) and _norm(t).count("/") <= 2 and small_system is None:
+            small_system = Hit(ASK, f"sudo recursive delete inside the system directory {t}; confirm it.", t)
+    if small_system:
+        return small_system
     for t in targets:
         if _is_empty_var_target(t) and (force or recursive):
             return Hit(ASK, f"recursive delete of {t}: if the variable is empty this is the root directory.", t)
@@ -923,27 +1084,34 @@ def _disk_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
 
 _BREW_DIRS = frozenset({"/usr/local", "/usr/local/bin", "/usr/local/lib", "/usr/local/share", "/usr/local/etc", "/usr/local/include",
                         "/usr/local/sbin", "/usr/local/var"})
-_OWN_NAME = re.compile(r"\$\{?(?:USER|LOGNAME)\}?(?::\$?\{?[\w-]{0,40}\}?)?")
+_OWN_NAME = re.compile(r"\$\{?(?:USER|LOGNAME)\}?(?::\$?\{?[\w-]{0,40}\}?)?|\$\(\s{0,3}(?:whoami|id\s{1,3}-un|logname)\s{0,3}\)|`\s{0,3}whoami\s{0,3}`")
 
 
 def _mode_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
     flags = [a for a in argv[1:] if a.startswith("-") and len(a) > 1 and not a[1:].isdigit()]
     pos = [a for a in argv[1:] if a not in flags]
-    recursive = any(a == "--recursive" or (not a.startswith("--") and "R" in a[1:]) for a in flags)
+    recursive = any(_is_opt(a, "--recursive") or (not a.startswith("--") and "R" in a[1:]) for a in flags)
     if not pos:
         return None
     mode, targets = pos[0], pos[1:]
     if name == "chmod" and mode.startswith("-") and len(pos) > 1:
         mode, targets = pos[1], pos[2:]
-    if name in ("chown", "chgrp") and any(a.startswith("--reference") for a in argv[1:]):
-        targets = pos
+    if name == "chmod":  # a mode such as -w or -x is read as an option by the parser above, but chmod takes it as the mode
+        symbolic = next((a for a in flags if not a.startswith("--") and set(a[1:]) - set("RfvchHLP")), None)
+        if symbolic:
+            mode, targets = symbolic, pos
+    if any(_is_opt(a, "--reference") for a in flags):  # the mode or owner comes from a file: every word is a target
+        mode, targets = "", pos
     prot = [t for t in targets if _protected(t)]
     syst = [t for t in targets if _system(t)]
     note = " (with sudo)" if sudo else ""
     if name == "chmod":
         bad = bool(_WORLD_WRITABLE.search(mode)) or mode in ("000", "0000", "a-rwx", "ugo-rwx", "a=")
-        if bad and recursive and prot:
-            return Hit(DENY, f"recursive chmod {mode} on {prot[0]}{note}.", prot[0])
+        if recursive and prot:  # whatever the mode: 644 or go-rwx on / or /usr stops a system from working
+            home = [t for t in prot if _norm(t) == "~" or _norm(t).startswith("~/") or _norm(t) in _BREW_DIRS]
+            if bad or len(home) < len(prot) or sudo and not all(_norm(t) in _BREW_DIRS for t in prot):
+                return Hit(DENY, f"recursive chmod {mode} on {prot[0]}, a root, home or system directory{note}.", prot[0])
+            return Hit(ASK, f"recursive chmod {mode} on {prot[0]}{note}; confirm it.", prot[0])
         if bad and syst:
             return Hit(ASK, f"chmod {mode} on the system path {syst[0]}{note}.", syst[0])
         if bad and recursive and _WORLD_WRITABLE.search(mode):
@@ -980,7 +1148,7 @@ def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
             targets += [a[3:] for a in args if a.startswith("of=")]
         elif pos:
             targets.append(pos[-1])
-    elif name in ("sed", "perl", "ruby", "python3") and any(a.startswith("-i") or a == "--in-place" for a in args):
+    elif name in ("sed", "perl", "ruby", "python3") and any(a.startswith("-i") or _is_opt(a, "--in-place") for a in args):
         targets += pos[1:] if name == "sed" else pos
     elif name == "touch" or name == "chmod":
         targets += []
@@ -1023,9 +1191,13 @@ def _remote_hosts(argv: list[str]) -> list[str]:
     return hosts
 
 
+_FETCH_LONG = ("--data", "--data-binary", "--data-raw", "--data-urlencode", "--data-ascii", "--form", "--form-string",
+               "--upload-file", "--json", "--post-file", "--body-file", "--output", "--output-document", "--remote-name")
+
+
 def _data_files(name: str, argv: list[str]) -> list[str]:
     """Files a curl or wget command sends: ``-d @f``, ``-F x=@f``, ``-T f``, ``--post-file f``."""
-    out, args = [], argv[1:]
+    out, args = [], [_canon(a, _FETCH_LONG) for a in argv[1:]]
     for i, a in enumerate(args):
         val = None
         if a in _CURL_DATA and i + 1 < len(args):
@@ -1208,24 +1380,37 @@ def _named(needle: str, intent: str) -> bool:
 # --- variables, brace expansion and the working directory of one command line ----------------------------------
 
 _VAR_REF = re.compile(r"\$(?:\{(\w{1,40})\}|(\w{1,40}))")
-_MAX_VARIANTS = 8
+_MAX_VARIANTS = 32   # words of one for loop that are followed; the variants of a stage are capped at twice this
+_MANY = ["\x00many"]   # what a variable holds after a loop over more words than that: not followed
 _DECLARERS = frozenset({"export", "declare", "readonly", "local", "typeset"})
 _BRACE = re.compile(r"(?<!\$)\{([^{}\s]{0,100},[^{}\s]{0,100})\}")
 # Programs whose arguments are paths that a brace list (``rm -rf {/,}``, ``cat ~/.ssh/{id_rsa,x}``) may spell.
 _EXPANDED = frozenset({"rm", "rmdir", "unlink", "chmod", "chown", "chgrp", "mv", "shred", "truncate", "find"}) | _READERS
 
 
-def _braces(arg: str, depth: int = 0) -> list[str]:
-    """The words bash makes of ``arg`` when it holds a brace list: ``{/,}`` is ``/`` and the empty word."""
-    m = _BRACE.search(arg) if depth < 4 and len(arg) <= 300 else None
+_BRACE_ARG, _BRACE_ALTS, _BRACE_WORDS, _BRACE_DEPTH = 300, 16, 64, 4
+
+
+def _braces(arg: str, depth: int = 0, cut: list[bool] | None = None) -> list[str]:
+    """The words bash makes of ``arg`` when it holds a brace list: ``{/,}`` is ``/`` and the empty word. A list that is past a limit
+    (an argument of more than 300 characters, 16 alternatives, 64 words or 4 levels) is not expanded in full: ``cut`` gets a ``True``."""
+    m = _BRACE.search(arg)
     if not m:
         return [arg]
+    alts = m[1].split(",")
+    if depth >= _BRACE_DEPTH or len(arg) > _BRACE_ARG or len(alts) > _BRACE_ALTS:
+        if cut is not None and (_pathlike(arg) or arg.startswith("{")):
+            cut.append(True)
+        if depth >= _BRACE_DEPTH or len(arg) > _BRACE_ARG:
+            return [arg]
     out: list[str] = []
-    for alt in m[1].split(",")[:16]:
-        out.extend(_braces(arg[:m.start()] + alt + arg[m.end():], depth + 1))
-        if len(out) >= 64:
+    for alt in alts[:_BRACE_ALTS]:
+        out.extend(_braces(arg[:m.start()] + alt + arg[m.end():], depth + 1, cut))
+        if len(out) >= _BRACE_WORDS:
+            if cut is not None:
+                cut.append(True)
             break
-    return out[:64]
+    return out[:_BRACE_WORDS]
 
 
 def _under(cwd: str, arg: str) -> str:
@@ -1294,8 +1479,10 @@ def _track(st: _Stage, env: dict[str, list[str]], where: dict[str, Any]) -> None
                     env[key] = [value]
     elif name == "for" and len(bare.argv) >= 4 and bare.argv[2] == "in":
         words = bare.argv[3:]
-        if any("$" in w or "`" in w for w in words) or len(words) > _MAX_VARIANTS:
+        if any("$" in w or "`" in w for w in words):
             env.pop(bare.argv[1], None)
+        elif len(words) > _MAX_VARIANTS:
+            env[bare.argv[1]] = _MANY
         else:
             env[bare.argv[1]] = list(words)
     elif name in ("read", "unset") or name == "mapfile":
@@ -1310,7 +1497,7 @@ def _track(st: _Stage, env: dict[str, list[str]], where: dict[str, Any]) -> None
         where["cwd"] = stack.pop() if stack else None
 
 
-def _expand_vars(st: _Stage, env: dict[str, list[str]]) -> list[_Stage]:
+def _expand_vars(st: _Stage, env: dict[str, list[str]], notes: list[str] | None = None) -> list[_Stage]:
     """The stage with the variables set earlier in the same command line replaced by their values (one stage for each value
     a ``for`` variable takes): ``RM=rm; $RM -rf /`` is ``rm -rf /``."""
     if not env:
@@ -1318,15 +1505,24 @@ def _expand_vars(st: _Stage, env: dict[str, list[str]]) -> list[_Stage]:
     names = {n for a in [*st.argv, *(t for _, t in st.redirects)] for m in _VAR_REF.finditer(a) for n in (m[1] or m[2],) if n in env}
     if not names:
         return [st]
+    if notes is not None and any(env[n] is _MANY for n in names):
+        notes.append(f"a variable set by a loop over more than {_MAX_VARIANTS} words")
+    names = {n for n in names if env[n] is not _MANY}
+    if not names:
+        return [st]
     combos: list[dict[str, str]] = [{}]
     for n in sorted(names):
-        combos = [{**c, n: v} for c in combos for v in env[n]][:_MAX_VARIANTS]
+        combos = [{**c, n: v} for c in combos for v in env[n]]
+        if len(combos) > 2 * _MAX_VARIANTS:
+            combos = combos[:2 * _MAX_VARIANTS]
+            if notes is not None:
+                notes.append("variables that hold too many combinations of values")
 
     def fill(text: str, values: dict[str, str]) -> str:
         return _VAR_REF.sub(lambda m: values.get(m[1] or m[2], m[0]), text)
 
     return [_Stage([fill(a, c) for a in st.argv], [(op, fill(t, c)) for op, t in st.redirects], st.piped, st.pipeline,
-                   st.sudo, list(st.assigns)) for c in combos]
+                   st.sudo, list(st.assigns), st.xargs) for c in combos]
 
 
 # --- the guard's own surface -------------------------------------------------------------------------------------
@@ -1348,9 +1544,11 @@ _SELF_WRITE_CODE = re.compile(r"\b(?:write|dump|unlink|remove|rmtree|replace|ren
 def guard_surface(path: str) -> tuple[str, str] | None:
     """(decision, why) when ``path`` holds the hook settings of a harness or IntentShield's own state (database, API key):
     what an agent would change to switch the guard off."""
-    p = path.strip().strip("\"'").replace("\\", "/")
-    if not p or len(p) > 1000:
+    p = _clean_path(path.strip().strip("\"'").replace("\\", "/"))
+    if not p:
         return None
+    if len(p) > _PATH_CAP:
+        return (ASK, _PATH_CAP_WHY) if _pathlike(p) else None
     n = _norm(p) if p.startswith(("~", "$", "/")) else posixpath.normpath(p)
     if _GUARD_SURFACE.search(n):
         return ASK, "the hook settings of a harness or IntentShield's own state, which is how the guard is switched off"
@@ -1415,12 +1613,21 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
                 elif (p := persistence_path(target) or guard_surface(target)):
                     out.append(Hit(p[0], f"writes {target}, {p[1]}.", target))
         return out
+    if bare.xargs and (fed := [w for op, t in bare.redirects if op == "<<<" for w in t.split()]):
+        out.extend(_stage_hits(_Stage([*argv, *fed], [], False, 0, bare.sudo, list(bare.assigns)), intent, depth, dict(state)))
+    cut: list[bool] = []
     if "{" in argv[0] and "," in argv[0]:  # {rm,-rf,/} is the words rm -rf /
-        argv = [*_braces(argv[0]), *argv[1:]]
+        argv = [*_braces(argv[0], 0, cut), *argv[1:]]
     name = _bin(argv[0])
     sudo = bare.sudo
     if name in _EXPANDED and any("{" in a for a in argv[1:]):
-        argv = [argv[0], *(w for a in argv[1:] for w in _braces(a))][:400]
+        words = [argv[0], *(w for a in argv[1:] for w in _braces(a, 0, cut))]
+        if len(words) > _MAX_WORDS:
+            cut.append(True)
+        argv = words[:_MAX_WORDS]
+    if cut:
+        out.append(Hit(ASK, "a brace list in the command is too long to expand in full (over 300 characters, 16 alternatives, "
+                            "64 words or 4 levels); check the paths it names."))
     # text a shell runs: bash -c '...', eval ..., su -c
     if name in _SHELLS or name in ("su", "eval"):
         code = None
@@ -1512,7 +1719,7 @@ _STDOUT = frozenset({"-", "/dev/stdout", "/dev/fd/1", "/proc/self/fd/1"})
 
 def _writes(argv: list[str]) -> bool:
     """True when a fetcher saves the download to a file; ``-O -`` and ``-o /dev/stdout`` send it to the next stage."""
-    args = argv[1:]
+    args = [_canon(a, _FETCH_LONG) for a in argv[1:]]
     for i, a in enumerate(args):
         if a in ("-o", "-O", "--output", "--output-document"):
             val = args[i + 1] if i + 1 < len(args) else ""
@@ -1597,7 +1804,7 @@ def _download_run(stages: list[_Stage]) -> Hit | None:
             continue
         name = _bin(bare.argv[0])
         if name in _FETCHERS:
-            args = bare.argv[1:]
+            args = [_canon(a, _FETCH_LONG) for a in bare.argv[1:]]
             for i, a in enumerate(args):
                 if a in ("-o", "-O", "--output", "--output-document") and i + 1 < len(args):
                     saved.add(posixpath.basename(args[i + 1]))
@@ -1633,6 +1840,21 @@ def _piped_text(prev: _Stage, st: _Stage, intent: str, depth: int, sudo: bool) -
     if not words:
         return []
     return _analyse(" ".join(words), intent, depth + 1, {}, sudo or shell_stage.sudo)
+
+
+def _piped_xargs(prev: _Stage, st: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
+    """``echo / | xargs rm -rf``: the words that echo or printf print are the last arguments of the program xargs runs."""
+    maker, _ = _unwrap(prev)
+    bare, _ = _unwrap(st)
+    if not bare.xargs or not bare.argv or not maker.argv or _bin(maker.argv[0]) not in ("echo", "printf"):
+        return []
+    words = [a for a in maker.argv[1:] if a not in ("-n", "-e", "-E", "-ne", "-en")]
+    if _bin(maker.argv[0]) == "printf" and words and "%" in words[0]:
+        words = words[1:]
+    words = [w for a in words for w in a.split()]
+    if not words:
+        return []
+    return _stage_hits(_Stage([*bare.argv, *words], [], False, 0, bare.sudo, list(bare.assigns)), intent, depth, dict(state))
 
 
 def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo: bool = False) -> list[Hit]:
@@ -1672,12 +1894,17 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     for k, st in enumerate(stages):
         if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
             hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
+            hits.extend(_piped_xargs(stages[k - 1], st, intent, depth, state))
         elif st.piped and k and _piped_text(stages[k - 1], st, intent, 0, sudo):
             hits.append(Hit(ASK, _TOO_DEEP))
         local = dict(state)
         local["prev_secret"] = state_pipe_secret
         st.sudo = st.sudo or sudo
-        for variant in _expand_vars(st, env):
+        loop_notes: list[str] = []
+        variants = _expand_vars(st, env, loop_notes)
+        for note in dict.fromkeys(loop_notes):
+            hits.append(Hit(ASK, f"the command uses {note}, too many to follow; check what it does."))
+        for variant in variants:
             found = _stage_hits(variant, intent, depth, local)
             hits.extend(found)
             cwd = where["cwd"]
@@ -1686,7 +1913,7 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
                 name = _bin(bare.argv[0]) if bare.argv else ""
                 if name in _EXPANDED:
                     moved = _Stage(_in_dir(cwd, name, bare.argv), variant.redirects, variant.piped, variant.pipeline, bare.sudo,
-                                   list(bare.assigns))
+                                   list(bare.assigns), bare.xargs)
                     if moved.argv != bare.argv:
                         hits.extend(h for h in _stage_hits(moved, intent, depth, dict(local)) if h not in found)
         _track(st, env, where)
@@ -1740,6 +1967,8 @@ def assess_file(path: str, content: Any = None, write: bool = False, intent: str
     """The verdict on a file read or write by a built-in tool."""
     if not path:
         return None
+    if len(_clean_path(path)) > _PATH_CAP:  # a path, whatever it looks like: not read in full, so asked about
+        return Hit(ASK, f"{'writing' if write else 'reading'} {path}, {_PATH_CAP_WHY}.", path)
     if not write:
         cred = _cred_level(path)
         if cred:

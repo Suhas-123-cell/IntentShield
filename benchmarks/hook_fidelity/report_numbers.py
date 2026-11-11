@@ -29,6 +29,10 @@ import summarize  # noqa: E402
 
 RES = HERE.parents[1] / "results" / "hook-fidelity"
 
+# Builds on which nothing can be read: Claude Code 2.1.0 blocks even the neutral control (the scripted call received a different
+# tool result), so a deny there says nothing about the hook. The matrix leaves it out; the deny count leaves it out too.
+NOT_INTERPRETABLE = {("claude", "2.1.0")}
+
 HARNESS_NAMES = {"claude": "Claude Code", "codex": "Codex CLI", "gemini": "Gemini CLI"}
 # The mode and trust state each version sweep ran in, for shell commands: Claude `-p --allowedTools Bash` (M1h), Codex `exec`
 # with hooks trusted (persisted trust, or the bypass flag where it works), Gemini `-p --approval-mode yolo` (M2).
@@ -172,7 +176,7 @@ LABELS = {"timeout": "hook runs past its timeout", "empty": "empty reply", "exit
 def findings(rows: list[dict]) -> dict[str, str]:
     out: dict[str, str] = {}
     # 1. deny
-    r4 = [r for r in rows if r["reply"] == "R4"]
+    r4 = [r for r in rows if r["reply"] == "R4" and (r["harness"], r["version"]) not in NOT_INTERPRETABLE]
     ran = [r for r in r4 if r["hook_invoked"] is True]
     blocked = [r for r in ran if r["outcome"] == "BLOCKED"]
     skipped = [r for r in r4 if r["hook_invoked"] is False and r["outcome"] == "RAN"]

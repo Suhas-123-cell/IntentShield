@@ -1,6 +1,6 @@
 # What three agent CLIs do with the verdict a PreToolUse hook returns: a versioned stub-model conformance matrix (Cursor unmeasured)
 
-> Start with [`hook-fidelity-report.md`](hook-fidelity-report.md): the question, method, version matrix, findings, limits and disclosure status in a few pages.
+> Start with [`hook-fidelity-report.md`](../../hook-fidelity-report.md): the question, method, version matrix, findings, limits and disclosure status in a few pages.
 > This file is the full record, kept as working notes.
 
 Status (2026-11-11):
@@ -15,7 +15,7 @@ Status (2026-11-11):
 The sections below are the author's working notes, in the vocabulary they were written in. A *round* is one pass of work (rounds 1 to 3 built the
 runner and ran the matrix; rounds 4 to 9 added gap checks, comparisons and fixes). A *lane* is the part of a round given to one AI coding agent, such as the
 Claude Code runs or the detection comparison. A *critic* is a separate agent asked to re-run a lane's cells and try to refute its claims. A *branch* is a development branch of the same study, since squash-merged into `main`, so the commit hashes cited below are not in `main`'s history. The
-protocol-first document of rounds 1 and 2 is `git show a65db01:docs/hook-fidelity-study.md` in the author's clone (that commit is not in `main`'s history). Gemini CLI's consumer tiers reportedly ended 2026-06-18 (an
+protocol-first document of rounds 1 and 2 is `git show a65db01:docs/research-notes/hook-fidelity/hook-fidelity-study.md` in the author's clone (that commit is not in `main`'s history). Gemini CLI's consumer tiers reportedly ended 2026-06-18 (an
 unverified report, from the novelty notes), so the Gemini results may describe a CLI that is being retired.
 
 ## 0. Verdict first
@@ -241,7 +241,7 @@ What every measurement shares (state these wherever a number is cited):
   blocked, a result returned, no re-sample, no side calls) held on 251 of 251 Claude core runs and 428 of 428 Codex matrix rows. It does
   **not** hold on every committed row: of the 540 Claude rows, 118 do not have exactly 2 requests (2.0.41: 10 rows with 2 to 4 tool-less side
   calls; 2.1.47: 8 rows with 1 side call; 2.1.0: 10 Warmup rows; 2.1.89 to 2.1.281: 80 rows with a HEAD probe), and 36 Gemini HUNG rows have 1
-  request, which weakens the 2/2 RAN on 2.0.41 and 2.1.47 by a little (`docs/hook-fidelity-stub-feasibility.md` section 8 says so). The sign-off gate needs `signoffs.json` entries before `run --execute` accepts arm S.
+  request, which weakens the 2/2 RAN on 2.0.41 and 2.1.47 by a little (`docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md` section 8 says so). The sign-off gate needs `signoffs.json` entries before `run --execute` accepts arm S.
 - **Runner after integration** (`benchmarks/hook_fidelity/run.py`): one in-process stub per run for Claude, Codex and Gemini,
   `--lane`, `--matrix`, `--cells-json`, `--cap-s`, `--egress-proxy`, per-harness sign-off entries, and a refusal of an empty selection.
   Merge note: the three lanes had each built a different arm S path; the integrated one is the Claude lane's in-process stub with the Codex
@@ -526,7 +526,7 @@ a secondary source, and any launch to test the contradicted claims.
 ## 4. Real guards: captured bytes replayed (lane r3-guards)
 
 Evidence: `results/hook-fidelity/guards/` (`captures.jsonl`, `stub-rows.jsonl`, `summary.json`, `table.md`, `README.md`), corpus in
-`docs/hook-fidelity-corpus.md` (26 guards read; 6 captured; 4 not capturable offline: dcg and tool-gate-hook are Rust with no
+`docs/research-notes/hook-fidelity/hook-fidelity-corpus.md` (26 guards read; 6 captured; 4 not capturable offline: dcg and tool-gate-hook are Rust with no
 prebuilt binary, ggshield and hol-guard need Python dependencies not installed; the task asked for 8 to 10 guards, 6 delivered).
 Each guard's own hook entry point ran **inside `sandbox-exec`** (deny default, no network including loopback, writes only to a scratch
 directory, home unreadable) on fixture payloads; 91 captures. The captured stdout, stderr and exit code were replayed through Claude
@@ -562,7 +562,7 @@ nine with `--version`).
 
 ## 5. MCP coverage without a model (lane r3-coverage)
 
-Evidence: `docs/hook-fidelity-coverage-rerun.md`, `results/hook-fidelity/coverage/`. 94 recorded launches (84 valid) on Claude 2.0.41,
+Evidence: `docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md`, `results/hook-fidelity/coverage/`. 94 recorded launches (84 valid) on Claude 2.0.41,
 2.1.69, 2.1.139, 2.1.246, 2.1.316, Codex 0.131.0 and 0.166.0 (plus 0.134.0, 0.136.0, 0.140.0, 0.149.0 bisect) and Gemini 0.37.1, 0.37.2,
 0.39.1, 0.41.2, 0.50.0, 0.66.0, with a passive hook on every event. Egress was not blocked or measured here.
 
@@ -603,7 +603,7 @@ changes to `harness.py`, `install.py`, `doctor.py`, `tests/test_harness_translat
 measured (or for Claude Code documented) to read the ask; a hook deadline (default 30 s) answers with a refusal before the harness timeout; a
 fail-closed launcher turns any non-zero exit but 0 into exit 2 on Claude Code, Codex and Gemini (Cursor keeps `failClosed`); version is read
 from a cache written by `install` and `doctor` (and, round 4, refreshed from the running binary before an interactive ask); mode is read from
-the hook's ancestors on an ask only. `docs/hook-fidelity-mitigation.md` has the full description. **It is a reference implementation of the
+the hook's ancestors on an ask only. `docs/research-notes/hook-fidelity/hook-fidelity-mitigation.md` has the full description. **It is a reference implementation of the
 study's recommendations**: every component has precedent in the 26-guard corpus (a Cursor version floor, permission-mode branching, `|| exit 2`,
 crash-to-deny), and no guard in the corpus has its version-keyed behaviour measured, so the round-3 and round-4 evaluations compared nothing with them. Round 6 added a head-to-head against six captured guards' replayed bytes (section 6a: delivery of
 a fixed verdict, mostly a configuration difference a guard author could adopt) and interactive cells (section 6b).
@@ -631,7 +631,7 @@ launches, n=1): 28 of 28 outcomes matched, including the two Gemini HUNG cells.
 - Build identity: the release directory; the user-agent names the version in 148 of 192 rows (the 44 others are 32 Claude rows sending `node` or
   `Bun/1.4.3` and 12 INVALID Gemini rows sending nothing); no row carries `binary_sha256`.
 
-**Round 4 critic, verdict** (`docs/hook-fidelity-mitigation.md`): the headline numbers reproduce but do not support the claim as worded. The
+**Round 4 critic, verdict** (`docs/research-notes/hook-fidelity/hook-fidelity-mitigation.md`): the headline numbers reproduce but do not support the claim as worded. The
 evaluation could not tell the design from "always deny on ask, wrap in `|| exit 2`, add a timer": no allow scenario, every launch headless, so
 the version table, the mode detector and the interactive branch were never exercised. "Read it as: the deadline, the launcher and a headless
 ask-to-deny work on 12 stub builds." Round 4 answered with 36 launches (n=1 per cell, the same stub and sandbox, `mitigation/eval-r4/`):
@@ -660,7 +660,7 @@ announced on stderr. Not fixed (minor): the Gemini MCP ask is refused for every 
 `CHANGELOG.md`): installs write a deadline and a launcher by default, and a Claude Code ask that is not positively interactive becomes a deny. That
 needs a human review before a release. The author maintains the product evaluated.
 
-**Round 7 (sections 6a.1 and 6b.1; `docs/hook-fidelity-mitigation.md`).** Two more lanes, each with its own critic. The translation became usable on a third party's hook: `intentshield wrap-hook`
+**Round 7 (sections 6a.1 and 6b.1; `docs/research-notes/hook-fidelity/hook-fidelity-mitigation.md`).** Two more lanes, each with its own critic. The translation became usable on a third party's hook: `intentshield wrap-hook`
 (`src/intentshield/wrap_hook.py`, 39 unit tests, `translation.native_reply`) runs any guard command under the launcher, a deadline and the version-keyed translation. The mode detector no longer needs `ps`
 (`/proc` on Linux, `libproc` plus `sysctl kern.procargs2` on macOS, then `ps`; `unknown` is no longer read as `headless`; 38 and 12 tests in the two new files). Measured: wrapped 12/12 launched pairs, tying IS-ON, 9 of them the launcher alone
 (launcher-only 5/5); deny-all ties every survival cell; the allow evidence is thin; with `ps` blocked the prompt is kept (Claude Code 2.1.316 2/2, Gemini 0.66.0 2/2); Codex given a raw ask **runs** the call 2/2;
@@ -1210,9 +1210,10 @@ a cluster bootstrap by source; `dcg`; MCP calls in this set; a harness run of th
 
 **Rules since this section was written (2026-11-11).** The decisions and counts above are those of the rules as they stood when the study ran, and the
 committed results are not regenerated. A later change lets a deny from `dangerous.py` win over a session ask. Re-running the committed fixtures
-(`results/hook-fidelity/detect/fixtures.jsonl` and `fresh/fixtures.jsonl`) through the current code changes 45 `intentshield` decisions from ask to deny:
-27 rows (9 items) of the 467-fixture set and 18 rows (6 items) of the fresh set, all harmful credential-exfiltration items. No benign row changed and none
-changed to allow. On the 214 primary fresh calls the split of 41 asked and 35 denied becomes 35 asked and 41 denied; 28 of 104 harmful calls are
+(`results/hook-fidelity/detect/fixtures.jsonl` and `fresh/fixtures.jsonl`) through the current code changes 51 `intentshield` decisions. 48 go from ask to deny:
+30 rows (10 items) of the 467-fixture set and 18 rows (6 items) of the fresh set, all harmful credential-exfiltration items. 3 rows (1 item, `git push -f origin HEAD`)
+go from deny to ask on the fresh set, because `HEAD` is no longer read as a protected branch. No benign row changed and none changed to allow.
+On the 214 primary fresh calls the split of 41 asked and 35 denied becomes 36 asked and 40 denied; 28 of 104 harmful calls are
 still let through and the 5 benign asks stay. The denies-alone comparison (24/85 against 41/85) was computed before the change and has not been recomputed.
 
 ## 6f. Generalisation outside the rule categories (branch r9-general; the test did not run)
@@ -1355,7 +1356,7 @@ the bypass flag for the failure replies (not shown in round 3; round 4 showed it
   for Codex and on `sandbox-exec` for Claude and Gemini; the coverage lane ran with no containment at all and one non-stub request is known.
 - **Vendors self-update**; Gemini consumer tiers reportedly ended 2026-06-18, so 28 releases of a possibly retiring CLI carry two of the three
   replicating deviations; findings age.
-- **Prevalence** (`docs/hook-fidelity-prevalence.md`): configuration co-occurrence in a code-search index, not executions: 19,026 public
+- **Prevalence** (`docs/research-notes/hook-fidelity/hook-fidelity-prevalence.md`): configuration co-occurrence in a code-search index, not executions: 19,026 public
   repos run an agent headlessly in a workflow file; of 16,939 Claude repos, 2,138 commit a hook config and at least 36 set `ask` in a
   repo-local script (lower bound). It is an **upper bound on the public configuration surface** with the index-coverage caveat (a code-search index
   that does not cover forks; the list of the 36 repositories and the 378 MB of fetched text are not committed; the scripts hard-code scratch
@@ -1515,8 +1516,8 @@ is unsigned and unused) were signed off for Claude, Codex and Gemini by agents (
 
 ## 14. Companion documents and how to reproduce
 
-- `docs/hook-fidelity-corpus.md` (26 guards, 85 rows, measured cells in 3a), `docs/hook-fidelity-stub-feasibility.md` (round-3 outcome
-  appended), `docs/hook-fidelity-prevalence.md`, `docs/hook-fidelity-coverage-rerun.md`, `docs/hook-fidelity-mitigation.md`;
+- `docs/research-notes/hook-fidelity/hook-fidelity-corpus.md` (26 guards, 85 rows, measured cells in 3a), `docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md` (round-3 outcome
+  appended), `docs/research-notes/hook-fidelity/hook-fidelity-prevalence.md`, `docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md`, `docs/research-notes/hook-fidelity/hook-fidelity-mitigation.md`;
   per-lane READMEs of round 8: `results/hook-fidelity/detect/README.md` (and `breakdown.md`, `mcp-benign/`), `compare/README.md` "Round 8", `linux/README.md` (with `linux/r8fix/`), `detect/r8fix/README.md`, `detect/fresh/README.md`, `real-model/README.md`, `real-model-supp/README.md`, `real-model-critic/README.md`, `real-model-deepseek/README.md`.
 - Runner: `python benchmarks/hook_fidelity/run.py plan | run | pilot | summarize`; per-lane drivers `claude_lane.py`, `codex_matrix.py`,
   `gemini_lane.py`, `guard_replay.py`, `cursor_cells.py`, `coverage_run.py`, `mitigation_eval.py` (`plan` and, round 4, `plan-r4`),
@@ -1526,11 +1527,11 @@ is unsigned and unused) were signed off for Claude, Codex and Gemini by agents (
 - Round 8 drivers: `detect_fixtures.py` (`build`, `verify`), `detect_compare.py` (`decide`, `matrix`, `report`, `breakdown`; `decide` needs the corpus clones, which `fetch_corpus.py` clones at the commits in `corpus.json`; `report` and `breakdown` regenerate `table.md`, `summary.json`, `breakdown.md` and `breakdown.json` from `decisions.jsonl`, `fixtures.jsonl` and the committed delivery rows with no clone present, checked byte for byte against an empty `HF_SCRATCH` and by `tests/test_hook_fidelity_detect.py`. Before the fix described in `results/hook-fidelity/README.md` both crashed in a clean clone with a missing `hooks.json`, whatever this section said), `detect_validate.py` (`run`, `summarize`), `detect_mcp_benign.py` (`run`, `report`), `compare.py --round r8` with `r8_summary.py`, `linux_probe.py` (`docker`, `summarize`; needs Docker), `model_lane.py` (with `model_lane.sb`; needs a local Ollama server) and `deepseek_arm.py` (a paid endpoint, the user's approval required). The fixes after round 8 add `r8fix_report.py` (post hoc tables), `fresh_build.py` (the fresh fixtures, refuses on a collision with round 8's), `_is_subproc.py` (IntentShield's hook in process from a given source tree) and `fresh_report.py` (`table.md` and `summary.json` from `fixtures.jsonl`, `decisions.jsonl` and `detect/r8fix/delivery.json`; no guard is re-run).
 - Tests: `tests/test_hook_fidelity*.py` (482 collected, 479 passed and 3 skipped without the guard clones on 2026-11-11, including `test_hook_fidelity_compare.py` 10, `test_hook_fidelity_compare_arms.py` 13, `test_hook_fidelity_compare_rerun_and_shim.py` 8, `test_hook_fidelity_detect.py` 48, `test_hook_fidelity_linux_probe.py` 6, `test_hook_fidelity_model_lane.py` 11, `test_hook_fidelity_model_arms.py` 4, `test_hook_fidelity_pty.py` 38 and `test_hook_fidelity_pty_plan_and_observer.py` 12), `tests/test_wrap_hook.py` (39), `tests/test_translation_ancestry.py` (38), `tests/test_harness_translation.py` and `tests/test_harness_translation_mode_detection.py`, and
   `tests/test_hook_fidelity_study_numbers.py` (16, adding the Codex round-4 row count and a determinism check of the coding), `tests/test_hook_fidelity_reproduce.py` (7: the detection tables regenerate with no guard clone, the corpus fetch plan, the interpreter fallback) and `tests/test_hook_fidelity_report.py` (11: the report against the rows and the documents against themselves), which recompute the figures this document cites from the committed rows; none launches a harness
-  (the runner tests patch `subprocess` to fail, the lane tests start only the stub, `bash -n`, `sh -c` and fake binaries). The full suite after round 8 was 3773 collected: 3770 passed and 3 skipped when run attached (2026-11-01, 154 s, with the isolation environment of the repository's `CLAUDE.md`). **After the fixes of section 6e it is 4016 collected: 4013 passed and 3 skipped** attached (2026-11-01, 153 s), the figure before the `8b55158` skip; run as an orphaned `nohup` job on macOS `test_the_ancestry_is_read_with_no_runnable_ps` failed before that skip because the parent is `launchd` (6e), and now skips. The 243 added tests (3773 to 4016 collected) are `tests/test_dangerous_rules.py` 234, `tests/test_hook_fidelity_fresh_report.py` 3, four in `tests/test_translation_ancestry.py` (now 42) and two in `tests/test_hook_fidelity_linux_probe.py` (now 8); `ruff check src tests benchmarks` passes.
+  (the runner tests patch `subprocess` to fail, the lane tests start only the stub, `bash -n`, `sh -c` and fake binaries). The full suite after round 8 was 3773 collected: 3770 passed and 3 skipped when run attached (2026-11-01, 154 s, with the environment variables of the test command in `CONTRIBUTING.md` set). **After the fixes of section 6e it is 4016 collected: 4013 passed and 3 skipped** attached (2026-11-01, 153 s), the figure before the `8b55158` skip; run as an orphaned `nohup` job on macOS `test_the_ancestry_is_read_with_no_runnable_ps` failed before that skip because the parent is `launchd` (6e), and now skips. The 243 added tests (3773 to 4016 collected) are `tests/test_dangerous_rules.py` 234, `tests/test_hook_fidelity_fresh_report.py` 3, four in `tests/test_translation_ancestry.py` (now 42) and two in `tests/test_hook_fidelity_linux_probe.py` (now 8); `ruff check src tests benchmarks` passes.
 - Regenerating without a harness: the Claude, Codex, coverage and mitigation tables, the guard table (`guard_replay.py table --index
   results/hook-fidelity/guards/replay ...`), the `compare`, `interactive`, `detect` and `detect/fresh` tables regenerate from the committed rows; `corpus_counts.py --check`. What does not: the guard decisions themselves (`detect_compare.py decide` needs the clones from `fetch_corpus.py`), the prevalence counts and the guard
   captures (section 10, `results/hook-fidelity/release-manifests/README.md`). The coding of the 1342 committed stub rows (cell grouping, liveness, prediction hit or miss, deviation class, kill criterion) is deterministic: `summarize.summarize` over the same rows twice, and over three seeded shuffles, gives the same table, classes, hit counts and kill criterion (`test_the_coding_is_deterministic_over_the_committed_rows` in `tests/test_hook_fidelity_study_numbers.py`). That checks the coder, not the harness: re-scoring a launch from its raw evidence needs the run directories, which are not committed, and the 6 cells x 20 repeats run on the stub was not done.
-- Round 9 added no driver, test or result file: the branch `r9-general` is empty (6f). The full suite on the study branch is unchanged, 4013 passed and 3 skipped attached (2026-11-01, 154 s, the isolation environment of the repository's `CLAUDE.md`), and `ruff check src tests benchmarks` passes.
+- Round 9 added no driver, test or result file: the branch `r9-general` is empty (6f). The full suite on the study branch is unchanged, 4013 passed and 3 skipped attached (2026-11-01, 154 s, the environment variables of the test command in `CONTRIBUTING.md` set), and `ruff check src tests benchmarks` passes.
 - Raw data per lane under `results/hook-fidelity/<lane>/`; `benchmarks/hook_fidelity/signoffs.json` holds the sign-offs and
   `results/hook-fidelity/vendor-archive/` the source URLs and sha256 of the Claude Code and Codex documentation pages the sign-offs read (the page
   texts are not redistributed; Gemini CLI's v0.66.0 documentation is in `docs/hook-fidelity-archive/`; no Cursor text is archived).

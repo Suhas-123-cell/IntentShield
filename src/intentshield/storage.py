@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+from . import translation
+
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat()
@@ -34,7 +36,7 @@ def default_database(name: str = "intentshield.db") -> str:
 class Storage:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = str(path) if path is not None else default_database()
-        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        translation.private_dir(Path(self.path).parent)
         if not Path(self.path).exists():  # holds executed results and approval arguments: the user's only
             Path(self.path).touch(mode=0o600)
         self.initialize()

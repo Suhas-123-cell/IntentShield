@@ -13,7 +13,9 @@ answers (exit code, stdout, stderr) and sends the harness ONE reply in the harne
 * any other non-zero exit (1, 126, 127, a signal), a guard that cannot be started and a guard still running at the deadline are
   denies saying so: every harness measured lets such a call run, so the shim refuses it;
 * exit 0 with a verdict of deny or block (``hookSpecificOutput.permissionDecision``, a top-level ``decision`` or
-  ``permissionDecision`` or Cursor's ``permission``, also ``continue: false``) is a deny; ``ask`` is sent as an ask only where
+  ``permissionDecision`` or Cursor's ``permission``, also ``continue: false``) is a deny. A reply that names verdicts in
+  several of those places is read in all of them and the strictest wins (deny, then ask, then allow), so an allow in one place
+  never hides a block in another; ``ask`` is sent as an ask only where
   ``translation.Semantics.ask_reply`` says this harness build, in this mode, reads and enforces one, else as a deny that says
   what the guard wanted;
 * exit 0 with JSON that names no verdict (``{}``, an ``additionalContext`` only) is "no opinion", and an explicit allow is the
@@ -63,44 +65,56 @@ def effective_deadline(deadline: float, hook_timeout: float = 0.0) -> float:
     return deadline
 
 
+_VERDICT_KEYS = ("permissionDecision", "decision", "permission")
+_REASON_KEYS = ("permissionDecisionReason", "reason", "user_message", "agent_message", "stopReason", "systemMessage")
+_STRICTNESS = {"allow": 0, "ask": 1, "deny": 2}
+
+
+def _reason_of(spot: dict[str, Any]) -> str:
+    for key in _REASON_KEYS:
+        value = spot.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def _verdict_word(obj: dict[str, Any]) -> tuple[str | None, str, str]:
-    """(word, reason, error) of a guard's JSON reply: the verdict word if it names one, the reason text, and a non-empty error
-    when a verdict key holds something that is not a verdict."""
-    reason = ""
-    word: Any = None
-    found = False
+    """(word, reason, error) of a guard's JSON reply: the strictest verdict it names, the reason that goes with it, and a
+    non-empty error when a verdict key holds something that is not a verdict.
+
+    A reply may name a verdict in several places (``hookSpecificOutput``, the top level, ``continue: false``) and in several keys
+    of one place. They are all read and the strictest wins (deny, then ask, then allow), so an allow in one place never hides a
+    block in another."""
     spots: list[dict[str, Any]] = [obj]
     hso = obj.get("hookSpecificOutput")
     if isinstance(hso, dict):
         spots.insert(0, hso)
+    named: list[tuple[str, dict[str, Any]]] = []
     for spot in spots:
-        for key in ("permissionDecision", "decision", "permission"):
-            if key in spot:
-                word, found = spot[key], True
-                break
-        if found:
-            break
-    for spot in spots:
-        for key in ("permissionDecisionReason", "reason", "user_message", "agent_message", "stopReason", "systemMessage"):
-            if isinstance(spot.get(key), str) and spot[key].strip():
-                reason = spot[key].strip()
-                break
-        if reason:
-            break
-    if found:
-        if not isinstance(word, str):
-            return None, reason, f"the verdict is not a string ({type(word).__name__})"
-        low = word.strip().lower()
-        if low in _ALLOW:
-            return "allow", reason, ""
-        if low in _DENY:
-            return "deny", reason, ""
-        if low in _ASK:
-            return "ask", reason, ""
-        return None, reason, f"the verdict {word[:40]!r} is not one this shim knows (allow, ask, deny, block)"
+        for key in _VERDICT_KEYS:
+            if key not in spot:
+                continue
+            word = spot[key]
+            if not isinstance(word, str):
+                return None, _reason_of(spot), f"the verdict is not a string ({type(word).__name__})"
+            low = word.strip().lower()
+            if low in _ALLOW:
+                named.append(("allow", spot))
+            elif low in _DENY:
+                named.append(("deny", spot))
+            elif low in _ASK:
+                named.append(("ask", spot))
+            else:
+                return None, _reason_of(spot), f"the verdict {word[:40]!r} is not one this shim knows (allow, ask, deny, block)"
     if obj.get("continue") is False:
-        return "deny", reason or "the guard asked to stop (continue: false)", ""
-    return None, reason, ""
+        named.append(("deny", obj))
+    if not named:
+        return None, next((r for r in map(_reason_of, spots) if r), ""), ""
+    word, spot = max(named, key=lambda pair: _STRICTNESS[pair[0]])
+    reason = _reason_of(spot) or next((r for r in map(_reason_of, spots) if r), "")
+    if word == "deny" and not reason and obj.get("continue") is False:
+        reason = "the guard asked to stop (continue: false)"
+    return word, reason, ""
 
 
 def classify(code: int, stdout: str, stderr: str, on_empty: str = "deny") -> tuple[str, str, bool]:
@@ -267,8 +281,41 @@ def wrapped_command(harness: str, guard_command: str | list[str], *, wrapper: st
     return translation.launcher(" ".join(parts) + " -- " + guard_command)
 
 
+_HELP = """Run any third-party hook command under IntentShield's fail-closed launcher.
+
+    intentshield wrap-hook --harness claude|codex|gemini|cursor [options] -- <guard command>
+
+The harness runs this command in place of the guard. It sends the guard the harness's event, reads the answer and gives the
+harness one reply in the harness's own format. The guard's exit code and output are read like this:
+
+  exit 2                          deny, with the guard's stderr as the reason
+  any other non-zero exit,
+  a guard that cannot start,
+  a guard still running at the deadline
+                                  deny (every harness measured lets such a call run, so the call is refused here)
+  exit 0, JSON saying deny/block  deny
+  exit 0, JSON saying ask         ask where this harness build and mode enforce one, otherwise a deny that says what the
+                                  guard wanted
+  exit 0, JSON naming several verdicts
+                                  the strictest wins (deny, then ask, then allow)
+  exit 0, JSON naming no verdict
+  or an explicit allow            the guard's own output is passed through unchanged
+  exit 0, text that is not JSON,
+  an unknown verdict word,
+  more than 1 MB of output        deny
+  exit 0, nothing printed         deny by default; --on-empty allow lets it through (what silent guards mean, but it
+                                  also lets through a guard that failed before it decided)
+
+Only events that check a call are translated and held to the deadline. Other events go to the guard and its exit code and
+output come back unchanged.
+
+Use --print-entry to see the line to put in the harness's settings in place of the guard. The full table is in the guide:
+https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#wrapping-a-third-party-hook
+"""
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="intentshield wrap-hook", description=__doc__,
+    parser = argparse.ArgumentParser(prog="intentshield wrap-hook", description=_HELP,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--harness", required=True, choices=("claude", "codex", "gemini", "cursor"))
     parser.add_argument("--version", default=None, help="the harness build (X.Y.Z); default: the one `doctor` recorded")

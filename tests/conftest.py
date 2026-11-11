@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -36,6 +37,17 @@ def _isolate_environment(monkeypatch, tmp_path):
     monkeypatch.setattr("intentshield.envfile.find_dotenv", lambda *a, **k: "")  # no developer .env, not even to name
     for module in ("api", "mcp_server", "mcp_verify"):
         monkeypatch.setattr(f"intentshield.{module}.load_dotenv", lambda *a, **k: False)
+
+
+@pytest.fixture(autouse=True)
+def _restore_the_package_logger():
+    """``configure_logging`` (the server's entry points) replaces the handlers of the ``intentshield`` logger and stops it from
+    propagating, for the rest of the process. A test that starts a server must not leave that behind: a later test that reads the
+    package's records with ``caplog`` saw none."""
+    logger = logging.getLogger("intentshield")
+    handlers, level, propagate = logger.handlers[:], logger.level, logger.propagate
+    yield
+    logger.handlers[:], logger.level, logger.propagate = handlers, level, propagate
 
 
 @pytest.fixture

@@ -86,3 +86,4 @@ def test_the_package_does_not_declare_what_it_never_imports():
     required, _ = declared()
     used = {top for top, _, _ in third_party_imports()}
     assert required <= used, f"declared but never imported by src: {sorted(required - used)}"
+

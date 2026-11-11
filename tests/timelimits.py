@@ -2,18 +2,28 @@
 
 Each limit is set on a developer machine. Shared CI runners are two to three times slower and stall now and then, so a
 limit with no margin fails at random there (1.53 s against 1.5 s on a 3.12 runner). On CI (GitHub Actions sets CI)
-every limit is three times longer. That is still far below what the inputs these tests were written for took, which
-was seconds to minutes."""
+every limit is three times longer. So it is when a test runs under coverage (``pytest --cov``, which CONTRIBUTING.md asks
+for) or under a debugger: tracing every line roughly doubles the time of the parser, and a limit of one second then fails
+on a laptop with CI unset. That is still far below what the inputs these tests were written for took, which was seconds
+to minutes."""
 from __future__ import annotations
 
 import os
+import sys
 import time
 
-SCALE = 3.0 if os.environ.get("CI") else 1.0
+
+def _traced() -> bool:
+    """True while coverage or a debugger is measuring the lines that run."""
+    if sys.gettrace() is not None:
+        return True
+    coverage = sys.modules.get("coverage")
+    current = getattr(getattr(coverage, "Coverage", None), "current", None)
+    return bool(current and current())
 
 
 def limit(seconds: float) -> float:
-    return seconds * SCALE
+    return seconds * (3.0 if os.environ.get("CI") or _traced() else 1.0)
 
 
 def within(seconds: float, fn, *args):

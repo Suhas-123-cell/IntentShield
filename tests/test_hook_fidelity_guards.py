@@ -353,7 +353,7 @@ def test_corpus_has_stars_and_age_per_guard_and_the_measured_block():
         assert isinstance(g["stars"], int) and g["repo_pushed_at"] and "commit_age_days_at_2026-11-01" in g, g["id"]
     m = data["measured"]
     assert m["live_cells_tested"] == 38 or m["live_cells_tested"] > 0
-    doc = (ROOT / "docs" / "hook-fidelity-corpus.md").read_text()
+    doc = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-corpus.md").read_text()
     assert f"{m['live_cells_ran']} of {m['live_cells_tested']} let the guarded call run" in doc
     assert "ask with no human ran in 0 of" in doc
 

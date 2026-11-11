@@ -4,7 +4,8 @@
     HOOK_FIDELITY_GO=<n> cursor_cells.py run --out DIR [--only LABEL ...] [--seed N] [--cap 40] [--reruns 2]
     cursor_cells.py plan
 
-Cells (docs/hook-fidelity-study.md section 5; C1 to C3 are the confirmatory cells, the others controls and failure cells):
+Cells (section 5 of docs/research-notes/hook-fidelity/hook-fidelity-study.md; C1 to C3 are the confirmatory cells,
+the others controls and failure cells):
 
     C1  ask on an MCP tool on the cli.json allowlist           (earlier probe: ran 3/3)
     C2  ask on an MCP tool NOT on the allowlist

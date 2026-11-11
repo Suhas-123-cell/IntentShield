@@ -2,21 +2,34 @@
 
 The reference behind the [README](../README.md): what each placement of the guard sees and stops, what
 `install`, `wrap`, `scan` and the judge options do in full, the architecture, and the upstream config.
-Running the dashboard, the gateway, threat memory and the REST API is in [guide.md](guide.md).
+Running the dashboard, the gateway and the REST API is in [gateway.md](gateway.md); hooks, threat memory and troubleshooting are in [guide.md](guide.md).
 
 ## Terms
 
-Terms used below:
+The one glossary for the project's documents; the README and the other pages link here.
 
-- **ALLOW, REVIEW, BLOCK:** the three answers to a proposed tool call. REVIEW holds the call for a human.
-  The harness hooks map them to allow, ask and deny.
+- **Allow, ask, deny:** the three answers a hook gives to a proposed tool call. An ask holds the call for you to confirm; a deny
+  blocks it. The gateway and the benchmarks call the same three answers ALLOW, REVIEW and BLOCK, and a call in the review queue has not run.
+- **State-changing call:** a tool call that writes, sends or deletes, as opposed to a read.
 - **Taint:** a session is tainted once a tool result in it tried to instruct the agent. Values that appeared
   only in such a result are then not trusted.
 - **Provenance:** where a value in a call (an address, URL, account or path) came from: the user's prompt or
   only a tool output.
 - **Rug pull:** an MCP server changes a tool's description after you accepted it.
+- **Self-disclosure parameter:** a tool parameter that asks the agent for its own model name, system prompt or conversation
+  (for example `llm_model_name`). A malicious server adds one to an ordinary tool, and a capable agent fills it in because the
+  schema asked. IntentShield removes such parameters from the schema and sends them empty.
+- **Headless:** nobody is there to answer a prompt (`claude -p`, `codex exec`, `gemini -p`).
+- **Yolo mode:** Gemini CLI's approval mode that runs every tool call without asking (`--approval-mode yolo`).
 - **Canary:** a harmless marker value the benchmarks use in place of real data to see whether a call carries it out.
 - **MSB:** MCP Security Bench, which runs real MCP servers in Docker with an agent on the host.
+- **Arm, paired cases:** one setup in a benchmark (no guard, trivial baseline, gateway, hooks). The same cases run in every arm,
+  so arms are compared on paired cases.
+- **Trivial baseline:** a guard with no detection at all: it withholds tool descriptions, blanks self-disclosure parameters and
+  holds every state-changing call for a human. It is the control that shows what the detectors add.
+
+The hook study has its own terms (build, sweep, reply codes, control, expectation, deviation); they are listed in
+[the report](hook-fidelity-report.md#2-method).
 
 ## What each layer sees and stops
 
@@ -134,8 +147,9 @@ prompt in an interactive session; a headless run (`gemini -p`) then waits for an
 `intentshield doctor` checks the install: every harness's settings hold all IntentShield hooks, the hook
 command names an executable that exists, a hosted judge has its key, the harness has run a hook since the
 install (Codex skips hooks nobody has trusted, silently), and which stdio MCP servers are not behind the
-proxy, and whether the command of a wrapped server exists. It exits 1 on a problem; when nothing is installed it says
-so and exits 0.
+proxy, and whether the command of a wrapped server exists. It exits 1 on a `FAIL` line; when nothing is installed it says
+so and exits 0. A `note` line states a measured fact about the harness version (for example that a hook which prints nothing lets
+the call run) and needs no action.
 
 Claude Code, Gemini CLI, Codex CLI and Cursor have been run live against a malicious server
 ([benchmarks.md](benchmarks.md#live-harness-checks-claude-code-gemini-cli-codex-cli-and-cursor)). Every option,
@@ -304,7 +318,7 @@ values out of git. For the gateway, `read_only_tools` is a local trust decision 
 mutation needing approval), `allowed_tools` defaults to empty, and every allowed tool needs a
 `grounding_terms_by_tool` entry. Raw upstream descriptions are withheld unless
 `expose_upstream_descriptions` is set. A complete template is `configs/mcp-proxy.real.example.json`;
-every key is explained in [guide.md](guide.md#configure-another-upstream-server).
+every key is explained in [gateway.md](gateway.md#configure-another-upstream-server).
 
 ## Try it from a clone
 
@@ -326,5 +340,5 @@ Piped by hand like this, the event comes from your terminal and not from a harne
 count it as a run: it prints a `warn` that the only events came from a process that is not the harness (it cannot tell
 this apart on Cursor, and says so). The PyPI source distribution holds no tests, so this section needs a clone.
 
-Running the web dashboard, the Streamable HTTP gateway, the human-approval endpoint, threat memory
-and packs, production settings and the REST API are described in [guide.md](guide.md).
+Running the web dashboard, the Streamable HTTP gateway, the human-approval endpoint, production settings and the REST API
+are described in [gateway.md](gateway.md); threat memory and packs are in [guide.md](guide.md#adaptive-threat-memory-and-threat-packs).

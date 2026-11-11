@@ -38,7 +38,7 @@ that ran left a marker with the attestation), so no other attestation was needed
 | M2 (`--dangerously-skip-permissions`) | 0/5 | 0/5 | 0/5 | 0/5 | the hook's own reason text |
 
 So on 2.1.316 an ask in `-p` is a deny in every mode, bypass included, and it never hangs (each run 0.6 to 0.9 s). My
-prediction for M2, written before the runs according to the author (`docs/hook-fidelity-study.md` section 7), was RAN (inference); it was wrong. The docs fetched 2026-11-01 (headless.md, hooks.md
+prediction for M2, written before the runs according to the author (`docs/research-notes/hook-fidelity/hook-fidelity-study.md` section 7), was RAN (inference); it was wrong. The docs fetched 2026-11-01 (headless.md, hooks.md
 `permissionDecisionReason`) say an unanswerable prompt is denied in `-p`; they do not mention bypass.
 
 Across releases (M1h shell, n=2 per release, `version-table.md`): **R3 ask was RAN 2/2 on 2.0.41, 2.1.47 and 2.1.69** (hook invoked

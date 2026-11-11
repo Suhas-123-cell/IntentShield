@@ -92,6 +92,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 from urllib.parse import urlsplit
 
+from . import translation
 from .hostlists import PROTECTED_FIRST_PARTY, shared_host
 from .mcp_inspect import (
     _DESCRIPTION_RULES,
@@ -396,7 +397,7 @@ class ThreatMemory:
         self.hostile_window = min(hostile_days * 86400, self.ttl)
         self.containment, self.clock = containment, clock
         self.packs = packs  # a rule_packs.PackSet: more evidence, merged into the checks
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        translation.private_dir(self.path.parent)
         if not self.path.exists():  # what attacks used, and the operator's decisions: the user's only
             self.path.touch(mode=0o600)
         db = self._connect()

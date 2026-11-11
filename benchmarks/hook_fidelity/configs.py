@@ -53,8 +53,8 @@ MATCHERS = {
 }
 # Tool names each harness shows to a hook, per tool kind. A generated matcher must fully match at least one name of its own
 # kind and none of another kind's (lint_config): a matcher like "NoSuchTool" or ".*" is caught before any launch. Cursor
-# names events, not tools. The names are the ones the sources and docs give (docs/hook-fidelity-stub-feasibility.md section
-# 2), not a vendor loader's verdict.
+# names events, not tools. The names are the ones the sources and docs give
+# (docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md section 2), not a vendor loader's verdict.
 KNOWN_TOOLS = {
     "claude": {"mcp": ("mcp__notes__search_notes",), "shell": ("Bash",), "write": ("Write", "Edit"),
                "resource": ("ReadMcpResourceTool",)},
@@ -436,7 +436,8 @@ STUB_MODELS = {"claude": "claude-haiku-5-5", "codex": "stub-model", "gemini": "g
 
 def stub_script(cell: cells.Cell, nonce: str, work: Path, shim_dir: Path | None = None) -> dict:
     """The script for stub_model.py: the one tool call a stub-arm run issues, per wire format. The names are the ones the model
-    is shown (docs/hook-fidelity-stub-feasibility.md section 2); a pilot's ``offered_tools`` log settles any doubt.
+    is shown (section 2 of docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md); a pilot's ``offered_tools`` log
+    settles any doubt.
 
     ``shim_dir`` (OpenAI wire only): the scripted shell command calls the run's ``touch`` shim by ABSOLUTE path. Codex runs
     its shell tool as ``zsh -lc``, and a login shell reorders PATH (macOS ``path_helper``), so a PATH shim is skipped and the
@@ -536,7 +537,7 @@ def _claude(cell, paths, mode, binary, model, prompt, commands, server, stub_url
             at = argv.index(flag)
             del argv[at:at + (1 if flag == "--no-session-persistence" else 2)]
     extra: dict[str, str] = {}
-    if stub_url:  # docs/hook-fidelity-stub-feasibility.md 3.1: key set means no stored login is used
+    if stub_url:  # docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md 3.1: key set means no stored login is used
         extra = {"ANTHROPIC_BASE_URL": stub_url, "ANTHROPIC_API_KEY": STUB_KEY, "CLAUDE_CONFIG_DIR": str(paths.home / "claude"),
                  "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1", "DISABLE_AUTOUPDATER": "1",
                  "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "ENABLE_TOOL_SEARCH": "false"}
@@ -550,7 +551,8 @@ def _codex(cell, paths, mode, binary, model, prompt, commands, server, stub_url=
             "[sandbox_workspace_write]\nnetwork_access = true\n\n[mcp_servers.notes]\n"
             f"command = {json.dumps(server['command'])}\nargs = {json.dumps(server['args'])}\n"
             'default_tools_approval_mode = "approve"\n\n')
-    if stub_url:  # docs/hook-fidelity-stub-feasibility.md 3.2: Responses wire format only, no login involved
+    # docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md 3.2
+    if stub_url:  # Responses wire format only, no login involved
         # [features] apps and plugins off: with them on, a startup sync connects to chatgpt.com and github.com even with a custom
         # provider and no login (observed through a logging proxy on 0.131.0 and 0.165.0; none with both off)
         toml = ('check_for_update_on_startup = false\n' + toml + "[features]\napps = false\nplugins = false\n\n"
@@ -581,7 +583,8 @@ def _gemini(cell, paths, mode, binary, model, prompt, commands, server, stub_url
                 "general": {"disableAutoUpdate": True, "disableUpdateNag": True, "enableAutoUpdate": False,
                             "enableAutoUpdateNotification": False},
                 "mcpServers": {"notes": {**server, "trust": cell.state == "trust"}}}
-    if stub_url:  # docs/hook-fidelity-stub-feasibility.md 3.3: selectedType stays gemini-api-key (else the gateway path)
+    # docs/research-notes/hook-fidelity/hook-fidelity-stub-feasibility.md 3.3
+    if stub_url:  # selectedType stays gemini-api-key (else the gateway path)
         settings["privacy"] = {"usageStatisticsEnabled": False}
     if commands:
         settings["hooks"] = {"BeforeTool": [{"matcher": MATCHERS["gemini"][cell.kind][0], "hooks": [_handler(cell, c)]}

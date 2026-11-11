@@ -180,13 +180,7 @@ INTENT_HEAD = 20_000
 
 def _private_dir(directory: Path) -> None:
     """Creates ``directory``, and keeps ``~/.intentshield`` (prompts, API keys, tool catalogs) readable by its owner only."""
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700 if directory.name == ".intentshield" else 0o777)
-    if directory.name == ".intentshield" and os.name == "posix":
-        try:
-            if directory.stat().st_mode & 0o077 and directory.stat().st_uid == os.getuid():
-                directory.chmod(0o700)
-        except OSError:  # the files in it are 0600 either way
-            pass
+    translation.private_dir(directory)
 
 
 def _credential_mark(token: str) -> str:
@@ -963,8 +957,10 @@ def _builtin_value(kind: str, field_name: str, arguments: dict[str, Any]) -> Any
 def _builtin_target(kind: str, field_name: str, arguments: dict[str, Any]) -> str:
     value = _builtin_value(kind, field_name, arguments)
     if isinstance(value, list):  # an argv (Codex: ["bash", "-lc", "..."]), or several paths
-        return shlex.join(str(v) for v in value) if kind == "shell" else " ".join(str(v) for v in value)
-    return "" if value is None else str(value)
+        text = shlex.join(str(v) for v in value) if kind == "shell" else " ".join(str(v) for v in value)
+    else:
+        text = "" if value is None else str(value)
+    return text.replace("\x00", "")  # bash ignores a NUL in a script, so the text is read without it
 
 
 def _shape_problem(tool: str, arguments: dict[str, Any]) -> str:
@@ -1026,7 +1022,11 @@ def _patch_verdict(guard: HarnessGuard, session: str, label: str, patch: str) ->
     special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)
                or dangerous.path_risk(p)]
     verdicts = [guard.file(session, label, path, added, write=True) for path in special[:8] + paths[:1]]
-    return next((v for v in verdicts if v.decision != "allow"), verdicts[0])
+    for path in special[8:]:  # past the eight the guard reads one by one, the rules still read each file
+        hit = dangerous.assess_file(path, added, write=True)
+        if hit:
+            verdicts.append(Verdict(hit.decision, f"IntentShield: {hit.reason}"))
+    return next((v for v in sorted(verdicts, key=lambda v: v.decision != "deny") if v.decision != "allow"), verdicts[0])
 
 
 def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[str, Any]) -> Verdict | None:
@@ -1464,6 +1464,47 @@ def _deadline_arg(text: str) -> float:
     return value
 
 
+_OFF = ("0", "false", "off", "no")
+
+
+def _is_zero(text: str) -> bool:
+    try:
+        return float(text) == 0
+    except ValueError:
+        return False
+
+
+# (variable, the command-line flags that take its place, true when its value loosens the guard, what it does)
+_LOOSENING_ENV = (
+    ("INTENTSHIELD_HOOK_REVIEW", ("--review",), lambda v: v.strip().lower() == "never",
+     "turns off the asks before state-changing calls"),
+    ("INTENTSHIELD_HOOK_TRANSLATE", ("--no-translate",), lambda v: v.strip().lower() in _OFF,
+     "turns off the deadline and the choice of ask or refusal by the harness"),
+    ("INTENTSHIELD_HOOK_DEADLINE", ("--deadline",), lambda v: _is_zero(v),
+     "turns off the deadline"),
+    ("INTENTSHIELD_HOOK_SOURCED_READS", ("--allow-sourced-reads",), lambda v: v.strip().lower() == "allow",
+     "stops the asks before a read whose argument came from a tool output"),
+    ("INTENTSHIELD_THREAT_MEMORY", ("--no-threat-memory",), lambda v: v.strip().lower() in _OFF, "turns off threat memory"),
+    ("INTENTSHIELD_HOOK_DB", ("--db",), lambda v: bool(v.strip()),
+     "moves the session database, so what other sessions saw is not seen"),
+    ("INTENTSHIELD_THREAT_DB", ("--threats",), lambda v: bool(v.strip()), "moves the threat memory file"),
+    ("INTENTSHIELD_THREAT_PACKS", ("--packs",), lambda v: bool(v.strip()), "loads threat packs from another directory"),
+    ("INTENTSHIELD_HOOK_CATALOG", ("--catalog",), lambda v: bool(v.strip()), "moves the tool catalog the proxies write"),
+)
+
+
+def loosening_env(argv: list[str]) -> list[str]:
+    """Notes for each environment variable that changes the hook's settings and is not overridden by a flag on its command line.
+    A project's settings can set them for a session, so the hook says so on stderr instead of obeying them silently."""
+    notes = []
+    for name, flags, loosens, what in _LOOSENING_ENV:
+        value = os.environ.get(name)
+        if value is None or not loosens(value) or any(a == f or a.startswith(f + "=") for a in argv for f in flags):
+            continue
+        notes.append(f"{name}={value} (from the environment) {what}")
+    return notes
+
+
 def main(argv: list[str] | None = None) -> None:
     global _REPLY
     _REPLY = threading.Lock()  # one answer per hook process: a new lock per call, for callers that run main in-process
@@ -1481,7 +1522,7 @@ def main(argv: list[str] | None = None) -> None:
                         help="injection classifier artifact to run on results the rules pass (slower)")
     parser.add_argument("--catalog", default=os.getenv("INTENTSHIELD_HOOK_CATALOG",
                                                        str(Path.home() / ".intentshield" / "tools")),
-                        help="directory the transparent proxies write tool catalogs to (tool_catalog_dir)")
+                        help="directory the transparent proxies write tool catalogs to")
     parser.add_argument("--threats", default=os.getenv("INTENTSHIELD_THREAT_DB") or None,
                         help="threat memory database (default: threats.db next to --db)")
     parser.add_argument("--no-threat-memory", action="store_true",
@@ -1506,7 +1547,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-translate", action="store_true",
                         default=os.getenv("INTENTSHIELD_HOOK_TRANSLATE", "").lower() in ("0", "off", "false", "no"),
                         help="send each verdict as the guard made it: no choice of ask or deny by the harness's measured "
-                             "behaviour, and no deadline (translation.py)")
+                             "behaviour, and no deadline")
     parser.add_argument("--deadline", type=_deadline_arg, default=_env_seconds("INTENTSHIELD_HOOK_DEADLINE"),
                         help="seconds (0 to 3600) after which a hook still checking a call answers with a refusal, so that "
                              "a slow judge or a stuck database is not read as a timeout, which every harness measured lets "
@@ -1551,6 +1592,9 @@ def main(argv: list[str] | None = None) -> None:
             if event.get("hook_event_name") in translation.CALL_EVENTS:
                 for note in guard.translation.overrides():   # a project's settings can set these: never silently
                     print(f"IntentShield: {note} replaces what the hook would detect", file=sys.stderr)
+        if event.get("hook_event_name") in translation.CALL_EVENTS:
+            for note in loosening_env(sys.argv[2:] if argv is None else argv[1:]):
+                print(f"IntentShield: {note}", file=sys.stderr)
         guard.from_harness = translation.harness_running(args.harness)
         reply = handle(args.harness, event, guard)
     except Exception as exc:  # fail closed on calls, open on everything else

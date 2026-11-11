@@ -65,7 +65,7 @@ Every module in `src/intentshield/` is listed once, grouped by the layer it belo
 |---|---|---|
 | Browser console | `static/` | Request entry, scenarios, live model status, scores, audit runs, approval queue. No separate frontend server. |
 | FastAPI application | `api.py` | REST routes, static files, local host checks, bearer protection for approvals, model concurrency, startup and shutdown of real MCP connections. |
-| Command line | `__main__.py` | The `intentshield` command: `serve` (default), `install`, `uninstall`, `wrap`, `unwrap`, `scan`, `doctor`, `wrap-hook`. |
+| Command line | `__main__.py` | The `intentshield` command: `serve` (default), `install`, `uninstall`, `wrap`, `unwrap`, `scan`, `doctor`, `wrap-hook`, `demo` (three sample shell calls through the real hook, nothing run). |
 | Request and result models | `models.py` | Typed tool calls, decisions and stable reason codes. `ToolCall` forbids extra fields, so a client cannot inject trusted scores. |
 | Main service | `service.py` | Persists runs, obtains evidence, evaluates policy, manages approval and idempotency, invokes executors. |
 | Security workers | `security_agents.py` | Concurrent deterministic detection and grounding. Their validated evidence cannot authorize execution. |
@@ -80,7 +80,7 @@ Every module in `src/intentshield/` is listed once, grouped by the layer it belo
 
 Notes on the table above:
 
-- `__init__.py` holds the package version. The empty `py.typed` beside it marks the package as typed, and CI runs `mypy` over it.
+- `__init__.py` holds the package version, read from the installed metadata when first asked for, so that importing the package costs nothing. The empty `py.typed` beside it marks the package as typed, and CI runs `mypy` over it.
 - `service.py` treats the persisted run intent as authoritative when a call resumes. It also computes the fail-closed
   fallback signals for a call that names an unregistered tool (`_security_assessment`).
 
@@ -183,7 +183,7 @@ One local development checkpoint inspected on 3 October 2026 recorded the follow
 | Epochs / learning rate | 24 / 0.00005 |
 | Default abstention threshold | 0.65 |
 
-These are historical development results on 18 validation examples, not a current inference verification or a broad robustness benchmark. Install the optional ML dependencies and create or supply an artifact to test real predictions. Trained weights are not included because `artifacts/` is ignored.
+These are historical development results on 18 validation examples, not a current inference verification or a broad robustness benchmark. Install the optional ML dependencies and create or supply an artifact to test real predictions. Trained weights are not included in the repository.
 
 When no usable checkpoint is available at service startup, the optional ML adapter is omitted and deterministic grounding continues. If an attached classifier later fails, abstains, or predicts the wrong action family, that call receives conservative evidence and can be blocked. Restart the app after changing its artifact or dependencies.
 
@@ -261,7 +261,7 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --extra dev --frozen` and has none of those variables set.
 
-Expect every test to pass. The test totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The last total measured by hand was 4731 passed and 5 skipped on macOS on 2026-11-11, on the tree after commit `1909c35` and before the 0.4.3 tag (the same with `CI=true`); the Linux runners skip more of the platform-specific tests. Run `pytest -rs` to see why each test skipped. The skips are tests that need the guard-corpus clones or the MSB checkout under `artifacts/`, tests for the other operating system's process reader or sandbox, and, on a machine where the variable below is unset, the opt-in real HTTP process test. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. Run the HTTP test, or run the whole suite with HTTP enabled:
+Expect every test to pass. Measured on macOS (Python 3.14) on 2026-11-11 at the working tree after `633014e`: 5154 passed and 5 skipped; the same tree on the lowest allowed versions of the direct dependencies (Python 3.12): 5154 passed and 6 skipped. The totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The number of skips depends on the machine (a handful on macOS, more on Linux, which skips the platform-specific tests) and on whether the optional checkouts are present. Run `pytest -rs` to see why each test skipped. The skips are tests that need the guard-corpus clones or the MSB checkout under `artifacts/`, tests for the other operating system's process reader or sandbox, and, on a machine where the variable below is unset, the opt-in real HTTP process test. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. Run the HTTP test, or run the whole suite with HTTP enabled:
 
 ```bash
 INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_KEY= INTENTSHIELD_INTENT_MODEL_DIR=/tmp/none INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -vv --durations=10
@@ -386,6 +386,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_msb_scoring.py`, `test_paper_numbers.py` | MSB scoring on synthetic traces; the headline cells replayed from the committed traces in `results/msb` |
 | `test_injection_eval.py`, `test_adaptive_attacker.py`, `test_self_disclosure_eval.py` | injection evaluation corpus and per-family scoring; the adaptive-attacker protocol; self-disclosure stripping over recorded catalogs |
 | `test_docs_inventory.py`, `test_docs_links.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository |
+| `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
 | `test_import_declarations.py` | every third-party package that `src/intentshield` imports is declared in `pyproject.toml` |
 | `test_coverage_study.py`, `test_security_review_counts.py` | coverage-study instrumentation; `docs/security-review.md` table counts equal its finding rows |
 
@@ -653,7 +654,7 @@ uv pip install --python .venv/bin/python -r requirements-ml.txt
 
 These packages are declared separately from the project's normal extras. A later exact `uv sync` can remove them as extraneous. Use `uv sync --locked --extra dev --inexact` to preserve manually installed packages, or reinstall them after syncing.
 
-The trained model is `artifacts/intent-deberta-v3-small-v2` (Colab, `artifacts/colab-intent-retrain.ipynb`). The default path `artifacts/intent-deberta-v3-small` is absent, so the intent model is off unless `INTENTSHIELD_INTENT_MODEL_DIR` points at a model. To train one locally:
+The author's trained model (`artifacts/intent-deberta-v3-small-v2`, trained in Colab) is kept by the author, not in the repository. No default model directory exists, so the intent model is off unless `INTENTSHIELD_INTENT_MODEL_DIR` points at a model. To train one locally:
 
 ```bash
 .venv/bin/python -m intentshield.intent_training \
@@ -746,7 +747,7 @@ INTENTSHIELD_INTENT_MODEL_DIR=/nonexistent uv run python benchmarks/injection_ev
   --agentdojo results/injection/agentdojo-strings.jsonl --injecagent /nonexistent --out /tmp/injection-eval.json
 ```
 
-The rest need external datasets under `artifacts/data/` (ignored by Git), or the network:
+The rest need external datasets that you clone yourself, by convention under `artifacts/data/` (ignored by Git), or the network:
 
 | Runner | Needs | Model calls |
 |---|---|---|
