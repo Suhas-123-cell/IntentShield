@@ -51,3 +51,38 @@ def test_a_url_in_the_error_never_reaches_the_message():
     config = MCPUpstreamConfig(server_id="web", transport="streamable_http", url="https://example.test/mcp")
     text = _connection_failure(RuntimeError("Client error '401' for url 'https://example.test/mcp/session/SECRET'"), config)
     assert "SECRET" not in text and "<url>" in text
+
+
+def test_an_http_server_that_answers_with_an_error_is_named_by_its_address():
+    import http.server
+    import threading
+
+    class Failing(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length", 0)))
+            self.send_response(502)
+            self.send_header("content-length", "0")
+            self.end_headers()
+
+        do_GET = do_POST
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Failing)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/mcp"
+
+        async def attempt() -> None:
+            config = MCPUpstreamConfig(server_id="remote", transport="streamable_http", url=url, timeout_seconds=5,
+                                       read_timeout_seconds=5)
+            async with MCPUpstream(config):
+                pass
+
+        with pytest.raises(MCPUpstreamError) as caught:
+            asyncio.run(attempt())
+    finally:
+        server.shutdown()
+    message = caught.value.message
+    assert f"http://127.0.0.1:{server.server_port}/mcp" in message and "curl -i" in message

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Which harmful fixtures have their defining string in this repository's tests or source, and what the 214-call comparison
-says without them.
+says without them. It does the same for the 467-fixture set's before and after figures for the built-in tool rules.
 
 The two detection fixture sets were declared "held out": an item's command or path was not in IntentShield's repository text
 when the set was built. The unit tests of the dangerous-command rules were written afterwards and contain some of the same
 strings (canonical dangerous commands such as `rm -rf /` or `git push --force`; the rules were written from category lists, so
 this may be coincidence). This script counts the overlap with a plain substring match and rescores the 214-call set without the
-overlapping items, so a reader can see how much the comparison with safety-net and knox depends on them.
+overlapping items, and the 467-fixture set's before and after figures without its overlapping items, so a reader can see how
+much each comparison depends on them. `overlap_items.json` pins the items found at commit 1979d0e, which the report quotes; the
+script lists any item the current tree no longer matches.
 
     overlap_check.py [--roots tests src] [--json]
 
@@ -25,11 +27,13 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import fresh_report as fr  # noqa: E402
+import report_numbers as rn  # noqa: E402
 
 ROOT = HERE.parents[1]
 DETECT = ROOT / "results" / "hook-fidelity" / "detect"
 TOOL_KINDS = ("shell", "read", "write", "edit")
 MIN_LENGTH = 6   # shorter strings match anything
+PINNED = json.loads((HERE / "overlap_items.json").read_text())
 
 
 def defining_string(row: dict) -> str | None:
@@ -93,6 +97,11 @@ def rescored(excluded: set[str]) -> dict:
     return out
 
 
+def rescored_467(excluded: set[str] | frozenset[str]) -> dict:
+    """The 467-fixture set's harmful held-out figures, IntentShield before and after the built-in tool rules, without ``excluded``."""
+    return rn.rules_before_after(excluded)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--roots", nargs="+", default=["tests", "src"], help="directories under the repository root to search (default: tests src)")
@@ -107,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
     excluded = set(result["fresh_214_call_set"]["items"])
     result["fresh_without_overlap"] = rescored(excluded)
     result["fresh_with_all_items"] = rescored(set())
+    pinned_467 = set(PINNED["fixtures_467_set"])
+    result["fixtures_467_with_all_items"] = rescored_467(set())
+    result["fixtures_467_without_overlap"] = rescored_467(pinned_467)
+    result["pinned_items_missing_now"] = sorted((pinned_467 | set(PINNED["fresh_214_call_set"])) - set(result["fixtures_467_set"]["items"]) - set(result["fresh_214_call_set"]["items"]))
     if args.json:
         print(json.dumps(result, indent=1, sort_keys=True))
         return 0
@@ -122,6 +135,14 @@ def main(argv: list[str] | None = None) -> int:
             g = block[guard]
             print(f"    on {guard}'s scope ({g['n']} items): {guard} lets through {g['guard']['let_through']}, denies {g['guard']['deny']}; "
                   f"IntentShield lets through {g['intentshield_on_the_same_items']['let_through']}, denies {g['intentshield_on_the_same_items']['deny']}")
+    print()
+    names = (("held", "items that stayed held out"), ("declared", "items declared held out"), ("builtin", "built-in tool calls"))
+    for label in ("fixtures_467_with_all_items", "fixtures_467_without_overlap"):
+        for key, text in names:
+            b = result[label][key]
+            print(f"{label}, {b['n']} {text}: IntentShield lets through {b['before']} before the rules and {b['after']} after")
+    if result["pinned_items_missing_now"]:
+        print("pinned items whose string is no longer in the tree:", ", ".join(result["pinned_items_missing_now"]))
     return 0
 
 

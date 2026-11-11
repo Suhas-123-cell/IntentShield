@@ -47,7 +47,7 @@ nothing anywhere itself; only the optional judge and Prompt Guard send text to a
 |---|---|---|
 | `hooks.db` (`INTENTSHIELD_HOOK_DB` or `--db`) | per session: the user's prompts, the values taken from tool results, and the last hook time and working directory per harness (details below the table) | a session is deleted after 7 days without a hook event, or 30 days if a result in it was flagged (details below the table) |
 | `threats.db` (`INTENTSHIELD_THREAT_DB`) | what rule-confirmed attacks used: addresses, URLs, accounts, paths, word fingerprints of the injected sentences, and how often each server produced attacks | an entry expires 30 days after it was last seen; one the operator confirmed does not expire |
-| `proxies/*.db`, `gateway.db`, `intentshield.db` | the audit of a proxy or the gateway: runs with the user's intent, call arguments, decisions, approvals and the results of executed mutations | no expiry |
+| `proxies/*.db`, `gateway.db`, `intentshield.db` | the audit of a proxy (`proxies/NAME-<hash>.db`, one per wrapped server and client file; a server wrapped by 0.4.3 keeps its `NAME.db`) or the gateway: runs with the user's intent, call arguments, decisions, approvals and the results of executed mutations | no expiry |
 | `.env` | the judge API keys `install --judge` stored | until you remove them |
 | `backups/`, `installs.json`, `harness-versions.json` | the exact bytes of each settings or MCP file before `install` or `wrap` first changed it (these can hold tokens that were already in that file), when `install` last ran, and each harness's version | no expiry |
 | `tools/` (only with `tool_catalog_dir`) | the names and descriptions of the tools a proxy shows | rewritten when the proxy starts |
@@ -68,6 +68,10 @@ with mode 0700 (an existing one that you own is tightened to 0700 the next time 
 older version may be more open, so run `chmod 600` on it. The hash that replaces a credential in a stored prompt is only there so
 the guard can tell later that you gave that very value; it does not keep the value. A credential the guard does not recognise
 stays in the prompt text as you typed it.
+
+`intentshield scan` and `intentshield doctor --connect` start the MCP servers named in your own client files, which runs their code with
+your user rights; `--no-connect` (scan) and plain `doctor` start nothing. A server named by a file in the working directory, which a
+repository may have chosen, is started only with `--connect-project`.
 
 Since 0.4.3 the library's default databases (`Storage()`, `IntentShieldService.default()`, `create_mcp_server()` and a proxy
 config with no `database_path`) are in `~/.intentshield`, as the command line's are. Before that they were `intentshield.db`

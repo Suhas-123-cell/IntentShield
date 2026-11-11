@@ -196,3 +196,12 @@ def test_the_command_exits_1_on_an_error_and_writes_valid_sarif(tmp_path: Path, 
     report = json.loads(capsys.readouterr().out)
     assert report["version"] == "2.1.0" and TOKEN not in json.dumps(report)
     assert [r["ruleId"] for r in report["runs"][0]["results"]] == ["hardcoded_credential"]
+
+
+def test_the_summary_says_how_to_check_the_configs_without_starting_the_servers():
+    from intentshield import scan
+
+    server = scan.Server("cursor", Path("mcp.json"), "remote", {"url": "https://mcp.example.org/mcp"})
+    server.error = "MCPUpstreamError: Could not connect to MCP server 'remote'"
+    summary = scan.report([server], [], Path("/nonexistent")).splitlines()[-1]
+    assert "1 not scanned (--no-connect checks the configs without starting them)" in summary

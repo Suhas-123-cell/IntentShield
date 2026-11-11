@@ -386,7 +386,7 @@ IS_VARIANTS = {
     # Codex shapes only (the MCP event shape of Gemini differs and was not built).
     "intentshield-tainted": dict(builtin_tools=True, state=True, taint=True),
     # POST HOC (round 8 fix): the same configuration as "intentshield", run on the code of branch r8-fixrules, which adds the
-    # deterministic dangerous-call rules of src/intentshield/dangerous.py. Written from a category list before the fixtures were opened,
+    # deterministic dangerous-call rules of src/intentshield/dangerous/. Written from a category list before the fixtures were opened,
     # but the fixture set was seen in aggregate before, so this is no longer a clean held-out test. Decisions: r8fix/decisions.jsonl.
     "intentshield-r8fix": dict(builtin_tools=True, state=True),
 }

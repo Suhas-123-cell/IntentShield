@@ -71,7 +71,8 @@ The per-harness table (hook config, argument rewriting, asking the user) is in
 
 The proxy layer needs no harness support at all: `intentshield wrap <file>` rewrites every stdio
 server in an `mcpServers` file (Claude Code `.mcp.json`, Cursor `mcp.json`, Gemini CLI
-`settings.json`, or any client with that layout). Claude Code keeps the servers added with
+`settings.json`, or any client with that layout), in VS Code's `servers` key (`mcp.json`) or `mcp.servers` key (`settings.json`), and in the
+`[mcp_servers.NAME]` tables of Codex CLI's `~/.codex/config.toml`; `unwrap` gives the file back byte for byte. Claude Code keeps the servers added with
 `claude mcp add` in `~/.claude.json`, the top-level ones and each project's own; `wrap` handles that file the same way to launch the proxy in front of it, with one
 generated config per server under `~/.intentshield/proxies/`; `intentshield unwrap <file>` restores
 them. By hand, the entry looks like this:
@@ -107,14 +108,16 @@ harness's own tools to the hook (the per-harness table is in
 install without the flag to go back. `--builtin-tools` has been in the PyPI releases since 0.4.1. The session
 rules it applies to a shell command, fetch or file access (an address that came from an injected output, data
 sent to an address the user did not name, secrets read and sent out, what may run after an output tried to
-instruct the agent) are the ones in that row. After an injection a read-only command, and an ordinary local
+instruct the agent) are the ones in that row. One difference between the tools: in a session where an output tried to instruct the
+agent, `curl` to a host the user did not name asks, but `WebFetch` to one is not asked about (fetching a page an output linked to is how
+agents browse); it is refused only when the address came from the injected output or carries a credential. After an injection a read-only command, and an ordinary local
 build, test or version-control command such as `pytest` or `git commit`, still run; `rm`, `sed -i`,
 `pip install` and a download from a host the user did not name ask.
 
-**Dangerous-command rules.** With `--builtin-tools` the hook also runs `src/intentshield/dangerous.py` on every
+**Dangerous-command rules.** With `--builtin-tools` the hook also runs `src/intentshield/dangerous/` on every
 shell command, file read and file write, and the stricter of its verdict and the session rules' verdict wins (a deny
 beats an ask beats an allow): a key or cloud credential sent out is a deny even where the session rules would only
-have asked. They read the call's text alone, parsed safely (`shlex` stages, wrappers such as `sudo` and `env`, `bash -c`,
+have asked. They read the call's text alone, parsed safely (`shlex` stages, the wrappers listed below, `bash -c`,
 `$(...)`, here-documents, never executed), with linear-time patterns. They are **text rules and opt-in**, not a
 sandbox:
 
@@ -141,7 +144,8 @@ sandbox:
   approved, and these are common clean-ups); a delete by `find` at a system directory, or with `-o` or `-prune`, that names
   the files it removes; `rm -rf` of a variable that may be empty, also after a root or home (`$DIR`, `/$DIR`, `~/$DIR`,
   `$HOME/$DIR`, `/*$DIR`).
-- Permissions: `chmod 777`; a non-recursive `chmod` or `chown` on a system path; a recursive `chmod` or `chown` of the home
+- Permissions: `chmod 777`; a `chmod` to `000` or to a world-writable mode, or any `chown`, of a system path (not
+  `chmod 644 /etc/hosts`); a recursive `chmod` or `chown` of the home
   directory (without `sudo`) or of a `/usr/local` directory, and `chown -R $USER` or `chown -R $(whoami)` of a
   `/usr/local` directory (Homebrew's own advice).
 - Credentials read or sent: a read of `.env`, a `.pem` that is not a certificate, a cloud token, or a file named like a
@@ -150,8 +154,11 @@ sandbox:
   covered too, on a report that some Claude Code installs keep it there, which the vendor pages archived here do not
   confirm); an `.env` or similar file that holds secrets sent out as a file (a key or cloud credential sent out is a deny, and so is
   the output of `cat .env` put into a request to a host the user did not name); an upload
-  of a file (`curl -d @data.json`, `aws s3 cp`) to a host the user did not name.
-- Persistence and the guard: a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow;
+  of a file (`curl -d @data.json`, `aws s3 cp`) to a host the user did not name. The key named by `ssh -i`, `scp -i` or
+  `-o IdentityFile=` only signs a login and is not a read of the key; a copy of a private key (`id_rsa.bak`, `id_ed25519~`) is
+  the key, wherever it lies.
+- Persistence and the guard: a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow
+  (`.zshrc` and `.zshrc.local` ask; a copy that nothing runs, `.zshrc.bak`, `.bashrc.orig` or `.bashrc~`, does not);
   deleting or emptying a key or an access file; anything that changes the guard itself (below).
 - Too big to read: a path, a command, a brace list or a loop past a limit (next sections).
 
@@ -160,6 +167,21 @@ sandbox:
 Inside one command line it follows `cd`, `pushd` and `popd` (`cd ~ && rm -rf Documents` deletes the home
 directory's `Documents`), variables set earlier in that line (`RM=rm; $RM -rf /`, `for d in / b; do rm -rf "$d"; done`),
 `$'...'` quoting and brace lists (`rm -rf {/,}`, `{rm,-rf,/}`). The directory a `cd` went to is not known across two calls.
+The program behind a **wrapper** is the command that is judged, so a deny keeps its verdict in front of any of them. The wrappers
+are the programs that run another program, read from the manual pages of coreutils (`env`, `nice`, `nohup`, `stdbuf`,
+`timeout`, `chroot`), util-linux (`chrt`, `flock`, `ionice`, `nsenter`, `runuser`, `script`, `setarch`, `setpriv`, `setsid`,
+`taskset`, `unshare`), the BSD and macOS base systems (`arch`, `caffeinate`, `lockf`, `sandbox-exec`, `xcrun`) and the usual
+tools around them: `sudo`, `doas`, `pkexec`, `run0`, `su -c`, `sg`, `command`, `builtin`, `exec`, `time`, `watch`, `xargs`,
+`parallel`, `busybox`, `toybox`, `strace`, `ltrace`, `valgrind`, `gdb --args`, `numactl`, `cpulimit`, `prlimit`, `systemd-run`,
+`systemd-inhibit`, `fakeroot`, `proxychains`, `torsocks`, `faketime`, `xvfb-run`, `dbus-run-session`, `firejail`, `bwrap`,
+`screen`, `sshpass`, `ssh-agent`, and the `run` or `exec` subcommand of `uv`, `poetry`, `pipenv`, `pdm`, `hatch`, `rye`, `conda`,
+`bundle`, `direnv`, `mise`, `asdf`, `rbenv`, `pyenv`, `npm`, `pnpm` and `yarn`. An option that takes a value is skipped
+(`flock -w 5 /tmp/l rm ...`, `taskset -c 0,1 ...`, `stdbuf -o L ...`, `bwrap --ro-bind / / ...`), a shell text a wrapper runs is read as
+a command line (`flock f -c '...'`, `script -qc '...'`, `sudo -s ...`, `runuser -l u -c '...'`, `watch '...'`), and `ssh host ...`
+is read as the command the remote shell runs (`ssh host 'rm -rf /'` is a deny). The command `find -exec`, `-execdir`, `-ok` and
+`-okdir` run, and the one `fd -x` runs, is read like `xargs`'s (`find . -exec rm -rf / \;` is a deny; `{}` stands for the file
+found). Container and cluster wrappers (`docker run`, `docker exec`, `kubectl exec`) are not read: what they run does not run on
+this machine.
 Spellings the shell reads as nothing are read as nothing: a line continuation (`rm \` and a new line before `-rf /`), a
 tab, a form feed or vertical tab, `${IFS}` for a space, empty quotes or a backslash inside a word (`r''m`, `\rm`), a comment
 after the command, `$@` or `$()` or `${X:-}` (empty where they stand), a default that is spelled out (`${RM:-rm} -rf /` is
@@ -171,13 +193,16 @@ deletes only the files it names (`find ~ -name .DS_Store -delete`,
 `find ~ -name '*.pyc' -delete`) is read like `rm` of those files and allowed under the home directory; asked at a
 system directory.
 
-**Limits on what is read.** The parser reads at most 50,000 characters, 400 commands, 20,000 words and three levels of
-nesting (`bash -c`, `eval`, `$(...)`). A command that goes past any of them is **asked about, with the limit named**,
+**Limits on what is read.** The parser reads at most 50,000 characters, 400 commands, 20,000 words, 200 command substitutions
+and three levels of nesting (`bash -c`, `eval`, `$(...)`), and reads through at most eight wrappers in front of a command
+(`sudo sudo ... rm -rf /` with nine). A command that goes past any of them is **asked about, with the limit named**,
 never allowed: a deny hidden after the limit cannot get through by padding the command. The same holds for the rest: a
 path is read to 1,000 characters after repeated slashes and `/./` are collapsed (so `~/.ssh/./././id_rsa` padded to any
 length is still the key), and a path that is still longer is asked about; a brace list of more than 300 characters, 16
 alternatives, 64 words or four levels is asked about; a variable set by a `for` loop over more than 32 words is asked about
-where it is used; a patch is read file by file whatever its size.
+where it is used; a patch is read file by file whatever its size. After an injection, a script or `package.json` that
+is written and holds more than 200,000 characters (500 strings for `package.json`) is asked about. A test lists every limit of
+the three readers (`dangerous`, `shell`, `harness`) and puts a deny behind each, so that a new limit cannot be added without one.
 
 **When the user named it.** A command the user typed in their prompt, or a path or host they named, turns a deny into
 an ask, never into an allow. The prompt must name the target itself: `/etc/hosts` does not name `/etc`, `/Users/me/proj`
@@ -202,9 +227,18 @@ stderr for every call, unless a flag on its command line takes the place of the 
 
 **What it does not see.** A command built at run time from pieces (`$(printf ...)`, a variable set in an earlier
 call or read from the environment), an interpreter script file and a language one-liner that wraps the real action are
-not seen. **Which tools are covered.** Claude Code: `Bash` and `PowerShell` (shell commands; Claude Code's help lists both), `Monitor` (its input has a `command`, which is read as
+not seen; neither is what a container, a cluster or a test runner runs (`docker run`, `kubectl exec`, `git rebase --exec`, a
+`Makefile` target). **Which tools are covered.** Claude Code: `Bash` and `PowerShell` (shell commands; Claude Code's help lists both), `Monitor` (its input has a `command`, which is read as
 a shell command; this rests on the tool's own schema, not on the vendor pages archived here), `WebFetch`, `Read`, `Grep`, `Write`, `Edit`,
-`MultiEdit` and `NotebookEdit`. Codex CLI: its shell tools (`shell`, `local_shell`, `exec_command`)
+`MultiEdit` and `NotebookEdit`. **PowerShell** gets the POSIX reading above (a native program such as `git`, `curl.exe` or
+`dd`, and the POSIX aliases `rm`, `cat` and `curl`, are read as they are) and a reading of the cmdlets that correspond to the rules:
+`Remove-Item` (`ri`, `rd`, `del`, `erase`) with `-Recurse` and `-Force` of a root, the home directory or a system directory, also
+as `$HOME`, `$env:USERPROFILE`, `C:\`, `C:\Windows` and `C:\Users\name`; `Get-Content` (`gc`, `type`) of a credential file;
+`Invoke-WebRequest` or `Invoke-RestMethod` (`iwr`, `irm`) that uploads a file with `-InFile` or from a pipe; a download run with
+`Invoke-Expression` (`iex`), in a pipe or around it; and `pwsh -Command` or `-EncodedCommand`. Parameters may be cut short as
+PowerShell accepts it (`-r`, `-fo`). Other cmdlets are **not read**: `Set-Content`, `Out-File` and `Copy-Item` to a startup file,
+`Start-Process`, .NET calls such as `[IO.File]::Delete`, and scripts. A tool name that starts with `mcp__` but has no server or no
+tool part is refused. Codex CLI: its shell tools (`shell`, `local_shell`, `exec_command`)
 and `apply_patch`; a patch run through the shell tool (`apply_patch <<'PATCH' ...`) is read as the patch it is. Gemini CLI:
 `run_shell_command`, `web_fetch`, `read_file`, `read_many_files`, `write_file`, `replace`, `search_file_content` and its
 other search tools. Of the search tools only Grep (and Gemini CLI's `search_file_content`) is read, by its `path`: Glob, `LS`
@@ -306,15 +340,17 @@ changes. What you can change, narrowest first:
    learned on its own only asks; `confirm <id>` is what makes an entry block. Turn the memory off with
    `--no-threat-memory` on the hook command or `INTENTSHIELD_THREAT_MEMORY=0`.
 4. **Change `--review`.** It decides when a state-changing MCP call asks: `intentshield install <harness> --review
-   always|tainted|never` writes it into the hook command (the default is `tainted`: ask once an output tried to
-   instruct the agent or a value came from an output), and the hook reads `INTENTSHIELD_HOOK_REVIEW` when the flag
-   is absent. `always` asks about every state-changing call (a refusal on Codex and Gemini). `never` removes every
-   ask, including the asks for values from tool outputs, for credentials the user did not give, for a judge's
-   objection and for the dangerous-command rules; it keeps the denies (injected instructions in the arguments, a
-   value from an injected output, a known attack, the dangerous-command denies). It is not a way to approve one
-   call; use it only where a refusal costs more than the ask protects. Reads whose argument came from an output
-   can be let through on their own with `INTENTSHIELD_HOOK_SOURCED_READS=allow` (or `--allow-sourced-reads` on the
-   hook command; `install` has no flag for it) while writes still ask.
+   always|tainted|never` writes it into the hook command (the default is `tainted`: ask once an output tried to instruct the agent or
+   a value came from an output), and the hook reads `INTENTSHIELD_HOOK_REVIEW` when the flag is absent. `always` asks about every
+   state-changing call (a refusal on Codex and Gemini).
+
+   `never` removes every ask, including the asks for values from tool outputs, for credentials the user did not give, for a judge's
+   objection and for the dangerous-command rules; it keeps the denies (injected instructions in the arguments, a value from an
+   injected output, a known attack, the dangerous-command denies). It is not a way to approve one call; use it only where a refusal
+   costs more than the ask protects.
+
+   Reads whose argument came from an output can be let through on their own with `INTENTSHIELD_HOOK_SOURCED_READS=allow` (or
+   `--allow-sourced-reads` on the hook command; `install` has no flag for it) while writes still ask.
 5. **Remove a layer.** Run `intentshield install <harness>` again without `--judge`, `--builtin-tools` or
    `--gemini-ask` to drop what caused the prompt. `intentshield uninstall <harness>` (add `--scope project` for the
    project's settings file) removes only IntentShield's hook entries and leaves every other setting; the file is
@@ -375,7 +411,8 @@ intentshield wrap-hook --harness claude|codex|gemini|cursor [--version X.Y.Z] [-
 `--print-entry` prints the full entry to put in the harness's settings instead of running anything. The shim is named
 by the absolute path of the `intentshield` program, as `install` writes it, because a harness started from the Dock or an IDE
 may not have it on `PATH`. The guard may be given as one shell string or as separate arguments. Give `--hook-timeout` the same
-number as the entry's own timeout setting.
+number as the entry's own timeout setting. For Cursor, `install` relies on `"failClosed": true` in the hook entry and not on the
+launcher below, so set that key on a Cursor entry as well.
 
 A hook entry that ran `pnpm dlx block-no-verify` becomes
 
@@ -443,11 +480,14 @@ or no server could be started or read. The full description and exit codes are i
 ## Troubleshooting
 
 **`intentshield doctor`** checks every harness's user and project settings file, then the MCP configs it finds
-(Claude Code, Cursor and Gemini CLI). A line is `ok`, `note`, `warn`, `FAIL` or `--` (no IntentShield hooks for that
+(Claude Code, Cursor, Gemini CLI, Codex CLI and VS Code). For each file whose wrapped servers passed it prints an `ok` line that names
+them: the proxy config exists and the server's command is found. The summary counts the problems, the warnings and the notes.
+`--connect` also starts each wrapped server once through its proxy and lists its tools, which runs the server's code;
+`--connect-project` adds the servers named by files in the working directory. A line is `ok`, `note`, `warn`, `FAIL` or `--` (no IntentShield hooks for that
 harness); it exits 1 when any line is `FAIL`, and `note` and `warn` lines do not change the exit code. A `note` line is a measured
 fact about your harness version (for example that a hook which prints nothing lets the call run) and needs no action; only
 `FAIL` is a fault. A repeated line is printed and counted once. Apart from recording
-each harness's version it only reads. Messages from a run against a fresh install:
+each harness's version it only reads (and starts nothing unless you pass `--connect`). Messages from a run against a fresh install:
 
 - `FAIL <harness> (<file>): installed, but no hook has run since <time>.` Right after `install` this is expected:
   start the harness and send any prompt (every hook event counts, not only a tool call). If it stays, the harness is not running the hooks. For Codex the line adds: "Codex skips
@@ -494,7 +534,7 @@ id; the proxy keeps serving. Before 0.4.3 the protocol library dropped these sil
 transports were not checked for this.
 
 **A command that needs a package that is not installed.** After `pip install --no-deps intentshield-mcp` only the hooks,
-`wrap-hook`, `install`, `uninstall`, `doctor` and `scan --no-connect` run. The proxy, `wrap`, the dashboard, `scan` with a
+`wrap-hook`, `install`, `uninstall`, `doctor`, `demo` and `scan --no-connect` run (`doctor --connect` says it needs the full install). The proxy, `wrap`, the dashboard, `scan` with a
 connection and the verifier print one line, "this command needs the package '<name>', which is not installed ... Install
 everything with: pip install intentshield-mcp", and exit with status 2.
 
@@ -522,15 +562,15 @@ tell the run is headless, and `doctor` warns whenever the flag is on. If a sessi
 `intentshield install gemini` again without `--gemini-ask`. If the hook cannot read the mode it refuses the ask;
 `INTENTSHIELD_HARNESS_MODE=interactive` restores the prompt in a session you know has a person.
 
-**A wrapped server does not see your shell's environment.** `wrap` starts each server through the proxy, which
-gives it the variables the entry's `env` names plus basics such as `PATH` and `HOME`, not the rest of your
-environment (a proxy setting, `AWS_*`, `SSH_AUTH_SOCK`, a token you exported). Name each variable the server
-needs in the entry's `env`; a literal value there stays in the client's file and is passed on by name, and an
-empty value is not forwarded. `wrap` skips an entry whose command line uses `${...}`, `$VAR` or `%VAR%`
-interpolation, because the client expands those only for the program it starts: replace it with the value (or
-move it to `env`) and wrap again. `intentshield scan` starts servers with the same reduced environment, so a
-server that needs a variable can fail to list its tools there, and the finding is `not_scanned`. `scan` starts the
-servers of a config the repository chose only with `--connect-project`; a file you name on the command line is
+**A wrapped server does not see your shell's environment.** `wrap` starts each server through the proxy, which gives it the
+variables the entry's `env` names plus basics such as `PATH` and `HOME`, not the rest of your environment (a proxy setting,
+`AWS_*`, `SSH_AUTH_SOCK`, a token you exported). Name each variable the server needs in the entry's `env`; a literal value there
+stays in the client's file and is passed on by name, and an empty value is not forwarded.
+
+`wrap` skips an entry whose command line uses `${...}`, `$VAR` or `%VAR%` interpolation, because the client expands those only for
+the program it starts: replace it with the value (or move it to `env`) and wrap again. `intentshield scan` starts servers with the
+same reduced environment, so a server that needs a variable can fail to list its tools there, and the finding is `not_scanned`.
+`scan` starts the servers of a config the repository chose only with `--connect-project`; a file you name on the command line is
 treated as yours and is started.
 
 **The judge is offline.** The judge is evidence only. When it cannot be reached (no network, or its key is
@@ -551,21 +591,21 @@ New attacks should not need a new release. Two mechanisms adapt a running instal
 only: they can send a call to review or, when the operator says so, block it; they never allow
 anything and never relax a built-in rule.
 
-- **Threat memory** (`threat_memory.py`, on by default). When the deterministic rules confirm an
-  injection, the memory keeps what the attack used: the addresses, URLs, accounts and paths it named,
-  their domain once an attacker rotates local parts across runs, word fingerprints of the injected
-  sentences (also with the trigger phrases blanked, so rewording exactly what the rules look for does
-  not hide the payload), and how often each server produced attacks. One SQLite file is shared by every
-  proxy and hook process, so what one session caught, the next session knows. Only rule-confirmed text
-  teaches it, never its own matches; values the user typed are never learned or held against them;
-  fingerprints that a benign gate corpus would contain are rejected; learned entries expire after 30
-  days. A server with attacks in 5 distinct runs within 7 days is hostile: its outputs are read as possibly
-  injected (weak evidence, never on a call's arguments) until the operator approves a call to it or
-  allowlists it. What it learned on its own only asks (`REVIEW_KNOWN_THREAT`, a hook "ask"); an entry the operator
-  confirms, or one from an imported feed or a trusted pack, blocks (`BLOCK_KNOWN_THREAT`). The file
-  defaults to `threats.db` next to the proxy or hook database (`threat_memory_path` in the proxy config,
-  `--threats` or `INTENTSHIELD_THREAT_DB` for hooks); turn it off with `threat_memory: false` or
-  `--no-threat-memory` / `INTENTSHIELD_THREAT_MEMORY=0`.
+- **Threat memory** (`threat_memory.py`, on by default). When the deterministic rules confirm an injection, the memory keeps what
+  the attack used: the addresses, URLs, accounts and paths it named, their domain once an attacker rotates local parts across runs,
+  word fingerprints of the injected sentences (also with the trigger phrases blanked, so rewording exactly what the rules look for
+  does not hide the payload), and how often each server produced attacks. One SQLite file is shared by every proxy and hook process,
+  so what one session caught, the next session knows.
+
+  Only rule-confirmed text teaches it, never its own matches; values the user typed are never learned or held against them;
+  fingerprints that a benign gate corpus would contain are rejected; learned entries expire after 30 days. A server with attacks in
+  5 distinct runs within 7 days is hostile: its outputs are read as possibly injected (weak evidence, never on a call's arguments)
+  until the operator approves a call to it or allowlists it.
+
+  What it learned on its own only asks (`REVIEW_KNOWN_THREAT`, a hook "ask"); an entry the operator confirms, or one from an
+  imported feed or a trusted pack, blocks (`BLOCK_KNOWN_THREAT`). The file defaults to `threats.db` next to the proxy or hook
+  database (`threat_memory_path` in the proxy config, `--threats` or `INTENTSHIELD_THREAT_DB` for hooks); turn it off with
+  `threat_memory: false` or `--no-threat-memory` / `INTENTSHIELD_THREAT_MEMORY=0`.
 - **Threat packs** (`rule_packs.py`). New detection rules, indicators and fingerprints shipped as a
   JSON file. A running proxy or hook picks up a new or changed pack within seconds, without a restart.
   A pack loads only if it verifies against a digest you pinned (`INTENTSHIELD_PACK_PINS`), your HMAC key
@@ -588,14 +628,16 @@ intentshield-threats pack --dir ~/.intentshield/packs --pin sha256:<digest> inst
 intentshield-threats pack export > learned.json             # share what one install learned
 ```
 
-`benchmarks/adaptive_learning.py` (offline, deterministic) replays attack campaigns with mechanical
-rewordings: with the attacker's infrastructure reused, the memory raised the catch rate from 0.67 to
-1.00; with fresh addresses per attempt, from 0.67 to 0.93 (fingerprints alone); a family the rules
-miss went from 0.00 to 0.67 after hot-installing the baseline pack. It flagged none of 1,756 benign
-paragraphs. Read these as an upper bound: the attacks and the pack are self-authored, the rewordings
-are mechanical rather than an LLM's, and a full rewrite leaves too little wording to recognize
-(`tests/test_adaptive_integration.py` shows both cases). The memory adds about 5-25 ms to each hook
-process when small, and about 20 ms before a call and 40 ms after a result at its caps (5,000 indicators,
-500 fingerprints). Poisoning is bounded rather than prevented: an attacker can get a colleague's address
-learned, at review level; boilerplate after an injection is not learned (fingerprints are anchored on the
-injected sentence, and a bare trigger's payload is learned only when it names a destination).
+`benchmarks/adaptive_learning.py` (offline, deterministic) replays attack campaigns with mechanical rewordings: with the
+attacker's infrastructure reused, the memory raised the catch rate from 0.67 to 1.00; with fresh addresses per attempt, from 0.67
+to 0.93 (fingerprints alone); a family the rules miss went from 0.00 to 0.67 after hot-installing the baseline pack. It flagged
+none of 1,756 benign paragraphs.
+
+Read these as an upper bound: the attacks and the pack are self-authored, the rewordings are mechanical rather than an LLM's, and
+a full rewrite leaves too little wording to recognize (`tests/test_adaptive_integration.py` shows both cases). The memory adds
+about 5-25 ms to each hook process when small, and about 20 ms before a call and 40 ms after a result at its caps (5,000
+indicators, 500 fingerprints).
+
+Poisoning is bounded rather than prevented: an attacker can get a colleague's address learned, at review level; boilerplate after
+an injection is not learned (fingerprints are anchored on the injected sentence, and a bare trigger's payload is learned only when
+it names a destination).

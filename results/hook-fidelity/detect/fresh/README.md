@@ -38,7 +38,7 @@ guard on its claimed scope, and prints the ask/deny split, same-item comparisons
 | `benchmarks/hook_fidelity/fresh_build.py` | the fixture builder (item bank + source references, same payload shapes as `detect_fixtures.py`) |
 | `benchmarks/hook_fidelity/_is_subproc.py` | runs IntentShield's hook in-process against a fixtures file from a given `--src`, used once with the `r8-detect`-tip source tree and once with this branch's merged (`r8-fixrules`) source tree, so both variants could be scored without one import shadowing the other |
 | `benchmarks/hook_fidelity/fresh_report.py --out DIR` | computes `table.md`/`summary.json` into DIR (a scratch directory; diff it against the committed copies) from `fixtures.jsonl` + `decisions.jsonl` |
-| `benchmarks/hook_fidelity/overlap_check.py` | which harmful items have their command or path in `tests/` or `src/`, and the 214-call comparison without them |
+| `benchmarks/hook_fidelity/overlap_check.py` | which harmful items have their command or path in `tests/` or `src/`, and the 214-call comparison and the 467-fixture before and after figures without them |
 
 ## Method
 

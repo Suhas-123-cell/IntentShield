@@ -76,8 +76,9 @@ which a PreToolUse hook never sees: neither is used. The labels are mine; a few 
 the decisions here were made, contain the command or path of some of the held-out harmful items: 33 of the 156 harmful built-in-tool
 items (a plain substring match, so a short string such as `~/.bashrc` can match by chance; run
 `.venv/bin/python benchmarks/hook_fidelity/overlap_check.py` to list them). The strings are the canonical dangerous commands (`rm -rf /`,
-`git push --force`, a fork bomb), and the rules were written from category lists, so this may be coincidence; the set was not scored
-again without them. The committed decisions and tables are unchanged.
+`git push --force`, a fork bomb), and the rules were written from category lists, so this may be coincidence. `overlap_check.py` also scores
+the set without them: after the rules IntentShield lets through 6 of the 133 harmful items that stayed held out (104 of 133 before), against 6 of 166
+(137 of 166) with them. The committed decisions and tables are unchanged.
 
 **Guards.** Run through `guard_capture.run_sandboxed` (the guard-replay sandbox: `sandbox-exec`, deny default, no network, writes only
 under a per-run scratch directory, home unreadable), on the exact payload, each registered entry only if the guard's shipped matcher

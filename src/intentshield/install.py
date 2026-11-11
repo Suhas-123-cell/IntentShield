@@ -448,8 +448,9 @@ def _drop_trailing_commas(text: str) -> str:
 
 
 def _has_comments(path: Path) -> bool:
-    """Gemini CLI reads its settings with comments allowed; every other harness's file is strict JSON."""
-    return path.parent.name == ".gemini"
+    """Gemini CLI and VS Code read their settings with comments allowed; every other client's file is strict JSON."""
+    return path.parent.name in (".gemini", ".vscode") or (path.parent.name == "User" and path.parent.parent.name in ("Code",
+        "Code - Insiders"))
 
 
 def _parse(text: str, path: Path) -> Any:
@@ -468,6 +469,11 @@ class _NotJSON(json.JSONDecodeError):
 
     def __str__(self) -> str:
         return self.text
+
+
+def _exact_text(path: Path) -> str:
+    """The file's text with its line endings as they are (``read_text`` would turn CRLF into LF)."""
+    return path.read_bytes().decode("utf-8")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -489,6 +495,33 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data
 
 
+def _is_toml(path: Path) -> bool:
+    return path.suffix.lower() == ".toml"
+
+
+def _client_data(text: str, path: Path) -> dict[str, Any]:
+    """The servers of a client file's text in the layout ``_server_groups`` reads: a Codex CLI ``config.toml`` keeps them in
+    ``[mcp_servers.NAME]`` tables, which are the ``mcpServers`` object of the JSON clients."""
+    if _is_toml(path):
+        servers = tomllib.loads(text).get("mcp_servers")
+        return {"mcpServers": servers} if isinstance(servers, dict) else {}
+    data = _parse(text, path)
+    return data if isinstance(data, dict) else {}
+
+
+def _read_client(path: Path) -> dict[str, Any]:
+    """Like ``_read_json``, for a TOML client file too."""
+    if not _is_toml(path):
+        return _read_json(path)
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    _SEEN[path.resolve()] = text
+    try:
+        return _client_data(text, path)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"{path} is not valid TOML ({exc}); fix it, or add the entries by hand "
+                         "(see docs/gateway.md#real-mcp-proxy)") from None
+
+
 def _write(path: Path, text: str, dry_run: bool) -> None:
     """Atomic: the user's settings file is never left truncated."""
     if dry_run:
@@ -502,7 +535,7 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
               "text is saved and `intentshield uninstall` (or `unwrap`) puts it back, comments included.", file=sys.stderr)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
         if path.exists():
             os.chmod(tmp, path.stat().st_mode & 0o777)
@@ -532,7 +565,7 @@ def _keep_original(path: Path, home: Path | None, dry_run: bool) -> None:
     round-trip, so undoing the change puts these back when nothing else changed meanwhile."""
     backup = _backup_path(path, home)
     if path.exists() and not dry_run and not backup.exists():
-        _write(backup, json.dumps({"path": str(path.resolve()), "text": path.read_text(encoding="utf-8")}), False)
+        _write(backup, json.dumps({"path": str(path.resolve()), "text": _exact_text(path)}), False)
 
 
 def _remember_servers(path: Path, servers: dict[str, dict[str, Any]]) -> None:
@@ -568,6 +601,119 @@ def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[s
     return _json_text(data), False
 
 
+def _undone_toml(path: Path, text: str, home: Path | None) -> tuple[str, bool]:
+    """``text`` of a TOML file with our change undone, or the file's original bytes (True) when it holds what the original did."""
+    backup = _backup_path(path, home)
+    if backup.exists():
+        try:
+            original = json.loads(backup.read_text(encoding="utf-8"))["text"]
+            if tomllib.loads(original) == tomllib.loads(text):
+                return original, True
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    return text, False
+
+
+def _backup_holds_servers(backup: Path) -> bool:
+    """The backup of a file records servers a ``wrap`` rewrote: ``unwrap`` still needs it."""
+    try:
+        return bool(json.loads(backup.read_text(encoding="utf-8")).get("servers"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+# --- Codex CLI: [mcp_servers.NAME] tables of ~/.codex/config.toml ---------------------------------------------------------
+# TOML is edited as text, line by line, so that the rest of the file (comments, order, spacing) stays as it is. Only an entry
+# written
+# as a table of its own, with ``command`` (and ``args``) on lines of that table, is edited; the result is parsed again and must be
+# the
+# old file with that command and those args changed, or nothing is written.
+
+_TOML_HEADER = re.compile(r"^[ \t]*\[(?!\[)(.+?)\][ \t]*(?:#.*)?$")
+_TOML_ANY_HEADER = re.compile(r"^[ \t]*\[")
+
+
+def _toml_path(header: str) -> tuple[str, ...]:
+    """The key path a table header names (``mcp_servers."my server"`` is ``("mcp_servers", "my server")``)."""
+    node: Any = tomllib.loads(f"[{header}]\n")
+    path: list[str] = []
+    while isinstance(node, dict) and len(node) == 1:
+        key, node = next(iter(node.items()))
+        path.append(key)
+    return tuple(path)
+
+
+def _toml_value_end(lines: list[str], start: int) -> int:
+    """The index after the last line of the TOML value that begins on ``lines[start]`` (an array may run over several lines)."""
+    for end in range(start + 1, min(len(lines), start + 200) + 1):
+        try:
+            tomllib.loads("".join(lines[start:end]))
+            return end
+        except tomllib.TOMLDecodeError:
+            continue
+    raise ValueError("a value that does not end")
+
+
+def _toml_set(text: str, edits: dict[str, tuple[str, list[str] | None]]) -> str:
+    """``text`` with ``command`` and ``args`` of each ``[mcp_servers.NAME]`` table of ``edits`` replaced (``args`` of ``None``:
+    the
+    line removed). Raises ``ValueError`` naming the server that cannot be edited this way."""
+    lines = text.splitlines(keepends=True)
+    done: set[str] = set()
+    i = 0
+    while i < len(lines):
+        header = _TOML_HEADER.match(lines[i].rstrip("\r\n"))
+        try:
+            path = _toml_path(header[1]) if header else ()
+        except tomllib.TOMLDecodeError:
+            path = ()
+        if len(path) != 2 or path[0] != "mcp_servers" or path[1] not in edits:
+            i += 1
+            continue
+        name = path[1]
+        end = next((k for k in range(i + 1, len(lines)) if _TOML_ANY_HEADER.match(lines[k])), len(lines))
+        command, args = edits[name]
+        where: dict[str, tuple[int, int]] = {}
+        k = i + 1
+        while k < end:
+            key = re.match(r"^[ \t]*(command|args)[ \t]*=", lines[k])
+            stop = _toml_value_end(lines, k) if key else k + 1
+            if key:
+                where[key[1]] = (k, stop)
+            k = stop
+        if "command" not in where:
+            raise ValueError(f"{name}: the table has no `command` line")
+        command_line = lines[where["command"][0]]
+        eol = (re.search(r"\r?\n$", command_line) or ["\n"])[0]
+        indent = re.match(r"^[ \t]*", command_line)[0]  # type: ignore[index]
+        new_command = f"{indent}command = {json.dumps(command, ensure_ascii=False)}{eol}"
+        new_args = None if args is None else f"{indent}args = {json.dumps(args, ensure_ascii=False)}{eol}"
+        c0, c1 = where["command"]
+        a0, a1 = where.get("args", (c1, c1))
+        pieces = [(c0, c1, [new_command])]
+        pieces.append((a0, a1, [] if new_args is None else [new_args]))
+        size = len(lines)
+        for start, stop, replacement in sorted(pieces, reverse=True):
+            lines[start:stop] = replacement
+        done.add(name)
+        i = end + len(lines) - size
+    if missing := sorted(set(edits) - done):
+        raise ValueError(f"{', '.join(missing)}: not written as a [mcp_servers.NAME] table")
+    new = "".join(lines)
+    before, after = tomllib.loads(text), tomllib.loads(new)
+    servers = before.get("mcp_servers", {})
+    for name, (command, args) in edits.items():
+        entry = servers[name]
+        entry["command"] = command
+        if args is None:
+            entry.pop("args", None)
+        else:
+            entry["args"] = list(args)
+    if before != after:
+        raise ValueError("the edit would change more than command and args")
+    return new
+
+
 def _installs_path(home: Path | None) -> Path:
     return (home or Path.home()) / ".intentshield" / "installs.json"
 
@@ -600,6 +746,42 @@ def _record_install(path: Path, home: Path | None, when: float | None = None) ->
         pass
 
 
+def _hook_flags(commands: list[str]) -> set[str]:
+    """The options (with their values) of the ``intentshield-hook`` commands: ``--builtin-tools``, ``--review always``."""
+    flags: set[str] = set()
+    for command in commands:
+        try:
+            words = shlex.split(command)
+        except ValueError:
+            continue
+        for k, word in enumerate(words):
+            if word.startswith("--"):
+                following = words[k + 1] if k + 1 < len(words) else ""
+                value = "" if following.startswith("--") or word == "--builtin-tools" else following
+                flags.add(f"{word} {value}".strip())
+    return flags
+
+
+def _our_commands(settings: Any) -> list[str]:
+    """The hook commands of ``settings`` that run intentshield-hook."""
+    found: list[str] = []
+    hooks = settings.get("hooks") if isinstance(settings, dict) else None
+    for groups in (hooks.values() if isinstance(hooks, dict) else ()):
+        for group in (groups if isinstance(groups, list) else ()):
+            for entry in [group, *(group.get("hooks") or [] if isinstance(group, dict) and isinstance(group.get("hooks"), list)
+                                   else [])]:
+                if _ours(entry):
+                    found.append(entry["command"])
+    return found
+
+
+def _say_what_was_replaced(old: list[str], new: str) -> None:
+    """A reinstall replaces the hooks as they were, so an option given the first time and not now is gone: say so."""
+    gone = sorted(_hook_flags(old) - _hook_flags([new]))
+    if gone:
+        print(f"replaced the previous install; no longer set: {', '.join(gone)}. Give the option again to keep it.")
+
+
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
             judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
@@ -620,19 +802,25 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
-        stripped, _ = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
+        stripped, had_block = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
         new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command, builtin_tools, translate)
         tomllib.loads(new)
         if new == text:
             print(f"already installed: {path}")
             return path
+        if had_block:
+            block = text[text.find(_TOML_BEGIN):text.find(_TOML_END)]
+            _say_what_was_replaced([json.loads(c) for c in re.findall(r'^command = (".*")\s*$', block, re.M)], command)
+        _keep_original(path, home, dry_run)
         _write(path, new, dry_run)
         if not dry_run:
             _record_install(path, home, time.time())
     else:
         existed = path.exists()
         try:
-            settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools, translate))
+            current = _read_json(path)
+            previous = _our_commands(current)
+            settings, changed = merge_hooks(current, hook_entries(harness, command, builtin_tools, translate))
         except ValueError as exc:
             if str(path) in str(exc):
                 raise
@@ -640,6 +828,8 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         if not changed:
             print(f"already installed: {path}")
             return path
+        if previous:
+            _say_what_was_replaced(previous, command)
         if harness == "cursor" and not existed:  # a file Cursor wrote already has it; uninstall restores theirs
             settings.setdefault("version", 1)
         _keep_original(path, home, dry_run)
@@ -663,6 +853,9 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
     if scope == "project" and not dry_run:
         print(f"note: {path} now holds absolute paths of this machine (the hook command): do not commit it, and do not share it "
               "with a team that has the tools elsewhere.")
+    if not builtin_tools:
+        print("This guards MCP calls only, not the shell or the file tools. To guard those too: "
+              f"intentshield install {harness} --builtin-tools")
     if not dry_run:
         print(f"Next: {NEXT_STEP.format(harness=harness)} It reports FAIL \"no hook has run\" until the harness has run a "
               "hook, which is expected right after an install.")
@@ -676,8 +869,11 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
         print(f"nothing to remove: {path}")
         return path
     backup = _backup_path(path, home)  # this install is being undone either way
+    existed_before = backup.exists()  # the file was there before the first install: it is put back, not deleted
     if harness == "codex":
-        text, changed = _strip_toml_block(path.read_text())
+        text, changed = _strip_toml_block(_exact_text(path))
+        if changed:
+            text, _ = _undone_toml(path, text, home)
     else:
         settings, changed = remove_hooks(_read_json(path))
         text, _ = _undone_text(path, settings, home)
@@ -685,7 +881,7 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
         print(f"nothing to remove: {path}")
         return path
     emptied = not text.strip() or text.strip() in ("{}", json.dumps({"version": 1}, indent=2))
-    if emptied and not path.is_symlink():  # a file only `install` created: leave nothing behind
+    if emptied and not existed_before and not path.is_symlink():  # a file only `install` created: leave nothing behind
         if not dry_run:
             path.unlink()
             backup.unlink(missing_ok=True)
@@ -694,16 +890,20 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
         return path
     _write(path, text, dry_run)
     if not dry_run:
-        backup.unlink(missing_ok=True)
+        if not _backup_holds_servers(backup):  # wrap's record of the servers it rewrote is still needed
+            backup.unlink(missing_ok=True)
         _record_install(path, home)
     print(f"{'would remove' if dry_run else 'removed'} {harness} hooks from {path}")
     return path
 
 
 def server_stem(name: str, config: Path | None = None) -> str:
-    """A server id and file stem for a server name: the name itself when it is already a valid id and
-    the stem is only for the id, else sanitized plus a short hash of the name and the client file it
-    came from, so "my server" and "my-server", or "github" in two clients' files, never share a file."""
+    """A server id or file stem for a server name: the name itself when it is already a valid id and no client file is given, else
+    sanitized plus a short hash of the name and the client file it came from. The proxy config and the audit database of a wrapped
+    server are named by that stem, so "my server" and "my-server", or "github" in two clients' files, never share either. The
+    server id
+    stays the plain name, because the hook finds the tool catalog by the name the harness shows; a catalog of the same name in two
+    clients' files is therefore one file."""
     stem = _SERVER_ID.sub("-", name).strip("-.").replace("__", "-") or "server"
     if not re.match(r"^[A-Za-z0-9]", stem):
         stem = "s-" + stem
@@ -713,12 +913,15 @@ def server_stem(name: str, config: Path | None = None) -> str:
     return stem
 
 
-def proxy_config(name: str, server: dict[str, Any], out_dir: Path, scope: str = "") -> dict[str, Any]:
+def proxy_config(name: str, server: dict[str, Any], out_dir: Path, scope: str = "", stem: str | None = None) -> dict[str, Any]:
     """A transparent-proxy config for one stdio server of an ``mcpServers`` file. Literal ``env``
     values stay in the harness's file (it sets them on the proxy process), and the proxy forwards
     them by name, so no secret is copied. The threat memory is the file the hooks use too
     (``~/.intentshield/threats.db`` with the default ``out_dir``), so what one layer learns the other knows."""
     server_id = server_stem(f"{name}@{scope}" if scope else name)  # one id per project's server of that name
+    database = out_dir / f"{stem or server_id}.db"
+    if (before := out_dir / f"{server_id}.db").exists():
+        database = before  # 0.4.3 named the database by the server id: a wrapped server keeps the audit log it already has
     env = server.get("env") or {}
     upstream: dict[str, Any] = {"server_id": server_id, "transport": "stdio", "command": server["command"]}
     if "args" in server:  # kept exactly (even empty) so unwrap restores the entry as it was
@@ -728,7 +931,7 @@ def proxy_config(name: str, server: dict[str, Any], out_dir: Path, scope: str = 
         forwarded = {key: key for key, value in env.items() if str(value).strip()}
         if forwarded:
             upstream["env_from_env"] = forwarded
-    return {"upstreams": [upstream], "database_path": str(out_dir / f"{server_id}.db"),
+    return {"upstreams": [upstream], "database_path": str(database),
             "threat_memory_path": os.getenv("INTENTSHIELD_THREAT_DB") or str(out_dir.parent / "threats.db"),
             # The hooks read this for tool hints and the operator's read-only decisions, and every
             # proxy reads the others' files for cross-server shadowing.
@@ -752,9 +955,18 @@ def _is_wrapped(server: dict[str, Any]) -> bool:
 
 
 def _server_groups(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    """The ``mcpServers`` objects of a client file, each with its scope ("" for the top level): Claude Code's
-    ``~/.claude.json`` also keeps a project's own servers under ``projects.<path>.mcpServers``."""
-    groups = [("", data["mcpServers"])] if isinstance(data.get("mcpServers"), dict) else []
+    """The server objects of a client file, each with its scope ("" for the first one): ``mcpServers`` (Claude Code, Cursor,
+    Gemini
+    CLI, Windsurf, Claude Desktop), ``servers`` (VS Code's ``mcp.json``) and ``mcp.servers`` (VS Code's ``settings.json``). Claude
+    Code's ``~/.claude.json`` also keeps a project's own servers under ``projects.<path>.mcpServers``."""
+    groups: list[tuple[str, dict[str, Any]]] = []
+    if isinstance(data.get("mcpServers"), dict):
+        groups.append(("", data["mcpServers"]))
+    if isinstance(data.get("servers"), dict):
+        groups.append(("servers" if groups else "", data["servers"]))
+    nested = data.get("mcp")
+    if isinstance(nested, dict) and isinstance(nested.get("servers"), dict):
+        groups.append(("mcp.servers" if groups else "", nested["servers"]))
     projects = data.get("projects")
     for project, body in (projects.items() if isinstance(projects, dict) else ()):
         if isinstance(body, dict) and isinstance(body.get("mcpServers"), dict):
@@ -782,7 +994,21 @@ def _entry_problem(server: Any) -> str:
 
 def _require_file(path: Path) -> None:
     if not path.exists():
-        raise FileNotFoundError(f"{path} was not found: the file does not exist")
+        raise FileNotFoundError(f"{path} was not found: the file does not exist. Servers added with `claude mcp add` are in "
+                                "~/.claude.json; a project's are in .mcp.json")
+
+
+SUPPORTED = ("a JSON file with an 'mcpServers' object (Claude Code, Cursor, Gemini CLI, Windsurf, Claude Desktop), a "
+             "'servers' object "
+             "(VS Code mcp.json) or 'mcp.servers' (VS Code settings.json), or a Codex CLI config.toml with "
+             "[mcp_servers.NAME] tables")
+
+
+def _no_servers(path: Path) -> str:
+    """Why a file holds no servers to wrap, and what to do for a client this does not read."""
+    return (f"{path} has no servers wrap can read. Supported: {SUPPORTED}. For another client, put the proxy in front of a "
+            "server by hand: set the entry's command to `intentshield-mcp` and its args to `--transparent --config FILE`, "
+            "where FILE is a proxy config naming the server's own command (docs/gateway.md#real-mcp-proxy)")
 
 
 def _in_repository(path: Path) -> bool:
@@ -800,10 +1026,10 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
     the proxy configs are written only then, and removed again when the client file cannot be written."""
     out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
     _require_file(path)
-    data = _read_json(path)
+    data = _read_client(path)
     groups = _server_groups(data)
     if not groups:
-        raise ValueError(f"{path} has no 'mcpServers' object")
+        raise ValueError(_no_servers(path))
     if servers:
         missing = sorted(set(servers) - {name for _, entries in groups for name in entries})
         if missing:
@@ -837,8 +1063,19 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
                 print(f"skipped {_label(name, scope)}: {problem}")
                 skipped = True
                 continue
-            config_path = out_dir / f"{server_stem(_label(name, scope), path)}.json"
-            generated = proxy_config(name, server, out_dir, scope)
+            if _is_toml(path):
+                try:
+                    _toml_set(_exact_text(path), {name: (proxy, ["--transparent", "--config", "x"])})
+                except ValueError as exc:
+                    print(f"skipped {_label(name, scope)}: wrap edits only a [mcp_servers.NAME] table with its own `command` "
+                          f"line ({exc}). Write the entry as such a table, or add the proxy by hand: "
+                          "command = \"intentshield-mcp\", args = [\"--transparent\", \"--config\", FILE] "
+                          "(docs/gateway.md#real-mcp-proxy)")
+                    skipped = True
+                    continue
+            stem = server_stem(_label(name, scope), path)
+            config_path = out_dir / f"{stem}.json"
+            generated = proxy_config(name, server, out_dir, scope, stem)
             try:
                 MCPProxyConfig.model_validate(generated)
             except ValueError as exc:  # pydantic's ValidationError: the first problem, in a line
@@ -851,6 +1088,7 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
             plan.append((entries, name, scope, server, config_path, generated))
     wrapped: list[str] = []
     before: dict[str, dict[str, Any]] = {}
+    edits: dict[str, tuple[str, list[str] | None]] = {}
     created: list[Path] = []
     try:
         for entries, name, scope, server, config_path, generated in plan:
@@ -860,12 +1098,14 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
             before[json.dumps([scope, name])] = {"command": server["command"],
                                                  **({"args": server["args"]} if "args" in server else {})}
             entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
+            edits[name] = (proxy, entries[name]["args"])
             wrapped.append(_label(name, scope))
         if wrapped:
+            text = _toml_set(_exact_text(path), edits) if _is_toml(path) else _json_text(data)
             _keep_original(path, None, dry_run)
             if not dry_run:
                 _remember_servers(path, before)
-            _write(path, _json_text(data), dry_run)
+            _write(path, text, dry_run)
     except BaseException:
         for config_path in created:  # the client file was not changed: no config of this run is left behind
             config_path.unlink(missing_ok=True)
@@ -890,7 +1130,7 @@ def _backed_up_server(path: Path, scope: str, name: str) -> dict[str, Any] | Non
         saved = json.loads(_backup_path(path, None).read_text(encoding="utf-8"))
         entry = (saved.get("servers") or {}).get(json.dumps([scope, name]))
         if entry is None:  # a backup from before entries were recorded: the file's text at the first wrap
-            entry = dict(_server_groups(_parse(saved["text"], path)))[scope][name]
+            entry = dict(_server_groups(_client_data(saved["text"], path)))[scope][name]
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
     if not isinstance(entry, dict) or not entry.get("command") or _is_wrapped(entry):
@@ -901,11 +1141,12 @@ def _backed_up_server(path: Path, scope: str, name: str) -> dict[str, Any] | Non
 def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) -> list[str]:
     """Restore the servers a previous ``wrap`` rewrote, from their generated proxy configs."""
     _require_file(path)
-    data = _read_json(path)
+    data = _read_client(path)
     groups = _server_groups(data)
     if not groups:
-        raise ValueError(f"{path} has no 'mcpServers' object")
+        raise ValueError(_no_servers(path))
     restored: list[str] = []
+    edits: dict[str, tuple[str, list[str] | None]] = {}
     missing: list[str] = []
     residue: list[Path] = []
     for scope, entries in groups:
@@ -952,9 +1193,13 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
             if generated.get("database_path"):
                 residue.append(Path(generated["database_path"]))
             entries[name] = original
+            edits[name] = (original["command"], list(original["args"]) if "args" in original else None)
             restored.append(_label(name, scope))
     if restored:
-        text, exact = _undone_text(path, data, None)
+        if _is_toml(path):
+            text, exact = _undone_toml(path, _toml_set(_exact_text(path), edits), None)
+        else:
+            text, exact = _undone_text(path, data, None)
         _write(path, text, dry_run)
         if exact and not dry_run:
             _backup_path(path, None).unlink()
@@ -1004,10 +1249,11 @@ def add_subcommands(sub: Any) -> None:
                            help="the judge also reads each tool result the rules pass (catches plain-language "
                                 "injections; one request per result, about 1 s locally, 4 s on Gemini)")
     for verb in ("wrap", "unwrap"):
-        p = sub.add_parser(verb, help=f"{verb} stdio MCP servers of an mcpServers file "
+        p = sub.add_parser(verb, help=f"{verb} stdio MCP servers of a client's MCP file "
                                       f"{'in' if verb == 'wrap' else 'from'} the transparent proxy")
         p.add_argument("config", type=Path,
-                       help="e.g. .mcp.json (Claude Code), .cursor/mcp.json, ~/.gemini/settings.json")
+                       help="e.g. .mcp.json or ~/.claude.json (Claude Code), .cursor/mcp.json, ~/.gemini/settings.json, "
+                            "~/.codex/config.toml (Codex CLI), .vscode/mcp.json (VS Code)")
         p.add_argument("--server", action="append", dest="servers", metavar="NAME",
                        help="only this server (repeatable)")
         p.add_argument("--dry-run", action="store_true", help="print the files instead of writing them")

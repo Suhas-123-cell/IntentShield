@@ -54,21 +54,20 @@ that holds mutations for review and strips self-disclosure fields gets 0% mechan
 
 Candidate contributions that survive the search, strongest first:
 
-1. **What third-party hooks cannot see (chosen and measured 2026-10-12; on review not
-   publishable as it stands; see [contribution-history.md](research-notes/contribution-history.md) §5 and §7).** A
-   measurement and attack study of hook-based MCP guards across harnesses: which MCP channels
-   bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts, sampling
-   and elicitation), the transparent proxy as the fix, with utility cost. The coverage matrix
-   is now measured on Claude Code and Gemini CLI with benign markers (re-run with the fixed
-   instrumentation on 2026-10-13, one run per cell): a hook scoped to
-   MCP tool calls saw the tool-call and tool-result channels; no pre-action hook carried
-   descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks
-   carried the prompt; the proxy mediates descriptions and does not expose resources or
-   prompts (functionality lost, not mediated). See [coverage-study.md](coverage-study.md), [contribution-history.md](research-notes/contribution-history.md)
-   and [paper-draft.md](research-notes/paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in
-   mechanisms, not third-party guards) and CapScope (hooks for coding-agent authority, not MCP
-   channels). Still a hypothesis until confirmed with live per-channel attacks (§3.5 of the
-   draft); findings in shipping harnesses need responsible disclosure.
+1. **What third-party hooks cannot see (chosen and measured 2026-10-12; on review not publishable as it stands; see
+   [contribution-history.md](research-notes/contribution-history.md) §5 and §7).** A measurement and attack study of hook-based MCP
+   guards across harnesses: which MCP channels bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts,
+   sampling and elicitation), the transparent proxy as the fix, with utility cost.
+
+   The coverage matrix is now measured on Claude Code and Gemini CLI with benign markers (re-run with the fixed instrumentation on
+   2026-10-13, one run per cell): a hook scoped to MCP tool calls saw the tool-call and tool-result channels; no pre-action hook
+   carried descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks carried the prompt; the proxy
+   mediates descriptions and does not expose resources or prompts (functionality lost, not mediated).
+
+   See [coverage-study.md](coverage-study.md), [contribution-history.md](research-notes/contribution-history.md) and
+   [paper-draft.md](research-notes/paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in mechanisms, not third-party
+   guards) and CapScope (hooks for coding-agent authority, not MCP channels). Still a hypothesis until confirmed with live
+   per-channel attacks (§3.5 of the draft); findings in shipping harnesses need responsible disclosure.
 2. **Rules plus an evidence-only LLM judge on held-out live MCP servers, with reviewer
    load.** Incremental over 2610.07359 unless the live execution and harness path add
    something; better as one section of (1).
@@ -178,22 +177,21 @@ every tool output as untrusted by source.
 
 In order of value per effort:
 
-1. **Detection-independent provenance (done 2026-10-11).** Record distinctive values from *every* tool output
-   (by source), not only flagged ones. For authority-bearing arguments (recipients, accounts,
-   URLs, paths, commands; a small operator-owned role map like PACT's), a value whose only
-   source is a tool output goes to REVIEW; a value from a flagged output or another tool's
-   description stays BLOCK. Detection becomes evidence that escalates, not the gate. This
-   closes the polite-output, false-error and schema-valid-lie rows without any new rule.
-   Cost to measure: benign retrieve-then-act flows ("reply to the sender") now need review.
-   Implemented as `authority_values` (emails, URLs, IBANs, 9+ digit numbers, paths; generic
-   ids left out) recorded from every output; paths and URLs inside one the user named are
-   exempt; `review_output_sourced_arguments` turns it off. The MSB re-run on later code
-   (2026-10-12) showed the gateway reaching the task tool less often (45.7% vs 56.4%). That
-   drop is not from this change. It is the DeBERTa intent model
-   (`INTENTSHIELD_INTENT_MODEL_DIR`), which abstains on ordinary reads; abstention mapped to
-   alignment 0.0 and overrode lenient reads (no opinion since `14150e7`; on the v7 re-run blocked legitimate task calls fell from 18.7% to 7.3%, against 0.5% with the model off). `BLOCK_INTENT_MISMATCH` counts: 0 (frozen
-   commit, which ran without the model), 149 (v3), 141 (neutral ids, v4), 0 with the model
-   off (reached 54.5%). `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` fired 4-5 times in 220 cases.
+1. **Detection-independent provenance (done 2026-10-11).** Record distinctive values from *every* tool output (by source), not only
+   flagged ones. For authority-bearing arguments (recipients, accounts, URLs, paths, commands; a small operator-owned role map like
+   PACT's), a value whose only source is a tool output goes to REVIEW; a value from a flagged output or another tool's description
+   stays BLOCK. Detection becomes evidence that escalates, not the gate. This closes the polite-output, false-error and
+   schema-valid-lie rows without any new rule.
+
+   Cost to measure: benign retrieve-then-act flows ("reply to the sender") now need review. Implemented as `authority_values`
+   (emails, URLs, IBANs, 9+ digit numbers, paths; generic ids left out) recorded from every output; paths and URLs inside one the
+   user named are exempt; `review_output_sourced_arguments` turns it off. The MSB re-run on later code (2026-10-12) showed the
+   gateway reaching the task tool less often (45.7% vs 56.4%). That drop is not from this change.
+
+   It is the DeBERTa intent model (`INTENTSHIELD_INTENT_MODEL_DIR`), which abstains on ordinary reads; abstention mapped to alignment
+   0.0 and overrode lenient reads (no opinion since `14150e7`; on the v7 re-run blocked legitimate task calls fell from 18.7% to
+   7.3%, against 0.5% with the model off). `BLOCK_INTENT_MISMATCH` counts: 0 (frozen commit, which ran without the model), 149 (v3),
+   141 (neutral ids, v4), 0 with the model off (reached 54.5%). `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` fired 4-5 times in 220 cases.
 2. **Decode before scanning (done 2026-10-11).** Base64, hex, URL and HTML-entity decoding of long tokens, then
    rescan. Cheap, deterministic, closes the encoded row.
 3. **Server-level description scan (done 2026-10-11).** Also scan the concatenation of all of a server's
@@ -203,17 +201,15 @@ In order of value per effort:
    quarantine the server), the `cross_tool_data` and `external_send` description rules, and
    the `sensitive_request` output rule. On MCPTox: clean tools flagged 3/362 (unchanged),
    clean server catalogs 0/45, poisoned descriptions 1256/1302 (was 1255).
-4. **A semantic second stage, local and evidence-only (built 2026-10-11; first artifact not usable).** A small classifier for "this text
-   instructs the agent" on descriptions and outputs, run only on what the rules pass, trained
-   on MCPTox/MSB/InjecAgent with paraphrases and translations (keep MSB held-out cases out).
-   The repo already has a DeBERTa pipeline. This addresses plain-language and non-English
-   injections. It must stay evidence: it can escalate to REVIEW, never authorize.
-   Implemented as `InjectionClassifier` (`REVIEW_CLASSIFIER_FLAGGED`, off by default), trained
-   on MCPTox plus qwen2.5:7b-written outputs and translations (InjecAgent was not available
-   locally; MSB unused). On held-out MCPTox servers it caught 716/716 injections and 4/4 new
-   attack probes but flagged 20.3% of benign rows, including human-directed instructions
-   ("submit your timesheets by Friday"). Consistent with the detector literature; it needs
-   many more hard benign rows before it can be enabled.
+4. **A semantic second stage, local and evidence-only (built 2026-10-11; first artifact not usable).** A small classifier for "this
+   text instructs the agent" on descriptions and outputs, run only on what the rules pass, trained on MCPTox/MSB/InjecAgent with
+   paraphrases and translations (keep MSB held-out cases out). The repo already has a DeBERTa pipeline. This addresses plain-language
+   and non-English injections. It must stay evidence: it can escalate to REVIEW, never authorize.
+
+   Implemented as `InjectionClassifier` (`REVIEW_CLASSIFIER_FLAGGED`, off by default), trained on MCPTox plus qwen2.5:7b-written
+   outputs and translations (InjecAgent was not available locally; MSB unused). On held-out MCPTox servers it caught 716/716
+   injections and 4/4 new attack probes but flagged 20.3% of benign rows, including human-directed instructions ("submit your
+   timesheets by Friday"). Consistent with the detector literature; it needs many more hard benign rows before it can be enabled.
 5. **Behavioral baselines for outputs.** Per tool, learn the output shape (keys, value types,
    which distinctive values recur) over the first N calls; flag a later output that adds
    instruction-like fields or new destination-shaped values (TrustShift).

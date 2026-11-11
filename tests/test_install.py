@@ -118,7 +118,8 @@ def test_wrap_puts_the_proxy_in_front_of_stdio_servers_and_unwrap_restores_them(
     config = json.loads(Path(fs["args"][2]).read_text())
     assert config["upstreams"] == [{"server_id": "filesystem", "transport": "stdio", "command": "npx",
                                     "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]}]
-    assert config["database_path"] == str(out / "filesystem.db")
+    # named like its config, which is per client file
+    assert config["database_path"] == str(Path(fs["args"][2]).with_suffix(".db"))
     # The secret stays in the harness file (set on the proxy process) and is forwarded by name only.
     gh = data["mcpServers"]["github"]
     assert gh["env"] == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_secret"}
@@ -134,6 +135,24 @@ def test_wrap_puts_the_proxy_in_front_of_stdio_servers_and_unwrap_restores_them(
     assert install.wrap(mcp, out_dir=out, proxy="/opt/is/bin/intentshield-mcp") == []
     assert install.unwrap(mcp) == ["filesystem", "github"]
     assert json.loads(mcp.read_text()) == original
+
+
+def test_a_server_wrapped_by_0_4_3_keeps_its_audit_database_when_it_is_wrapped_again(tmp_path: Path):
+    """0.4.3 named the database by the server id. After unwrap and wrap the old file is still the one used; a server
+    with no such file gets the new name, which is per client file."""
+    mcp = tmp_path / ".mcp.json"
+    mcp.write_text(json.dumps({"mcpServers": {"notes": {"command": "npx", "args": ["notes"]},
+                                              "fresh": {"command": "npx", "args": ["fresh"]}}}))
+    out = tmp_path / "proxies"
+    out.mkdir()
+    (out / "notes.db").write_bytes(b"")  # left by 0.4.3
+    install.wrap(mcp, out_dir=out, proxy="/opt/is/bin/intentshield-mcp")
+    servers = json.loads(mcp.read_text())["mcpServers"]
+    notes = json.loads(Path(servers["notes"]["args"][2]).read_text())
+    fresh = json.loads(Path(servers["fresh"]["args"][2]).read_text())
+    assert notes["database_path"] == str(out / "notes.db")
+    assert fresh["database_path"] == str(Path(servers["fresh"]["args"][2]).with_suffix(".db"))
+    assert fresh["database_path"] != str(out / "fresh.db")
 
 
 def test_wrap_names_unknown_servers(tmp_path: Path):

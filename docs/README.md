@@ -2,16 +2,24 @@
 
 Start with the [README](../README.md) in the repository root. The files here are the reference behind it.
 
-**A 20-minute reading path** for someone judging the work: the [README](../README.md) (what it does, what it measured and
-the limits, 8 minutes), then [contribution.md](contribution.md) (what the work does and does not support as a research
-contribution, 4 minutes), then [hook-fidelity-report.md](hook-fidelity-report.md) (the one study, 8 minutes). Everything else is
-reference to look up a number or a protocol.
+**A reading path** for someone judging the work. Word counts are from `wc -w`; times assume 250 words a minute.
+
+| step | what you get | words | minutes |
+|---|---|---|---|
+| the [README](../README.md) down to Results | what it does, how to install it, what it stops and does not stop | 930 | 4 |
+| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,220 | 5 |
+| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,060 | 8 |
+| all three | | 4,210 | 17 |
+
+The first two steps alone take 9 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
+and its [appendix](hook-fidelity-report-appendix.md) (4,800 words) holds the denominators, the per-build detail and the long caveats. Everything
+else is reference to look up a number or a protocol.
 
 Where to go next, by what you want:
 
 - **To use the tool:** [guide.md](guide.md) for running it and [layers.md](layers.md) for what each part sees and stops.
 - **To judge the research:** [contribution.md](contribution.md) says what the work supports and does not, and
-  [hook-fidelity-report.md](hook-fidelity-report.md) is the short report of the one study. The working notes in
+  [hook-fidelity-report.md](hook-fidelity-report.md) is the report of the one study. The working notes in
   `research-notes/` are the full record and history behind those two; read them only to audit a number.
 - **To change the code:** [CONTRIBUTING.md](../CONTRIBUTING.md), then [architecture-and-testing.md](architecture-and-testing.md).
 
@@ -32,10 +40,11 @@ Project files in the repository root: [CHANGELOG.md](../CHANGELOG.md), [CONTRIBU
 
 ## The hook verdict fidelity study
 
-The short report is the entry point. The other files are working notes with the full record, kept so a number in the report
+The report is the entry point. The other files are working notes with the full record, kept so a number in the report
 can be traced to the runs behind it. They are in [research-notes/hook-fidelity/](research-notes/hook-fidelity/).
 
 - [hook-fidelity-report.md](hook-fidelity-report.md): what Claude Code, Codex CLI and Gemini CLI do with the verdict a hook returns, what was measured, and the limits of the result.
+- [hook-fidelity-report-appendix.md](hook-fidelity-report-appendix.md): the report's denominator variants, per-build detail, rescoring and long caveats.
 - [hook-fidelity-study.md](research-notes/hook-fidelity/hook-fidelity-study.md): the full study: method, every measurement, the comparison of what IntentShield and ten other guards decide, threats to validity and the disclosure plan. Written as a working record, with its own vocabulary.
 - [hook-fidelity-mitigation.md](research-notes/hook-fidelity/hook-fidelity-mitigation.md): the verdict-translation layer in IntentShield's hook, its regression check, the `intentshield wrap-hook` shim, the process-ancestry mode detector and what the hook decides.
 - [hook-fidelity-corpus.md](research-notes/hook-fidelity/hook-fidelity-corpus.md): inventory of 26 published hook-based guards, the byte captures of 6 and the measured replay cells (read the headline per run, not per cell).

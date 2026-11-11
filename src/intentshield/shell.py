@@ -97,7 +97,8 @@ _NAMES_ONLY = frozenset({"ls", "stat", "test", "[", "[[", "file", "du", "find", 
 # Inline code reaches the network only through a client library, and sends data only through one of these.
 _NODE_NET = r"(?:node:)?(?:https?|http2|net|tls|dgram|ws)"
 _NET_CALL = re.compile(r"\b(?:requests|httpx|aiohttp|urllib\d?|urlopen|http\.client|socket|fetch|axios|XMLHttpRequest|"
-                       r"smtplib|ftplib|paramiko|net/http|Net::HTTP|LWP|HTTP::Tiny|file_get_contents|curl_exec|TCPSocket|UDPSocket|"
+                       r"smtplib|ftplib|paramiko|net/http|Net::HTTP|LWP|HTTP::Tiny|file_get_contents|curl_exec|TCPSocket|"
+                       r"UDPSocket|"
                        r"fsockopen|stream_socket_client|open_connection|create_connection)\b|"
                        r"\bhttps?\.(?:get|request)\b|\brequire\(\s*['\"]" + _NODE_NET + r"['\"]|"
                        r"IO::Socket|\bnet\.(?:connect|createConnection|Socket)\b|"
@@ -1127,6 +1128,30 @@ def _run_string(code: str, found: Command, depth: int, env: dict[str, str], loop
         found.runs_fetched = True
 
 
+# The key file named by -i of ssh, scp, sftp or rsync's ssh command (or IdentityFile=) signs a login: it is used here, not read
+# out or sent. A key named anywhere else in the command, as a file to copy or in the remote command, still counts.
+_AUTH_PROGRAMS = frozenset({"ssh", "scp", "sftp", "rsync", "sshfs", "mosh"})
+_IDENTITY = re.compile(r"(?<![\w-])(?:-i[ \t]*|IdentityFile[= \t]+)(?:'[^']*'|\"[^\"]*\"|\S+)")
+
+
+def _without_identity(name: str, words: list[str]) -> list[str]:
+    """``words`` of an ssh-family command without the key files that only sign the login."""
+    if name not in _AUTH_PROGRAMS:
+        return words
+    out: list[str] = []
+    skip = False
+    for word in words:
+        if skip:
+            skip = False
+        elif word == "-i":
+            skip = True
+        elif re.match(r"(?:-i[~/$.]|-?o?IdentityFile=)", word, re.I):
+            continue
+        else:  # rsync -e 'ssh -i KEY', mosh --ssh='ssh -i KEY'
+            out.append(_IDENTITY.sub("", word) if re.search(r"\bssh[ \t]", word) else word)
+    return out
+
+
 def _segment(argv: list[str], piped_in: bool, found: Command, depth: int, env: dict[str, str],
              loopvars: frozenset[str]) -> tuple[str, bool]:
     """Reads one simple command into ``found``; returns its program name ("" if none) and whether it runs a
@@ -1141,7 +1166,7 @@ def _segment(argv: list[str], piped_in: bool, found: Command, depth: int, env: d
     name = _binary(argv[0])
     args = argv[1:]
     if name not in _NAMES_ONLY:
-        found.secrets += [a for a in whole if SECRET.search(a)]
+        found.secrets += [a for a in _without_identity(name, whole) if SECRET.search(a)]
     runs_stdin = (name in _SHELLS or name in _INTERPRETERS) and all(a.startswith("-") and a not in ("-c", "-e")
                                                                     or a == "-" or a in _STDIN_FILES for a in args)
     if (argv[0] == "." or name == "source") and args[:1] and args[0] in _STDIN_FILES:

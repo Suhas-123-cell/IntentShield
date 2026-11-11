@@ -286,23 +286,19 @@ redacted from connection metadata, tool results, exceptions and verifier JSON.
 Do not put API-key values directly in committed configuration files. A complete
 template is available at `configs/mcp-proxy.real.example.json`.
 
-`read_only_tools` is a local trust decision. Every upstream tool not explicitly
-listed there is treated as a mutation and requires idempotency plus human
-approval. Upstream descriptions and MCP annotations are never trusted to lower
-that classification. Raw upstream descriptions are withheld by default; set
-`expose_upstream_descriptions` only for a server whose catalog you trust. Every
-returned tool result is labeled `UNTRUSTED_MCP_OUTPUT` for downstream agents.
-`allowed_tools` defaults to an empty list, so each deployment must deliberately
-allow exact names or scoped patterns such as `filesystem:read_*`.
-All patterns and resource/destination rules must use qualified
-`server_id:tool_name` identities. Per-tool scope rules use
-`resource_fields` with `allowed_resources_by_tool`, or `destination_fields`
-with `allowed_destinations_by_tool`; global scope lists are rejected for MCP
-proxy configurations to prevent policy bleeding between servers. Every allowed
-tool must also have a nonempty `grounding_terms_by_tool` entry containing the
-operator-owned nouns that must appear in the user's request, such as `note`,
-`invoice`, or `status`. Startup fails if a discovered allowed tool has no such
-entry. When wildcard allow rules are used, map every tool they can admit.
+`read_only_tools` is a local trust decision. Every upstream tool not explicitly listed there is treated as a mutation and requires
+idempotency plus human approval. Upstream descriptions and MCP annotations are never trusted to lower that classification. Raw
+upstream descriptions are withheld by default; set `expose_upstream_descriptions` only for a server whose catalog you trust. Every
+returned tool result is labeled `UNTRUSTED_MCP_OUTPUT` for downstream agents. `allowed_tools` defaults to an empty list, so each
+deployment must deliberately allow exact names or scoped patterns such as `filesystem:read_*`.
+
+All patterns and resource/destination rules must use qualified `server_id:tool_name` identities. Per-tool scope rules use
+`resource_fields` with `allowed_resources_by_tool`, or `destination_fields` with `allowed_destinations_by_tool`; global scope
+lists are rejected for MCP proxy configurations to prevent policy bleeding between servers. Every allowed tool must also have a
+nonempty `grounding_terms_by_tool` entry containing the operator-owned nouns that must appear in the user's request, such as
+`note`, `invoice`, or `status`. Startup fails if a discovered allowed tool has no such entry.
+
+When wildcard allow rules are used, map every tool they can admit.
 
 For desktop clients that launch MCP subprocesses, use the absolute executable
 and config paths:
@@ -366,10 +362,10 @@ From a clone. This section is the local dashboard, the scripted demo and the dev
 not need it. With a pip install, the dashboard is `intentshield` with no command and the scripted check is
 `intentshield-mcp-verify --demo --stdio`.
 
-Requires Python 3.12 or later.
+Requires Python 3.11 or later.
 
 ```bash
-uv sync --extra dev
+uv sync --group dev
 .venv/bin/intentshield
 ```
 
@@ -400,7 +396,7 @@ Optional extras:
   `uv pip install --python .venv/bin/python -r requirements-ml.txt` from a clone. A plain `uv sync` removes it again.
 - `--extra learning` (numpy) is needed for the exemplar detector and for learning from operator
   labels.
-- `--extra dev` includes both pytest and numpy, which is what CI runs: `uv sync --extra dev --frozen`.
+- The `dev` dependency group (pytest, numpy, the linters; not published with the package) is what CI installs: `uv sync --group dev --frozen`.
 
 The learned detectors and the LLM judge are described in [detectors.md](detectors.md); the operator-label
 and induced-rule endpoints in [Teach the detector](detectors.md#teach-the-detector-operator-labels-and-induced-rules).

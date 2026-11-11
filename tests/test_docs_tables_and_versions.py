@@ -1,10 +1,12 @@
-"""Two guards on the front-door documents: no table cell is a paragraph, and the release version is the same everywhere."""
+"""Guards on the front-door documents: no table cell or paragraph is a wall of text, and the release version is one everywhere."""
 from __future__ import annotations
 
 import re
 import sys
 import tomllib
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_CELL = 300
@@ -87,3 +89,67 @@ def test_the_lock_file_names_the_package_version():
 def test_the_changelog_has_a_heading_for_the_package_version():
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert re.search(rf"^## {re.escape(_project_version())} - \d{{4}}-\d{{2}}-\d{{2}}$", text, re.M)
+
+
+MAX_PARAGRAPH = 900
+MAX_PARAGRAPH_ARCHITECTURE = 500
+PARAGRAPH_FILES = (
+    "README.md",
+    "CONTRIBUTING.md",
+    "docs/README.md",
+    "docs/architecture-and-testing.md",
+    "docs/contribution.md",
+    "docs/hook-fidelity-report.md",
+)
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+
+
+def _long_paragraphs(name: str, limit: int, root: Path | None = None) -> list[str]:
+    """Paragraphs longer than ``limit`` characters. A paragraph is the lines between blank lines, with each list item counted
+    on its own; code blocks, headings and table rows are not paragraphs."""
+    problems: list[str] = []
+    block: list[str] = []
+    start = 0
+    fenced = False
+
+    def close() -> None:
+        text = " ".join(part.strip() for part in block)
+        if len(text) > limit:
+            problems.append(f"{name}:{start}: a paragraph of {len(text)} characters (limit {limit}): {text[:70]}...")
+        block.clear()
+
+    for number, line in enumerate(((root or ROOT) / name).read_text(encoding="utf-8").splitlines(), 1):
+        if line.lstrip().startswith(("```", "~~~")):
+            close()
+            fenced = not fenced
+            continue
+        stripped = line.strip()
+        if fenced or not stripped or stripped.startswith(("#", "|", "<!--", "<a ")):
+            close()
+            continue
+        if _LIST_ITEM.match(line):
+            close()
+        if not block:
+            start = number
+        block.append(line)
+    close()
+    return problems
+
+
+@pytest.mark.parametrize("name", PARAGRAPH_FILES)
+def test_no_paragraph_in_the_front_door_documents_is_longer_than_900_characters(name):
+    assert not _long_paragraphs(name, MAX_PARAGRAPH)
+
+
+def test_no_paragraph_in_the_architecture_document_is_longer_than_500_characters():
+    assert not _long_paragraphs("docs/architecture-and-testing.md", MAX_PARAGRAPH_ARCHITECTURE)
+
+
+def test_the_paragraph_checker_counts_a_wrapped_paragraph_and_a_list_item_separately(tmp_path):
+    (tmp_path / "doc.md").write_text(
+        "# Title\n\n" + "word " * 60 + "\nmore " * 60 + "\n\n- item one\n  continues\n- item two\n\n```\n" + "x" * 2000
+        + "\n```\n"
+    )
+    found = _long_paragraphs("doc.md", 500, tmp_path)
+    assert len(found) == 1 and found[0].startswith("doc.md:3:")
+    assert not _long_paragraphs("doc.md", 700, tmp_path)

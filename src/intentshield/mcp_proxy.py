@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from time import monotonic as _mono  # a name of its own: tests replace this module's ``time``
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import unquote, urlsplit
 
 from jsonschema import Draft202012Validator, validators
@@ -46,7 +46,11 @@ from .models import GatewayResult, ReasonCode, ToolCall
 from .policy import PolicyConfig
 from .service import IntentShieldService
 from .storage import Storage, default_database
+from .threat_memory import GuardedMemory
 from .tools import MCPArguments, ToolSpec, catch_all_destination, stable_hash
+
+if TYPE_CHECKING:
+    from .threat_memory import ThreatMemory
 
 logger = logging.getLogger(__name__)
 
@@ -809,7 +813,7 @@ class MCPProxyRuntime:
         self._suspect_tools: dict[str, ReasonCode] = {}
         self._suspect_values: _RecentSet = _RecentSet()
         self._taint_incomplete = False  # a cap dropped tainted values: see MAX_TAINTED
-        self._memory: Any = None
+        self._memory: ThreatMemory | None = None
         if config.threat_memory:
             from .rule_packs import PackSet
             from .threat_memory import ThreatMemory
@@ -819,6 +823,7 @@ class MCPProxyRuntime:
                     packs=PackSet(config.threat_packs_dir) if config.threat_packs_dir else None)
             except Exception as exc:  # a corrupt file costs the memory, not the proxy
                 logger.warning("threat memory disabled", extra={"error": f"{type(exc).__name__}: {exc}"})
+        self._recall = GuardedMemory(self._memory, self._memory_failed)
 
     async def __aenter__(self) -> "MCPProxyRuntime":
         await self.connect()
@@ -890,8 +895,7 @@ class MCPProxyRuntime:
         finally:
             if service is not None:
                 service.security_supervisor.close()
-            if self._memory is not None:
-                self._remember("close")
+            self._recall.close()
 
     async def _close_upstreams(self) -> None:
         # MCP transport context managers are task-affine. Close them in the
@@ -1006,10 +1010,9 @@ class MCPProxyRuntime:
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
             if findings:  # one listing is one "run": several poisoned tools must not count as many
-                self._remember("record_attack", text, findings, source=tool.server_id,
-                               run_key=f"catalog:{tool.server_id}")
+                self._recall.record_attack(text, findings, source=tool.server_id, run_key=f"catalog:{tool.server_id}")
             if not findings and qualified not in self._quarantined:
-                if self._remember("check_text", text, target="description"):
+                if self._recall.check_text(text, target="description"):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_KNOWN_THREAT
                 elif self._semantic_flag(text, "description"):
                     self._suspect_tools[qualified] = ReasonCode.REVIEW_CLASSIFIER_FLAGGED
@@ -1287,27 +1290,19 @@ class MCPProxyRuntime:
         values exempt) or a pack rule for arguments matches it; None otherwise or when it fails."""
         if self._memory is None:
             return None
-        try:
-            values = distinctive_values(call.arguments) - distinctive_values(user_intent)
-            known = self._memory.check_values(values, trusted=user_intent)
-            levels = [known.level] if known else []
-            levels += [hit["level"] for hit in self._memory.text_matches(call.arguments, target="argument")]
-        except Exception as exc:  # the memory adds evidence; its failure must not stop the gateway
-            logger.warning("threat memory check failed", extra={"error": type(exc).__name__})
-            return None
+        # A failure of the memory is reported and ignored.
+        values = distinctive_values(call.arguments) - distinctive_values(user_intent)
+        known = self._recall.check_values(values, trusted=user_intent)
+        levels = [known.level] if known else []
+        levels += [hit["level"] for hit in self._recall.text_matches(call.arguments, target="argument")]
         return "block" if "block" in levels else "review" if levels else None
 
     @staticmethod
     def _known_reason(level: str | None) -> ReasonCode | None:
         return {"block": ReasonCode.BLOCK_KNOWN_THREAT, "review": ReasonCode.REVIEW_KNOWN_THREAT}.get(level or "")
 
-    def _remember(self, method: str, *args: Any, **kwargs: Any) -> Any:
-        """A threat-memory call that logs and gives up instead of raising."""
-        try:
-            return getattr(self._memory, method)(*args, **kwargs) if self._memory else None
-        except Exception as exc:
-            logger.warning("threat memory failed", extra={"method": method, "error": type(exc).__name__})
-            return None
+    def _memory_failed(self, method: str, exc: Exception) -> None:
+        logger.warning("threat memory failed", extra={"method": method, "error": type(exc).__name__})
 
     def _judge_failed(self, exc: Exception) -> None:
         logger.warning("judge raised: no opinion", extra={"error": type(exc).__name__})
@@ -1462,7 +1457,7 @@ class MCPProxyRuntime:
         # hosted detector can take seconds, and the event loop takes the same lock in create_run.
         findings = scan_output(upstream)
         text = upstream if isinstance(upstream, str) else json.dumps(upstream, ensure_ascii=False)
-        known = [] if findings else self._remember("text_matches", upstream) or []
+        known = [] if findings else self._recall.text_matches(upstream)
         if any(hit["level"] == "block" for hit in known):
             # A rule from a pack the operator trusts at block level counts like a built-in rule hit
             # (taints the output's values), but teaches the memory nothing.
@@ -1487,7 +1482,7 @@ class MCPProxyRuntime:
         collapsed = [] if findings else scan_output_collapsed(upstream)
         detector = None if findings else (
             "line_split_rules" if collapsed
-            else "threat_memory" if known or self._remember("hostile", call.tool_name.partition(":")[0])
+            else "threat_memory" if known or self._recall.hostile(call.tool_name.partition(":")[0])
             else self._semantic_flag(text, "output", run_id) or self._judge_output(run_id, call.tool_name, text))
         with self._lock:
             if self._learner is not None:  # only learning links a reviewed call to the text it reused
@@ -1511,8 +1506,8 @@ class MCPProxyRuntime:
             return result
         if self._memory and not known:  # only rule-confirmed text teaches it, never a pack's or its own
             run = self._service().storage.get_run(run_id) or {}
-            self._remember("record_attack", upstream, findings, source=call.tool_name.partition(":")[0],
-                           run_key=run_id, trusted=run.get("user_intent", ""))
+            self._recall.record_attack(upstream, findings, source=call.tool_name.partition(":")[0], run_key=run_id,
+                                       trusted=run.get("user_intent", ""))
         self._service().storage.add_event(run_id, "MCP_OUTPUT_INJECTION", {
             "tool_name": call.tool_name, "findings": findings, "tainted_values": len(values),
         })
@@ -1641,7 +1636,7 @@ class MCPProxyRuntime:
             return await asyncio.to_thread(service.decide_approval, approval_id, False)
         result = await asyncio.to_thread(service.decide_approval, approval_id, approve)
         if approve and trust_source:  # only an operator who says so vouches for the server: approving one call does not
-            await asyncio.to_thread(self._remember, "clear_source", approval["tool_name"].partition(":")[0])
+            await asyncio.to_thread(self._recall.clear_source, approval["tool_name"].partition(":")[0])
         return result
 
     async def decide_and_learn(self, approval_id: str, approve: bool,

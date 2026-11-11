@@ -72,18 +72,20 @@ Benign examples are scarce (about 5 injected rows per benign one) and the traini
 reached 0.0001, so scores saturate near 1.0. Do not enable it on this artifact; a usable
 one needs many more benign rows with human-directed instructions.
 
-**Loader bug, found and fixed 2026-10-13 (`dc8aee0`).** The shared model loader passed
-`fix_mistral_regex=True` to the tokenizer (transformers 4.57 suggests it). For DeBERTa it
-splits words into fragments ("Ignore" became "I", "gno", "re"), so the classifier, trained
-without it, read noise at run time: through the runtime path it caught 19.4% of the held-out
-injections, not the 100% its training report shows. Fixed, the runtime path matches the report.
-On the injection evaluation with hard benign texts (below) it is still unusable: 46.5% of
-injections caught and 24.4% of benign texts flagged, including 100% of human-to-human requests
-and of reports quoting an attack, 78% of legitimate tool-usage guidance and 44% of agent-
-addressed hints. The first DeBERTa intent model was trained with the same flag, so it learned
-from fragmented tokens. It was retrained with a clean tokenizer on 2026-10-18
-(`intent-deberta-v3-small-v2`); on MSB that did not help (see the MSB section of [benchmarks.md](benchmarks.md): as a veto it
-still blocked the task tool often, and as advisory evidence it changes nothing measurable (the v11 traces record no intent evidence and no provenance, so it is not confirmed that the model was active in that arm; treat as unconfirmed)).
+**Loader bug, found and fixed 2026-10-13 (`dc8aee0`).** The shared model loader passed `fix_mistral_regex=True` to the tokenizer
+(transformers 4.57 suggests it). For DeBERTa it splits words into fragments ("Ignore" became "I", "gno", "re"), so the classifier,
+trained without it, read noise at run time: through the runtime path it caught 19.4% of the held-out injections, not the 100% its
+training report shows. Fixed, the runtime path matches the report.
+
+On the injection evaluation with hard benign texts (below) it is still unusable: 46.5% of injections caught and 24.4% of benign
+texts flagged, including 100% of human-to-human requests and of reports quoting an attack, 78% of legitimate tool-usage guidance
+and 44% of agent- addressed hints. The first DeBERTa intent model was trained with the same flag, so it learned from fragmented
+tokens.
+
+It was retrained with a clean tokenizer on 2026-10-18 (`intent-deberta-v3-small-v2`); on MSB that did not help (see the MSB
+section of [benchmarks.md](benchmarks.md): as a veto it still blocked the task tool often, and as advisory evidence it changes
+nothing measurable (the v11 traces record no intent evidence and no provenance, so it is not confirmed that the model was active
+in that arm; treat as unconfirmed)).
 
 ## Adaptive injection detection
 
@@ -127,6 +129,12 @@ injections caught and the share of benign texts flagged:
 | any of the four (rules, classifier, Prompt Guard, exemplars on outputs) | 70.6% | 24.9% (189/758) | 113/142 |
 
 The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked (1,505 of the 2,959 injections in all); on the remaining independent families the rules catch 2.1% (30/1,454) and rules+exemplars 18.1% (263/1,454).
+
+That 18.1% is mostly in distribution for the exemplar index. The index is built from the train split of the same dataset (MCPTox
+descriptions, outputs written by a local model in four injection styles, translations and hard negatives), and 228 of the 263 hits
+are on the 346 generated-output test rows, which share their styles and generator with the train rows and differ only by MCPTox
+server. On the 1,108 injections from sources the index never saw (AgentDojo `direct` and `ignore_previous`, InjecAgent base)
+rules+exemplars catch 35 (3.2%) and the rules alone 17 (1.5%), read from the per-family rows of `results/injection/table.txt`.
 
 Sources: the rules, Prompt Guard, exemplars-on-outputs and combination rows are
 `results/injection/report-rules-pg-exemplars.json` (`table.txt` is its per-family print-out); the
@@ -200,15 +208,15 @@ rewrites, 2 were not requests to send data), so the 42/42 is an upper bound; and
 construction, because a try must keep the canary verbatim to count as valid, so the address is always
 traceable to the output.
 
-Learning helped a little, and the difference is not significant: 3 seeds, with overlapping
-intervals. Two seeds were caught on the first attempt because of what the defense had learned
-from earlier, different seeds. Learning did not help on InjecAgent's base attacks (5/6 evaded in
-both arms). The attacker is weak, too: only 28-31 of up to 210 attempts were valid. Benign flags
-fell after learning because class-balanced voting gives each injection chunk less weight as more
-are added. A first run gave every seed the same canary. Six of its approved rules then named that
-address, which made learning look better than it was. Rules may no longer name addresses or
-numbers, and each seed now has its own canary (`95ef2c1`; the first run's output is kept by the author, not in the repository). Some approved rules are broad, such as
-`\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
+Learning helped a little, and the difference is not significant: 3 seeds, with overlapping intervals. Two seeds were caught on the
+first attempt because of what the defense had learned from earlier, different seeds. Learning did not help on InjecAgent's base
+attacks (5/6 evaded in both arms). The attacker is weak, too: only 28-31 of up to 210 attempts were valid. Benign flags fell after
+learning because class-balanced voting gives each injection chunk less weight as more are added. A first run gave every seed the
+same canary.
+
+Six of its approved rules then named that address, which made learning look better than it was. Rules may no longer name addresses
+or numbers, and each seed now has its own canary (`95ef2c1`; the first run's output is kept by the author, not in the repository).
+Some approved rules are broad, such as `\bsend\b.*?\binformation\b`. They passed every gate, which is why a human still approves
 each rule.
 
 ## LLM judge on tool results (plain-language injections)
@@ -244,15 +252,15 @@ tokens a day, which the train runs used up, and about 200 judged results would u
 Gemini takes about 4 s per result and local qwen about 1 s, on every result the rules pass. Results:
 `results/judge/outputs-gemini-flash-lite-test.json`, `results/judge/outputs-qwen2.5-7b-test.json`.
 
-**Since 0.4.0** the prompt (v2.1) also names rules for how the work must be done, requests to whoever
-reads or forwards the result, and text that speaks to the reviewer or vouches for itself. On the same
-test split qwen2.5:7b catches 101/346 (29.2%) and flags 6/176 benign (3.4%), against 84/346 and 1/176
-with the first prompt; DeepSeek's `deepseek-flash` (paid) catches 298/346 (86.1%) and flags 13/176 (7.4%), none
-of them requests between people or quoted attacks. These are judge-alone rates: with the rules, which still run, the
-same rows flag 20/176 (11.4%, qwen v2.1) and 27/176 (15.3%, DeepSeek), and 13 of the rules' flags are on 24 texts that
-quote an attack. DeepSeek's and Gemini's recalls are on different row sets and prompts and are not ranked. Thirty hand-written jailbreaks and an adaptive attacker that sees the judge's
-prompt and verdicts were run against it; the method and numbers are in
-[benchmarks.md](benchmarks.md#attacks-on-the-output-judge).
+**Since 0.4.0** the prompt (v2.1) also names rules for how the work must be done, requests to whoever reads or forwards the
+result, and text that speaks to the reviewer or vouches for itself. On the same test split qwen2.5:7b catches 101/346 (29.2%) and
+flags 6/176 benign (3.4%), against 84/346 and 1/176 with the first prompt; DeepSeek's `deepseek-flash` (paid) catches 298/346
+(86.1%) and flags 13/176 (7.4%), none of them requests between people or quoted attacks.
+
+These are judge-alone rates: with the rules, which still run, the same rows flag 20/176 (11.4%, qwen v2.1) and 27/176 (15.3%,
+DeepSeek), and 13 of the rules' flags are on 24 texts that quote an attack. DeepSeek's and Gemini's recalls are on different row
+sets and prompts and are not ranked. Thirty hand-written jailbreaks and an adaptive attacker that sees the judge's prompt and
+verdicts were run against it; the method and numbers are in [benchmarks.md](benchmarks.md#attacks-on-the-output-judge).
 
 ## Teach the detector (operator labels and induced rules)
 

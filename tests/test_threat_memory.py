@@ -421,3 +421,68 @@ def test_cli_prints_json(tmp_path, capsys):
 def _run(db: str, command: str, capsys, *args: str) -> str:
     threat_memory.main(["--db", db, command, *args])
     return capsys.readouterr().out
+
+
+# --- the guarded calls of the hook and the proxy
+# ---------------------------------------------------------------------------------
+
+def test_every_guarded_call_has_the_signature_of_the_memory_call_it_makes():
+    """A rename or a changed argument in ``ThreatMemory`` that ``GuardedMemory`` does not follow fails here (and in the type
+    checker),
+    not as a memory that is silently off."""
+    import inspect
+
+    from intentshield.threat_memory import GuardedMemory, ThreatMemory
+
+    for name in ("check_values", "text_matches", "check_text", "hostile", "record_attack", "clear_source", "close"):
+        guarded, real = inspect.signature(getattr(GuardedMemory, name)), inspect.signature(getattr(ThreatMemory, name))
+        assert list(guarded.parameters) == list(real.parameters), name
+
+
+def test_a_guarded_call_reports_a_failure_by_name_and_answers_as_if_the_memory_knew_nothing():
+    import sqlite3
+
+    from intentshield.threat_memory import GuardedMemory
+
+    class Locked:
+        """A memory whose every call raises, as a locked database does."""
+
+        def __getattr__(self, name):
+            def call(*args, **kwargs):
+                raise sqlite3.OperationalError("database is locked")
+
+            return call
+
+    reports: list[tuple[str, str]] = []
+    guarded = GuardedMemory(Locked(), lambda method, exc: reports.append((method, type(exc).__name__)))  # type: ignore[arg-type]
+
+    assert guarded.check_values({"x@evil.test"}) is None
+    assert guarded.text_matches("anything") == [] and guarded.check_text("anything") == []
+    assert guarded.hostile("web") is False
+    assert guarded.record_attack("t", ["instruction_override"], source="web", run_key="r") is None
+    assert guarded.clear_source("web") is None
+    guarded.close()
+    assert [method for method, _ in reports] == ["check_values", "text_matches", "check_text", "hostile", "record_attack",
+                                                 "clear_source",
+                                                 "close"]
+    assert {kind for _, kind in reports} == {"OperationalError"}
+
+
+def test_a_guarded_call_without_a_memory_answers_nothing_and_reports_nothing():
+    from intentshield.threat_memory import GuardedMemory
+
+    reports: list[str] = []
+    guarded = GuardedMemory(None, lambda method, exc: reports.append(method))
+    assert guarded.check_values({"a"}) is None and guarded.text_matches("t") == [] and guarded.hostile("s") is False
+    guarded.close()
+    assert reports == []
+
+
+def test_the_hook_and_the_proxy_make_their_memory_calls_through_one_class():
+    import re
+
+    root = Path(__file__).resolve().parents[1] / "src" / "intentshield"
+    for module in ("harness.py", "mcp_proxy.py"):
+        text = (root / module).read_text()
+        assert "getattr(self.memory" not in text and "getattr(self._memory" not in text, module
+        assert not re.search(r"self\._(?:memory|remember)\(\s*[\"']", text), module

@@ -250,6 +250,11 @@ def _connection_failure(exc: BaseException, config: MCPUpstreamConfig) -> str:
         return "the server did not answer the start-up message in time"
     if "connection closed" in text.lower():
         return "the server ended before it answered the start-up message (its own error output, if any, is on stderr)"
+    if config.transport != "stdio" and config.url:
+        where = re.sub(r"^(\w+://)[^/@]*@", r"\1",
+                       config.url).split("?")[0].split("#")[0]  # no user name, password or token in the line
+        return (f"{name}: {text}" if text else name) + (f" (the server at {where}; the client library does not report the HTTP "
+                                                        f"status, `curl -i {where}` shows it)")
     return f"{name}: {text}" if text else name
 
 

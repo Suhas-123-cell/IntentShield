@@ -1210,3 +1210,23 @@ def test_a_command_kept_in_a_variable_or_joined_by_a_dot_still_names_its_address
 def test_a_push_after_a_commit_message_with_a_link_does_not_reach_the_link():
     assert not parse('git commit -m "see https://huggingface.co/x" && git push').destinations
 
+
+
+# --- the key of an ssh login ----------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("command", [
+    "ssh -i ~/.ssh/id_ed25519 host", "ssh -i ~/.ssh/id_ed25519 deploy@host.example.org uptime",
+                                     "scp -i ~/.ssh/id_rsa a.txt host:/tmp",
+    "ssh -o IdentityFile=~/.ssh/id_rsa host", "ssh -oIdentityFile=~/.ssh/id_rsa host", "rsync -e 'ssh -i ~/.ssh/id_rsa' a host:b",
+    "sftp -i ~/.ssh/id_rsa host", "ssh -i~/.ssh/id_rsa host",
+])
+def test_the_key_that_signs_a_login_is_not_a_secret_the_command_reads(command):
+    assert parse(command).secrets == []
+
+
+@pytest.mark.parametrize("command", [
+    "scp ~/.ssh/id_rsa host:/tmp", "scp -i ~/.ssh/k ~/.ssh/id_rsa host:/tmp", "ssh host 'cat ~/.ssh/id_rsa'",
+    "ssh -i ~/.ssh/k host 'cat ~/.ssh/id_rsa'", "rsync ~/.ssh/id_rsa host:b", "cat ~/.ssh/id_rsa | ssh host 'cat > k'",
+])
+def test_a_key_that_is_copied_or_read_out_still_counts(command):
+    assert parse(command).secrets

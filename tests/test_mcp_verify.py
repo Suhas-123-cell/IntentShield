@@ -222,6 +222,16 @@ def test_demo_flag_needs_no_config_file_or_path(monkeypatch, capsys):
     assert not seen["directory"].exists()  # nothing of the demo is left behind
 
 
+def test_summary_prints_one_line_for_a_pass_and_a_line_for_each_check_that_failed(monkeypatch, capsys):
+    from intentshield import mcp_verify
+
+    monkeypatch.setenv("PATH", "")
+    assert main(["--demo", "--summary"]) == 0
+    assert capsys.readouterr().out == "PASS 13/13 checks\n"
+    report = {"status": "FAIL", "checks": [{"id": "a", "status": "PASS"}, {"id": "b", "status": "FAIL", "message": "no tools"}]}
+    assert mcp_verify._summary(report) == "FAIL 1/2 checks\n  FAIL b: no tools"
+
+
 def test_a_failed_run_says_on_stderr_which_kind_of_failure_it_was_without_quoting_it(monkeypatch, capsys):
     from intentshield import mcp_verify
 

@@ -350,6 +350,9 @@ def main(argv: list[str] | None = None) -> None:
                               deadline=args.deadline if args.deadline != translation.DEFAULT_DEADLINE_S else None,
                               hook_timeout=args.hook_timeout or None, on_empty=args.on_empty if args.on_empty != "deny" else None,
                               mode=args.mode, version=args.version, gemini_ask=args.gemini_ask))
+        if args.harness == "cursor":  # Cursor blocks a call whose hook fails only with this flag, as `install cursor` sets it
+            print('note: also set "failClosed": true on the hook in Cursor\'s hooks.json; the line above is the command only.',
+                  file=sys.stderr)
         return
     if not 0 < args.deadline <= 3600:  # also false for nan; inf cannot be waited for
         print("intentshield wrap-hook: --deadline must be a number of seconds from 0 (exclusive) to 3600", file=sys.stderr)

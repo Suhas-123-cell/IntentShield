@@ -1,5 +1,6 @@
-"""Every relative link and anchor in the repository's Markdown resolves, and so does every absolute link from the README to a
-file in this repository (the README is the PyPI page, where relative links 404, so it links to GitHub by URL).
+"""Every relative link and anchor in the repository's Markdown resolves, and so does every absolute link from the README to a file
+in this repository (the README is the PyPI page, where relative links 404, so it links to GitHub by URL; a link to a section of
+the README itself is a same-page `#anchor`).
 
 GitHub's anchor rule: the heading text lowercased, every character that is not a letter, digit, space, hyphen or underscore
 dropped, spaces turned into hyphens; a repeated heading gets -1, -2 and so on.
@@ -159,6 +160,15 @@ def test_the_readme_has_no_relative_links():
     relative = [t for t in _targets(ROOT / "README.md")
                 if not re.match(r"[a-z][a-z0-9+.-]*:", t, re.I) and not t.startswith("#")]
     assert not relative, relative
+
+
+def test_the_readme_links_to_its_own_sections_by_anchor_only():
+    """A same-page link is `#results`, not a URL: it must work in a clone, on a fork and on the PyPI page."""
+    targets = _targets(ROOT / "README.md")
+    own = [t for t in targets if t.startswith(f"{REPO_URL}/blob/main/README.md")]
+    assert not own, own
+    anchors = [t for t in targets if t.startswith("#")]
+    assert {"#results", "#the-hook-study"} <= set(anchors), anchors
 
 
 def test_the_anchor_rule_matches_githubs_on_known_headings():
