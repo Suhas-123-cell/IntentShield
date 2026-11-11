@@ -803,6 +803,7 @@ def main(argv: list[str] | None = None) -> None:
         help="expose the upstream's own tools (catalog layer only) for harnesses guarded by intentshield-hook",
     )
     args = parser.parse_args(argv)
+    failures: list[BaseException] = []
     try:
         run_mcp_server(
             transport=args.transport,
@@ -818,7 +819,11 @@ def main(argv: list[str] | None = None) -> None:
     except* (FileNotFoundError, ValueError, MCPUpstreamError) as group:
         # A missing config, a bad config or an upstream that cannot start: one line each on
         # stderr, not the anyio exception-group traceback the transport would otherwise print.
-        for leaf in _leaves(group):
+        # Leave the handler before exiting: a SystemExit raised inside ``except*`` comes out wrapped in an exception group,
+        # which prints the traceback this handler is here to replace.
+        failures = _leaves(group)
+    if failures:
+        for leaf in failures:
             print(f"intentshield-mcp: {leaf}", file=sys.stderr)
         sys.exit(1)
 
