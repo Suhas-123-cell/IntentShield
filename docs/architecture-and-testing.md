@@ -335,8 +335,8 @@ Expect every test to pass. Measured on 2026-11-11 at the working tree after `f39
 
 | platform | result |
 |---|---|
-| macOS, Python 3.14 | 5997 passed, 5 skipped |
-| macOS, Python 3.11, with `--cov` (91.8% covered; the floor is 85%) | 5997 passed, 5 skipped |
+| macOS, Python 3.14 | 5998 passed, 5 skipped |
+| macOS, Python 3.11, with `--cov` (91.8% covered; the floor is 85%) | 5998 passed, 5 skipped |
 | the lowest allowed versions of the direct dependencies, Python 3.11, on a copy of the tracked files | 5996 passed, 6 skipped |
 
 The totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The number of
