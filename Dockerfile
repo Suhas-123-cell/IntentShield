@@ -3,7 +3,7 @@
 #   docker run --rm intentshield                                    # verify the demo proxy end to end
 #   docker run --rm intentshield pytest -q                          # the test suite
 #   echo '<hook event JSON>' | docker run --rm -i intentshield intentshield-hook claude
-FROM python:3.12-slim
+FROM python:3.15-slim
 COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY . .
