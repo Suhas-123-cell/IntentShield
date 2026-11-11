@@ -718,3 +718,14 @@ def test_the_proxy_marks_a_phrase_split_between_two_text_blocks(tmp_path: Path):
             assert "tries to instruct the agent" in str(marked.content[0])
 
     asyncio.run(exercise())
+
+
+def test_closing_a_guard_closes_its_threat_memory_too(tmp_path):
+    import sqlite3
+
+    guard = HarnessGuard(tmp_path / "hooks.db", threats=tmp_path / "threats.db")
+    assert guard.memory is not None
+    reader = guard.memory._reader
+    guard.close()
+    with pytest.raises(sqlite3.ProgrammingError):
+        reader.execute("SELECT 1")

@@ -376,6 +376,7 @@ class HarnessGuard:
         self.db.execute("COMMIT")
 
     def close(self) -> None:
+        self.recall.close()  # the threat memory keeps its own reader connection open
         self.db.close()
 
     def _load(self, session: str) -> tuple[str, set[str]]:
