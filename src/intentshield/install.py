@@ -488,6 +488,8 @@ def _read_json(path: Path) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         how = ("fix that line" if _has_comments(path) else
                "remove its comments and trailing commas (this file is read as strict JSON)")
+        if text.startswith("\ufeff"):
+            how = "save it as UTF-8 without a byte order mark (it starts with one, which JSON does not allow)"
         raise _NotJSON(f"{path} is not valid JSON ({exc.msg}, line {exc.lineno} column {exc.colno}); {how}, or add the entries "
                        "by hand from the output of `intentshield install <harness> --dry-run`", exc) from None
     if _has_comments(path) and strip_json_comments(text) != text:
@@ -1165,8 +1167,9 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
                   "run `intentshield unwrap` on it first.")
         if not dry_run:
             local = _inside(path, Path.cwd())
-            print(f"Next: restart the MCP client that reads {path} (close it before wrapping ~/.claude.json, which Claude Code "
-                  "rewrites), then run "
+            closing_note = (" (close it before wrapping ~/.claude.json, which Claude Code rewrites)"
+                            if path.name == ".claude.json" else "")
+            print(f"Next: restart the MCP client that reads {path}{closing_note}, then run "
                   f"`intentshield doctor --connect{'-project' if local else ''}` to check that each wrapped server starts "
                   "through the proxy.")
     elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):

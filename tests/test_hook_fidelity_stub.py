@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 
 BENCH = Path(__file__).resolve().parents[1] / "benchmarks"
-sys.path.insert(0, str(BENCH))
 from hook_fidelity import stub_model  # noqa: E402
 from hook_fidelity.stub_model import Script, ScriptError, StubServer  # noqa: E402
 

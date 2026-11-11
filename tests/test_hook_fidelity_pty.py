@@ -16,7 +16,6 @@ from pathlib import Path
 import pytest
 
 BENCH = Path(__file__).resolve().parents[1] / "benchmarks" / "hook_fidelity"
-sys.path.insert(0, str(BENCH.parent))
 sys.path.insert(0, str(BENCH))
 import pty_lane as pl  # noqa: E402
 from timelimits import limit  # noqa: E402

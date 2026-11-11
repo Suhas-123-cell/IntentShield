@@ -23,8 +23,8 @@ def _wilson_upper(k: int, n: int, z: float = 1.959964) -> float:
     return 100 * (centre + half)
 
 
-def test_the_readme_stays_under_230_lines():
-    assert len(READ("README.md").splitlines()) < 230
+def test_the_readme_stays_under_260_lines():
+    assert len(READ("README.md").splitlines()) < 260
 
 
 def test_the_reading_path_word_counts_are_wc_counts():
@@ -48,6 +48,35 @@ def test_the_reading_path_word_counts_are_wc_counts():
     parts = [v for k, v in stated.items() if k != "all three"]
     assert abs(total_words - sum(w for w, _ in parts)) <= 10
     assert abs(total_minutes - total_words / 250) <= 1 and abs(total_minutes - sum(m for _, m in parts)) <= 1
+
+
+def _words(paths) -> int:
+    return sum(len(path.read_text(encoding="utf-8", errors="replace").split()) for path in paths)
+
+
+def test_the_stated_size_of_each_group_of_documents_is_a_wc_count():
+    """docs/README.md says how many words the product documentation, the research write-ups and the archived notes hold."""
+    text = " ".join(READ("docs/README.md").split())
+    product = [ROOT / name for name in ("README.md", "docs/guide.md", "docs/layers.md", "docs/gateway.md", "docs/detectors.md",
+                                         "docs/benchmarks.md", "docs/security-review.md", "docs/architecture-and-testing.md",
+                                         "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md")]
+    research = [ROOT / "docs" / name for name in ("contribution.md", "hook-fidelity-report.md",
+                                                   "hook-fidelity-report-appendix.md", "related-work.md", "coverage-study.md")]
+    archive = [path for folder in ("research-notes", "hook-fidelity-archive")
+               for path in sorted((ROOT / "docs" / folder).rglob("*.md"))]
+    user = [ROOT / "README.md", ROOT / "docs" / "guide.md"]
+    stated = {
+        "product": (r"\*\*Product documentation\*\*[^.]*?about ([\d,]+) words in all", product),
+        "user": (r"needs only the README and the guide, about ([\d,]+) words", user),
+        "research": (r"\*\*Research write-ups\*\*[^:]*?about ([\d,]+) words", research),
+        "archive": (r"about ([\d,]+) words in (\d+) Markdown files", archive),
+    }
+    for name, (pattern, files) in stated.items():
+        match = re.search(pattern, text)
+        assert match, name
+        count = int(match.group(1).replace(",", ""))
+        assert abs(count - _words(files)) <= 0.03 * _words(files), (name, count, _words(files))
+    assert int(re.search(r"words in (\d+) Markdown files", text).group(1)) == len(archive)
 
 
 def _injection_rows() -> dict[str, list[tuple[int, int]]]:
@@ -129,7 +158,6 @@ def test_the_injection_headline_says_which_rules_it_was_measured_with():
     rules."""
     import json
 
-    sys.path.insert(0, str(ROOT / "benchmarks"))
     import injection_eval
 
     assert _injection_rows()["instruction:agentdojo_ignore_previous"][0] == (0, 27)    # the rules column of the committed table

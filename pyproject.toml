@@ -88,7 +88,8 @@ intentshield-eval = "intentshield._launch:evaluation"
 intentshield-threats = "intentshield._launch:threats"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# The tests import the benchmark scripts by their file names.
+pythonpath = ["src", "benchmarks", "benchmarks/harness_live"]
 testpaths = ["tests"]
 # A misspelled marker or config key is an error, not a silently ignored name.
 addopts = ["--strict-markers", "--strict-config"]
@@ -158,8 +159,9 @@ select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "
 ignore = ["E741", "E731", "B008", "B023", "B905", "UP035", "UP037"]
 
 [tool.ruff.lint.mccabe]
-# A ceiling just above the most complex function today (_stage_hits, 57); lower it as the large functions are split.
-max-complexity = 60
+# A ceiling just above the most complex function today (33: shell._read, rules._net_hit, benchmarks cmd_run); lower it as those
+# are split.
+max-complexity = 35
 
 [tool.ruff.lint.per-file-ignores]
 # The corpus readings are prose data (long quoted lines, printf-style row builders): not code style.

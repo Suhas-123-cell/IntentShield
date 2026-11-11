@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import io
-import sys
 from pathlib import Path
 
+import paper_numbers
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "benchmarks"))
-
-import paper_numbers  # noqa: E402
 
 RESULTS = ROOT / "results" / "msb"
 DATA = ROOT / "artifacts" / "data" / "MSB"  # optional: the committed results/msb/cases.jsonl is the same grid

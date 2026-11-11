@@ -16,7 +16,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "benchmarks"
-sys.path.insert(0, str(BENCH))
 sys.path.insert(0, str(BENCH / "hook_fidelity" / "corpus_build"))
 from hook_fidelity import corpus_counts, guard_capture, guard_replay, stubhook  # noqa: E402
 

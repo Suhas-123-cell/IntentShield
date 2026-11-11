@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+if not (ROOT / "docs" / "architecture-and-testing.md").is_file():
+    pytest.skip("needs the repository's docs/ (a full clone, not an installed package)", allow_module_level=True)
 DOC = (ROOT / "docs" / "architecture-and-testing.md").read_text(encoding="utf-8")
 
 

@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 HF = Path(__file__).resolve().parents[1] / "benchmarks" / "hook_fidelity"
-sys.path.insert(0, str(HF.parent))
 sys.path.insert(0, str(HF))
 
 import compare  # noqa: E402

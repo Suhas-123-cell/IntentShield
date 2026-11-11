@@ -3,10 +3,8 @@ because the session errored, and a benign run is done only when the answer gives
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks" / "harness_live"))
 import builtin_live as b
 
 

@@ -5,7 +5,8 @@
     .venv/bin/python benchmarks/hook_fidelity/report_numbers.py --json     # the same as JSON
 
 Rules (the same as the study's, section 1): a count is k/n over the committed stub-arm rows (INVALID rows never counted); the
-Wilson interval is computed here from k and n and never stored rounded. The stub is deterministic and each cell has n of 2 to 5,
+Wilson interval is computed here from k and n and never stored rounded. The stub is scripted (repeats were not tested for
+determinism) and each cell has n of 2 to 5,
 so an interval on rows bounds repeatability, not a rate; the cell and build counts are printed beside the row counts and are
 the better unit.
 
@@ -227,7 +228,7 @@ def findings(rows: list[dict]) -> dict[str, str]:
     builds_blocked = builds - {(r["harness"], r["version"]) for r in ran if r["outcome"] != "BLOCKED"}
     out["deny"] = (
         f"deny enforced where the hook ran: {len(builds_blocked)} of {len(builds)} builds, {fmt(len(blocked), len(ran))} rows "
-        f"({len(ran) - len(blocked)} let the call run); the rows are {len(cells)} deterministic cells on {len(builds)} builds, "
+        f"({len(ran) - len(blocked)} let the call run); the rows are {len(cells)} scripted cells on {len(builds)} builds, "
         f"so the interval bounds repeatability, not a population rate; "
         f"deny rows where the hook did not run and the call ran: {len(skipped)} of {len(r4)} "
         f"({', '.join(f'{k} {v}' for k, v in sorted(by_cause.items()))}); "

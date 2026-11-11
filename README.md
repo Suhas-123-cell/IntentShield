@@ -9,14 +9,26 @@ anything runs. It reads each tool call, tool description and tool result with de
 the call, holds it for you to confirm (an "ask"), or blocks it (a "deny"); the core needs no API key.
 
 It works with Claude Code, Codex CLI, Cursor and Gemini CLI (through their hooks: commands the harness runs before each tool call)
-and with any MCP client that launches stdio servers (through a proxy). The measurements behind it are under [Results](#results) and [The hook study](#the-hook-study); they
-show less than a headline number would suggest.
+and with any MCP client that launches stdio servers (through a proxy).
+
+In short: in the MCP Security Bench runs no guarded arm let a harmful call run, but a trivial baseline did equally well; on injection text
+the rules were not written for they catch about 2%; and a hook that ran past its timeout let the call run on every build tested. The
+measurements are under [Results](#results) and [The hook study](#the-hook-study).
+
+**Threat model.**
+- **Attacker:** whoever controls text the model reads (an MCP server's tool descriptions and results, a fetched page, a file) and
+  wants the agent to make a call you did not ask for.
+- **Trusted:** you, your prompts, your machine, the harness and IntentShield's own rules. The model's output and everything an MCP
+  server sends are untrusted: scanned, never obeyed. Only the deterministic rules can allow a call; detectors and the judge add evidence.
+- **Not covered:** an attacker who already has your shell or controls the harness; the MCP servers' own code; the harness's shell, file
+  and web tools unless installed with `--builtin-tools` (best effort); plain-language injections the rules do not read.
+- Full text: [Security boundary](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#security-boundary) and [what is in and out of scope](https://github.com/Suhas-123-cell/IntentShield/blob/main/SECURITY.md#in-scope).
 
 ![IntentShield blocking an injected MCP call](https://raw.githubusercontent.com/Suhas-123-cell/IntentShield/main/docs/demo.gif)
 
 ## Install
 
-Python 3.12 or later. Python 3.11 also works (on main, after 0.4.3); PyPI 0.4.3 needs 3.12.
+Python 3.11 or later.
 
 ```sh
 uv tool install intentshield-mcp   # or: pipx install intentshield-mcp
@@ -25,54 +37,66 @@ intentshield demo                  # sample calls through the real hook: prints 
 intentshield doctor                # run it after you start the harness and send it any prompt
 ```
 
+> **PyPI has 0.4.3, which predates some of what this page describes**: Python 3.11, `doctor --connect` and `--verbose`, `wrap` for Codex and
+> VS Code files, and a first-run `doctor` that exits 0 (0.4.3 prints `FAIL` and exits 1). The
+> [Unreleased section of the changelog](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#unreleased) lists the differences and
+> [Upgrading from 0.4.3](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#upgrading-from-043) says what changes for you.
+
 What you should see:
 
 - `install` prints `installed claude hooks in <the settings file>`, then a `Next:` line.
-- `demo` prints one line per sample call (`allow`, `ask`, `deny`) with the rule's reason and exits 0. It also sends an MCP call, a second deny (on main, after 0.4.3).
-- `doctor` run right after `install` says that no hook has run yet, which is expected. In 0.4.3 that is a line
-  `FAIL claude (...): installed, but no hook has run since ...` and exit status 1; on main, after 0.4.3, it is a `warn` line for the
-  first hour after the install and the exit status is 0. Start the harness (Codex CLI first asks you to trust the new hooks),
-  send any prompt and run `doctor` again; a line that stays `FAIL` is explained in [Troubleshooting](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#troubleshooting).
-  `note` and `warn` lines do not change the exit status. `doctor` counts the `note` lines and prints them only
-  with `doctor --verbose` (on main, after 0.4.3).
+- `demo` prints one line per sample call (`allow`, `ask`, `deny`) with the rule's reason and exits 0. It also sends an MCP call, a second deny.
+- `doctor` run right after `install` says that no hook has run yet, which is expected: a `warn` line for the first hour, exit status 0.
+  Start the harness (Codex CLI first asks you to trust the new hooks), send any prompt and run `doctor` again.
+  A line that stays `FAIL` is explained in [Troubleshooting](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#troubleshooting).
+- `note` and `warn` lines do not change the exit status. `doctor` counts the `note` lines and prints them only with `doctor --verbose`.
 - To guard MCP servers too, see [Put the proxy in front of MCP servers](#put-the-proxy-in-front-of-mcp-servers).
 
 `pip install intentshield-mcp` works inside a virtual environment. On a system Python that pip will not change (the
 "externally-managed-environment" error, common on Homebrew and Debian), use `uv tool` or `pipx`; if `intentshield` is then not found,
-run `uv tool update-shell` or `pipx ensurepath`. Do not install through `uvx`, which leaves a temporary path behind. The PyPI name is
-`intentshield-mcp`; `intentshield` there is [a different project](https://pypi.org/project/intentshield/). The commands are still
-`intentshield`. To undo: `intentshield uninstall claude` and `intentshield unwrap .mcp.json`.
+run `uv tool update-shell` or `pipx ensurepath`. macOS's own `python3` is 3.9, too old: `uv tool install` fetches a suitable Python.
+Do not install through `uvx`, which leaves a temporary path behind.
+
+The PyPI name is `intentshield-mcp`; `intentshield` there is [a different project](https://pypi.org/project/intentshield/). The commands
+are still `intentshield`. To undo: `intentshield uninstall claude` and `intentshield unwrap .mcp.json`. To upgrade, or to remove
+everything including `~/.intentshield`, see [Upgrading and removing](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#upgrading-and-removing-intentshield).
 
 **What the default install guards.**
 - It guards MCP calls. Shell commands, file tools and web tools are guarded only if you add `--builtin-tools`:
   `intentshield install claude --builtin-tools` (opt-in, best effort). `intentshield demo` runs its shell calls with that flag on.
 - `intentshield doctor` checks that the hooks and proxies are installed and wired correctly: the hook entries in each harness's
   settings, when each hook last ran, and that each wrapped server's proxy config and command exist. It does not start your servers.
-  `--connect` (on main, after 0.4.3) starts each wrapped server once and lists its tools, which runs the server's code.
+  `--connect` starts each wrapped server once and lists its tools, which runs the server's code; `--connect-project` does the same for
+  servers named by a file in the working directory.
 
 If the guard blocks something legitimate, or you want a hooks-only `--no-deps` install, see
-[Troubleshooting](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#troubleshooting). An optional LLM judge (`--judge`, off by default; a hosted one sends prompts, arguments and tool text to its provider) is in
-[docs/layers.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#the-optional-llm-judge), with a
-[glossary](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#terms). **Platforms.** Tested on macOS and Linux
-(CI, Python 3.12 to 3.14; 3.11 too, on main, after 0.4.3); Windows is untested, as the fail-closed launcher is POSIX-only.
+[Troubleshooting](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#troubleshooting).
+
+An optional LLM judge (`--judge`, off by default; a hosted one sends prompts, arguments and tool text to its provider) is in
+[docs/layers.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#the-optional-llm-judge), with a [glossary](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#terms).
+
+The package ships no trained model. The optional learned classifiers in [docs/detectors.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/detectors.md)
+are trained from a clone (`requirements-ml.txt` lists the packages they need) and are off until you point to a trained model.
+
+`intentshield wrap-hook` runs another guard's hook under the same launcher and deadline ([guide](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#wrapping-a-third-party-hook)).
+
+**Platforms.** Tested on macOS and Linux (CI, Python 3.11 to 3.14); Windows is untested, as the fail-closed launcher (the shell wrapper
+`install` writes, which turns a hook that cannot start into a refusal) is POSIX-only.
 
 ## See it work
 
 `intentshield demo` sends three sample shell calls to the real hook, with `--builtin-tools`, and prints an allow, an ask and a deny.
-Nothing runs. It also sends one MCP call to the default install's hook, which adds a second deny (on main, after 0.4.3).
+Nothing runs. It also sends one MCP call to the default install's hook, which adds a second deny.
 
 The gateway mode (an MCP server your agent calls its tools through; see [docs/gateway.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/gateway.md))
 has its own check, 13 tests against a bundled demo MCP server. It does not check the proxy that `wrap` installs; `doctor --connect`
-(on main, after 0.4.3) starts each wrapped server through its proxy. The JSON report goes to stdout and log lines to
-stderr, so this one-liner prints only the verdict (with [uv](https://docs.astral.sh/uv/) and nothing installed, prefix it with
-`uvx --from intentshield-mcp`):
+starts each wrapped server through its proxy. With [uv](https://docs.astral.sh/uv/) and nothing installed, prefix the command with
+`uvx --from intentshield-mcp`:
 
 ```sh
-intentshield-mcp-verify --demo --stdio 2>/dev/null | python3 -c "import sys, json; r = json.load(sys.stdin); print(r['status'], r['summary'])"
-# PASS {'failed': 0, 'guarded_tools_discovered': 3, 'passed': 13, 'warnings': 0}
+intentshield-mcp-verify --demo --stdio --summary
+# PASS 13/13 checks
 ```
-
-`intentshield-mcp-verify --demo --stdio --summary` prints `PASS 13/13 checks` and needs no one-liner (on main, after 0.4.3).
 
 ## Put the proxy in front of MCP servers
 
@@ -82,22 +106,25 @@ servers. If you have no MCP servers, there is nothing to wrap. Restart the clien
 
 ```sh
 intentshield wrap .mcp.json          # or ~/.claude.json (servers added with `claude mcp add`), Cursor mcp.json, Gemini settings.json,
-                                     # ~/.codex/config.toml, VS Code mcp.json (on main, after 0.4.3)
+                                     # ~/.codex/config.toml, VS Code mcp.json
 intentshield unwrap .mcp.json        # undo; add --dry-run to either command to preview
 ```
 
 `wrap` reads JSON files with an `mcpServers` object (Claude Code, Cursor, Gemini CLI and other clients that use that layout), VS Code's
-`servers` or `mcp.servers` key and the `[mcp_servers.NAME]` tables of Codex CLI's `~/.codex/config.toml` (the last two on main, after 0.4.3).
+`servers` or `mcp.servers` key and the `[mcp_servers.NAME]` tables of Codex CLI's `~/.codex/config.toml`.
 Only files in a `.gemini` or `.vscode` folder, or in VS Code's user folder, may hold comments; any other JSON file must be strict
-JSON, or the command stops and says what to remove. It rewrites each stdio
-server to start through `intentshield-mcp --transparent`, which hides poisoned or changed tool descriptions and flags injected
-results. HTTP servers (`"url"`) are left alone. A wrapped server sees only the environment variables its entry names, plus basics such
-as `PATH` and `HOME`. `install` and `wrap` write absolute paths of this machine, so do not commit a wrapped project file or a
-`--scope project` hook file.
+JSON, or the command stops and says what to remove.
 
-`intentshield scan` checks the servers you already use, offline: poisoned descriptions, credentials in configs, and tools that
-changed since the last scan
-([details](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#scan-the-mcp-servers-you-already-use)).
+`wrap` rewrites each stdio server to start through `intentshield-mcp --transparent`, which hides poisoned or changed tool descriptions
+and flags injected results. HTTP servers (`"url"`) are left alone. A wrapped server sees only the environment variables its entry
+names, plus basics such as `PATH` and `HOME`.
+
+`install` and `wrap` write absolute paths of this machine, so do not commit a wrapped project file or a `--scope project` hook file.
+
+`intentshield scan` checks the servers you already use: poisoned descriptions, credentials in configs, and tools that changed since
+the last scan ([details](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md#scan-the-mcp-servers-you-already-use)). It starts each configured server to list its tools,
+which runs the server's code, and calls none of them; `--no-connect` reads the configs only. Servers named by a file in the
+working directory start only with `--connect-project`; `intentshield scan .mcp.json` names a file yourself.
 
 ## What it stops and does not stop
 
@@ -105,7 +132,7 @@ changed since the last scan
 |---|---|
 | Instructions injected into a tool call's arguments or a tool result | Plain-language injections with no instruction marker (the optional judge reads these) |
 | A value a tool result supplied that the user never gave: an address, URL, path or credential | Most non-English injections: the rules read two phrases in 11 languages |
-| Poisoned tool descriptions, and descriptions that change after you accepted them (a "rug pull"), through the proxy | The harness's own shell and file tools, unless installed with `--builtin-tools` (opt-in, best effort; `Grep` is read, `Glob` and directory listings are not). What an MCP filesystem or shell server is asked to do is read only by its `path` and `command` arguments (on main, after 0.4.3) |
+| Poisoned tool descriptions, and descriptions that change after you accepted them (a "rug pull"), through the proxy | The harness's own shell and file tools, unless installed with `--builtin-tools` (opt-in, best effort; `Grep` is read, `Glob` and directory listings are not). What an MCP filesystem or shell server is asked to do is read only by its `path` and `command` arguments |
 | Tools that ask for the model's name or system prompt ("self-disclosure parameters": the guard removes them from the schema) | HTTP MCP servers under `wrap` |
 | A hook that cannot start or crashes: `install` adds a launcher that turns it into a refusal (POSIX shells) | A Codex hook you have not trusted yet: Codex skips it silently |
 
@@ -119,10 +146,10 @@ What each layer sees, per harness: [docs/layers.md](https://github.com/Suhas-123
 These files are in `~/.intentshield`:
 - `hooks.db` (file mode 0600): the hook's per-session state. It holds your prompts, with any credential the guard recognises replaced by
   a short hash, and the values (addresses, URLs, paths) it took from tool calls and results. A clean session is forgotten after 7 days
-  without activity, one that holds taint or a flag after 30.
+  without activity, one that holds a flag or taint (it read an injected result) after 30.
 - `threats.db`: learned threat memory (30 days unless confirmed).
-- `gateway.db`, and for each wrapped server `proxies/<server>-<hash>.db` (on main, after 0.4.3; `proxies/<server>.db` in 0.4.3): an audit
-  database with call arguments and results, with no expiry.
+- `gateway.db`, and for each wrapped server `proxies/<server>-<hash>.db` (a server wrapped by 0.4.3 keeps its `proxies/<server>.db`): an
+  audit database with call arguments and results, with no expiry.
 - `backups/`: each settings or MCP file as it was before `install` or `wrap` first changed it; it can hold tokens that were already in
   that file.
 - `.env`: a judge key, if you set one.
@@ -170,8 +197,8 @@ The weak numbers come first; protocols, intervals and caveats are in [docs/bench
 What the table shows:
 - No guarded arm let a harmful action run, against 15 to 59% unguarded, but the trivial baseline reaches 0.0% too, so this metric
   cannot rank guards.
-- The gateway's measurable gain is that no harmful call waits in the review queue (the baseline leaves up to 19% of cases there); it
-  costs 8 to 14 points of task completion against the baseline.
+- The gateway's measurable gain is that no harmful call waits in the review queue (the baseline leaves up to 19% of cases there).
+- It costs 8 to 14 points of task completion against the baseline, and it raises the reviews per case on three of the four agents.
 
 What it does not show: these are single runs of small models on tuning templates, and only the three qwen2.5:7b arms were rerun on
 recent code. Overhead is about 75 ms per hook event and about 150 ms per guarded MCP call (`benchmarks/latency.py`).
@@ -184,6 +211,7 @@ From a clone, after `uv sync --group dev` (the PyPI source distribution has no t
 |---|---|---|---|
 | `uv run python benchmarks/paper_numbers.py` | every MSB table above, with paired bootstrap intervals | none: committed traces | about 3 s |
 | `uv run python benchmarks/hook_fidelity/report_numbers.py` | every figure in the hook-study report | none: committed rows | under 1 s |
+| `uv run python benchmarks/hook_fidelity/fresh_report.py --out <empty directory> --current-rules` | the denies-alone comparison with the rules in your checkout, beside the study's | none: committed fixtures | about 3 s |
 | `uv run python benchmarks/latency.py --calls 50 --hooks 30 --out <file>` | hook and proxy overhead on your machine | none | about 15 s |
 | `uv run python benchmarks/mcptox.py --data <MCPTox-Benchmark checkout> --replay`, `uv run python benchmarks/injection_eval.py` (flags in `results/README.md`) | MCPTox replay rows; injection detection table (rules column) | MCPTox-Benchmark and InjecAgent checkouts | `injection_eval.py` about 2 s; the other not timed |
 
@@ -193,24 +221,31 @@ and [results/hook-fidelity/README.md](https://github.com/Suhas-123-cell/IntentSh
 
 ## The hook study
 
-What coding-agent tools do with the verdict a hook returns; the [report](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/hook-fidelity-report.md) is about 2,000 words.
+What coding-agent tools do with the verdict a hook returns; the [report](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/hook-fidelity-report.md) is about 2,600 words.
 
 - **Setup.** Real builds of Claude Code (27 scored builds), Codex CLI (14) and Gemini CLI (28), run headless on macOS against a scripted
   stub model. Cursor was not measured. IntentShield's own hook is one of the things measured.
-- **Deny and ask.** A `deny` the harness parsed was enforced on every build where the hook ran. An `ask` with nobody to answer it was
-  refused by Claude Code from 2.1.85, ignored by Codex CLI, and run or left hanging by Gemini CLI.
-- **Failures.** A hook that ran past its timeout let the call run on every build tested. Claude Code's `onFailure: "block"`, which
-  `install` writes, blocked it on 2.1.316 and had no effect on 2.1.281. A hook that printed nothing, exited 1 or had a missing
-  interpreter was tested on one Claude Code and two Codex CLI builds only; a missing interpreter was also run on 26 Gemini CLI builds.
-- **Other guards.** Mixed. Before its dangerous-command rules IntentShield let through 137 of 166 harmful calls, against 31 of 130 for
-  safety-net and 67 of 117 for knox on their own scopes. With the opt-in rules it is behind safety-net on denies alone (24 of 85
-  harmful calls denied, against 41 of 85). Its gain elsewhere fits its own rule categories and is post hoc. On benign calls it ties
-  safety-net and trails knox.
+- **Deny.** A `deny` the harness parsed was enforced on every build where the hook ran.
+- **Ask.** An `ask` with nobody to answer it was refused by Claude Code from 2.1.85, ignored by Codex CLI, and run or left hanging by
+  Gemini CLI. The Claude Code sweep ran with Bash pre-approved; the same cell with nothing pre-approved was run on one build, 2.1.316,
+  where it was refused. Whether the change at 2.1.85 survives without the pre-approval was not measured.
+- **Timeouts.** A hook that ran past its timeout let the call run on every build tested. Claude Code's `onFailure: "block"`, which
+  `install` writes, blocked it on 2.1.316 and had no effect on 2.1.281.
+- **Other failures.** A hook that printed nothing, exited 1 or had a missing interpreter was tested on one Claude Code and two Codex CLI
+  builds only; a missing interpreter was also run on 26 Gemini CLI builds.
+- **Other guards.** The result is mixed. Before its dangerous-command rules IntentShield let through 137 of 166 harmful calls, against
+  31 of 130 for safety-net and 67 of 117 for knox on their own scopes.
+- **Denies alone.** Where nobody answers an ask, only a deny stops a call. With the opt-in rules as they were when scored, IntentShield denied 24 of 85 harmful calls and safety-net 41 of 85
+  (sign test p = 0.0033). The rules have changed since. Scoring the same items with the rules in the repository now, with
+  `benchmarks/hook_fidelity/fresh_report.py --current-rules`, gives 29 of 85 (p = 0.043); the report has both.
+- **Where it gains.** Its gain elsewhere fits its own rule categories and is post hoc. On benign calls it ties safety-net and trails knox.
 - **Limits and status.** One author, one operating system, a stub model, author-written fixtures, no second coder. A measurement note
   and an artifact, not a paper; nothing was sent to a vendor.
 
 ## Documentation
 
-- [docs/README.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/README.md): a reading path with word counts. The research verdict: [docs/contribution.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/contribution.md).
-- [docs/guide.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md): hooks, the proxy, scan, settings, troubleshooting, the [built-in tool rules](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#built-in-tools-and-the-dangerous-command-rules) and [wrapping a third-party hook](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#wrapping-a-third-party-hook). [docs/gateway.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/gateway.md): the gateway, dashboard and REST API. [docs/layers.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md): what each layer sees and stops. [docs/benchmarks.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/benchmarks.md): every protocol, table and limit.
+- [docs/README.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/README.md): which files are the product documentation and which are archived notes, and a reading path with word counts. The research verdict: [docs/contribution.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/contribution.md).
+- [docs/guide.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md): hooks, the proxy, scan, settings, troubleshooting, the [built-in tool rules](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#built-in-tools-and-the-dangerous-command-rules) and [wrapping a third-party hook](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#wrapping-a-third-party-hook).
+- [docs/gateway.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/gateway.md): the gateway, dashboard and REST API. [docs/layers.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/layers.md): what each layer sees and stops.
+- [docs/benchmarks.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/benchmarks.md): every protocol, table and limit.
 - [SECURITY.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/SECURITY.md), [CONTRIBUTING.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/CONTRIBUTING.md), [CHANGELOG.md](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md), [CITATION.cff](https://github.com/Suhas-123-cell/IntentShield/blob/main/CITATION.cff). Licence: Apache-2.0, [LICENSE](https://github.com/Suhas-123-cell/IntentShield/blob/main/LICENSE).

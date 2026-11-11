@@ -93,6 +93,7 @@ def test_the_changelog_has_a_heading_for_the_package_version():
 
 MAX_PARAGRAPH = 900
 MAX_PARAGRAPH_ARCHITECTURE = 500
+MAX_PARAGRAPH_README = 700
 PARAGRAPH_FILES = (
     "README.md",
     "CONTRIBUTING.md",
@@ -153,6 +154,10 @@ def _long_paragraphs(name: str, limit: int, root: Path | None = None) -> list[st
 @pytest.mark.parametrize("name", PARAGRAPH_FILES)
 def test_no_paragraph_in_the_front_door_documents_is_longer_than_900_characters(name):
     assert not _long_paragraphs(name, MAX_PARAGRAPH)
+
+
+def test_no_paragraph_in_the_readme_is_longer_than_700_characters():
+    assert not _long_paragraphs("README.md", MAX_PARAGRAPH_README)
 
 
 def test_no_paragraph_in_the_architecture_document_is_longer_than_500_characters():

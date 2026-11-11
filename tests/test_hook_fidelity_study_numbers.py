@@ -3,12 +3,14 @@ benchmarks/paper_numbers.py does for the MSB papers. A reviewer found 20 count a
 rows;
 this pins the ones that were wrong so they cannot drift back."""
 import json
-import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "benchmarks"))
 RES = ROOT / "results" / "hook-fidelity"
+if not RES.is_dir():
+    pytest.skip("needs the repository's docs/ and results/ (a full clone, not an installed package)", allow_module_level=True)
 STUDY = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md").read_text()
 
 

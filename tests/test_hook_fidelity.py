@@ -16,7 +16,6 @@ from pathlib import Path
 import pytest
 
 BENCH = Path(__file__).resolve().parents[1] / "benchmarks"
-sys.path.insert(0, str(BENCH))
 from hook_fidelity import cells, codex_matrix, configs, run, scoring, stubhook, summarize  # noqa: E402
 
 from intentshield.evaluation import wilson  # noqa: E402

@@ -4,118 +4,74 @@ User-visible changes go under `## Unreleased` (see [CONTRIBUTING.md](CONTRIBUTIN
 
 ## Unreleased
 
+### Upgrading from 0.4.3
+
+Nothing to run: an installed hook keeps working. What changes for you:
+
+- **Everyone:** `doctor` right after an install exits 0 with a `warn` (0.4.3 exited 1 with a `FAIL`) and prints `note` lines only with
+  `--verbose`. `wrap` can exit 1 where it exited 0.
+- **Everyone:** `install claude --scope project` writes `.claude/settings.local.json`; install again to move a 0.4.3 hook out of
+  `.claude/settings.json`.
+- **Everyone:** a `wrap` of a new server names its database `NAME-<hash>.db`; the files of 0.4.3 are used as they are.
+- **Everyone:** an injection split between two text blocks, a call named `mcp__x` and a result over 1,000,000 characters are now
+  flagged, refused or asked about.
+- **Everyone:** a call whose tool name is not text, or a Gemini CLI tool named like an MCP tool with no `mcp_context`, is refused with a
+  reason; the transparent proxy answers a message that is not a JSON-RPC request with `-32600`.
+- **Everyone:** `pip install intentshield-mcp[dev]` no longer exists; contributors run `uv sync --group dev`.
+- **Only with `--builtin-tools`:** more commands are denied or asked about, and a few false asks and denies stop (a backup of
+  `~/.ssh/config`, `~/.ssh/known_hosts`); this applies as soon as the package is upgraded. See [the rules](docs/guide.md#built-in-tools-and-the-dangerous-command-rules).
+
 ### Added
 
-- `wrap` and `unwrap` read Codex CLI's `~/.codex/config.toml` (`[mcp_servers.NAME]` tables) and VS Code's `servers` key
-  (`mcp.json`) and `mcp.servers` key (`settings.json`), as well as `mcpServers` files. A TOML entry written as an inline table or
-  with dotted keys is skipped with a message that names the manual entry. A file with no servers it can read now says which formats
-  it reads.
-- `intentshield doctor` prints an `ok` line per file whose wrapped servers passed (naming them) and counts warnings in its summary.
-  `--connect` starts each wrapped server once through its proxy and lists its tools, which runs the server's code; servers named by
-  a file in the working directory are started only with `--connect-project`. Without these flags it starts nothing.
+- `wrap` and `unwrap` read Codex CLI's `~/.codex/config.toml` and VS Code's `mcp.json` and `settings.json`; a file with no servers it
+  can read says which formats it reads ([layers.md](docs/layers.md)).
+- `doctor` prints an `ok` line per file whose wrapped servers passed. `doctor --connect` starts each wrapped server through its proxy
+  and lists its tools (`--connect-project` for servers named by a file in the working directory); without them it starts nothing.
+- `doctor --verbose` lists the `note` lines, which `doctor` now counts; paths under your home print as `~/`.
 - `intentshield-mcp-verify --summary` prints `PASS 13/13 checks` and one line per failing check.
-- `intentshield demo` also sends one MCP call (an injected argument) to the default install's hook, and ends with the command that
-  adds the shell and file tools. `intentshield install` says when the default install guards MCP calls only, and says which options
-  a reinstall dropped (`--builtin-tools`, `--review always`).
-- `wrap-hook --print-entry --harness cursor` notes that the entry needs `"failClosed": true`. `scan` names the address of an HTTP
-  server that failed and says that `--no-connect` checks configs only.
-- `intentshield doctor --verbose` lists the `note` lines. Without it `doctor` counts them and says how many it left out. Paths under
-  your home print as `~/`.
-- `wrap` ends with a `Next:` line: restart the client, then run `doctor --connect` (or `--connect-project` for a file in the working
-  directory).
-- `scan` prints, under each `tool_poisoning` finding, what each rule that matched means and the first words that matched. The JSON
-  findings get a `detail` key when it is not empty. The proxy logs one warning for each tool it hides, with the rules that matched.
-- Only with `--builtin-tools`: the hook also reads the arguments of an MCP tool. Those named `path`, `paths`, `file`, `filename`,
-  `file_path`, `filepath`, `source`, `destination`, `dest` or `target` go through the file rules (as a write when the tool's name says
-  it writes, moves, deletes, creates or edits), and `command` or `cmd` through the shell rules. It only makes a verdict stricter. A
-  tool named `list`, `tree`, `info`, `exists` or `search` is not read, and neither is an argument under another name.
+- `intentshield demo` also sends one MCP call to the default install's hook. `install` says when it guards MCP calls only, and which
+  options a reinstall dropped.
+- `wrap` ends with a `Next:` line. `wrap-hook --print-entry --harness cursor` notes that the entry needs `"failClosed": true`. `scan`
+  names the address of an HTTP server that failed.
+- `scan` prints what each matched `tool_poisoning` rule means and the first words that matched; the proxy logs one warning for each
+  tool it hides.
+- Only with `--builtin-tools`: the hook also reads the arguments of an MCP tool, a path through the file rules and `command` or `cmd`
+  through the shell rules. It only makes a verdict stricter ([guide](docs/guide.md#built-in-tools-and-the-dangerous-command-rules)).
+- The proxy config takes `trusted_tools` (`server:tool` names). A description that only names a secret file still hides its tool, and
+  no longer counts as an attack by its server ([guide](docs/guide.md#troubleshooting)).
 
 ### Changed
 
-- A tool result split across adjacent text blocks is now scanned as one text, so an injected phrase cut between blocks is flagged by
-  the hook and by the proxy.
-- A tool call named `mcp__x` with no tool part is refused by the Claude Code hook; it was let through unchecked.
-- `install`, `uninstall`, `wrap` and `unwrap` give the file back with its exact bytes (line endings, comments, spacing).
-  `uninstall` puts back an original settings file that was empty or `{}` instead of deleting it, and keeps a backup that records
-  wrapped servers.
-- `intentshield doctor --help` and the README now say what doctor checks: files and commands, not a running server.
-- Python 3.11 is supported (CI runs 3.11 to 3.14). The development tools moved from the `dev` extra to a dependency group
-  (`uv sync --group dev`); the published package has no `dev` extra.
-- Only with `--builtin-tools`: the deny and ask rules read the command behind about 80 wrapper programs (`sudo`, `env`, `flock`,
-  `time`, `watch`, `ssh host CMD`, `find -exec`, `fd -x`, ...) and the PowerShell cmdlets that match a rule (`Remove-Item -Recurse
-  -Force`, `Get-Content` of a credential file, an upload, a download run with `Invoke-Expression`). A command with more than 8
-  wrappers, more than 200 substitutions or a brace list too long to expand now asks, with the limit named. After an injection a
-  written script over 200,000 characters asks. `ssh -i KEY host` is not a read of the key; `.zshrc.bak` is no longer asked about as
-  startup persistence; `id_rsa.bak` outside `.ssh` is a key.
-- `intentshield doctor` right after an `install` is a `warn` that says no hook has run yet and exits 0; the same state an hour later is
-  a `FAIL`. `install` ends with the same advice. A `note` that was always printed is now counted and shown with `--verbose`. The
-  "version unknown" note is reworded. `doctor` warns when the `env` block of a Claude Code settings file sets one of the variables
-  that loosen the guard (`INTENTSHIELD_HOOK_REVIEW=never` and the like).
-- `intentshield install claude --scope project` writes `.claude/settings.local.json`, not `.claude/settings.json`. A hook that 0.4.3
-  left in `.claude/settings.json` is removed when you install again, and `uninstall` and `doctor` read both files.
-- `wrap` exits 1, with a line on stderr, when it skipped a stdio server because of its entry (interpolation in the command line, a bad
-  command or arguments, or a server the proxy refuses). Skipping a server that is not stdio does not change the exit status. The
-  error for a Codex `config.toml` that does not parse names the file and says what to do. `wrap-hook` denies a reply from the
-  wrapped guard that repeats a JSON key.
-- The hook's reply carries a note when a variable that loosens the guard is set where the hook runs (all harnesses but Cursor, which
-  has no field for it, on every call event, with or without `--builtin-tools`). A tool result over 1,000,000 characters is scanned at
-  its first and last 500,000; the reply tells the model the rest was not read, and later state-changing calls in the session ask.
-- The help text of `intentshield-mcp --host` said a non-loopback address was accepted with a token. It never was: the server refuses
-  any address but loopback, and the help text and the error now say so.
-- Only with `--builtin-tools`: the dangerous-command rules changed in these ways.
-  - A write by a redirect, `cp`, `mv`, `ln`, `install`, `dd`, `tee` or `sed -i`, or by the Write and Edit tools, asks when it
-    targets IntentShield's own programs or installed package (a developer of IntentShield itself is asked before each edit of its
-    source), a proxy config under `~/.intentshield/proxies/`, or an MCP client file that holds a wrapped server.
-  - A program that no rule reads (`git add`, `gh gist create`, `az`, `rsync`, `curl file://`, `ln -s`) asks when it is given a key,
-    a cloud credential or a `.netrc`. `ssh`, `ssh-add`, `ssh-keygen`, `ls`, `stat`, `chmod`, `rm` and similar names-only programs
-    do not. Reading `~/.aws` and `~/.gnupg`, or a glob over them, is a deny; `~/.kube`, `~/.docker`, `~/.config/gh` and
-    `~/.config/gcloud` ask; `$(< key)` and a loop fed from a key are denies. A Grep over the whole home directory asks.
-  - `cat /etc/sudoers` asks (a write is still a deny). `exec 3<>/dev/tcp/HOST/PORT` is a deny when something reads the socket (a
-    `while read` loop, a shell, `eval`, `<&3`, `$line`), otherwise it asks, and a socket to localhost is allowed.
-  - A key fixture such as `/project/tests/fixtures/id_rsa` asks instead of being denied when it lies inside the call's working
-    directory. `/run`, `/nix`, `/cores` and `/lost+found` are system directories.
-  - `git config --get core.hooksPath` and `--unset` no longer ask. After an injection `curl http://localhost:8000/x` passes like
-    `curl localhost:8000/x`; `-X DELETE` still asks.
-  - On Codex CLI and Gemini CLI, a tool the hook does not know by name whose input has a text `command` or `cmd` is read as a shell
-    call.
-- Documents: the README leads with `uv tool install intentshield-mcp` or `pipx install` (pip refuses a system Python), and its install
-  block runs as written. The README and the guide mark what is on main and not in 0.4.3 with "on main, after 0.4.3". The injection
-  figures say that they were measured with the rules as they were before 0.3.5, and that most of the exemplar detector's 18.1% is in
-  distribution for its index (3.2% on sources it never saw). The hook study report is about 2,000 words with an
-  [appendix](docs/hook-fidelity-report-appendix.md).
+- A tool result split across adjacent text blocks is scanned as one text, by the hook and by the proxy.
+- A tool call named `mcp__x` with no tool part is refused by the Claude Code hook; it was let through.
+- `install`, `uninstall`, `wrap` and `unwrap` give a file back with its exact bytes. `uninstall` puts back an original settings file
+  that was empty or `{}`.
+- Python 3.11 is supported (CI runs 3.11 to 3.14). The development tools moved from the `dev` extra to a dependency group.
+- `doctor` right after an `install` is a `warn` that exits 0; the same state an hour later is a `FAIL`. It warns when a Claude Code
+  `env` block sets a variable that loosens the guard.
+- `install claude --scope project` writes `.claude/settings.local.json`; `uninstall` and `doctor` read both files.
+- `wrap` exits 1, with a line on stderr, when it skipped a stdio server because of its entry. `wrap-hook` denies a reply that repeats a
+  JSON key.
+- The hook's reply carries a note when a variable that loosens the guard is set where it runs (not on Cursor). A tool result over
+  1,000,000 characters is scanned at its two ends, and later state-changing calls ask.
+- A call whose tool name is not text (Claude Code, Codex CLI), or is named like an MCP tool with no `mcp_context` (Gemini CLI), is
+  refused with the reason; with `--builtin-tools` so is a call with no tool name. The transparent proxy answers a message that is
+  not a JSON-RPC request with `-32600` and keeps serving.
+- `doctor` writes `~/` only where a path starts, so the `wrap` command it prints can be copied. `wrap`'s `Next:` line asks you to close
+  the client only for `~/.claude.json`; `scan` cuts a start-up error at a word.
+- The help text of `intentshield-mcp --host` said a non-loopback address was accepted with a token; the server refuses it, and the help
+  and the error now say so.
+- Only with `--builtin-tools`: the rules read the command behind about 80 wrapper programs and the PowerShell cmdlets, deny or ask in
+  more cases (a credential given to an unlisted program, `~/.aws`, `/etc/sudoers`, a raw socket, a write to IntentShield's own files, a redirect over a key, `rsync --delete` onto a system directory)
+  and ask less in a few; a relative path is read from the call's directory and a file in `~/.ssh` by what it is
+  ([the full list](docs/guide.md#built-in-tools-and-the-dangerous-command-rules)).
 
 ### Fixed
 
 - A proxy audit database is named like its proxy config (`NAME-<hash>.db`), so two clients' servers of the same name no longer share
-  one. A server wrapped by 0.4.3 keeps the `NAME.db` it has, also when it is wrapped again.
-- A failure of the threat-memory file is reported with the name of the method that failed and the call goes on as if the memory knew
-  nothing; the hook and the proxy now share one wrapper for this.
-
-### Upgrading from 0.4.3
-
-Nothing to run: an installed hook keeps working. Behaviour that changes for you:
-
-- **Everyone:** a reinstall prints which options it dropped, if any. `intentshield install <harness>` still guards MCP calls only.
-- **Everyone:** a `wrap` of a server that has no database yet names it `NAME-<hash>.db` instead of `NAME.db`. Proxy configs and
-  databases from 0.4.3 are not renamed and are used as they are.
-- **Everyone:** an injection split between two text blocks of a result, and a call named `mcp__x` with no tool part, are now refused
-  or flagged where they passed before.
-- **Everyone:** `pip install intentshield-mcp[dev]` no longer exists (pip warns that the extra is unknown). Contributors run
-  `uv sync --group dev`.
-- **Everyone:** `doctor` right after an install exits 0 with a `warn`, where 0.4.3 exited 1 with a `FAIL`; a script that relied on
-  the exit status needs to know. `doctor` prints notes only with `--verbose`. `wrap` can exit 1 where it exited 0, when it skipped a
-  stdio server for its entry.
-- **Everyone:** `install claude --scope project` writes `.claude/settings.local.json`. If you installed with 0.4.3, install again
-  and the old hook leaves `.claude/settings.json`.
-- **Everyone:** a result over 1,000,000 characters is scanned at its two ends and makes later state-changing calls in that session
-  ask. A hook that starts with a loosening variable set says so in its reply as well as on stderr.
-- **Only with `--builtin-tools`:** more commands are denied or asked about (a deny behind a wrapper, `find -exec`, `ssh host` and the
-  PowerShell cmdlets), a few more are asked because they pass a limit, and two false asks stop (`ssh -i`, `.zshrc.bak`). This applies
-  to an install made with `--builtin-tools` as soon as the package is upgraded; the rules are text rules and best effort.
-- **Only with `--builtin-tools`:** more is asked or denied: the arguments of MCP tools, writes to IntentShield's own files and to
-  wrapped client files, a key or credential given to a program no rule reads, `~/.aws`, `~/.gnupg` and `/etc/sudoers`, and a raw
-  socket to another machine. Less is asked: a key fixture inside the working directory (an ask, was a deny), `git config` reads, a
-  `curl` to localhost with a scheme after an injection, and a socket to localhost.
+  one.
+- A failure of the threat-memory file is reported with the name of the method that failed, and the call goes on as if the memory knew
+  nothing.
 
 ## 0.4.3 - 2026-11-11
 

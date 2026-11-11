@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 BENCH = Path(__file__).resolve().parents[1] / "benchmarks"
-sys.path.insert(0, str(BENCH))
 from hook_fidelity import coverage_run, coverage_summarize, stub_model  # noqa: E402
 from hook_fidelity.coverage_probe_server import markers_for  # noqa: E402
 from hook_fidelity.stub_model import Script, StubServer  # noqa: E402

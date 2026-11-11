@@ -12,6 +12,11 @@ support for (the knox row changed from 75/104 to 44/73 on its claimed scope). Ea
 its claimed scope (SCOPE below), taken from the guard's own README, and IntentShield is scored on the same items.
 
     fresh_report.py --out <empty scratch directory>
+    fresh_report.py --out <empty scratch directory> --current-rules
+
+With --current-rules the IntentShield rows are not the committed ones: the same fixtures are run in process through the code in this
+checkout (`detect_compare.decide_intentshield`, no network, nothing executed), and every IntentShield figure of the output is for those
+rules. The committed tables are the rules as they stood when the study ran.
 
 Guards scored (decisions.jsonl rows, built by fresh_build.py and the driver scripts -- see README.md
 for how each guard's decisions were produced): intentshield (as on r8-detect, commit 81446c3), intentshield-r8fix (r8-fixrules
@@ -33,7 +38,7 @@ from typing import Callable
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from detect_compare import outcome  # noqa: E402
+from detect_compare import decide_intentshield, outcome  # noqa: E402
 
 ROOT = HERE.parent.parent
 FRESH = ROOT / "results/hook-fidelity/detect/fresh"
@@ -248,11 +253,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True,
                         help="directory to write table.md and summary.json into (created if missing); the committed copies are "
                              "results/hook-fidelity/detect/fresh/, so give a scratch directory and diff against them")
+    parser.add_argument("--current-rules", action="store_true",
+                        help="score IntentShield with the code in this checkout instead of the committed decisions; "
+                             "every other guard keeps its committed decisions")
     args = parser.parse_args(argv)
     rows = load_fixtures()
     decisions = [json.loads(line) for line in (FRESH / "decisions.jsonl").read_text().splitlines()]
+    if args.current_rules:
+        now = decide_intentshield(rows, "intentshield")
+        for decision in now:
+            decision["guard"] = IS
+        decisions = [d for d in decisions if d["guard"] != IS] + now
     delivery = json.loads((ROOT / "results/hook-fidelity/detect/r8fix/delivery.json").read_text())
-    lines, summary = build_report(rows, decisions, delivery)
+    label = GUARD_LABEL[IS]
+    if args.current_rules:
+        GUARD_LABEL[IS] = "IntentShield, the rules in this checkout (not the study's)"
+    try:
+        lines, summary = build_report(rows, decisions, delivery)
+    finally:
+        GUARD_LABEL[IS] = label
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "table.md").write_text("\n".join(lines) + "\n")
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")

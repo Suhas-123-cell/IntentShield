@@ -97,6 +97,10 @@ class MCPProxyConfig(BaseModel):
     # Tools whose description or schema text matches poisoning rules are shown
     # as unavailable and every call to them is blocked.
     quarantine_poisoned_tools: bool = True
+    # Qualified ``server:tool`` names whose description may name a key, a credential or a secrets file (a tool that reads the
+    # project's ``.env``, a tool that returns the public key): the ``sensitive_target`` rule alone does not hide them. Every other
+    # rule still does, and the description is still pinned by its hash.
+    trusted_tools: list[str] = Field(default_factory=list)
     # A recipient, URL, account or path whose only source is a tool output sends the
     # call to review, whether or not the scanners flagged that output. A side-effecting
     # call always does; this setting decides it for reads.
@@ -196,6 +200,8 @@ class MCPProxyConfig(BaseModel):
         )
         if any(":" not in key for key in scoped_keys):
             raise ValueError("Resource and destination policies require qualified server:tool keys")
+        if any(":" not in name for name in self.trusted_tools):
+            raise ValueError("trusted_tools needs qualified server:tool names")
         if self.allowed_resources or self.allowed_destinations:
             raise ValueError(
                 "MCP scope policy must use allowed_resources_by_tool and "
@@ -1035,9 +1041,14 @@ class MCPProxyRuntime:
             foreign = set().union(*(names for sid, names in names_by_server.items() if sid != tool.server_id),
                                   catalog_names)
             findings = scan_description(text, foreign - own_names)
+            if qualified in self.config.trusted_tools:  # the operator vouches for a description that names a secret file
+                findings = [rule for rule in findings if rule != "sensitive_target"]
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
-            if findings:  # one listing is one "run": several poisoned tools must not count as many
+            if any(rule != "sensitive_target" for rule in findings):
+                # One listing is one "run": several poisoned tools must not count as many. A description that only names a
+                # secret file is a weak signal (a tool may say it reads the .env): it hides the tool but is not learned
+                # as an attack by its server.
                 self._recall.record_attack(text, findings, source=tool.server_id, run_key=f"catalog:{tool.server_id}")
             if not findings and qualified not in self._quarantined:
                 if self._recall.check_text(text, target="description"):

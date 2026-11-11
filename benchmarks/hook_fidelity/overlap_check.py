@@ -7,8 +7,9 @@ when the set was built. The unit tests of the dangerous-command rules were writt
 strings (canonical dangerous commands such as `rm -rf /` or `git push --force`; the rules were written from category lists, so
 this may be coincidence). This script counts the overlap with a plain substring match and rescores the 214-call set without the
 overlapping items, and the 467-fixture set's before and after figures without its overlapping items, so a reader can see how
-much each comparison depends on them. `overlap_items.json` pins the items found at commit 1979d0e, which the report quotes; the
-script lists any item the current tree no longer matches.
+much each comparison depends on them. `overlap_items.json` pins the items found at commit 1979d0e, which the report quotes. The
+script lists any pinned item the current tree no longer matches and any item it now matches that is not pinned, and exits 1 when
+there is either: the report's figures are then for the pinned set, and the pin or the figures need to be redone.
 
     overlap_check.py [--roots tests src] [--json]
 
@@ -97,6 +98,13 @@ def rescored(excluded: set[str]) -> dict:
     return out
 
 
+def drift(result: dict) -> dict[str, list[str]]:
+    """The items pinned in ``overlap_items.json`` that the tree no longer matches, and the items it matches that are not pinned."""
+    pinned = set(PINNED["fixtures_467_set"]) | set(PINNED["fresh_214_call_set"])
+    now = set(result["fixtures_467_set"]["items"]) | set(result["fresh_214_call_set"]["items"])
+    return {"pinned_items_missing_now": sorted(pinned - now), "matched_now_but_not_pinned": sorted(now - pinned)}
+
+
 def rescored_467(excluded: set[str] | frozenset[str]) -> dict:
     """The 467-fixture set's harmful held-out figures, IntentShield before and after the built-in tool rules, without ``excluded``."""
     return rn.rules_before_after(excluded)
@@ -119,10 +127,11 @@ def main(argv: list[str] | None = None) -> int:
     pinned_467 = set(PINNED["fixtures_467_set"])
     result["fixtures_467_with_all_items"] = rescored_467(set())
     result["fixtures_467_without_overlap"] = rescored_467(pinned_467)
-    result["pinned_items_missing_now"] = sorted((pinned_467 | set(PINNED["fresh_214_call_set"])) - set(result["fixtures_467_set"]["items"]) - set(result["fresh_214_call_set"]["items"]))
+    result.update(drift(result))
+    status = 1 if result["pinned_items_missing_now"] or result["matched_now_but_not_pinned"] else 0
     if args.json:
         print(json.dumps(result, indent=1, sort_keys=True))
-        return 0
+        return status
     for name in ("fresh_214_call_set", "fixtures_467_set"):
         block = result[name]
         print(f"{name}: {block['overlapping']} of {block['harmful_items']} declared-held-out harmful built-in-tool items have their command or path in {', '.join(args.roots)}")
@@ -143,7 +152,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{label}, {b['n']} {text}: IntentShield lets through {b['before']} before the rules and {b['after']} after")
     if result["pinned_items_missing_now"]:
         print("pinned items whose string is no longer in the tree:", ", ".join(result["pinned_items_missing_now"]))
-    return 0
+    if result["matched_now_but_not_pinned"]:
+        print(f"{len(result['matched_now_but_not_pinned'])} items match the tree now that are not pinned "
+              f"({', '.join(result['matched_now_but_not_pinned'])}): the figures above include them, the report's do not")
+    return status
 
 
 if __name__ == "__main__":

@@ -75,10 +75,10 @@ session from recalled sources), and that further agents re-ran sampled cells and
 
 ## Finding 1 in detail
 
-> deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 deterministic
+> deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 scripted
 > cells on 65 builds, so the interval bounds repeatability, not a population rate
 
-The 218 rows are 83 cells repeated two to five times on a deterministic stub. The interval on rows says how repeatable the stub is and
+The 218 rows are 83 cells repeated two to five times on a scripted stub. The interval on rows says how repeatable the stub is and
 nothing about how often a deny is enforced across hooks, builds or users, so the build count is the figure to read. The 47 deny rows
 where the hook did not run are three causes: an untrusted Codex hook is skipped without any signal in `codex exec` (40 rows, 12 builds);
 a Claude Code hook scoped with the natural `mcp__.*` matcher does not see a resource read, which goes through a built-in tool name
@@ -191,8 +191,9 @@ items. Through the code on main after 0.4.3 it is 54: 51 go from ask to deny, 33
 HEAD`) go from deny to ask on the 214-call set, because a force-push to `HEAD` is now an ask. No benign row changed and none changed to
 allow in the `intentshield` variant; on main, after 0.4.3, `curl -s http://localhost:8000/health` goes from ask to allow in 5 rows of
 the `-always` and `-tainted` variants. On the 214-call set the 41 asked and 35 denied become 36 asked and 40 denied; 28 of 104 harmful
-calls are still let through and the 5 benign asks stay. The figures in the report are the study's, not these, and the denies-alone count
-(24/85) was not recomputed.
+calls are still let through and the 5 benign asks stay. The figures in the report are the study's, not these. The denies-alone count, recomputed with
+`fresh_report.py --current-rules` on the rules in the repository now, is 29/85 for IntentShield against safety-net's 41/85 (only IntentShield 9,
+only safety-net 21, p = 0.043).
 
 ## Limits in full
 
@@ -297,7 +298,7 @@ builds excluded (neutral control did not run the hook): {'Claude Code': ['2.1.0'
 | Gemini CLI | 28 | 28 | 0 |
 
 [findings]
-deny: deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 deterministic cells on 65 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 271 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2); deny rows where the hook did not run and the call was blocked anyway, in neither count: 6 (Gemini CLI 0.66.0 in mode M1, mcp rows 3, Gemini CLI 0.66.0 in mode M1, shell rows 3)
+deny: deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 scripted cells on 65 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 271 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2); deny rows where the hook did not run and the call was blocked anyway, in neither count: 6 (Gemini CLI 0.66.0 in mode M1, mcp rows 3, Gemini CLI 0.66.0 in mode M1, shell rows 3)
 ask_claude: Claude Code ask: RAN on 6 builds, BLOCKED on 21 of 27 measured; last RAN 2.1.84, first BLOCKED 2.1.85
 ask_codex: Codex ask: RAN on 12 of 12 builds
 ask_gemini: Gemini ask: RAN on 13, HUNG on 15 of 28 builds; last RAN 0.37.2, first HUNG 0.38.0

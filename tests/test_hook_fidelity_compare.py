@@ -5,13 +5,11 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "benchmarks"))
 from hook_fidelity import compare  # noqa: E402
 
 RESULTS = ROOT / "results" / "hook-fidelity" / "compare"

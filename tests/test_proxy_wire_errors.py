@@ -83,4 +83,19 @@ def test_refused_line_answers_a_request_with_the_id_it_came_with_and_never_a_not
     assert _refused_line(request(0, "tools/call", "x"))[0] == 0  # type: ignore[index]
     assert _refused_line(json.dumps({"jsonrpc": "2.0", "id": "abc", "method": "m", "params": 3}))[0] == "abc"  # type: ignore[index]
     assert _refused_line(json.dumps({"jsonrpc": "2.0", "method": "notifications/x", "params": [1]})) is None
-    assert _refused_line(json.dumps({"jsonrpc": "2.0", "id": True, "method": "m", "params": [1]})) is None
+    assert _refused_line(json.dumps({"jsonrpc": "2.0", "id": True, "method": "m", "params": [1]}))[1] == -32600  # type: ignore[index]
+
+
+@pytest.mark.parametrize("line", ["{}", "null", "[]", "5", '"text"', '[{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}]',
+                                  '{"jsonrpc": "2.0", "id": {"a": 1}, "method": "tools/list"}',
+                                  '{"jsonrpc": "2.0", "id": 1, "method": 7}', '{"jsonrpc": "2.0", "id": 1}'])
+def test_refused_line_answers_json_that_is_not_a_request_with_invalid_request(line):
+    assert _refused_line(line) is not None and _refused_line(line)[:2] == (None, -32600)  # type: ignore[index]
+
+
+def test_a_line_that_is_json_but_not_a_request_gets_an_error_and_the_proxy_keeps_serving(tmp_path):
+    batch = json.dumps([{"jsonrpc": "2.0", "id": 5, "method": "tools/list"}])
+    replies = converse(tmp_path, [INIT, READY, "{}", "null", batch, request(3, "tools/list", {})], answers=5)
+    errors = [r for r in replies if "error" in r]
+    assert len(errors) == 3 and all(e["error"]["code"] == -32600 and e["id"] is None for e in errors)
+    assert any(r.get("id") == 3 and r["result"]["tools"] for r in replies), "later calls are still served"

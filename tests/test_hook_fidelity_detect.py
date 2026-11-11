@@ -12,7 +12,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "benchmarks" / "hook_fidelity"))
-sys.path.insert(0, str(ROOT / "src"))
 
 import detect_compare as dc  # noqa: E402
 import detect_fixtures as df  # noqa: E402

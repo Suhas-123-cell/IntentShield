@@ -13,7 +13,11 @@ ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "benchmarks" / "hook_fidelity"
 sys.path.insert(0, str(BENCH))
 
+import pytest  # noqa: E402
 import report_numbers as rn  # noqa: E402
+
+if not (ROOT / "docs" / "hook-fidelity-report.md").is_file():
+    pytest.skip("needs the repository's docs/ and results/ (a full clone, not an installed package)", allow_module_level=True)
 
 REPORT = (ROOT / "docs" / "hook-fidelity-report.md").read_text()
 APPENDIX = (ROOT / "docs" / "hook-fidelity-report-appendix.md").read_text()
@@ -76,7 +80,7 @@ def test_report_headline_figures():
     rows = rn.stub_rows()
     f = rn.findings(rows)
     assert f["deny"].startswith("deny enforced where the hook ran: 65 of 65 builds, 218/218 ")
-    assert "83 deterministic cells on 65 builds" in f["deny"] and "bounds repeatability, not a population rate" in f["deny"]
+    assert "83 scripted cells on 65 builds" in f["deny"] and "bounds repeatability, not a population rate" in f["deny"]
     assert "47 of 271" in f["deny"]
     assert f["ask_claude"].endswith("last RAN 2.1.84, first BLOCKED 2.1.85")
     assert f["ask_gemini"].endswith("last RAN 0.37.2, first HUNG 0.38.0")
@@ -149,6 +153,45 @@ def test_the_467_set_is_also_rescored_without_the_items_now_in_the_rules_tests()
     assert len(pinned["fixtures_467_set"]) == 33 and set(pinned["fixtures_467_set"]) <= set(live)
 
 
+def test_the_claude_ask_flip_is_stated_with_the_pre_approval_and_the_one_unconfounded_build():
+    """Finding 2: the sweep ran with Bash pre-approved (M1h); the cell with nothing pre-approved (M0h) ran on 2.1.316 only."""
+    rows = rn.stub_rows() + rn.read("claude", "r4-gaps", "bisect", "runs.jsonl")
+    ask = [r for r in rows if (r["harness"], r["kind"], r["reply"], r["failcfg"]) == ("claude", "shell", "R3", "-")
+           and r["outcome"] != "INVALID"]
+    plain = [r for r in ask if r["mode"] == "M0h"]
+    assert {r["version"] for r in plain} == {"2.1.316"} and [r["outcome"] for r in plain] == ["BLOCKED"] * 5
+    assert {r["mode"] for r in ask if r["version"] != "2.1.316"} == {"M1h"}
+    flat = _flat(REPORT.split("**Finding 2.")[1].split("**Finding 3.")[0])
+    for needle in ("pre-approved", "one build, 2.1.316 (BLOCKED in 5 of 5 runs", "with the pre-approval only"):
+        assert needle in flat, needle
+
+
+def test_finding_1_says_what_the_65_counts_and_that_it_is_not_the_matrix_column():
+    r4 = [r for r in rn.stub_rows() if r["reply"] == "R4" and r["hook_invoked"] is True
+          and (r["harness"], r["version"]) not in rn.NOT_INTERPRETABLE]
+    per = {h: len({r["version"] for r in r4 if r["harness"] == h}) for h in ("claude", "codex", "gemini")}
+    assert per == {"claude": 22, "codex": 17, "gemini": 26}
+    flat = _flat(REPORT.split("**Finding 1.")[1].split("**Finding 2.")[0])
+    for needle in ("65 of 65 builds", "(22 Claude Code, 17 Codex CLI, 26 Gemini CLI)", "not the deny rows of the matrix"):
+        assert needle in flat, needle
+
+
+def test_the_denies_alone_figure_is_scoped_to_the_rules_it_was_scored_with_and_to_unattended_runs():
+    flat = _flat(REPORT)
+    assert "with the rules as they were when scored: safety-net 41/85, IntentShield 24/85" in flat
+    assert "fresh_report.py --current-rules" in flat and "that comparison was not made" in flat
+    assert "In unattended runs, where an ask is not a stop," in flat
+    readme = _flat((ROOT / "README.md").read_text())
+    assert "as they were when scored, IntentShield denied 24 of 85" in readme and "--current-rules" in readme
+
+
+def test_the_kill_criterion_in_the_report_carries_its_qualifications():
+    section = _flat(REPORT.split("- **Kill criterion.**")[1].split("- **Standing.**")[0])
+    for needle in ("20 undocumented groups", "2 of the 3 that replicate are Gemini CLI's",
+                   "At a threshold of 3 the criterion would be met"):
+        assert needle in section, needle
+
+
 def test_report_has_no_process_vocabulary():
     for word in ("round", "lane", "critic", "worktree", "branch"):
         assert not re.search(rf"\b{word}s?\b", BOTH, re.I), word
@@ -156,7 +199,7 @@ def test_report_has_no_process_vocabulary():
 
 def test_the_main_text_stays_short_and_links_to_its_appendix():
     words = [w for w in REPORT.split() if not set(w) <= set("|-")]
-    assert len(words) <= 2000, len(words)
+    assert len(words) <= 2450, len(words)
     assert "(hook-fidelity-report-appendix.md)" in REPORT and "(hook-fidelity-report.md)" in APPENDIX
     assert "#reproduce-in-full" in REPORT
 

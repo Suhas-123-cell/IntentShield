@@ -17,7 +17,6 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 BENCH = ROOT / "benchmarks" / "hook_fidelity"
 sys.path.insert(0, str(BENCH))
-sys.path.insert(0, str(ROOT / "src"))
 
 import fetch_corpus as fc  # noqa: E402
 import mitigation_eval as me  # noqa: E402

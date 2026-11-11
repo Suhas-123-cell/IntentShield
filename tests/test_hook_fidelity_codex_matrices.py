@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "benchmarks"))
 
 from hook_fidelity import codex_matrix, r4_report  # noqa: E402
 
@@ -41,7 +40,6 @@ def test_r4_integration_matrix_and_mitigation_plan(monkeypatch):
     assert sum(c.reps for c in codex_matrix.r4_persisted_b()) == 6
     assert {c.reply for c in codex_matrix.r4_persisted_b()} == {"R6", "R8", "R15"}
     sys.path.insert(0, str(ROOT / "benchmarks" / "hook_fidelity"))
-    sys.path.insert(0, str(ROOT / "src"))
     import mitigation_eval
 
     plan = mitigation_eval.plan_r4()

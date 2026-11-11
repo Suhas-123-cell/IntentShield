@@ -74,7 +74,7 @@ def _ollama_host() -> str:
     return host if "://" in host else "http://" + host
 
 
-def _ollama_url() -> str:
+def ollama_url() -> str:
     """Ollama's OpenAI-compatible endpoint (the benchmarks' agents use it). It ignores ``num_ctx`` and keeps
     the server's default context: measured on Ollama 0.40, a longer prompt was cut to 2,050 tokens and lost
     its system prompt. The judge uses the native endpoint instead."""

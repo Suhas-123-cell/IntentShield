@@ -4,13 +4,11 @@ Nothing here launches cursor-agent."""
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
 BENCH = Path(__file__).resolve().parents[1] / "benchmarks"
-sys.path.insert(0, str(BENCH))
 from hook_fidelity import cells, configs, cursor_cells, scoring  # noqa: E402
 
 

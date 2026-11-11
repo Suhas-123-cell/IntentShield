@@ -1,11 +1,6 @@
 """Result files of the judge benchmarks say which endpoint and context the judge ran through."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks"))
-
 import adaptive_judge
 
 from intentshield import judge as judge_module
