@@ -264,7 +264,8 @@ def _config_findings(servers: list[Server]) -> list[Finding]:
 
 
 def _roles(tool: dict[str, Any]) -> set[str]:
-    text = f"{re.sub(r'[_\-.]', ' ', tool['name'])} {tool.get('title') or ''} {tool['description'][:400]}"
+    words = re.sub(r"[_\-.]", " ", tool["name"])
+    text = f"{words} {tool.get('title') or ''} {tool['description'][:400]}"
     hints = tool.get("annotations") or {}
     read_only = hints.get("readOnlyHint")
     writes = is_mutation(tool["name"]) if read_only is None else not read_only
@@ -440,7 +441,8 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
     warnings = sum(f.level == WARNING for f in findings)
     left = sum(1 for s in servers if s.error or (s.skipped and connected))
     lines.append((f"{len(servers)} server(s) checked: " if not left else
-                  f"{len(servers) - left} of {len(servers)} server(s) checked, {left} not scanned: ")
+                  f"{len(servers) - left} of {len(servers)} server(s) checked, {left} not scanned (--no-connect checks "
+                  "the configs without starting them): ")
                  + f"{errors} error(s), {warnings} warning(s)" if servers else "no MCP configs found")
     return "\n".join(lines)
 

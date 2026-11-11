@@ -1,4 +1,4 @@
-"""The built-in tool rules (dangerous.py), the verdict translation, the Cursor read hook and the wrap-hook shim: each
+"""The built-in tool rules (the dangerous package), the verdict translation, the Cursor read hook and the wrap-hook shim: each
 test names a case that was refused or passed wrongly."""
 from __future__ import annotations
 
@@ -252,3 +252,30 @@ def test_a_typo_in_the_deadline_does_not_crash_the_hook(tmp_path):
     out = subprocess.run([sys.executable, "-c", "from intentshield.harness import main; main(['claude'])"],
                          input=json.dumps(event), capture_output=True, text=True, env=env, timeout=60)
     assert out.returncode == 0 and "Traceback" not in out.stderr, out.stderr
+
+
+# --- a copy of a file that nothing runs, and a copy of a key -----------------------------------------------------------------
+
+@pytest.mark.parametrize("command", ["cp ~/.zshrc ~/.zshrc.bak", "echo x > ~/.bashrc.orig", "cp ~/.bashrc ~/.bashrc.old",
+                                     "echo x > ~/.zshrc~",
+                                     "cp ~/.gitconfig ~/.gitconfig.backup"])
+def test_a_backup_of_a_startup_file_is_not_a_file_that_runs_code_later(command):
+    assert decision(command) is None
+
+
+@pytest.mark.parametrize("command", ["echo x >> ~/.zshrc", "echo x > ~/.zshrc.local", "echo x > ~/.bashrc", "cp x ~/.zshenv",
+                                     "echo x > ~/.zshrc.d/a.zsh"])
+def test_a_startup_file_and_the_files_it_sources_still_ask(command):
+    assert decision(command) == "ask"
+
+
+@pytest.mark.parametrize("path", ["~/id_rsa.bak", "/proj/id_rsa.bak", "/proj/id_ed25519.old", "/proj/id_ecdsa~", "/proj/id_rsa",
+                                  "/Users/x/.ssh/id_rsa.bak"])
+def test_a_copy_of_a_private_key_is_the_key_wherever_it_lies(path):
+    assert dangerous.assess_file(path).decision == "deny"
+    assert decision(f"cat {path}") == "deny"
+
+
+def test_a_public_key_is_not_a_private_key_with_a_backup_suffix():
+    assert dangerous.assess_file("/proj/id_rsa.pub") is None
+    assert dangerous.assess_file("/proj/id_rsa.pub.bak") is None

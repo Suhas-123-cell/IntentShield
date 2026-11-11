@@ -307,7 +307,7 @@ def table(s: dict) -> str:
         f"* Wrapped ask cells: BLOCKED {p1['ask']['r8_blocked']}/{p1['ask']['r8_n']} reps now, {p1['ask']['r7_blocked']}/{p1['ask']['r7_n']} in round 7.",
         f"* (build, arm, cell) groups with the same outcome label as round 7: {p1['groups_same']}/{p1['groups_n']}; rows whose outcome equals "
         f"round 7's single outcome for the group: {p1['rows_same_outcome_as_r7']}/{p1['rows']}. Changes: "
-        f"{', '.join(f'{c["build"]} {c["arm"]} {c["cell"]}' for c in p1['changes']) or 'none'}.",
+        + (", ".join(c["build"] + " " + c["arm"] + " " + c["cell"] for c in p1["changes"]) or "none") + ".",
         "* `+wrap-nohint` (no `--hook-timeout`, so the deadline is the shim's 30 s): "
         + "; ".join(f"{n['build']} {n['arm']}: now {n['r8']}, round 7 {n['r7']}" for n in p1["nohint"])
         + ".",
@@ -324,7 +324,8 @@ def table(s: dict) -> str:
         "",
         "## Detector reading in every round 8 row",
         "",
-        f"* Ancestry source: {', '.join(f'{k} {v}/{det["rows"]}' for k, v in det['source'].items())}; complete walk {det['complete']}/{det['rows']}; "
+        "* Ancestry source: " + ", ".join(f"{k} {v}/{det['rows']}" for k, v in det["source"].items())
+        + f"; complete walk {det['complete']}/{det['rows']}; "
         f"detector exceptions {det['errors']}/{det['rows']}; `ps` was not used in any row (its sandbox profile blocks it, as in round 7).",
         "* Mode and reason: "
         + "; ".join(f"{k} {v}/{det['rows']}" for k, v in sorted(det["how"].items(), key=lambda kv: -kv[1]))

@@ -1,5 +1,5 @@
 # Renders docs/demo.gif with VHS (https://github.com/charmbracelet/vhs).
-# Run from the repo root after `uv sync --extra dev`:  vhs docs/demo.tape
+# Run from the repo root after `uv sync --group dev`:  vhs docs/demo.tape
 
 Output docs/demo.gif
 

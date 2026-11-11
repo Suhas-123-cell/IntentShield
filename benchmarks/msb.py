@@ -136,9 +136,10 @@ def server_ids(data: Path, case: dict[str, Any], roles: list[str]) -> dict[str, 
     addition servers share the tool's own server name and differ only by a hash of the case
     and role, so neither the name nor the suffix says which one is malicious.
     """
-    return {role: role if role == "filesystem" else
-            f"{server_name(data, case['tool'])}-{hashlib.sha256(f'{case['id']}:{role}'.encode()).hexdigest()[:4]}"
-            for role in roles}
+    def digest(role: str) -> str:
+        return hashlib.sha256(f"{case['id']}:{role}".encode()).hexdigest()[:4]
+
+    return {role: role if role == "filesystem" else f"{server_name(data, case['tool'])}-{digest(role)}" for role in roles}
 
 
 def servers_for(data: Path, case: dict[str, Any]) -> dict[str, list[str] | None]:

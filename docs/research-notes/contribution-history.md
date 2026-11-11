@@ -16,7 +16,7 @@ version: most of IntentShield is engineering over prior art.
 > and a measurement note or workshop paper.
 >
 > **Claimed, each with its limit**
-> - A versioned measurement of what Claude Code (23 sampled builds), Codex CLI (17) and Gemini CLI (28) do with the verdict a
+> - A versioned measurement of what Claude Code (27 scored builds), Codex CLI (14) and Gemini CLI (28) do with the verdict a
 >   PreToolUse-style hook returns (§13, `docs/hook-fidelity-report.md`). Limit: a scripted stub model, headless, macOS, one author,
 >   Cursor unmeasured, most behaviours already documented by the vendors. A measurement of the harnesses, not of IntentShield.
 > - Self-disclosure parameter stripping, measured on 159 tool schemas (§10, §12). Limit: one benchmark's catalogs, and the rule is a

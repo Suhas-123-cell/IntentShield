@@ -1,17 +1,17 @@
 """Round five of the shell parser audit (hooks-1 and hooks-15): no input makes the parser take more than a second.
 
-The second is on a developer machine (the slowest input here takes 0.9 s on an M-series Mac). Shared CI runners
+The second is on a developer machine (the slowest input here takes about 0.9 s on an M-series Mac), so each input is
+timed up to three times and the best run counts: one slow sample on a busy machine is not a failure. Shared CI runners
 are about twice as slow, so there the limit is three seconds: still far below what a quadratic input of 200,000
-characters takes, which is what these tests are for.
+characters takes on every run, which is what these tests are for.
 
 Every address is a reserved example name; nothing here is run."""
 from __future__ import annotations
 
 import random
-import time
 
 import pytest
-from timelimits import limit
+from timelimits import best_of_three
 
 from intentshield.shell import parse
 
@@ -22,9 +22,13 @@ TOKENS = ["\\", "'", '"', "$(", "`", "<<", "${", "$((", "(", ")", "{", "}", "$["
 
 
 def _timed(command: str, seconds: float = 1.0) -> None:
-    start = time.perf_counter()
-    parse(command)
-    assert time.perf_counter() - start < limit(seconds), command[:40]
+    """``parse(command)`` finishes inside the limit on at least one of three runs: one slow sample on a busy machine is not a
+    failure,
+    a parser that is quadratic on this input is slow on all three."""
+    try:
+        best_of_three(seconds, parse, command)
+    except AssertionError as exc:
+        raise AssertionError(f"{command[:40]!r}: {exc}") from None
 
 
 @pytest.mark.parametrize("shape", [

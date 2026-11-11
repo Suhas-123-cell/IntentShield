@@ -89,7 +89,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Callable, Collection, Iterable, Iterator
 from urllib.parse import urlsplit
 
 from . import translation
@@ -587,13 +587,14 @@ class ThreatMemory:
         except sqlite3.Error:
             return 0
 
-    def hostile(self, source: Any) -> bool:
+    def hostile(self, source: str) -> bool:
         return self.reputation(source) >= self.hostile_runs and not (
             isinstance(source, str) and source.lower() in self._cache().allow)
 
     # --- learning from rule-confirmed attacks --------------------------------------------------
 
-    def record_attack(self, text: Any, findings: Any, *, source: Any, run_key: Any, trusted: Any = "") -> dict[str, Any]:
+    def record_attack(self, text: Any, findings: str | Collection[str], *, source: str, run_key: str,
+                      trusted: Any = "") -> dict[str, Any]:
         """Learn from one output or description the built-in rules flagged; returns what was learned."""
         if isinstance(findings, str):
             findings = [findings]
@@ -1016,6 +1017,69 @@ class ThreatMemory:
         if self.packs is not None:
             result["packs"] = self.packs.status()
         return result
+
+
+class GuardedMemory:
+    """The threat-memory calls the hook and the proxy make, each of which reports a failure and answers as if the memory knew
+    nothing: it only adds evidence, so a locked, full or corrupt database must not stop a call. One class for both callers, with
+    real methods (not a name looked up as text), so that a rename or a changed argument is an error the type checker finds, not a
+    memory that is silently off. ``memory`` is None when none is kept; ``report(method, error)`` says what failed (the hook writes
+    to stderr, the proxy to its log)."""
+
+    def __init__(self, memory: ThreatMemory | None, report: Callable[[str, Exception], None]) -> None:
+        self._memory = memory
+        self._report = report
+
+    def check_values(self, values: Any, trusted: Any = frozenset()) -> ThreatMatch | None:
+        try:
+            return self._memory.check_values(values, trusted=trusted) if self._memory else None
+        except Exception as exc:
+            self._report("check_values", exc)
+            return None
+
+    def text_matches(self, text: Any, target: str = "output") -> list[dict[str, Any]]:
+        try:
+            return self._memory.text_matches(text, target) if self._memory else []
+        except Exception as exc:
+            self._report("text_matches", exc)
+            return []
+
+    def check_text(self, text: Any, target: str = "output") -> list[str]:
+        try:
+            return self._memory.check_text(text, target) if self._memory else []
+        except Exception as exc:
+            self._report("check_text", exc)
+            return []
+
+    def hostile(self, source: str) -> bool:
+        try:
+            return self._memory.hostile(source) if self._memory else False
+        except Exception as exc:
+            self._report("hostile", exc)
+            return False
+
+    def record_attack(self, text: Any, findings: str | Collection[str], *, source: str, run_key: str,
+                      trusted: Any = "") -> dict[str, Any] | None:
+        try:
+            return self._memory.record_attack(text, findings, source=source, run_key=run_key,
+                                              trusted=trusted) if self._memory else None
+        except Exception as exc:
+            self._report("record_attack", exc)
+            return None
+
+    def clear_source(self, server: str) -> None:
+        try:
+            if self._memory:
+                self._memory.clear_source(server)
+        except Exception as exc:
+            self._report("clear_source", exc)
+
+    def close(self) -> None:
+        try:
+            if self._memory:
+                self._memory.close()
+        except Exception as exc:
+            self._report("close", exc)
 
 
 def default_db() -> str:

@@ -4,11 +4,11 @@ By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). To report
 
 ## Development setup
 
-Python 3.12+ and [uv](https://docs.astral.sh/uv/):
+Python 3.11+ and [uv](https://docs.astral.sh/uv/):
 
 ```sh
 git clone https://github.com/Suhas-123-cell/IntentShield.git && cd IntentShield
-uv sync --extra dev
+uv sync --group dev
 ```
 
 The optional ML extras (torch, transformers, sentencepiece, protobuf) are needed only for the local DeBERTa classifiers and the exemplar embedder:
@@ -17,7 +17,14 @@ The optional ML extras (torch, transformers, sentencepiece, protobuf) are needed
 uv pip install --python .venv/bin/python -r requirements-ml.txt
 ```
 
-A plain `uv sync` removes them again. CI runs without them (`uv sync --extra dev --frozen`), so a new third-party import must be declared in `pyproject.toml` (then `uv lock`); the local `.venv` can hide a missing declaration.
+A plain `uv sync` removes them again. CI runs without them (`uv sync --group dev --frozen`), so a new third-party import must be declared in `pyproject.toml` (then `uv lock`); the local `.venv` can hide a missing declaration.
+
+## Where things are
+
+- `src/intentshield/`: the package (the module map is in [docs/architecture-and-testing.md](docs/architecture-and-testing.md#2-components-and-responsibilities)).
+- `tests/`: the test suite. It reads `results/` and `docs/`, so it runs from a clone, not from the PyPI source distribution.
+- `benchmarks/`: the scripts that produce every cited number. `results/`: the committed rows and tables they read and write.
+- `docs/`: the documentation, indexed in [docs/README.md](docs/README.md). `configs/`: example hook and proxy configurations.
 
 ## Sending a change
 
@@ -34,7 +41,8 @@ There is no discussion board or chat.
 
 - **False-positive reports.** A call, tool result or command the guard refused or asked about that was fine. Include the
   command that reproduces it (the hook event piped into `intentshield-hook <harness>`, or the `intentshield scan` run),
-  the harness and version, and the decision and reason it printed. Use benign markers, not real data. These are the most useful.
+  the harness and version, and the decision and reason it printed. Use benign markers, not real data. A ready-to-paste event is in
+  [Try it from a clone](docs/layers.md#try-it-from-a-clone). These are the most useful.
 - **New detection rules, with a measured benign check.** A rule is accepted with the texts it should flag, a count of what
   it flags in the repository's benign corpora, and no new false positive on them; a rule with no benign check is not
   accepted. Say plainly what it does not catch. [Add a detection rule](#add-a-detection-rule) gives the commands, and they
@@ -53,7 +61,7 @@ Where a rule goes:
 |---|---|---|
 | tool descriptions, tool outputs, arguments (injected instructions, poisoning) | `src/intentshield/mcp_inspect.py` (`scan_description`, `scan_output`) | `tests/test_rules_detection.py`, `tests/test_output_rule_evasions.py` |
 | credential formats | `src/intentshield/credentials.py` | `tests/test_credential_masking.py` |
-| a built-in tool call: a shell command, a file read or write (`--builtin-tools`) | `src/intentshield/dangerous.py`, with `shell.py` for parsing | `tests/test_dangerous_rules.py` |
+| a built-in tool call: a shell command, a file read or write (`--builtin-tools`) | `src/intentshield/dangerous/` (`rules.py`, `paths.py`), with `shell.py` for parsing | `tests/test_dangerous_rules.py` |
 
 A rule that should ship as data, without a release, is a threat pack instead (`src/intentshield/rule_packs.py`, [guide](docs/guide.md#adaptive-threat-memory-and-threat-packs)).
 
@@ -122,12 +130,12 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 
 Two more checks run outside the test job: a Docker job builds the image and runs the demo proxy check in it, and an
 `audit` workflow checks the locked dependencies against the PyPI advisory database on each push and weekly.
-CI runs the test job on Linux with Python 3.12 to 3.14 and on macOS with 3.12. The module map, the test inventory by
+CI runs the test job on Linux with Python 3.11 to 3.14 and on macOS with 3.12, and one job tests the lowest allowed versions of the direct dependencies on 3.11. The module map, the test inventory by
 area and how to diagnose a failure are in [docs/architecture-and-testing.md](docs/architecture-and-testing.md).
 
 ## Changelog
 
-A change a user can see (a flag, a message, a decision, a fix) gets one line in [CHANGELOG.md](CHANGELOG.md) under `## Unreleased`, in the group it belongs to: Added, Changed or Fixed. Say what changed for the user, not how the code changed. The maintainer moves the entries under a version heading and a date at release. A pull request that changes nothing a user can see needs no entry.
+A change a user can see (a flag, a message, a decision, a fix) gets one line in [CHANGELOG.md](CHANGELOG.md) under `## Unreleased`, in the group it belongs to: Added, Changed or Fixed (a release entry may also carry Upgrading, Internal, and Study and benchmarks sections). Say what changed for the user, not how the code changed. The maintainer moves the entries under a version heading and a date at release. A pull request that changes nothing a user can see needs no entry.
 
 ## Releasing
 

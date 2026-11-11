@@ -1,4 +1,4 @@
-"""docs/hook-fidelity-report.md, the study and docs/contribution.md against the data and themselves. No harness is launched."""
+"""The hook study report and its appendix, the study and docs/contribution.md against the data and themselves. No harness runs."""
 
 from __future__ import annotations
 
@@ -16,6 +16,16 @@ sys.path.insert(0, str(BENCH))
 import report_numbers as rn  # noqa: E402
 
 REPORT = (ROOT / "docs" / "hook-fidelity-report.md").read_text()
+APPENDIX = (ROOT / "docs" / "hook-fidelity-report-appendix.md").read_text()
+BOTH = REPORT + "\n" + APPENDIX
+
+
+def _flat(text: str) -> str:
+    """The text with every run of whitespace, line breaks and list indents included, as one space."""
+    return re.sub(r"\s+", " ", text)
+
+
+FLAT = _flat(REPORT)
 STUDY = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md").read_text()
 CONTRIBUTION = (ROOT / "docs" / "contribution.md").read_text()
 HISTORY = (ROOT / "docs" / "research-notes" / "contribution-history.md").read_text()
@@ -32,7 +42,7 @@ def _script_output() -> str:
 def test_report_numbers_block_is_what_the_script_prints_from_the_committed_rows():
     printed = _script_output()
     assert printed == _script_output()  # deterministic
-    block = REPORT.split("```\n")[-2]
+    block = APPENDIX.split("```\n")[-2]
     assert block.rstrip("\n") == printed
 
 
@@ -40,8 +50,26 @@ def test_report_matrix_and_findings_are_the_recomputed_ones():
     rows = rn.stub_rows()
     assert len(rows) == 1342
     assert rn.matrix_md(rn.matrix(rows)) in REPORT
+    assert rn.build_counts_md(rn.build_counts(rows)) in REPORT
+    assert rn.build_counts_md(rn.build_counts(rows)) in APPENDIX
     for text in {**rn.findings(rows), **rn.guards()}.values():
-        assert text in REPORT, text
+        assert text in BOTH, text
+
+
+def test_one_build_count_per_harness_in_every_document_that_states_it():
+    counts = rn.build_counts(rn.stub_rows())
+    c, x, g = counts["claude"], counts["codex"], counts["gemini"]
+    assert (c["installed"], c["scored"], c["excluded"]) == (28, 27, 1)
+    assert (x["installed"], x["scored"], x["excluded"]) == (19, 14, 5)
+    assert (g["installed"], g["scored"], g["excluded"]) == (28, 28, 0)
+    sentence = f"Claude Code ({c['scored']} scored builds), Codex CLI ({x['scored']}) and Gemini CLI ({g['scored']})"
+    readme = (ROOT / "README.md").read_text()
+    results = (ROOT / "results" / "hook-fidelity" / "README.md").read_text()
+    for name, text in (("README.md", readme), ("contribution.md", CONTRIBUTION), ("results/hook-fidelity/README.md", results)):
+        assert sentence in text.replace("\n", " "), name
+    for name, text in (("README.md", readme), ("contribution.md", CONTRIBUTION), ("report", REPORT), ("appendix", APPENDIX)):
+        flat = text.replace("\n", " ")
+        assert "Claude Code (23 builds)" not in flat and "Codex CLI (17)" not in flat, name
 
 
 def test_report_headline_figures():
@@ -58,10 +86,16 @@ def test_report_headline_figures():
     assert "28/104" in g["fresh_is_after"] and "96/104" in g["fresh_is_before"]
     assert "44/85" in g["fresh_vs_safety_net"] and "25/85" in g["fresh_vs_safety_net"]
     assert "137/166" in g["detect_is"] and "31/130" in g["detect_sn"]
+    for needle in ("65 of 65 builds", "47 of 271", "0 of 70", "22 of 22 Claude Code", "12 of 12 Codex CLI", "15 of 28"):
+        assert needle in FLAT, needle
+    for key in ("fresh_is_before", "fresh_is_after", "fresh_vs_safety_net", "fresh_vs_knox", "detect_is", "detect_sn"):
+        for figure in re.findall(r"\d+/\d+ \[[\d.]+, [\d.]+\]%", g[key]):
+            assert figure in FLAT, (key, figure)
+    assert "41/85, IntentShield 24/85" in FLAT
 
 
 def test_report_states_both_sides_and_every_limit():
-    low = REPORT.lower()
+    low = FLAT.lower()
     for needle in (
         "where intentshield is behind",
         "where intentshield is ahead",
@@ -73,7 +107,6 @@ def test_report_states_both_sides_and_every_limit():
         "cannot verify",
         "nothing has been sent",
         "outside those categories",
-        "fetch_corpus.py",
         "same model family",
         "one to two builds",
         "determinism run",
@@ -81,13 +114,51 @@ def test_report_states_both_sides_and_every_limit():
         "ai coding agents",
         "no human second coder",
         "do not settle the order",
+        "only on its own rule categories, and post hoc",
+        "a tie with safety-net and a loss to knox",
     ):
         assert needle in low, needle
+    assert "fetch_corpus.py" in APPENDIX
+
+
+def test_the_benign_line_is_not_listed_as_a_place_where_intentshield_is_ahead():
+    ahead = REPORT.split("**Where IntentShield is ahead")[1].split("**Benign calls")[0]
+    assert "benign" not in ahead.lower().replace("benign calls", "")
+    benign = REPORT.split("**Benign calls: a tie with safety-net and a loss to knox.**")[1].split("\n\n")[0]
+    assert "knox flags 0" in benign and "safety-net denies 4" in benign
+
+
+def test_the_467_set_is_also_rescored_without_the_items_now_in_the_rules_tests():
+    line = rn.guards()["rules_without_overlap"]
+    for needle in (
+        "without the 33 items",
+        "133 items that stayed held out, 104/133 ",
+        " before, 6/133 ",
+        "123 built-in tool calls, 104/123 ",
+    ):
+        assert needle in line, needle
+    for figure in ("104/133 [70.4, 84.4]%", "6/133 [2.1, 9.5]%"):
+        assert figure in FLAT and figure in _flat(APPENDIX), figure
+    import overlap_check
+
+    pinned = json.loads((BENCH / "overlap_items.json").read_text())
+    live = overlap_check.overlapping_items(
+        [json.loads(x) for x in (ROOT / "results/hook-fidelity/detect/fixtures.jsonl").read_text().splitlines()],
+        overlap_check.repository_text(["tests", "src"]),
+    )
+    assert len(pinned["fixtures_467_set"]) == 33 and set(pinned["fixtures_467_set"]) <= set(live)
 
 
 def test_report_has_no_process_vocabulary():
     for word in ("round", "lane", "critic", "worktree", "branch"):
-        assert not re.search(rf"\b{word}s?\b", REPORT, re.I), word
+        assert not re.search(rf"\b{word}s?\b", BOTH, re.I), word
+
+
+def test_the_main_text_stays_short_and_links_to_its_appendix():
+    words = [w for w in REPORT.split() if not set(w) <= set("|-")]
+    assert len(words) <= 2000, len(words)
+    assert "(hook-fidelity-report-appendix.md)" in REPORT and "(hook-fidelity-report.md)" in APPENDIX
+    assert "#reproduce-in-full" in REPORT
 
 
 # ------------------------------------------------------------------------------------------------------------- the study
@@ -104,7 +175,7 @@ def test_study_points_to_the_report_and_opens_with_a_five_line_status():
 
 def test_the_order_of_writing_is_stated_as_the_authors_word_everywhere():
     pattern = re.compile(r"registered in advance|before any matrix run|author-registered|advance registration", re.I)
-    files = [ROOT / "docs" / name for name in ("hook-fidelity-report.md", "contribution.md")]
+    files = [ROOT / "docs" / name for name in ("hook-fidelity-report.md", "hook-fidelity-report-appendix.md", "contribution.md")]
     files += sorted((ROOT / "docs" / "research-notes").rglob("*.md")) + [ROOT / "results" / "hook-fidelity" / "README.md"]
     files += sorted(BENCH.glob("*.py"))
     for path in files:
@@ -115,7 +186,7 @@ def test_the_order_of_writing_is_stated_as_the_authors_word_everywhere():
                 continue
             assert not pattern.search(line), (path.name, line[:120])
     for text in (REPORT, STUDY):
-        assert "the available timestamps do not settle the order" in text.replace("\n", " ")
+        assert "the available timestamps do not settle the order" in _flat(text)
 
 
 def test_study_never_calls_the_registration_pre_registered_without_a_qualifier():

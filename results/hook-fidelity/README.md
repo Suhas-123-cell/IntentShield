@@ -1,12 +1,12 @@
 # Hook verdict fidelity study: data
 
-Raw rows, ledgers and derived tables of the study. Start with the short report, [`docs/hook-fidelity-report.md`](../../docs/hook-fidelity-report.md);
+Raw rows, ledgers and derived tables of the study. Start with the report, [`docs/hook-fidelity-report.md`](../../docs/hook-fidelity-report.md);
 [`docs/research-notes/hook-fidelity/hook-fidelity-study.md`](../../docs/research-notes/hook-fidelity/hook-fidelity-study.md) is the full record.
 The question: what do Claude Code, Codex CLI and Gemini CLI do with the verdict a `PreToolUse`-style hook returns (allow,
 ask, deny, a crash, a timeout, an empty reply), and what does IntentShield's own hook decide on the same calls. Scope: macOS,
 mostly headless against a scripted stub model, a pseudo-terminal lane for interactive sessions, a narrow real-model arm, a
-Linux probe on dummy processes, and sampled builds of each harness (23 Claude Code, 17 Codex CLI and 28 Gemini CLI releases
-the lanes could install, not every release). Cursor was not measured: its free plan ran out. The study's own verdict is a
+Linux probe on dummy processes, and the builds of each harness that the lanes could install, not every release: Claude Code (27 scored builds), Codex CLI (14) and Gemini CLI (28), counted as
+`benchmarks/hook_fidelity/report_numbers.py` prints them. Cursor was not measured: its free plan ran out. The study's own verdict is a
 measurement note and an artifact, not a paper (`docs/contribution.md`; the account of how that verdict was reached is section 13 of `docs/research-notes/contribution-history.md`).
 
 A rate printed beside a count is the count's share to the digits shown. The generated `table*.md` files format with Python's `:.0f`, which rounds a tie to the even digit (5/8 is printed 62%, 132/160 is printed 82%); a hand-written figure in the documents is checked by `tests/test_hook_fidelity_report.py`, which accepts either direction at a tie.

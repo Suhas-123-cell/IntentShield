@@ -306,3 +306,19 @@ def test_the_state_directory_is_private(tmp_path):
     other = tmp_path / "elsewhere"
     HarnessGuard(other / "hooks.db").close()
     assert other.stat().st_mode & 0o077  # a directory the caller chose is left at the default
+
+
+# --- a tool name that starts like an MCP tool and is not one ---------------------------------------------------------------
+
+@pytest.mark.parametrize("name", ["mcp__srv", "mcp__", "mcp__x"])
+@pytest.mark.parametrize("harness_name", ["claude", "codex"])
+def test_a_name_that_starts_with_mcp_but_has_no_tool_part_is_refused(tmp_path: Path, name: str, harness_name: str, capsys):
+    event = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": name, "tool_input": {"a": 1}}
+    assert verdict(handle(harness_name, event, guard(tmp_path))) == "deny"
+    assert "could not read the tool name" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name", ["mcp__srv__tool", "mcp__srv__", "mcp__srv__a__b", "Bash", "mcp_srv"])
+def test_a_readable_name_is_not_refused_for_its_shape(tmp_path: Path, name: str):
+    event = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": name, "tool_input": {"command": "ls"}}
+    assert verdict(handle("claude", event, guard(tmp_path))) == "allow"

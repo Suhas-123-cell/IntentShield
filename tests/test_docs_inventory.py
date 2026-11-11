@@ -8,8 +8,9 @@ DOC = (ROOT / "docs" / "architecture-and-testing.md").read_text(encoding="utf-8"
 
 
 def test_every_module_is_in_the_module_map():
-    missing = [p.name for p in sorted((ROOT / "src" / "intentshield").glob("*.py"))
-               if p.stem != "__init__" and f"`{p.name}`" not in DOC]
+    package = ROOT / "src" / "intentshield"
+    missing = [p.relative_to(package).as_posix() for p in sorted(package.rglob("*.py"))
+               if p.stem != "__init__" and f"`{p.relative_to(package).as_posix()}`" not in DOC]
     assert not missing, f"add these modules to the module map in docs/architecture-and-testing.md: {missing}"
 
 

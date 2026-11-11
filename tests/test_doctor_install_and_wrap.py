@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -394,6 +395,7 @@ def test_a_setting_of_the_users_that_has_a_cost_stays_a_warning(tmp_path: Path, 
     _ran(_db(home), "gemini", time.time() + 5)
     _rc, out = _doctor(home, cwd, capsys)
     assert any(line.startswith("warn gemini") and "--gemini-ask is on" in line for line in out.splitlines())
+    assert re.search(r"no problems found, \d+ warning\(s\) above", out)  # the summary does not hide the warning
 
 
 def test_the_module_text_names_no_flag_that_the_command_does_not_have(capsys):
@@ -408,3 +410,253 @@ def test_the_module_text_names_no_flag_that_the_command_does_not_have(capsys):
     for word in doctor.__doc__.split():
         if word.startswith("--") and word.rstrip("].,)") not in flags:
             raise AssertionError(f"doctor's text names {word}")
+
+
+# --- Codex config.toml and VS Code files: wrap and unwrap ------------------------------------------------------------------
+
+CODEX_TOML = '''# my Codex config
+model = "gpt-5"   # the default
+
+[mcp_servers.fs]   # files
+command = "npx"
+args = ["-y", "@mcp/fs", "/tmp"]
+
+[mcp_servers.fs.env]
+TOKEN = "t"
+
+[mcp_servers."my server"]
+args = [
+  "serve",
+  "a]b",
+]
+command = "node"   # no args line above this one
+cwd = "/srv"
+
+[mcp_servers.plain]
+command = "uvx"
+
+[mcp_servers.web]
+url = "https://mcp.example.org/mcp"
+
+[profiles.fast]
+model = "gpt-5-mini"
+'''
+
+
+def _servers(path: Path) -> dict:
+    import tomllib
+
+    return tomllib.loads(path.read_text()).get("mcp_servers", {})
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_wrap_and_unwrap_edit_codex_tables_and_restore_the_file_byte_for_byte(tmp_path: Path, home: Path, capsys, eol: str):
+    path = tmp_path / "config.toml"
+    before = CODEX_TOML.replace("\n", eol)
+    path.write_bytes(before.encode())
+    done = install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
+    assert done == ["fs", "my server", "plain"]
+    servers = _servers(path)
+    for name in done:
+        assert servers[name]["command"] == "/bin/intentshield-mcp" and servers[name]["args"][:2] == ["--transparent", "--config"]
+    assert servers["web"] == {"url": "https://mcp.example.org/mcp"}  # not a stdio server
+    assert servers["my server"]["cwd"] == "/srv" and servers["fs"]["env"] == {"TOKEN": "t"}
+    text = path.read_bytes().decode()
+    assert text.count("# files") == 1 and "# my Codex config" in text and "[profiles.fast]" in text  # the rest is as it was
+    assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == []  # idempotent
+    assert install.unwrap(path) == ["fs", "my server", "plain"]
+    assert path.read_bytes() == before.encode()
+
+
+def test_unwrap_of_a_codex_table_the_user_edited_meanwhile_restores_the_command_and_keeps_the_edit(tmp_path: Path, home: Path):
+    path = tmp_path / "config.toml"
+    path.write_text(CODEX_TOML)
+    install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
+    path.write_text(path.read_text().replace('model = "gpt-5"', 'model = "gpt-6"'))
+    install.unwrap(path)
+    servers = _servers(path)
+    assert servers["fs"]["command"] == "npx" and servers["fs"]["args"] == ["-y", "@mcp/fs", "/tmp"]
+    assert "args" not in servers["plain"] and servers["plain"]["command"] == "uvx"
+    assert 'model = "gpt-6"' in path.read_text()
+
+
+def test_a_codex_entry_that_is_not_a_table_of_its_own_is_skipped_with_what_to_do(tmp_path: Path, home: Path, capsys):
+    path = tmp_path / "config.toml"
+    path.write_text('[mcp_servers]\nfs = { command = "npx", args = ["x"] }\n\n[mcp_servers.ok]\ncommand = "uvx"\n')
+    assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["ok"]
+    out = capsys.readouterr().out
+    assert "skipped fs" in out and "[mcp_servers.NAME] table" in out and "--transparent" in out
+    assert _servers(path)["fs"] == {"command": "npx", "args": ["x"]}
+
+
+def test_a_toml_file_with_no_codex_servers_names_the_formats_wrap_reads(tmp_path: Path, home: Path):
+    path = tmp_path / "other.toml"
+    path.write_text('model = "x"\n')
+    with pytest.raises(ValueError) as exc:
+        install.wrap(path, out_dir=tmp_path / "proxies")
+    message = str(exc.value)
+    for named in ("mcpServers", "servers", "mcp.servers", "[mcp_servers.NAME]", "Codex CLI", "--transparent --config"):
+        assert named in message
+    assert not (tmp_path / "proxies").exists()
+
+
+def test_a_toml_file_that_does_not_parse_is_refused_and_untouched(tmp_path: Path, home: Path):
+    path = tmp_path / "config.toml"
+    path.write_text('[mcp_servers.fs\ncommand = "npx"\n')
+    with pytest.raises(ValueError, match="not valid TOML"):
+        install.wrap(path, out_dir=tmp_path / "proxies")
+    assert path.read_text() == '[mcp_servers.fs\ncommand = "npx"\n'
+
+
+VSCODE_JSON = '''// MCP servers of this workspace
+{
+  "servers": {
+    "fs": {"type": "stdio", "command": "npx", "args": ["-y", "@mcp/fs"], "env": {"A": "${input:key}"}},
+    "remote": {"type": "http", "url": "https://mcp.example.org/mcp"}, /* hosted */
+  },
+  "inputs": [{"id": "key", "type": "promptString"}]
+}
+'''
+
+
+def test_wrap_and_unwrap_read_the_servers_key_of_a_vscode_file_and_restore_it_byte_for_byte(tmp_path: Path, home: Path):
+    path = tmp_path / ".vscode" / "mcp.json"
+    path.parent.mkdir()
+    path.write_text(VSCODE_JSON)
+    assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["fs"]
+    data = json.loads(path.read_text())
+    assert data["servers"]["fs"]["command"] == "/bin/intentshield-mcp" and data["servers"]["fs"]["env"] == {"A": "${input:key}"}
+    assert data["servers"]["remote"]["url"] == "https://mcp.example.org/mcp" and data["inputs"][0]["id"] == "key"
+    assert install.unwrap(path) == ["fs"]
+    assert path.read_text() == VSCODE_JSON
+
+
+def test_wrap_reads_mcp_servers_of_a_vscode_settings_file(tmp_path: Path, home: Path):
+    path = tmp_path / "settings.json"
+    before = json.dumps({"editor.fontSize": 14, "mcp": {"servers": {"fs": {"command": "npx", "args": ["x"]}}}}, indent=2) + "\n"
+    path.write_text(before)
+    assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["fs"]
+    assert json.loads(path.read_text())["mcp"]["servers"]["fs"]["command"] == "/bin/intentshield-mcp"
+    install.unwrap(path)
+    assert path.read_text() == before
+
+
+def test_a_file_with_both_keys_wraps_each_server_under_its_own_config(tmp_path: Path, home: Path):
+    path = tmp_path / "mixed.json"
+    path.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}}, "servers": {"a": {"command": "y"}}}))
+    assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["a", "a [servers]"]
+    configs = {json.loads(path.read_text())[key]["a"]["args"][2] for key in ("mcpServers", "servers")}
+    assert len(configs) == 2
+    install.unwrap(path)
+    assert json.loads(path.read_text()) == {"mcpServers": {"a": {"command": "x"}}, "servers": {"a": {"command": "y"}}}
+
+
+def test_a_json_file_with_no_servers_names_the_formats_wrap_reads(tmp_path: Path, home: Path):
+    path = tmp_path / "x.json"
+    path.write_text('{"theme": "dark"}')
+    with pytest.raises(ValueError) as exc:
+        install.wrap(path, out_dir=tmp_path / "proxies")
+    assert "Codex CLI" in str(exc.value) and "VS Code" in str(exc.value) and "Windsurf" in str(exc.value)
+
+
+def test_a_missing_file_points_at_the_claude_json_for_servers_added_by_the_cli(tmp_path: Path, home: Path):
+    with pytest.raises(FileNotFoundError, match=r"~/\.claude\.json"):
+        install.wrap(tmp_path / ".mcp.json")
+
+
+def test_the_same_server_name_in_two_client_files_has_its_own_proxy_config_and_audit_database(tmp_path: Path, home: Path):
+    for name, command in (("a.json", "serverA"), ("b.json", "serverB")):
+        (tmp_path / name).write_text(json.dumps({"mcpServers": {"github": {"command": command}}}))
+        install.wrap(tmp_path / name, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
+    configs = [json.loads(Path(json.loads((tmp_path / n).read_text())["mcpServers"]["github"]["args"][2]).read_text())
+               for n in ("a.json", "b.json")]
+    assert configs[0]["database_path"] != configs[1]["database_path"]
+    assert {c["upstreams"][0]["server_id"] for c in configs} == {"github"}  # the hook finds the tool catalog by this name
+
+
+# --- an install and its undoing give the file back as it was -------------------------------------------------------------------
+
+@pytest.mark.parametrize("original", [b'{\r\n  "a": 1\r\n}\r\n', b"", b"{}", b"{}\n", b'{\n\t"a": 1\n}'])
+@pytest.mark.parametrize("harness", ["claude", "cursor", "gemini"])
+def test_install_then_uninstall_gives_back_the_exact_bytes_even_for_crlf_and_empty_files(tmp_path: Path, home: Path, harness: str,
+                                                                                         original: bytes):
+    path = install.settings_path(harness, "user", home, tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(original)
+    install.install(harness, "user", hook="intentshield-hook", home=home, cwd=tmp_path)
+    assert b"intentshield-hook" in path.read_bytes()
+    install.uninstall(harness, "user", home=home, cwd=tmp_path)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("original", [b'model = "o3"\r\n\r\n[mcp_servers.demo]\r\ncommand = "demo"\r\n', b"",
+                                      b"# only a comment\n"])
+def test_codex_install_then_uninstall_gives_back_the_exact_bytes(tmp_path: Path, home: Path, original: bytes):
+    path = home / ".codex" / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(original)
+    install.install("codex", "user", hook="intentshield-hook", home=home)
+    install.uninstall("codex", "user", home=home)
+    assert path.read_bytes() == original
+
+
+def test_wrap_then_unwrap_gives_back_the_exact_bytes_of_a_crlf_mcp_file(tmp_path: Path, home: Path):
+    path = tmp_path / ".mcp.json"
+    original = b'{\r\n  "mcpServers": {\r\n    "a": {"command": "x"}\r\n  }\r\n}\r\n'
+    path.write_bytes(original)
+    install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
+    install.unwrap(path)
+    assert path.read_bytes() == original
+
+
+def test_an_install_in_a_file_that_was_not_there_is_removed_again(tmp_path: Path, home: Path):
+    path = install.settings_path("claude", "user", home, tmp_path)
+    install.install("claude", "user", hook="intentshield-hook", home=home, cwd=tmp_path)
+    install.uninstall("claude", "user", home=home, cwd=tmp_path)
+    assert not path.exists()
+
+
+def test_codex_hooks_and_wrapped_servers_in_one_file_come_back_exactly_in_either_order(tmp_path: Path, home: Path):
+    path = home / ".codex" / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text(CODEX_TOML)
+    install.install("codex", "user", hook="intentshield-hook", home=home)
+    install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
+    install.uninstall("codex", "user", home=home)
+    install.unwrap(path)
+    assert path.read_text() == CODEX_TOML
+
+
+# --- what install says -------------------------------------------------------------------------------------------------------
+
+def test_a_reinstall_without_an_option_says_that_the_option_is_gone(tmp_path: Path, home: Path, capsys):
+    install.install("claude", "user", hook="intentshield-hook", home=home, builtin_tools=True, review="always")
+    capsys.readouterr()
+    install.install("claude", "user", hook="intentshield-hook", home=home)
+    out = capsys.readouterr().out
+    assert "replaced the previous install" in out and "--builtin-tools" in out and "--review always" in out
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex"])
+def test_an_unchanged_reinstall_does_not_claim_a_replacement(tmp_path: Path, home: Path, capsys, harness: str):
+    install.install(harness, "user", hook="intentshield-hook", home=home, builtin_tools=True)
+    capsys.readouterr()
+    install.install(harness, "user", hook="intentshield-hook", home=home, builtin_tools=True)
+    assert "replaced" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex"])
+def test_a_codex_or_claude_reinstall_without_the_option_names_it(tmp_path: Path, home: Path, capsys, harness: str):
+    install.install(harness, "user", hook="intentshield-hook", home=home, builtin_tools=True)
+    capsys.readouterr()
+    install.install(harness, "user", hook="intentshield-hook", home=home)
+    assert "no longer set: --builtin-tools" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("builtin", [False, True])
+def test_install_says_that_shell_and_file_tools_are_guarded_only_with_the_option(tmp_path: Path, home: Path, capsys,
+                                                                                 builtin: bool):
+    install.install("claude", "user", hook="intentshield-hook", home=home, builtin_tools=builtin)
+    out = capsys.readouterr().out
+    assert ("MCP calls only, not the shell or the file tools" in out) is not builtin
+    assert ("--builtin-tools" in out) is not builtin

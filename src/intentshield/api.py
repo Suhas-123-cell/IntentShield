@@ -170,7 +170,8 @@ def create_app(
             if runtime is not None
             else await asyncio.to_thread(service().create_run, request.user_intent)
         )
-        assert request.call is not None
+        if request.call is None:  # not an assert: a check that stays when Python runs with -O
+            raise HTTPException(422, "Provide exactly one of scenario or call")
         if runtime is not None:
             return await runtime.evaluate_and_execute(run_id, request.call)
         return await asyncio.to_thread(

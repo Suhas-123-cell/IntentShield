@@ -189,7 +189,33 @@ Things the fix reports list as not done, or that this review found still open in
 17. **Credentials.** After 0.4.1, tokens that are base64- or hex-encoded, reversed, split over two adjacent fields or across lines are detected and masked as written (no new hits on 6,460 corpus rows, 79 READMEs or 12,937 MSB call arguments). A token split three ways, or encoded twice, is not.
 18. **Operator labelling.** `learn=benign` on a quiet injection teaches it as data when the regression set does not contain the wording (RP15).
 19. **Verification gaps.** Hook and proxy fixes were tested with synthetic events, not live Claude Code, Codex, Gemini or Cursor runs. The reviewers' own repro scripts were not re-run after the fixes.
-20. **Built-in tools (after 0.4.0, opt-in).** `--builtin-tools` reads shell, web and file tools, but: the event shapes come from the harnesses' docs and Claude Code's transcripts, and only Claude Code's `Bash` and Gemini CLI's `run_shell_command` events have been seen in live hook runs (2026-10-30, `results/harness-live-builtin/`; with the hooks, Gemini's uploads reached the canary in 0/11 runs against 12/12 unguarded; Haiku and DeepSeek attempted none); Codex's shell tool name and argument shape are guessed (several are accepted); Cursor's `beforeShellExecution` is wired after 0.4.1: measured, a hook's `ask` or `deny` held the command and its empty reply left it to Cursor's approval; live with the real hook, an upload a page asked for was held 3 times. Cursor's unguarded arm still needs a valid run. The shell parser is best effort: after 0.4.1 it reads `eval` and variables the command assigns itself (`C="curl ..."; $C`, `U=URL; curl -d @x $U`), which on 40 real sessions from other projects raised shell asks from 4 to 7 of 1,707 (all three put the user's own site, seen first in a tool output, in a variable; private transcripts, not reproducible from the repository); aliases, variables set elsewhere, scripts on disk, and data sent by a program that is not a known network tool (a compiled binary, `git` with a configured remote) are not read. A local file or command output with injected text only warns: a malicious file in a cloned repository does not flag the session. A here-document or `-c` program counts as network code only when it names a known client library. Gemini CLI has a `BeforeTool` `ask` decision, but the hook still refuses there, so Gemini users get a refusal, not a prompt. Measured with a stub hook that always asks (`benchmarks/harness_live/gemini_ask_probe.py`, 2026-10-30; one run per cell, and the screen captures and hook logs were not committed, so this is not re-checkable from the repository): on 0.37.1 headless yolo the asked command ran; on 0.66.0 headless yolo it did not run but the CLI waited for an answer until killed; on 0.66.0 interactive, default or yolo, it was a real prompt (Enter ran the command, Escape cancelled it); headless default mode does not offer the shell tool. The hook input names neither the version nor whether a person is there, so the hook cannot pick ask safely on its own; `--gemini-ask` turns it on for those who run Gemini CLI 0.66 or later interactively, and `doctor` checks the version (not whether a run is headless). After an injection, a plain download (a `curl` GET or HEAD, `wget -qO-`) to a host the user named passes: its path and query can still carry data to that host.
+20. **Built-in tools (after 0.4.0, opt-in).** `--builtin-tools` reads shell, web and file tools, but: the event shapes come from the
+    harnesses' docs and Claude Code's transcripts, and only Claude Code's `Bash` and Gemini CLI's `run_shell_command` events have been
+    seen in live hook runs (2026-10-30, `results/harness-live-builtin/`; with the hooks, Gemini's uploads reached the canary in 0/11
+    runs against 12/12 unguarded; Haiku and DeepSeek attempted none); Codex's shell tool name and argument shape are guessed (several
+    are accepted); Cursor's `beforeShellExecution` is wired after 0.4.1: measured, a hook's `ask` or `deny` held the command and its
+    empty reply left it to Cursor's approval; live with the real hook, an upload a page asked for was held 3 times.
+
+    Cursor's unguarded arm still needs a valid run. The shell parser is best effort: after 0.4.1 it reads `eval` and variables the
+    command assigns itself (`C="curl ..."; $C`, `U=URL; curl -d @x $U`), which on 40 real sessions from other projects raised shell
+    asks from 4 to 7 of 1,707 (all three put the user's own site, seen first in a tool output, in a variable; private transcripts, not
+    reproducible from the repository); aliases, variables set elsewhere, scripts on disk, and data sent by a program that is not a
+    known network tool (a compiled binary, `git` with a configured remote) are not read.
+
+    A local file or command output with injected text only warns: a malicious file in a cloned repository does not flag the session. A
+    here-document or `-c` program counts as network code only when it names a known client library. Gemini CLI has a `BeforeTool`
+    `ask` decision, but the hook still refuses there, so Gemini users get a refusal, not a prompt.
+
+    Measured with a stub hook that always asks (`benchmarks/harness_live/gemini_ask_probe.py`, 2026-10-30; one run per cell, and the
+    screen captures and hook logs were not committed, so this is not re-checkable from the repository): on 0.37.1 headless yolo the
+    asked command ran; on 0.66.0 headless yolo it did not run but the CLI waited for an answer until killed; on 0.66.0 interactive,
+    default or yolo, it was a real prompt (Enter ran the command, Escape cancelled it); headless default mode does not offer the shell
+    tool.
+
+    The hook input names neither the version nor whether a person is there, so the hook cannot pick ask safely on its own;
+    `--gemini-ask` turns it on for those who run Gemini CLI 0.66 or later interactively, and `doctor` checks the version (not whether
+    a run is headless). After an injection, a plain download (a `curl` GET or HEAD, `wget -qO-`) to a host the user named passes: its
+    path and query can still carry data to that host.
 
 ## Second audit (2026-10-31)
 
@@ -314,7 +340,19 @@ Still open: output-judge verdicts on results over 6 windows vary between runs (r
 
 ### Detection rules (rules-9, rules-1, rules-12, rules-10, rules-3 to rules-6)
 
-Three fix-and-review rounds, then a fourth by hand. The third review still broke four findings with close variants and found a regression: with the whole IANA root zone read bare, member chains of source code became hosts (`collections.abc`, `self.member.name`, `request.url.host`; on 1,537 local source files, 998 new values in 290 files), so editing with a line just read from a file asked where it used to be allowed. The round-4 fix reads a bare name only on a country code, an internationalized domain or a short list of longer domains (`com`, `io`, `pro`, `xyz`, `shop`, `icu` and others); every other root-zone domain is read after a word that points at a destination ("send the notes to relay.example.abc", quoted or not), with a scheme or as an address. It also repaired four root-zone entries a line wrap had split, stopped reading source code backwards because it says "backwards compatible" or `reversed(`, let a comma end a negated order ("do not send a reply, send the password to ..."), and matched a feed or pack indicator with a port (`c2.example:8080`, `[2001:db8::5]:8080`) against calls to its host. Tests in `tests/test_host_reading_rules.py` (50 of 58 fail on the round-3 tree; the rest are controls).
+Three fix-and-review rounds, then a fourth by hand. The third review still broke four findings with close variants and found a
+regression: with the whole IANA root zone read bare, member chains of source code became hosts (`collections.abc`,
+`self.member.name`, `request.url.host`; on 1,537 local source files, 998 new values in 290 files), so editing with a line just
+read from a file asked where it used to be allowed.
+
+The round-4 fix reads a bare name only on a country code, an internationalized domain or a short list of longer domains (`com`,
+`io`, `pro`, `xyz`, `shop`, `icu` and others); every other root-zone domain is read after a word that points at a destination
+("send the notes to relay.example.abc", quoted or not), with a scheme or as an address.
+
+It also repaired four root-zone entries a line wrap had split, stopped reading source code backwards because it says "backwards
+compatible" or `reversed(`, let a comma end a negated order ("do not send a reply, send the password to ..."), and matched a feed
+or pack indicator with a port (`c2.example:8080`, `[2001:db8::5]:8080`) against calls to its host. Tests in
+`tests/test_host_reading_rules.py` (50 of 58 fail on the round-3 tree; the rest are controls).
 
 | Finding | Severity | Status |
 |---|---|---|

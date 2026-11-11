@@ -795,6 +795,9 @@ def main(argv: list[str] | None = None) -> int:
         "--url",
         help="Verify an already-running IntentShield Streamable HTTP MCP endpoint",
     )
+    parser.add_argument("--summary", action="store_true",
+                        help="print one line (PASS 13/13 checks) and a line for each check that did not pass, instead of "
+                             "the JSON report")
     args = parser.parse_args(argv)
     if args.demo:  # the demo's files live in a directory that goes away with the run
         with tempfile.TemporaryDirectory(prefix="intentshield-demo-") as directory:
@@ -823,8 +826,17 @@ def _verify_and_print(args: argparse.Namespace) -> int:
             tail = _child_stderr_tail(args.config)
             if tail:
                 print(f"intentshield-mcp-verify: the proxy, started on its own, printed:\n{tail}", file=sys.stderr)
-    print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+    print(_summary(report) if args.summary else json.dumps(report, sort_keys=True, separators=(",", ":")))
     return 0 if report["status"] == "PASS" else 1
+
+
+def _summary(report: dict[str, Any]) -> str:
+    """``PASS 13/13 checks``, then a line for each check that did not pass."""
+    checks = [c for c in report.get("checks") or [] if isinstance(c, dict)]
+    passed = sum(c.get("status") == "PASS" for c in checks)
+    lines = [f"{report.get('status')} {passed}/{len(checks)} checks"]
+    lines += [f"  {c.get('status')} {c.get('id')}: {c.get('message', '')}" for c in checks if c.get("status") != "PASS"]
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":  # pragma: no cover

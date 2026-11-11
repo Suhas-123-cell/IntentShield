@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every number in docs/hook-fidelity-report.md, recomputed from the committed rows. No harness, no model, no network.
+"""Every number in docs/hook-fidelity-report.md and its appendix, recomputed from the committed rows (no harness, model, network).
 
     .venv/bin/python benchmarks/hook_fidelity/report_numbers.py            # print the version matrix and the finding lines
     .venv/bin/python benchmarks/hook_fidelity/report_numbers.py --json     # the same as JSON
@@ -243,6 +243,30 @@ def findings(rows: list[dict]) -> dict[str, str]:
     return out
 
 
+def build_counts(rows: list[dict]) -> dict[str, dict[str, int]]:
+    """One build count per harness, used the same way in every document.
+
+    ``installed``: distinct releases that appear in the committed rows, including the releases installed only to bisect one
+    change. ``scored``: those whose neutral control ran the hook, so the cells run on them test something. ``excluded``: the
+    rest, listed in the matrix output. The matrix and the findings count builds per reply, and not every scored build ran
+    every reply, so their numbers are smaller than ``scored`` where a reply ran on a subset."""
+    extra = read("claude", "r4-gaps", "bisect", "runs.jsonl") + read("codex", "r4-integration", "bisect", "runs.jsonl")
+    out: dict[str, dict[str, int]] = {}
+    for h in HARNESS_NAMES:
+        installed = {r["version"] for r in rows + extra if r["harness"] == h}
+        scored, excluded = live_builds(h, rows)
+        assert set(scored) | set(excluded) == installed, (h, installed ^ (set(scored) | set(excluded)))
+        out[h] = {"installed": len(installed), "scored": len(scored), "excluded": len(excluded)}
+    return out
+
+
+def build_counts_md(counts: dict[str, dict[str, int]]) -> str:
+    lines = ["| harness | installed builds | scored builds | excluded by control |", "|---|---|---|---|"]
+    for h, c in counts.items():
+        lines.append(f"| {HARNESS_NAMES[h]} | {c['installed']} | {c['scored']} | {c['excluded']} |")
+    return "\n".join(lines)
+
+
 def guards() -> dict[str, str]:
     """The guard comparison. k and n come from the committed summaries; the intervals are recomputed here."""
     out: dict[str, str] = {}
@@ -277,6 +301,13 @@ def guards() -> dict[str, str]:
         f"{_kn(total, 'false_ask', benign=True)[1]}, denies {_kn(total, 'false_deny', benign=True)[0]}; "
         f"safety-net denies {sn_g['false_deny']['k']} of {sn_g['false_deny']['n']}"
     )
+    out["fresh_benign_same_scope"] = (
+        f"benign calls, 214-item set, on the same items: on safety-net's shell scope IntentShield asks on "
+        f"{fmt(sn_is['false_ask']['k'], sn_is['false_ask']['n'])} and denies {sn_is['false_deny']['k']}, safety-net denies "
+        f"{fmt(sn_g['false_deny']['k'], sn_g['false_deny']['n'])}; on knox's scope IntentShield asks on "
+        f"{fmt(kx_is['false_ask']['k'], kx_is['false_ask']['n'])} and knox flags "
+        f"{fmt(kx_g['false_ask']['k'] + kx_g['false_deny']['k'], kx_g['false_ask']['n'])}"
+    )
     out.update(_fresh_discovery(fresh))
     det = json.loads((RES / "detect" / "summary.json").read_text())["decisions"]
 
@@ -292,8 +323,40 @@ def guards() -> dict[str, str]:
         f"safety-net on its scope: {fmt(s['false_allow'], s['n_harmful'])}; "
         f"knox on its scope: {fmt(k['false_allow'], k['n_harmful'])}"
     )
+    out["detect_benign"] = _detect_benign(det)
     out.update(_rules_same_items())
+    out["rules_without_overlap"] = _rules_without_overlap()
     return out
+
+
+def _detect_benign(det: dict) -> str:
+    """The 467-fixture set's benign calls: IntentShield with the rules, safety-net and knox, each on its own scope."""
+    after = json.loads((RES / "detect" / "r8fix" / "summary.json").read_text())["decisions"]
+    i = after["intentshield-r8fix"]["claimed"]["heldout"]
+    s = det["safety-net"]["claimed"]["heldout"]
+    k = det["knox"]["claimed"]["heldout"]
+    return (
+        "467-fixture set, benign calls, each guard on its own scope: IntentShield with the rules asks on "
+        f"{fmt(i['false_ask'], i['n_benign'])} and denies {i['false_deny']}; safety-net denies "
+        f"{fmt(s['false_deny'], s['n_benign'])}; knox flags {fmt(k['false_ask'] + k['false_deny'], k['n_benign'])}"
+    )
+
+
+def _rules_without_overlap() -> str:
+    """The 467-fixture set's before and after figures without the items whose command or path is in the repository's tests or
+    source (overlap_items.json, found by overlap_check.py)."""
+    pinned = frozenset(json.loads((HERE / "overlap_items.json").read_text())["fixtures_467_set"])
+    r = rules_before_after(pinned)
+
+    def pair(name: str) -> str:
+        return f"{fmt(r[name]['before'], r[name]['n'])} before, {fmt(r[name]['after'], r[name]['n'])} after"
+
+    return (
+        f"467-fixture set without the {len(pinned)} items whose command or path is in tests/ or src/ (post hoc): "
+        f"{r['held']['n']} items that stayed held out, {pair('held')}; "
+        f"{r['declared']['n']} items declared held out, {pair('declared')}; "
+        f"{r['builtin']['n']} built-in tool calls, {pair('builtin')}"
+    )
 
 
 # The 467-fixture set's held-out harmful items. 178 are declared held out. 12 of them are the AgentDojo `ignore_previous` family,
@@ -303,41 +366,54 @@ def guards() -> dict[str, str]:
 NOT_HELD_OUT_SOURCE = "agentdojo:agentdojo_ignore_previous"
 
 
-def _rules_same_items() -> dict[str, str]:
-    """IntentShield before and after the built-in tool rules on the same harmful items, from detect/fixtures.jsonl and the two
-    guards' rows in detect/r8fix/decisions.jsonl. The report once set 137/166 before against 6/178 after; the two are on one
-    denominator here."""
+def rules_before_after(exclude: frozenset[str] | set[str] = frozenset()) -> dict[str, dict[str, int]]:
+    """IntentShield before and after the built-in tool rules on the same harmful items of the 467-fixture set, from
+    detect/fixtures.jsonl and the two guards' rows in detect/r8fix/decisions.jsonl. ``exclude`` is a set of item ids to leave
+    out (overlap_check.py passes the items whose command or path is in the repository's tests or source). Each entry holds the
+    number of items and how many of them IntentShield lets through before and after the rules."""
     fixtures = [json.loads(line) for line in (RES / "detect" / "fixtures.jsonl").read_text().splitlines() if line.strip()]
-    harmful = [f for f in fixtures if f["primary"] and f["label"] == "harmful" and f["heldout"]]
+    declared = [f for f in fixtures if f["primary"] and f["label"] == "harmful" and f["heldout"] and f["item_id"] not in exclude]
     cls: dict[str, dict[str, str]] = {"intentshield": {}, "intentshield-r8fix": {}}
     for line in (RES / "detect" / "r8fix" / "decisions.jsonl").read_text().splitlines():
         d = json.loads(line)
         if d["guard"] in cls:
             cls[d["guard"]][d["row_id"]] = d["class"]
 
-    def let_through(guard: str, items: list[dict]) -> tuple[int, int]:
-        return sum(cls[guard][f["id"]] in ("allow", "error") for f in items), len(items)
+    def let_through(guard: str, items: list[dict]) -> int:
+        return sum(cls[guard][f["id"]] in ("allow", "error") for f in items)
 
-    declared = harmful
-    held = [f for f in declared if f["source"] != NOT_HELD_OUT_SOURCE]
-    builtin = [f for f in declared if f["tool_kind"] != "mcp"]
-    mcp = [f for f in declared if f["tool_kind"] == "mcp"]
-    mcp_same = sum(cls["intentshield"][f["id"]] == cls["intentshield-r8fix"][f["id"]] for f in mcp)
+    groups = {
+        "held": [f for f in declared if f["source"] != NOT_HELD_OUT_SOURCE],
+        "declared": declared,
+        "builtin": [f for f in declared if f["tool_kind"] != "mcp"],
+        "mcp": [f for f in declared if f["tool_kind"] == "mcp"],
+    }
+    out = {
+        name: {"n": len(items), "before": let_through("intentshield", items), "after": let_through("intentshield-r8fix", items)}
+        for name, items in groups.items()
+    }
+    out["mcp"]["same_reply"] = sum(cls["intentshield"][f["id"]] == cls["intentshield-r8fix"][f["id"]] for f in groups["mcp"])
+    return out
 
-    def pair(items: list[dict]) -> str:
-        return f"{fmt(*let_through('intentshield', items))} before, {fmt(*let_through('intentshield-r8fix', items))} after"
+
+def _rules_same_items() -> dict[str, str]:
+    """The same figures as text. The report once set 137/166 before against 6/178 after; the two are on one denominator here."""
+    r = rules_before_after()
+
+    def pair(name: str) -> str:
+        return f"{fmt(r[name]['before'], r[name]['n'])} before, {fmt(r[name]['after'], r[name]['n'])} after"
 
     return {
         "rules_same_items": (
             "467-fixture set, harmful held-out items IntentShield lets through, before the built-in tool rules and after them "
             "(post hoc): "
-            f"{len(held)} items that stayed held out, {pair(held)}; "
-            f"{len(declared)} items declared held out, {pair(declared)}; "
-            f"{len(builtin)} built-in tool calls, the only ones the rules act on, {pair(builtin)}"
+            f"{r['held']['n']} items that stayed held out, {pair('held')}; "
+            f"{r['declared']['n']} items declared held out, {pair('declared')}; "
+            f"{r['builtin']['n']} built-in tool calls, the only ones the rules act on, {pair('builtin')}"
         ),
         "rules_mcp_items": (
-            f"the {len(mcp)} MCP calls among the {len(declared)} get the same reply before and after the rules in "
-            f"{mcp_same} of {len(mcp)}"
+            f"the {r['mcp']['n']} MCP calls among the {r['declared']['n']} get the same reply before and after the rules in "
+            f"{r['mcp']['same_reply']} of {r['mcp']['n']}"
         ),
     }
 
@@ -413,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(rows)} committed stub rows\n")
     print(result["matrix_md"])
     print("\nbuilds excluded (neutral control did not run the hook):", {HARNESS_NAMES[h]: v for h, v in m["excluded"].items()})
+    print("\n[builds]\n" + build_counts_md(build_counts(rows)))
     for section in ("findings", "guards"):
         print(f"\n[{section}]")
         for key, text in result[section].items():

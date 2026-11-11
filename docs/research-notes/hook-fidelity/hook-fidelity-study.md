@@ -31,7 +31,7 @@ mechanism-level novelty is nil: every component has precedent in a guard's own h
 
 **What the measurement is** (the matrix measurements are unchanged by rounds 7 and 8; round 8 added comparisons, a narrow model arm and a Linux probe, and moved no matrix row; one status was downgraded: the Codex `--dangerously-bypass-hook-trust` finding is a reproduction of a publicly reported and
 fixed bug, openai/codex #26383, section 3.7). On macOS, with a deterministic scripted single-call stub model and headless modes for the matrix, a versioned conformance matrix shows what Claude Code
-(23 sampled builds), Codex CLI (17 sampled builds) and Gemini CLI (28 sampled builds) do with the verdict a third-party PreToolUse hook returns:
+(27 scored builds), Codex CLI (14) and Gemini CLI (28) do with the verdict a third-party PreToolUse hook returns:
 
 > A parsed `deny` was enforced wherever the hook ran, on every build and in every mode tested; no unenforced deny was found. An `ask` with no human is
 > denied by Claude Code from 2.1.85 (the change lies between the adjacent releases 2.1.84 and 2.1.85), ignored by Codex (as its documentation
@@ -1476,7 +1476,7 @@ Incidents, disclosed:
 
 Product changes that came in with this merge and are not measurement (see `CHANGELOG.md` 0.4.3): the verdict-translation layer, the
 deadline and launcher written by default into installed hooks (`--no-translate` and `INTENTSHIELD_HOOK_TRANSLATE=off` restore the old hook),
-version-aware `doctor` output, and `GEMINI_ASK_TESTED` wording. Round 7 added `intentshield wrap-hook` and the `ps`-free mode detector with its `unknown` mode (`CHANGELOG.md`); the wrap-hook measurement and the detector measurement each had a critic,
+version-aware `doctor` output, and the wording of the Gemini ask check. Round 7 added `intentshield wrap-hook` and the `ps`-free mode detector with its `unknown` mode (`CHANGELOG.md`); the wrap-hook measurement and the detector measurement each had a critic,
 the product decisions (the Gemini refusal in unknown mode, the default `--on-empty deny`, the note appended to every ask reason) did not, and **the shipped behaviour still needs a human review before a release**.
 
 ## 13. Not done, plainly

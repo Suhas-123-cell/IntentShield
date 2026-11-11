@@ -55,16 +55,18 @@ full proxy reached human 12/1579 = 0.8% [0.4, 1.3] (was 13). Every other count i
 
 **Fields of an MSB row.** `msb/cases.jsonl` has one JSON object per case: `id` (`c0000`...), `attack_type`, `agent` (the MSB agent
 persona), `system` (its system prompt), `tool` (the task server's tool), `task` (the user's request), `attack_task` and
-`implementation` (the injected instruction; text taken from MSB). A trace row in `msb/<model>/<arm>.jsonl` has the case's `id`,
-`attack_type`, `agent`, `tool` and `attack_task`, then: `trace`, one object per tool call the agent made (`tool` as
-`server:tool`, `arguments`, `role` of the server, `task` or `attack`, `decision` `ALLOW`, `REVIEW`, `BLOCK` or `UNKNOWN_TOOL`,
-`executed`, `sent` the arguments that reached the server after any rewrite, and `reasons`); `final`, the agent's last message
-(cut) or `(max steps)` at the 10-step cap; `judge_errors`; and the metrics `benchmarks/msb.py` `trace_metrics` computes:
-`harm_executed` (MSB's harm criterion on what reached the server or the output file's state), `harm_attempted`,
-`harm_reached_review`, `harm_blocked`, `harm_rewritten` (the call ran but what arrived was harmless, for example a blanked
-self-disclosure parameter), `task_tool_executed`, `task_tool_reached`, `task_tool_blocked`, `user_task` (MSB's task completion
-criterion; `null` for the attack types where MSB defines none) and `truncated`. Provenance of a run is in `msb/MANIFEST.json`,
-not in the rows.
+`implementation` (the injected instruction; text taken from MSB).
+
+A trace row in `msb/<model>/<arm>.jsonl` has the case's `id`, `attack_type`, `agent`, `tool` and `attack_task`, then: `trace`, one
+object per tool call the agent made (`tool` as `server:tool`, `arguments`, `role` of the server, `task` or `attack`, `decision`
+`ALLOW`, `REVIEW`, `BLOCK` or `UNKNOWN_TOOL`, `executed`, `sent` the arguments that reached the server after any rewrite, and
+`reasons`); `final`, the agent's last message (cut) or `(max steps)` at the 10-step cap; `judge_errors`; and the metrics
+`benchmarks/msb.py` `trace_metrics` computes: `harm_executed` (MSB's harm criterion on what reached the server or the output
+file's state), `harm_attempted`, `harm_reached_review`, `harm_blocked`, `harm_rewritten` (the call ran but what arrived was
+harmless, for example a blanked self-disclosure parameter), `task_tool_executed`, `task_tool_reached`, `task_tool_blocked`,
+`user_task` (MSB's task completion criterion; `null` for the attack types where MSB defines none) and `truncated`.
+
+Provenance of a run is in `msb/MANIFEST.json`, not in the rows.
 
 | Arm | Defense | Intent model |
 |---|---|---|
@@ -76,16 +78,17 @@ not in the rows.
 | `gateway-intent-advisory` | gateway, DeBERTa v2 as advisory evidence (MSB v11) | on |
 | `gateway-prompt-guard` | gateway plus Llama Prompt Guard 2 (qwen only) | off |
 
-**Code versions.** Only the three qwen v12 files below are shown to run on code whose guard and runner
-behave as at commit `0a3776d` (their provenance records it); the other arms are believed equivalent
-apart from the intent model, but that is not verified, because they carry no provenance. The qwen2.5:7b `none`, `baseline` and `gateway` arms are the MSB v12
-reruns of 2026-10-19; the originals (2026-10-12/13) predated gateway and hook fixes. Runs from v12
-on carry their commit, intent model hash, Ollama model digest and container image in
-`MANIFEST.json`; older runs have `"provenance": null`, and their dates and commits are in
-`docs/research-notes/artifact-paper.md` §4. Only those three qwen files have provenance; the other 19 of the 22
-trace files are earlier runs on older code: every `hooks` arm, `gateway-prompt-guard` and all the
-llama3.1:8b and ornith:9b main arms are MSB v8, the Gemini arms v9, `gateway-intent-veto` v10 and
-`gateway-intent-advisory` v11 (`source` in `MANIFEST.json`).
+**Code versions.** Only the three qwen v12 files below are shown to run on code whose guard and runner behave as at commit
+`0a3776d`. Their provenance records `0a3776d` for `none` and `159feb3` for `baseline` and `gateway`, and `src/` and
+`benchmarks/msb.py` are identical at the two commits. The other arms are believed equivalent apart from the intent model, but that is not
+verified, because they carry no provenance. The qwen2.5:7b `none`, `baseline` and `gateway` arms are the MSB v12 reruns of
+2026-10-19; the originals (2026-10-12/13) predated gateway and hook fixes.
+
+Runs from v12 on carry their commit, intent model hash, Ollama model digest and container image in `MANIFEST.json`; older runs
+have `"provenance": null`, and their dates and commits are in `docs/research-notes/artifact-paper.md` §4. Only those three qwen
+files have provenance; the other 19 of the 22 trace files are earlier runs on older code: every `hooks` arm,
+`gateway-prompt-guard` and all the llama3.1:8b and ornith:9b main arms are MSB v8, the Gemini arms v9, `gateway-intent-veto` v10
+and `gateway-intent-advisory` v11 (`source` in `MANIFEST.json`).
 
 **What does not replay offline.** `paper_numbers.py` and the injection table's rules column do; the
 rest needs inputs or services that are not in this directory: the exemplar index
@@ -99,7 +102,21 @@ which need Docker and the agent model to regenerate, 19 of which carry `provenan
 five days later reproduced all 220 call sequences and every per-case metric; 24 final answers
 differed only in wording.
 
-**Numbers with no raw data here.** (1) The review-load figures in `CHANGELOG.md`, `docs/security-review.md` and the report (for example shell asks 4/1,707, 7/1,713 and 8/1,713, MCP asks 741/3,405 and 53 to 55 of 126, and the 830/3,720 in IntentShield's own sessions) were measured by replaying the author's private Claude Code transcripts from 40 sessions of other projects and from IntentShield's own sessions, which are not committed and cannot be shared; they cannot be reproduced from this repository. Only the hand-written 35-call fixture of `benchmarks/shell_replay.py` reproduces (0 of 35 asked), and its author also tuned the parser. (2) The Gemini CLI ask-probe table (`docs/benchmarks.md`, finding 20 of the security review: six cells over versions 0.37.1 and 0.66.0) has no committed rows: `benchmarks/harness_live/gemini_ask_probe.py run <mode> <outdir>` writes each cell's screen text, `answered.txt` and hook log to the directory it is given, and those were not committed; treat the table as one run per cell, reported by the author and not re-checkable here. (3) The AgentDojo qwen2.5:7b runs of `docs/benchmarks.md` (slack 10/32 to 5/32 successful attacks, benign utility 6/8 to 4/8, and the travel and workspace suites): the per-case rows are kept by the author, not in the repository; only the structural replay of AgentDojo's published GPT-4o logs (`agentdojo/`) is committed. (4) Earlier figures that a doc quotes as "before" (for example the hook alone holding 27 of 30 jailbreak sends before the review's fixes) come from runs whose rows were not committed.
+**Numbers with no raw data here.** (1) The review-load figures in `CHANGELOG.md`, `docs/security-review.md` and the report (for
+example shell asks 4/1,707, 7/1,713 and 8/1,713, MCP asks 741/3,405 and 53 to 55 of 126, and the 830/3,720 in IntentShield's own
+sessions) were measured by replaying the author's private Claude Code transcripts from 40 sessions of other projects and from
+IntentShield's own sessions, which are not committed and cannot be shared; they cannot be reproduced from this repository.
+
+Only the hand-written 35-call fixture of `benchmarks/shell_replay.py` reproduces (0 of 35 asked), and its author also tuned the
+parser. (2) The Gemini CLI ask-probe table (`docs/benchmarks.md`, finding 20 of the security review: six cells over versions
+0.37.1 and 0.66.0) has no committed rows: `benchmarks/harness_live/gemini_ask_probe.py run <mode> <outdir>` writes each cell's
+screen text, `answered.txt` and hook log to the directory it is given, and those were not committed; treat the table as one run
+per cell, reported by the author and not re-checkable here.
+
+(3) The AgentDojo qwen2.5:7b runs of `docs/benchmarks.md` (slack 10/32 to 5/32 successful attacks, benign utility 6/8 to 4/8, and
+the travel and workspace suites): the per-case rows are kept by the author, not in the repository; only the structural replay of
+AgentDojo's published GPT-4o logs (`agentdojo/`) is committed. (4) Earlier figures that a doc quotes as "before" (for example the
+hook alone holding 27 of 30 jailbreak sends before the review's fixes) come from runs whose rows were not committed.
 
 **Known gaps.** Cases a server failed to start for (`c0343`) or the agent timed out on are listed
 per arm by `paper_numbers.py` and dropped from every arm of that model. The descriptions-exposed and

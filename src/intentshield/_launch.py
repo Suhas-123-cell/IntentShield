@@ -25,7 +25,8 @@ def missing_package(exc: BaseException) -> str | None:
 
 def explain(package: str) -> str:
     return (f"intentshield: this command needs the package '{package}', which is not installed (a --no-deps install has only the "
-            "hooks, install, uninstall, doctor and scan --no-connect). Install everything with: pip install intentshield-mcp")
+            "hooks, install, uninstall, doctor, demo, wrap-hook and scan --no-connect). "
+            "Install everything with: pip install intentshield-mcp")
 
 
 def guarded(run: Callable[[], Any]) -> Any:

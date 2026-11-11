@@ -1,8 +1,67 @@
 # Changelog
 
-User-visible changes go under `## Unreleased` (see [CONTRIBUTING.md](CONTRIBUTING.md#changelog)). Release dates are the dates of the release tags; 0.1.0 was never tagged and has none.
+User-visible changes go under `## Unreleased
 
-## Unreleased
+### Added
+
+- `wrap` and `unwrap` read Codex CLI's `~/.codex/config.toml` (`[mcp_servers.NAME]` tables) and VS Code's `servers` key
+  (`mcp.json`) and `mcp.servers` key (`settings.json`), as well as `mcpServers` files. A TOML entry written as an inline table or
+  with dotted keys is skipped with a message that names the manual entry. A file with no servers it can read now says which formats
+  it reads.
+- `intentshield doctor` prints an `ok` line per file whose wrapped servers passed (naming them) and counts warnings in its summary.
+  `--connect` starts each wrapped server once through its proxy and lists its tools, which runs the server's code; servers named by
+  a file in the working directory are started only with `--connect-project`. Without these flags it starts nothing.
+- `intentshield-mcp-verify --summary` prints `PASS 13/13 checks` and one line per failing check.
+- `intentshield demo` also sends one MCP call (an injected argument) to the default install's hook, and ends with the command that
+  adds the shell and file tools. `intentshield install` says when the default install guards MCP calls only, and says which options
+  a reinstall dropped (`--builtin-tools`, `--review always`).
+- `wrap-hook --print-entry --harness cursor` notes that the entry needs `"failClosed": true`. `scan` names the address of an HTTP
+  server that failed and says that `--no-connect` checks configs only.
+
+### Changed
+
+- A tool result split across adjacent text blocks is now scanned as one text, so an injected phrase cut between blocks is flagged by
+  the hook and by the proxy.
+- A tool call named `mcp__x` with no tool part is refused by the Claude Code hook; it was let through unchecked.
+- `install`, `uninstall`, `wrap` and `unwrap` give the file back with its exact bytes (line endings, comments, spacing).
+  `uninstall` puts back an original settings file that was empty or `{}` instead of deleting it, and keeps a backup that records
+  wrapped servers.
+- `intentshield doctor --help` and the README now say what doctor checks: files and commands, not a running server.
+- Python 3.11 is supported (CI runs 3.11 to 3.14). The development tools moved from the `dev` extra to a dependency group
+  (`uv sync --group dev`); the published package has no `dev` extra.
+- Only with `--builtin-tools`: the deny and ask rules read the command behind about 80 wrapper programs (`sudo`, `env`, `flock`,
+  `time`, `watch`, `ssh host CMD`, `find -exec`, `fd -x`, ...) and the PowerShell cmdlets that match a rule (`Remove-Item -Recurse
+  -Force`, `Get-Content` of a credential file, an upload, a download run with `Invoke-Expression`). A command with more than 8
+  wrappers, more than 200 substitutions or a brace list too long to expand now asks, with the limit named. After an injection a
+  written script over 200,000 characters asks. `ssh -i KEY host` is not a read of the key; `.zshrc.bak` is no longer asked about as
+  startup persistence; `id_rsa.bak` outside `.ssh` is a key.
+- Documents: the README is under 175 lines and leads with `uv tool install intentshield-mcp` or `pipx install` (pip refuses a system
+  Python). Results, commit hashes and dates moved to [docs/benchmarks.md](docs/benchmarks.md). The hook study report is about 2,000
+  words with an [appendix](docs/hook-fidelity-report-appendix.md), one build count per harness, and the benign comparison apart from
+  where IntentShield is ahead. The docs say that most of the exemplar detector's 18.1% on independent injections is in distribution
+  for its index (3.2% on sources it never saw).
+
+### Fixed
+
+- A proxy audit database is named like its proxy config (`NAME-<hash>.db`), so two clients' servers of the same name no longer share
+  one. A server wrapped by 0.4.3 keeps the `NAME.db` it has, also when it is wrapped again.
+- A failure of the threat-memory file is reported with the name of the method that failed and the call goes on as if the memory knew
+  nothing; the hook and the proxy now share one wrapper for this.
+
+### Upgrading from 0.4.3
+
+Nothing to run: an installed hook keeps working. Behaviour that changes for you:
+
+- **Everyone:** a reinstall prints which options it dropped, if any. `intentshield install <harness>` still guards MCP calls only.
+- **Everyone:** a `wrap` of a server that has no database yet names it `NAME-<hash>.db` instead of `NAME.db`. Proxy configs and
+  databases from 0.4.3 are not renamed and are used as they are.
+- **Everyone:** an injection split between two text blocks of a result, and a call named `mcp__x` with no tool part, are now refused
+  or flagged where they passed before.
+- **Everyone:** `pip install intentshield-mcp[dev]` no longer exists (pip warns that the extra is unknown). Contributors run
+  `uv sync --group dev`.
+- **Only with `--builtin-tools`:** more commands are denied or asked about (a deny behind a wrapper, `find -exec`, `ssh host` and the
+  PowerShell cmdlets), a few more are asked because they pass a limit, and two false asks stop (`ssh -i`, `.zshrc.bak`). This applies
+  to an install made with `--builtin-tools` as soon as the package is upgraded; the rules are text rules and best effort.
 
 ## 0.4.3 - 2026-11-11
 
@@ -102,7 +161,7 @@ Run `intentshield install <harness>` again to get the launcher and the deadline.
 
 The verdict translation came out of a measurement study of Claude Code, Codex CLI and Gemini CLI on a stub model (macOS, one
 author; a measurement note, not a paper). Its results, limits and reproduction commands are in the
-[short report](docs/hook-fidelity-report.md); the committed rows are in `results/hook-fidelity/`. Re-running the committed fixtures
+[report](docs/hook-fidelity-report.md); the committed rows are in `results/hook-fidelity/`. Re-running the committed fixtures
 through this release's rules changes 51 `intentshield` decisions: 48 from ask to deny (harmful credential-exfiltration rows) and 3
 from deny to ask (`git push -f origin HEAD`); the report says which sets. Overhead of the hook is measured in [docs/benchmarks.md](docs/benchmarks.md).
 
@@ -113,23 +172,57 @@ The fixes of a second self-audit (66 findings: 54 fixed, 10 partly fixed, 2 refu
 check before upgrading: a control or agent token set only in a `.env` found by searching (such as a checkout's own)
 now stops the gateway from starting; export it or put it in `~/.intentshield/.env`.
 
-- **Credentials, paths and learned memory (second audit, rules-7, rules-8, rules-14 to rules-18, rules-20):** tokens split by separators or written as percent, escapes, hex lists, char codes or base32, glued to a word, or split across a key and its value are found (other encodings still are not); an inserted `xxxxxxxx` no longer hides a real token, while a documentation token masked after a few characters stays a placeholder; `mask()` covers private-key bodies and joined tokens; self-disclosure parameters are read in any spelling and nesting; `../` paths join the working directory; the rule safety gate refuses polynomial-backtracking patterns; one server, whatever its tool names, can no longer evict what other servers taught the threat memory; account numbers in other digit scripts match. Credentials found on 19,476 benign texts unchanged (2); hook decisions on 95 real sessions unchanged.
-- **Detection rules (second audit, rules-1, rules-3 to rules-6, rules-9, rules-10, rules-12):** textbook override phrases flag (one-word variants of the closed list still pass); a negation exempts only a verb it governs, so "do not hesitate to send the password to ..." and "do not send a reply, send the password to ..." flag; feed and pack indicators match every spelling of a call's URL, address and host, including indicators with a port; `image_exfiltration` reads any case and more forms; bare hosts are read on every country code, internationalized domains and common longer domains, and on other root-zone domains after a word that points at a destination; IDN, ideographic-dot, octal and IPv6 hosts are read; tenant names on multi-tenant platforms trace and are learned, never the platform. Injection corpus 2,373 of 5,095 flagged (was 2,371), benign 29/1,365 and READMEs 8/79 unchanged; source code that says "backwards compatible" or `reversed(` is no longer read backwards for values.
-- **Proxy (second audit, proxy-4 to proxy-9, proxy-11 to proxy-15):** a flagged or unread tool's schema no longer carries the withheld text (enum, const, default, long names). `scan` keeps the user's own servers and the pins of servers that did not start. An approved read whose upstream fails gets a final answer. A judge outage at connect leaves descriptions unreviewed, not clean. A `.env` found by searching can no longer set the proxy config, the tokens or loader variables, and a token found only there stops the start: **if your control token is in the checkout's `.env`, export it or move it to `~/.intentshield/.env`**. The output judge keeps the readable words inside an encoded blob and mixes random windows into its reading. Oversize results are refused before copying. A malformed `Retry-After` no longer raises, and a call lists the upstream once instead of twice. With the judge off or passing, tool views are byte-identical. Still open: results over 6 windows are only partly read.
-- **Hooks, installer and doctor (second audit, hooks-7, hooks-9 to hooks-14, hooks-17, hooks-18):** `.local`, `.internal` and metadata hosts are no longer treated as this machine. After a flagged result, local builds, tests and commits run again on Gemini and Codex, unless they carry a tainted value, run a written script, load code through an option or discard work: 984 of 1,503 real commands are still refused there, down from 1,240. About 90 persistence points and build configs ask on a write after a flag, and Codex `apply_patch` is read. Doctor now catches a dead shebang interpreter, disabled hooks, matchers that miss MCP tools and a judge key set only in the shell. `wrap` skips servers that use `${VAR}`; `unwrap` works from its backup; Gemini settings with comments are read; `install --judge` stores a shell-only key. Sessions with no flag are unchanged (all 2,642 verdicts on 41 private sessions). Still open: a written test run after a flag, and lists of known names.
+- **Credentials, paths and learned memory (second audit, rules-7, rules-8, rules-14 to rules-18, rules-20):** tokens split by
+  separators or written as percent, escapes, hex lists, char codes or base32, glued to a word, or split across a key and its value
+  are found (other encodings still are not); an inserted `xxxxxxxx` no longer hides a real token, while a documentation token masked
+  after a few characters stays a placeholder; `mask()` covers private-key bodies and joined tokens; self-disclosure parameters are
+  read in any spelling and nesting; `../` paths join the working directory; the rule safety gate refuses polynomial-backtracking
+  patterns; one server, whatever its tool names, can no longer evict what other servers taught the threat memory; account numbers in
+  other digit scripts match.
+
+  Credentials found on 19,476 benign texts unchanged (2); hook decisions on 95 real sessions unchanged.
+- **Detection rules (second audit, rules-1, rules-3 to rules-6, rules-9, rules-10, rules-12):** textbook override phrases flag
+  (one-word variants of the closed list still pass); a negation exempts only a verb it governs, so "do not hesitate to send the
+  password to ..." and "do not send a reply, send the password to ..." flag; feed and pack indicators match every spelling of a
+  call's URL, address and host, including indicators with a port; `image_exfiltration` reads any case and more forms; bare hosts are
+  read on every country code, internationalized domains and common longer domains, and on other root-zone domains after a word that
+  points at a destination; IDN, ideographic-dot, octal and IPv6 hosts are read; tenant names on multi-tenant platforms trace and are
+  learned, never the platform.
+
+  Injection corpus 2,373 of 5,095 flagged (was 2,371), benign 29/1,365 and READMEs 8/79 unchanged; source code that says "backwards
+  compatible" or `reversed(` is no longer read backwards for values.
+- **Proxy (second audit, proxy-4 to proxy-9, proxy-11 to proxy-15):** a flagged or unread tool's schema no longer carries the
+  withheld text (enum, const, default, long names). `scan` keeps the user's own servers and the pins of servers that did not start.
+  An approved read whose upstream fails gets a final answer. A judge outage at connect leaves descriptions unreviewed, not clean.
+
+  A `.env` found by searching can no longer set the proxy config, the tokens or loader variables, and a token found only there stops
+  the start: **if your control token is in the checkout's `.env`, export it or move it to `~/.intentshield/.env`**. The output judge
+  keeps the readable words inside an encoded blob and mixes random windows into its reading. Oversize results are refused before
+  copying. A malformed `Retry-After` no longer raises, and a call lists the upstream once instead of twice. With the judge off or
+  passing, tool views are byte-identical. Still open: results over 6 windows are only partly read.
+- **Hooks, installer and doctor (second audit, hooks-7, hooks-9 to hooks-14, hooks-17, hooks-18):** `.local`, `.internal` and
+  metadata hosts are no longer treated as this machine. After a flagged result, local builds, tests and commits run again on Gemini
+  and Codex, unless they carry a tainted value, run a written script, load code through an option or discard work: 984 of 1,503 real
+  commands are still refused there, down from 1,240. About 90 persistence points and build configs ask on a write after a flag, and
+  Codex `apply_patch` is read.
+
+  Doctor now catches a dead shebang interpreter, disabled hooks, matchers that miss MCP tools and a judge key set only in the shell.
+  `wrap` skips servers that use `${VAR}`; `unwrap` works from its backup; Gemini settings with comments are read; `install --judge`
+  stores a shell-only key. Sessions with no flag are unchanged (all 2,642 verdicts on 41 private sessions). Still open: a written
+  test run after a flag, and lists of known names.
 - **Denial of service (second audit, proxy-2, rules-2, rules-13, proxy-1, rules-11, proxy-3, hooks-16, proxy-10):** the output, mailbox, credential and marker regexes are linear (200 KB in under 1 s, was 25 s to minutes); deep tool schemas and outputs no longer crash `connect()` or the scan; the gateway no longer runs an upstream's own regexes; session intent and tainted sets are bounded, with any dropped taint flagging the session. Detection unchanged on the corpus (2371/5095, 29/1365, 8/79) and on 19,476 credential texts; `redis://:pw@host` is now found. Details and what is still open in docs/security-review.md.
 - **Judge offline (second audit, hooks-8):** a judge that is down, rate-limited or has no key no longer turns every state-changing MCP call into an ask (Claude Code) or a refusal with a wrong instruction (Codex); its note goes to the model and the rules decide. After a failure that means no network or a refused key (not a timeout, rate limit or unreadable reply, which a hostile output could cause), the hooks skip the judge for 5 minutes: measured with an unreachable endpoint, the first call 1.13 s, the next ones 0.0 s.
 - **Judge with your own key:** `install --judge openai:<model>`, `openrouter:<model>` or `custom:<model> --judge-url <URL>` (any OpenAI-compatible endpoint; https, or http to localhost) asks for the key once and stores it, and the URL, in `~/.intentshield/.env`; Groq's free tier stays the default. `install --judge deepseek`, which the README documented, was refused by the installer and now works. A refused `--judge` spec no longer stores a key first. These judges are not measured.
-- **Shell parser (second audit, hooks-1 to hooks-6 and hooks-15):** a newline separates commands, comments
-  and unbalanced quotes no longer hide a send, variables are read in order, wrappers (`setsid`, `flock`,
-  `busybox`, `env -S`, `bash <(curl ..)`, `printf .. | sh`) and inline code no longer hide the command,
-  curl header, cookie and cluster forms count as sends, and options that run programs or write files are not
-  read-only. Three backstops independent of the parser: only plain syntax is read-only, every address in the
-  raw text (also with escapes decoded and variables taken out) is a destination, and a sender next to one in
-  the same statement sends. Parsing is linear (200,000 characters in 0.06 to 0.12 s, was 45 to 94 s); commands
-  over 100,000 characters are read from the raw text. Benign cost: shell asks on 40 private (uncommitted) sessions from other
-  projects went from 7 to 8 of 1,713; in IntentShield's own sessions flagged by injected outputs, from 830 to
-  1,066 of 3,720. Open residuals are listed in `docs/security-review.md`.
+- **Shell parser (second audit, hooks-1 to hooks-6 and hooks-15):** a newline separates commands, comments and unbalanced quotes no
+  longer hide a send, variables are read in order, wrappers (`setsid`, `flock`, `busybox`, `env -S`, `bash <(curl ..)`, `printf .. |
+  sh`) and inline code no longer hide the command, curl header, cookie and cluster forms count as sends, and options that run
+  programs or write files are not read-only.
+
+  Three backstops independent of the parser: only plain syntax is read-only, every address in the raw text (also with escapes
+  decoded and variables taken out) is a destination, and a sender next to one in the same statement sends. Parsing is linear
+  (200,000 characters in 0.06 to 0.12 s, was 45 to 94 s); commands over 100,000 characters are read from the raw text. Benign cost:
+  shell asks on 40 private (uncommitted) sessions from other projects went from 7 to 8 of 1,713; in IntentShield's own sessions
+  flagged by injected outputs, from 830 to 1,066 of 3,720. Open residuals are listed in `docs/security-review.md`.
 - **Cursor:** with `--builtin-tools`, `beforeShellExecution` now checks each shell command before it runs.
   Measured with `benchmarks/harness_live/cursor_hook_probe.py` on Cursor CLI 2026.10.22: a hook's `ask` or
   `deny` held a command, and `allow` did not skip Cursor's own approval (finding HK4). The same probe found
@@ -166,22 +259,24 @@ that the guard is really in the path, and Gemini CLI can ask instead of refusing
 unless you install with the new options, except that refusals on Codex and Gemini now tell the agent not to
 retry, and a dropped judge connection no longer blocks a call.
 
-- **Built-in tools, opt-in** (`intentshield install <harness> --builtin-tools`, or `--builtin-tools` on the
-  hook). The hooks now read the harness's own shell, web and file tools: Claude Code `Bash`, `WebFetch`,
-  `WebSearch`, `Read`, `Write`, `Edit`; Codex's shell tool; Gemini CLI's shell, fetch, search, read and
-  write tools; Cursor's `beforeReadFile` and `afterShellExecution`. A shell command is parsed for where it
-  reaches, whether it sends data and which secrets it reads (`src/intentshield/shell.py`). A command or
-  fetch to an address from an injected output is denied; sending data to an address that came only from a
-  tool output asks, as does reading secrets and sending data out; after an injection, commands that are not
-  read-only ask. A plain download (a `curl` GET or HEAD, or `wget -qO-`, that sends no data and writes no file)
-  counts as read-only, but after an injection it still asks unless every host it reaches was named by the user,
-  because its address can carry data. Before, re-fetching the page the user asked for asked too. Fetched pages, search results and remote command output are scanned like MCP results; the
-  user's own files and local command output only warn, because the rules fire on ordinary code there.
-  Benign review load (`benchmarks/shell_replay.py`): 0/35 calls on the committed fixture; replaying 40 real
-  Claude Code sessions from five projects, 4/1707 shell calls asked (0.2%, 95% CI 0.1-0.6%), 0/326 reads,
-  0/473 writes, and MCP asks rose from 47/126 to 53/126 because built-in outputs add observed values. On
-  this repository's own sessions, which handle attack text, 741/3405 shell calls asked (21.8%): 7 of 33
-  sessions read real injection text from the network. Off by default until the default is decided.
+- **Built-in tools, opt-in** (`intentshield install <harness> --builtin-tools`, or `--builtin-tools` on the hook). The hooks now
+  read the harness's own shell, web and file tools: Claude Code `Bash`, `WebFetch`, `WebSearch`, `Read`, `Write`, `Edit`; Codex's
+  shell tool; Gemini CLI's shell, fetch, search, read and write tools; Cursor's `beforeReadFile` and `afterShellExecution`. A shell
+  command is parsed for where it reaches, whether it sends data and which secrets it reads (`src/intentshield/shell.py`).
+
+  A command or fetch to an address from an injected output is denied; sending data to an address that came only from a tool output
+  asks, as does reading secrets and sending data out; after an injection, commands that are not read-only ask. A plain download (a
+  `curl` GET or HEAD, or `wget -qO-`, that sends no data and writes no file) counts as read-only, but after an injection it still
+  asks unless every host it reaches was named by the user, because its address can carry data. Before, re-fetching the page the user
+  asked for asked too.
+
+  Fetched pages, search results and remote command output are scanned like MCP results; the user's own files and local command
+  output only warn, because the rules fire on ordinary code there. Benign review load (`benchmarks/shell_replay.py`): 0/35 calls on
+  the committed fixture; replaying 40 real Claude Code sessions from five projects, 4/1707 shell calls asked (0.2%, 95% CI
+  0.1-0.6%), 0/326 reads, 0/473 writes, and MCP asks rose from 47/126 to 53/126 because built-in outputs add observed values.
+
+  On this repository's own sessions, which handle attack text, 741/3405 shell calls asked (21.8%): 7 of 33 sessions read real
+  injection text from the network. Off by default until the default is decided.
 - A refused call now tells the agent not to retry it and to tell the user instead (Codex CLI and Gemini CLI,
   where an ask is a refusal). In the live built-in tool runs, Gemini CLI retried one refused command up to 75
   times. The Gemini hook also ends the agent's turn (`continue: false`, which Gemini CLI 0.37 honours in

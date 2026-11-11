@@ -1063,12 +1063,34 @@ def _values_text(value: Any) -> str:
 _AS_SPACE = str.maketrans("|,;", "   ")
 
 
+def _joined_blocks(value: Any) -> list[str]:
+    """For each list in ``value`` that holds two or more text blocks (``{"type": "text", "text": ...}`` or plain strings), the
+    blocks joined with a space and with nothing. A client model reads adjacent blocks as one text, so a sentence may be split
+    between them at a word or inside one. Each list costs two copies of its own text, so the total is linear."""
+    out: list[str] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            texts = [x["text"] if isinstance(x, dict) and isinstance(x.get("text"), str) else x for x in item]
+            texts = [t for t in texts if isinstance(t, str)]
+            if len(texts) > 1:
+                out += [" ".join(texts), "".join(texts)]
+            stack.extend(x for x in item if isinstance(x, (dict, list, tuple)))
+    return out
+
+
 def scan_output(value: Any, trusted: str = "") -> list[str]:
     text = leaf_text(value)
     found = _scan(text, _OUTPUT_RULES, trusted, hidden=True)
     if not isinstance(value, str) or text.translate(_AS_SPACE) != text:
         if (cells := _values_text(value)) != text:
             found += [name for name in _scan(cells, _OUTPUT_RULES, trusted) if name not in found]
+    if not isinstance(value, str):
+        for joined in _joined_blocks(value):
+            found += [name for name in _scan(joined, _OUTPUT_RULES, trusted) if name not in found]
     return found
 
 
