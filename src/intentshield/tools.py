@@ -62,7 +62,7 @@ class ReadInboxArgs(BaseModel):
 
 class SendEmailArgs(BaseModel):
     resource: str = Field(default="outbox", pattern="^outbox$")
-    # A deliberately conservative syntactic check keeps the MVP dependency-free.
+    # A deliberately conservative syntactic check keeps the module dependency-free.
     # It is not intended to provide RFC-complete email validation.
     to: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=320)
     subject: str = Field(min_length=1, max_length=200)

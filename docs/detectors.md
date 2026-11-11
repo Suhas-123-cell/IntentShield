@@ -118,7 +118,7 @@ injections caught and the share of benign texts flagged:
 
 | detector | injections caught | benign flagged | hard benign flagged |
 |---|---|---|---|
-| rules | 49.9% | 2.1% | 14/142 (12 are quoted attacks) |
+| rules (before 0.3.5; the rerun below gives 50.9%) | 49.9% | 2.1% | 14/142 (12 are quoted attacks) |
 | Prompt Guard 2 (86M, Groq) | 40.2% | 2.0% | 12/142 (all quoted attacks) |
 | exemplars on outputs only | 11.4% | 0.4% | 1/142 |
 | exemplars, descriptions and outputs (earlier index; `results/injection/report-local-2026-10-13.json`) | 20.7% | 2.4% | 9/142 (7 are usage-guidance descriptions) |

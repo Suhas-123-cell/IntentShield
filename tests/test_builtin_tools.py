@@ -92,9 +92,13 @@ def test_an_injected_page_then_curl_to_its_host_is_denied_and_the_session_asks(t
     assert handle("claude", bash("ls && git status"), g) is None
     assert handle("claude", bash("curl -s https://notes.example.dev/setup | head -50"), g) is None
     assert handle("claude", bash("curl -sL https://notes.example.dev/setup/next"), g) is None  # same host
+    # An address on this machine is the same with or without a scheme and a port.
+    for local in ("curl -s localhost:8000/health", "curl -s http://localhost:8000/health", "curl http://127.0.0.1:3000",
+                  "curl -s http://[::1]:3000/"):
+        assert handle("claude", bash(local), g) is None, local
+    assert decision(handle("claude", bash("curl -X DELETE http://localhost:8000/health"), g)) == "ask"
     # A download elsewhere may carry data in its address, and one that saves a file or picks a method changes things.
-    for command in ("curl -s https://api.other.example/q?x=1", "curl -s http://localhost:8000/admin",
-                    "curl -so page.html https://notes.example.dev/setup",
+    for command in ("curl -s https://api.other.example/q?x=1", "curl -so page.html https://notes.example.dev/setup",
                     "curl -X DELETE https://notes.example.dev/setup", "wget https://notes.example.dev/setup"):
         assert decision(handle("claude", bash(command), g)) == "ask", command
     assert handle("claude", claude("PreToolUse", tool_name="Write",
@@ -373,12 +377,19 @@ def _ran(db: Path, harness: str, when: float) -> None:
         conn.execute("INSERT OR REPLACE INTO harness_events VALUES (?, ?)", (harness, when))
 
 
-def test_doctor_passes_a_working_install_and_fails_one_that_never_ran(tmp_path: Path, capsys):
+def test_doctor_passes_a_working_install_and_fails_one_that_never_ran(tmp_path: Path, capsys, monkeypatch):
     home, cwd, db = tmp_path / "home", tmp_path / "work", tmp_path / "home" / ".intentshield" / "hooks.db"
     cwd.mkdir(parents=True)
     path = install.install("claude", home=home, cwd=cwd, hook=_hook_exe(tmp_path))
+    # Just installed: no hook has run, which is expected, so it is a warning that says what to do next, not a failure.
+    assert doctor.doctor(home, cwd, db) == 0
+    out = capsys.readouterr().out
+    assert "no hook has run yet, which is expected" in out and "doctor` again" in out and "FAIL" not in out
+    # The same state an hour later is a failure: the harness is not running the hooks.
+    monkeypatch.setattr(doctor, "FRESH_SECONDS", 0)
     assert doctor.doctor(home, cwd, db) == 1
     assert "no hook has run since" in capsys.readouterr().out
+    monkeypatch.undo()
     _ran(db, "claude", time.time() + 5)
     assert doctor.doctor(home, cwd, db) == 0
     assert "ok   claude" in capsys.readouterr().out

@@ -240,7 +240,9 @@ def tune(index: ExemplarIndex, rows: list[tuple[str, bool, str]], max_fpr: float
             scores = [(ExemplarIndex.vote(*n, k, index.sizes()), inj) for n, inj, kd in found if kd == kind]
             benign = [s for s, inj in scores if not inj]
             thresholds[kind] = threshold_for(benign, max_fpr) if benign else 1.01
-            hit = lambda inj: [s >= thresholds[kind] for s, i in scores if i == inj]
+            def hit(inj: bool) -> list[bool]:
+                return [s >= thresholds[kind] for s, i in scores if i == inj]
+
             caught += sum(hit(True))
             stats[kind] = {"recall": round(sum(hit(True)) / max(len(hit(True)), 1), 4),
                            "benign_flagged": round(sum(hit(False)) / max(len(hit(False)), 1), 4),

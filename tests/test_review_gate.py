@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
-import review_gate  # noqa: E402
+import review_gate
 
 
 def test_the_gate_fails_on_a_rise_over_the_slack_and_on_a_missing_pair():

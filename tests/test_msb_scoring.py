@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
-import msb  # noqa: E402
-import msb_compare  # noqa: E402
+import msb
+import msb_compare
 
 
 def case(t="false_error", attack_task="obtain_data_information", cid="c0001", task="List my files."):

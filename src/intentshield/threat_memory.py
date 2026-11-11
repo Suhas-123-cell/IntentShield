@@ -190,9 +190,9 @@ def window(text: str) -> str:
 def canonical(value: Any) -> str:
     if not isinstance(value, str):
         return ""
-    value = _normalize(value[:2048]).strip().strip(".,;:\"'<>(){}").lower()
+    text: str = _normalize(value[:2048]).strip().strip(".,;:\"'<>(){}").lower()
     # a bracketed IPv6 address keeps its brackets when a port follows ("[2001:db8::5]:8080")
-    return value if re.fullmatch(r"\[[0-9a-f:.]+\]:\d{1,5}", value) else value.strip("[]")
+    return text if re.fullmatch(r"\[[0-9a-f:.]+\]:\d{1,5}", text) else text.strip("[]")
 
 
 _IPV4 = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}")
@@ -437,7 +437,7 @@ class ThreatMemory:
         finally:
             db.close()
 
-    def _read(self, query: str, params: tuple = ()) -> list[sqlite3.Row]:
+    def _read(self, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         with self._lock:
             return self._reader.execute(query, params).fetchall()
 
@@ -582,8 +582,9 @@ class ThreatMemory:
         if not isinstance(source, str):
             return 0
         try:
-            return self._read("SELECT COUNT(DISTINCT run_key) FROM threat_sources WHERE source=? AND seen>=?",
-                              (source[:200], self.clock() - self.hostile_window))[0][0]
+            count: int = self._read("SELECT COUNT(DISTINCT run_key) FROM threat_sources WHERE source=? AND seen>=?",
+                                    (source[:200], self.clock() - self.hostile_window))[0][0]
+            return count
         except sqlite3.Error:
             return 0
 
@@ -715,7 +716,7 @@ class ThreatMemory:
                     self._sight(db, item, run_key, source, now)
                     summary["domains"].append(host)
 
-    def _learn_prints(self, db: sqlite3.Connection, summary: dict[str, Any], candidates: list, run_key: str,
+    def _learn_prints(self, db: sqlite3.Connection, summary: dict[str, Any], candidates: list[Any], run_key: str,
                       source: str, now: float) -> None:
         revoked = [frozenset(json.loads(r[0])) for r in
                    db.execute("SELECT shingles_json FROM threat_fingerprints WHERE status='revoked'")]
@@ -766,7 +767,8 @@ class ThreatMemory:
                        "decided_at=? WHERE id=?", (origin, json.dumps(provenance), now, now, row["id"]))
         else:
             db.execute("UPDATE threat_indicators SET last_seen=? WHERE id=?", (now, row["id"]))
-        return row["id"]
+        found: str = row["id"]
+        return found
 
     @staticmethod
     def _sight(db: sqlite3.Connection, item: str, run_key: str, source: str, now: float,
@@ -965,15 +967,15 @@ class ThreatMemory:
 
     @staticmethod
     def _public(row: Any) -> dict[str, Any]:
-        row = dict(row)
+        public: dict[str, Any] = dict(row)
         for key in ("provenance_json", "gate_json"):
-            if key in row:
-                row[key.removesuffix("_json")] = json.loads(row.pop(key))
-        row.pop("shingles_json", None)
+            if key in public:
+                public[key.removesuffix("_json")] = json.loads(public.pop(key))
+        public.pop("shingles_json", None)
         for key in ("first_seen", "last_seen", "decided_at"):
-            if row.get(key) is not None:
-                row[key] = datetime.fromtimestamp(row[key], UTC).isoformat(timespec="seconds")
-        return row
+            if public.get(key) is not None:
+                public[key] = datetime.fromtimestamp(public[key], UTC).isoformat(timespec="seconds")
+        return public
 
     def items(self) -> dict[str, Any]:
         indicators = self._read("SELECT * FROM threat_indicators ORDER BY last_seen DESC")
@@ -1112,10 +1114,15 @@ def main(argv: list[str] | None = None) -> None:
             result = rule_packs.run_command(args)
         else:
             memory = ThreatMemory(args.db)
-            result = {"list": memory.items, "stats": memory.stats, "export": memory.export,
-                      "confirm": lambda: memory.confirm(args.id), "revoke": lambda: memory.revoke(args.id),
-                      "allow": lambda: memory.allow(args.value), "import": lambda: memory.import_feed(args.feed),
-                      "benign": lambda: memory.add_benign(args.text)}[args.command]()
+            # the commands that take one argument, by the name of the option that holds it (read only for the command chosen)
+            with_argument: dict[str, tuple[Callable[[Any], dict[str, Any]], str]] = {
+                "confirm": (memory.confirm, "id"), "revoke": (memory.revoke, "id"), "allow": (memory.allow, "value"),
+                "import": (memory.import_feed, "feed"), "benign": (memory.add_benign, "text")}
+            if args.command in with_argument:
+                method, field_name = with_argument[args.command]
+                result = method(getattr(args, field_name))
+            else:
+                result = {"list": memory.items, "stats": memory.stats, "export": memory.export}[args.command]()
     except (KeyError, ValueError, OSError, sqlite3.Error, rule_packs.PackError) as exc:
         print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}))
         sys.exit(1)

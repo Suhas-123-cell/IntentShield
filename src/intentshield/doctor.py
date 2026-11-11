@@ -10,7 +10,8 @@ that cannot be told. It also lists stdio MCP servers that are
 not behind the transparent proxy, whose tool descriptions the hooks never see. For each harness it records the
 version it finds on PATH (``~/.intentshield/harness-versions.json``, which the hooks read to choose their replies) and
 prints what the hook-fidelity study measured for that version. A line starts with ``ok``, ``--`` (nothing installed),
-``note`` (a fact about the harness that IntentShield already works around: nothing to do), ``warn`` (worth a look) or
+``note`` (a fact about the harness that IntentShield already works around, printed with ``--verbose`` and counted otherwise),
+``warn`` (worth a look; right after an install it says that no hook has run yet, which is expected until the harness is used) or
 ``FAIL`` (a problem). Exit status: 1 on any problem (a line that starts with FAIL), else 0; when no hook and no wrapped server
 is found it says that nothing is installed and still exits 0. Apart from that record it reads only. Only the standard library is
 imported.
@@ -40,6 +41,8 @@ REQUIRED = {"claude": ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToo
             "codex": ("UserPromptSubmit", "PreToolUse", "PostToolUse"),
             "cursor": ("beforeSubmitPrompt", "beforeMCPExecution", "afterMCPExecution"),
             "gemini": ("BeforeAgent", "BeforeTool", "AfterTool")}
+# An install younger than this (seconds) with no hook run yet is expected, not a failure.
+FRESH_SECONDS = 3600
 _KEYS = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEEPSEEK_API_KEY",
          "openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", "custom": "INTENTSHIELD_JUDGE_API_KEY"}
 
@@ -57,21 +60,28 @@ def gemini_version() -> tuple[int, ...] | None:
 
 
 class Report:
-    def __init__(self) -> None:
+    def __init__(self, home: Path | None = None, verbose: bool = False) -> None:
         self.problems = 0
         self.notes = 0
         self.warnings = 0
+        self.verbose = verbose
+        self._home = str(home) if home else ""
         self._seen: set[tuple[str, str, str]] = set()
 
     def line(self, level: str, subject: str, message: str) -> None:
-        """One line of the report. The same line is printed and counted once (two hook commands can name one program)."""
+        """One line of the report. The same line is printed and counted once (two hook commands can name one program). A path in
+        the home directory is written ``~/...``, and a note (a fact about a harness that IntentShield already works around) is
+        printed only with ``--verbose``: it is counted either way."""
         if (level, subject, message) in self._seen:
             return
         self._seen.add((level, subject, message))
         self.problems += level == "FAIL"
         self.notes += level == "note"
         self.warnings += level == "warn"
-        print(f"{level:<4} {subject}: {message}")
+        if level == "note" and not self.verbose:
+            return
+        text = f"{level:<4} {subject}: {message}"
+        print(text.replace(self._home + "/", "~/") if self._home else text)
 
 
 def _hooks(harness: str, path: Path) -> dict[str, list[dict[str, Any]]]:
@@ -237,6 +247,28 @@ def _disabled(harness: str, path: Path, home: Path, cwd: Path | None = None) -> 
     return ""
 
 
+def _loosening_settings(harness: str, path: Path, home: Path, cwd: Path | None = None) -> list[str]:
+    """Settings of Claude Code's ``env`` block (this file, its ``.local`` sibling, the user's and the project's) that loosen the
+    hook: the hook obeys them, and says so in each reply, but a project's file can set them without the user looking."""
+    if harness != "claude":
+        return []
+    from .harness import _LOOSENING_ENV  # not at the top: the hook's own module is large and doctor reads settings only
+    project = [cwd / ".claude" / "settings.json", cwd / ".claude" / "settings.local.json"] if cwd else []
+    notes = []
+    for candidate in dict.fromkeys([path, path.with_name("settings.local.json"), home / ".claude" / "settings.json",
+                                    home / ".claude" / "settings.local.json", *project]):
+        try:
+            data = install._parse(candidate.read_text(encoding="utf-8"), candidate)
+        except (OSError, ValueError):
+            continue
+        env = data.get("env") if isinstance(data, dict) else None
+        for name, _, loosens, what in _LOOSENING_ENV:
+            value = env.get(name) if isinstance(env, dict) else None
+            if isinstance(value, str) and loosens(value):
+                notes.append(f"{candidate} sets {name}={value}, which {what}. Remove it from the env block unless you meant it")
+    return notes
+
+
 # Tool names the harness gives an MCP tool: a hook whose matcher does not match one guards no MCP call.
 _MCP_NAME = {"claude": "mcp__server__tool", "codex": "mcp__server__tool", "gemini": "mcp_server_tool"}
 _CALL_EVENT = {"claude": "PreToolUse", "codex": "PreToolUse", "gemini": "BeforeTool"}
@@ -322,6 +354,8 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
             _check_gemini_ask(report, subject, version)
     if why := _disabled(harness, path, home, cwd):
         report.line("FAIL", subject, f"the hooks are installed but switched off: {why}")
+    for note in _loosening_settings(harness, path, home, cwd):
+        report.line("warn", subject, note)
     if harness in translation.LAUNCHER_HARNESSES:
         plain = [h for event in translation.CALL_EVENTS for h in hooks.get(event, []) if translation.LAUNCHER not in h["command"]]
         if plain:
@@ -354,6 +388,14 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
                         f"not {harness} (last at {time.strftime('%Y-%m-%d %H:%M', time.localtime(piped))}), which is what a "
                         f"hand-piped test event looks like, so it is not counted as a run. Start {harness} and send any "
                         "prompt; if this stays, the harness is not running the hooks.")
+        elif (runs.events.get(harness) or 0) < installed and time.time() - installed < FRESH_SECONDS:
+            # Right after an install no hook has run, which is what a working install looks like until the harness is used.
+            minutes = max(int((time.time() - installed) // 60), 0)
+            report.line("warn", subject, f"installed {minutes} minute(s) ago; no hook has run yet, which is expected until "
+                        f"you use {harness}. Start {harness}, send any prompt"
+                        + (" and approve the IntentShield hooks when Codex asks (it skips hooks nobody has trusted)"
+                           if harness == "codex" else "")
+                        + ", then run `intentshield doctor` again: this line becomes ok.")
         else:
             hint = (" Codex skips hooks nobody has trusted: start `codex` and approve the IntentShield hooks."
                     if harness == "codex" else
@@ -484,16 +526,18 @@ def _connect(report: Report, targets: list[tuple[Path, str, dict[str, Any]]], ti
 
 
 def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = None, connect: bool = False,
-           connect_project: bool = False) -> int:
+           connect_project: bool = False, verbose: bool = False) -> int:
     home, cwd = home or Path.home(), cwd or Path.cwd()
     db = db or Path(os.getenv("INTENTSHIELD_HOOK_DB") or home / ".intentshield" / "hooks.db")
-    report = Report()
+    report = Report(home, verbose)
     runs = _last_runs(db)
     guarded = []
     for harness in install.HARNESSES:
         paths = [install.settings_path(harness, "user", home, cwd)]
         if harness != "codex":
             paths.append(install.settings_path(harness, "project", home, cwd))
+            if legacy := install.legacy_project_settings(harness, cwd):  # where 0.4.3 and earlier put Claude Code's project hooks
+                paths.append(legacy)
         for path in dict.fromkeys(paths):
             # a project's settings file (cwd/.claude/settings.json) is run for sessions inside that project only
             project = path.parent.parent if path != paths[0] else None
@@ -531,8 +575,11 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
         print(f"\nno problems found, {report.warnings} warning(s) above")
     else:
         print("\nno problems found")
-    if report.notes:
-        print(f"{report.notes} note(s) state how the harness behaves and what IntentShield does about it; they need no action.")
+    if report.notes and report.verbose:
+        print(f"{report.notes} note(s) above state how a harness behaves and what IntentShield does about it.")
+    elif report.notes:
+        print(f"{report.notes} note(s) about how the harnesses behave (measured, and already allowed for) are not shown; "
+              "`intentshield doctor --verbose` lists them.")
     return 1 if report.problems else 0
 
 
@@ -642,13 +689,16 @@ def add_subcommand(sub: Any) -> None:
     p.add_argument("--db", type=Path, default=None, help="the hooks' database (default ~/.intentshield/hooks.db)")
     p.add_argument("--connect", action="store_true",
                    help="start each wrapped server through its proxy once and list its tools (runs the server's code)")
+    p.add_argument("--verbose", action="store_true",
+                   help="also print the notes: facts about how each harness behaves that IntentShield already allows for")
     p.add_argument("--connect-project", action="store_true",
                    help="with --connect, also start the servers named by files in this directory (code the repository chose)")
 
 
 def run(args: argparse.Namespace) -> int:
     try:
-        return doctor(db=args.db, connect=args.connect or args.connect_project, connect_project=args.connect_project)
+        return doctor(db=args.db, connect=args.connect or args.connect_project, connect_project=args.connect_project,
+                      verbose=args.verbose)
     except OSError as exc:
         print(f"intentshield doctor: {exc}", file=sys.stderr)
         return 1

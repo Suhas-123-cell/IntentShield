@@ -100,7 +100,10 @@ PARAGRAPH_FILES = (
     "docs/architecture-and-testing.md",
     "docs/contribution.md",
     "docs/hook-fidelity-report.md",
+    "docs/guide.md",
 )
+# Sections that the paragraph test does not read, by file. None: every section of every file listed above is checked.
+PARAGRAPH_EXCLUDED_SECTIONS: dict[str, tuple[str, ...]] = {}
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 
 
@@ -111,10 +114,12 @@ def _long_paragraphs(name: str, limit: int, root: Path | None = None) -> list[st
     block: list[str] = []
     start = 0
     fenced = False
+    skipped = PARAGRAPH_EXCLUDED_SECTIONS.get(name, ())
+    excluded_level = 0     # the heading level of the section being skipped, 0 when none is
 
     def close() -> None:
         text = " ".join(part.strip() for part in block)
-        if len(text) > limit:
+        if len(text) > limit and not excluded_level:
             problems.append(f"{name}:{start}: a paragraph of {len(text)} characters (limit {limit}): {text[:70]}...")
         block.clear()
 
@@ -124,7 +129,16 @@ def _long_paragraphs(name: str, limit: int, root: Path | None = None) -> list[st
             fenced = not fenced
             continue
         stripped = line.strip()
-        if fenced or not stripped or stripped.startswith(("#", "|", "<!--", "<a ")):
+        heading = _HEADING.match(line)
+        if heading and not fenced:
+            close()
+            level = len(heading.group(1))
+            if excluded_level and level <= excluded_level:
+                excluded_level = 0
+            if stripped in skipped:
+                excluded_level = level
+            continue
+        if fenced or not stripped or stripped.startswith(("|", "<!--", "<a ")):
             close()
             continue
         if _LIST_ITEM.match(line):
@@ -153,6 +167,15 @@ def test_the_paragraph_checker_counts_a_wrapped_paragraph_and_a_list_item_separa
     found = _long_paragraphs("doc.md", 500, tmp_path)
     assert len(found) == 1 and found[0].startswith("doc.md:3:")
     assert not _long_paragraphs("doc.md", 700, tmp_path)
+
+
+def test_the_paragraph_checker_skips_a_named_section_and_the_guide_is_checked_whole(tmp_path, monkeypatch):
+    long = "word " * 300
+    (tmp_path / "doc.md").write_text(f"# T\n\n## A\n\n### Skipped\n\n{long}\n\n#### Inside\n\n{long}\n\n## B\n\n{long}\n")
+    monkeypatch.setitem(PARAGRAPH_EXCLUDED_SECTIONS, "doc.md", ("### Skipped",))
+    assert [found.split(":")[1] for found in _long_paragraphs("doc.md", 900, tmp_path)] == ["15"]
+    assert "docs/guide.md" in PARAGRAPH_FILES
+    assert not PARAGRAPH_EXCLUDED_SECTIONS.get("docs/guide.md")
 
 
 def test_the_changelog_opens_with_an_unreleased_heading_and_closed_code_spans():

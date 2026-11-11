@@ -588,7 +588,7 @@ def _read_body(handler: BaseHTTPRequestHandler) -> tuple[bytes, str | None]:
             return zlib.decompress(raw), None
         if encoding == "zstd" and _zstd is not None:
             return _zstd.decompress(raw), None
-    except Exception as exc:  # noqa: BLE001 - any decode failure is reported, not raised
+    except Exception as exc:
         return b"", f"cannot decode {encoding} body: {type(exc).__name__}"
     return b"", f"unsupported Content-Encoding {encoding}"
 
@@ -612,16 +612,16 @@ def _make_handler(server: StubServer):
         def _error(self, status: int, message: str) -> None:
             self._send(status, json.dumps({"error": {"type": "stub_error", "message": message}}).encode())
 
-        def do_HEAD(self) -> None:  # noqa: N802
+        def do_HEAD(self) -> None:
             self._handle()
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             self._handle()
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             self._handle()
 
-        def do_OPTIONS(self) -> None:  # noqa: N802
+        def do_OPTIONS(self) -> None:
             self._handle()
 
         def _handle(self) -> None:
@@ -638,7 +638,7 @@ def _make_handler(server: StubServer):
             record["kind"] = kind or None
             try:
                 status, body, ctype = self._respond(record, api, kind, model, raw, problem, split.query, seq)
-            except Exception as exc:  # noqa: BLE001 - the log must record a failure the harness will see as a 500
+            except Exception as exc:
                 record["decision"] = "error"
                 record["error"] = f"{type(exc).__name__}: {exc}"
                 status, body, ctype = 500, json.dumps({"error": {"type": "stub_error", "message": str(exc)}}).encode(), \

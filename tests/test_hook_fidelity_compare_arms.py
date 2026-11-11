@@ -85,7 +85,7 @@ def test_regime_b_hint_follows_the_shipped_timeout():
 
 
 def test_allow_arms_flags_and_controls():
-    flags = lambda arm, build="claude-2.1.316": compare.shim_flags(  # noqa: E731
+    flags = lambda arm, build="claude-2.1.316": compare.shim_flags(
         {"build": build, "arm": arm, "cell": "allow", "regime": "A", "rep": 0}, compare.arm_guard(build, arm))
     assert flags("ALLOW+wrap")["on_empty"] == "allow"
     assert "on_empty" not in flags("ALLOW+wrap-strict") and "on_empty" not in flags("ALLOW+wrap-json")

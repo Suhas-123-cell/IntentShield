@@ -15,6 +15,7 @@ from .core import (
     _PATH_CAP,
     _PATH_CAP_WHY,
     _TOO_DEEP,
+    _WORKDIR,
     ASK,
     DENY,
     Hit,
@@ -33,11 +34,14 @@ from .paths import (
     _cred_level,
     _device,
     _in_order,
+    _named_secret,
+    _norm,
     _protected,
     persistence_path,
 )
 from .powershell import _POWERSHELLS, _ps_command_text, _ps_posix
 from .rules import (
+    _EXEC_SOCKET,
     _FETCH_LONG,
     _FORK_BOMB,
     _FORK_CODE,
@@ -45,6 +49,7 @@ from .rules import (
     _NET_SINKS,
     _PIPE_SHELL_SUBST,
     _REVERSE_STRICT,
+    _SOCKET_FEED,
     _disk_hit,
     _find_hit,
     _git_hit,
@@ -73,6 +78,8 @@ def _inner_hits(extras: list[tuple[str, str]], intent: str, depth: int, state: d
     return out
 
 
+# What stands at the end of a loop or block that is fed from a file, and the shell's own reads: they show the file's text.
+_SHELL_READS = frozenset({"done", "fi", "esac", "}", ")", "read", "mapfile", "readarray", "eval", "exec"})
 _FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 _FD_RUNS = frozenset({"-x", "-X", "--exec", "--exec-batch"})
 _SSH_OPTIONS = frozenset({"-b", "-c", "-D", "-E", "-e", "-F", "-I", "-i", "-J", "-L", "-l", "-m", "-O", "-o", "-p", "-Q", "-R",
@@ -140,6 +147,8 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
                     out.append(Hit(DENY, f"redirect into the block device {target}.", target))
                 elif (p := persistence_path(target) or guard_surface(target)):
                     out.append(Hit(p[0], f"writes {target}, {p[1]}.", target))
+            elif op == "<" and (level := _cred_level(target)) and level[0] == DENY:  # $(< file), a loop fed from a file
+                out.append(Hit(DENY, f"the shell reads {target}, {level[1]}.", target))
         return out
     if bare.xargs and (fed := [w for op, t in bare.redirects if op == "<<<" for w in t.split()]):
         out.extend(_stage_hits(_Stage([*argv, *fed], [], False, 0, bare.sudo, list(bare.assigns)), intent, depth, dict(state)))
@@ -179,8 +188,10 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
             out.extend(_analyse(target, intent, depth + 1, state, sudo))  # bash <<< 'rm -rf /': the string is the program
         elif op == "<<<" and name in _SHELLS and not any(not a.startswith("-") or "c" in a[1:] for a in argv[1:]):
             out.append(Hit(ASK, _TOO_DEEP))
-        elif op == "<" and name in _READERS | _NET_SINKS and (level := _cred_level(target)) and level[0] == DENY:
-            out.append(Hit(DENY, f"{name} reads {target}, {level[1]}.", target))
+        elif op == "<" and (level := _cred_level(target)) and level[0] == DENY:
+            # the readers show it or send it on; another program (``gh secret set X < key``) is only asked about
+            shows = name in _READERS or name in _NET_SINKS or name in _SHELL_READS
+            out.append(Hit(DENY if shows else ASK, f"{name} reads {target}, {level[1]}.", target))
     # destruction
     if name == "rm" or name == "unlink" or name == "rmdir":
         hit = _rm_hit(argv, sudo)
@@ -251,6 +262,8 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
     hit = _persist_hit(name, argv, bare)
     if hit:
         out.append(hit)
+    if not out and (named := _named_secret(argv)):  # a program no rule above reads that is given a key or a credential file
+        out.append(Hit(named[0], f"{argv[0]} is given {named[2]}, {named[1]}; confirm it.", named[2]))
     if name in _FETCHERS or name == "nc":
         state["fetched"] = True
     return out
@@ -418,11 +431,11 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
         plain = _plain_download(data)
         hits.append(Hit(DENY if sudo or plain else ASK,
                         "code downloaded and run unread (a shell or eval given a download's output)."))
-    if _REVERSE_STRICT.search(data):
+    if _REVERSE_STRICT.search(data) or (_EXEC_SOCKET.search(data) and _SOCKET_FEED.search(data)):
         hits.append(Hit(DENY, "a reverse shell: a shell handed to a network socket."))
     elif "/dev/tcp/" in data or "/dev/udp/" in data:
         for m in re.finditer(r"/dev/(?:tcp|udp)/([^/\s'\"]{1,100})/\d{1,5}", data):
-            if not shell.is_loopback(m[1]):
+            if not (shell.is_loopback(m[1]) or m[1].lower() in ("localhost", "ip6-localhost")):
                 hits.append(Hit(ASK, f"a raw network socket to {m[1]}.", m[1]))
                 break
     if re.search(r"rmtree\(\s{0,3}(?:os\.path\.expanduser\(\s{0,3}['\"]~['\"]\s{0,3}\)|['\"](?:/|~|\$HOME)['\"]|Path\.home\(\)|"
@@ -503,15 +516,19 @@ def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
     return left[0] if left else None
 
 
-def assess_shell(command: str, intent: str = "", powershell: bool = False) -> Hit | None:
+def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: str = "") -> Hit | None:
     """The verdict on a shell command by its text, or None when nothing here objects. ``powershell``: the command is the input of
-    the
-    PowerShell tool, read as POSIX shell as well as by its cmdlets (see ``_ps_posix``)."""
+    the PowerShell tool, read as POSIX shell as well as by its cmdlets (see ``_ps_posix``). ``cwd``: the directory the command
+    runs in, from which a relative path is opened where a rule must look inside the file."""
     if not command or not command.strip():
         return None
-    hits = _analyse(command, intent, 0, {})
-    if powershell:
-        hits.extend(_ps_hits(command, intent, 0, {}, False))
+    token = _WORKDIR.set(cwd)
+    try:
+        hits = _analyse(command, intent, 0, {})
+        if powershell:
+            hits.extend(_ps_hits(command, intent, 0, {}, False))
+    finally:
+        _WORKDIR.reset(token)
     if len(command) > _MAX and not any(h.decision == DENY for h in hits):  # the rest was not read: do not pass it as safe
         hits.append(Hit(ASK,
                         f"the command is longer than {_MAX} characters, too long to read in full; check the part after that."))
@@ -520,8 +537,16 @@ def assess_shell(command: str, intent: str = "", powershell: bool = False) -> Hi
     return _worst(hits, intent)
 
 
-def assess_file(path: str, content: Any = None, write: bool = False, intent: str = "") -> Hit | None:
-    """The verdict on a file read or write by a built-in tool."""
+def assess_file(path: str, content: Any = None, write: bool = False, intent: str = "", cwd: str = "") -> Hit | None:
+    """The verdict on a file read or write by a built-in tool. ``cwd``: the directory a relative ``path`` is read from."""
+    token = _WORKDIR.set(cwd)
+    try:
+        return _assess_file(path, content, write, intent)
+    finally:
+        _WORKDIR.reset(token)
+
+
+def _assess_file(path: str, content: Any, write: bool, intent: str) -> Hit | None:
     if not path:
         return None
     if len(_clean_path(path)) > _PATH_CAP:  # a path, whatever it looks like: not read in full, so asked about
@@ -531,6 +556,8 @@ def assess_file(path: str, content: Any = None, write: bool = False, intent: str
         if cred:
             hit = Hit(cred[0], f"reading {path}, {cred[1]}.", path)
             return _worst([hit], intent)
+        if _norm(path) == "~":  # a search of the whole home directory reaches ~/.ssh and ~/.aws as well
+            return _worst([Hit(ASK, f"reading {path}, the whole home directory, which holds ~/.ssh and ~/.aws.", path)], intent)
         return None
     pers = persistence_path(path)
     text = _text(content)[:_MAX]

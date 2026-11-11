@@ -75,8 +75,9 @@ def test_ordinary_powershell_stays_allowed(command):
 @pytest.mark.parametrize("command", [c for c in DENY if c.startswith(("Remove-Item", "Get-Content", "gc", "irm",
                                                                       "Invoke-RestMethod"))])
 def test_without_the_powershell_flag_the_cmdlets_are_not_read(command):
-    """A POSIX shell has no ``Remove-Item``: the cmdlets are read only for the PowerShell tool and ``pwsh -Command``."""
-    assert verdict(command, powershell=False) == "allow"
+    """A POSIX shell has no ``Remove-Item``: the cmdlets are read only for the PowerShell tool and ``pwsh -Command``. A key that
+    any program is given still asks, but the cmdlet is not read as the command it corresponds to, so there is no deny."""
+    assert verdict(command, powershell=False) in ("allow", "ask")
 
 
 def test_the_posix_reading_still_applies_to_a_native_command_in_powershell():

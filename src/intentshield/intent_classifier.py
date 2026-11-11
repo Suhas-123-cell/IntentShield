@@ -111,7 +111,7 @@ class DebertaIntentClassifier:
         if not path.is_file():
             raise RuntimeError(f"classifier artifact metadata is missing: {path}")
         try:
-            metadata = json.loads(path.read_text(encoding="utf-8"))
+            metadata: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise RuntimeError("classifier artifact metadata is unreadable") from exc
         if metadata.get("schema_version") != ARTIFACT_SCHEMA_VERSION:

@@ -25,7 +25,7 @@ The package: ``core`` (limits, ``Hit``), ``parsing`` (command text into stages),
 from __future__ import annotations
 
 # The names of the private rules stay reachable as ``dangerous._name`` (the tests read the limits and the tables there).
-from . import analysis, core, parsing, paths, powershell, rules, runners, selfguard, variables  # noqa: E402
+from . import analysis, core, parsing, paths, powershell, rules, runners, selfguard, variables
 from .analysis import assess_file as assess_file
 from .analysis import assess_shell as assess_shell
 from .core import ASK as ASK

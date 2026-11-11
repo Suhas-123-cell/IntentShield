@@ -180,25 +180,25 @@ def test_a_judge_url_without_a_custom_judge_is_refused(tmp_path):
 
 
 def test_a_hooks_value_that_is_not_an_object_is_reported_with_its_file(tmp_path, capsys):
-    path = tmp_path / ".claude" / "settings.json"
+    path = tmp_path / ".claude" / "settings.local.json"
     path.parent.mkdir()
     path.write_text('{"hooks": "x"}')
-    with pytest.raises(ValueError, match="settings.json: 'hooks' is not an object"):
+    with pytest.raises(ValueError, match="settings.local.json: 'hooks' is not an object"):
         install.install("claude", "project", hook="/opt/is/bin/intentshield-hook", cwd=tmp_path)
     path.write_text('{"hooks": {"PreToolUse": 5}}')
-    with pytest.raises(ValueError, match="settings.json: hooks.PreToolUse is not a list"):
+    with pytest.raises(ValueError, match="settings.local.json: hooks.PreToolUse is not a list"):
         install.install("claude", "project", hook="/opt/is/bin/intentshield-hook", cwd=tmp_path)
 
 
 def test_the_command_line_says_which_file_for_a_bad_hooks_value(tmp_path, monkeypatch, capsys):
-    path = tmp_path / ".claude" / "settings.json"
+    path = tmp_path / ".claude" / "settings.local.json"
     path.parent.mkdir()
     path.write_text('{"hooks": "x"}')
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as stop:
         cli.main(["install", "claude", "--scope", "project"])
     assert stop.value.code == 1
-    assert "settings.json: 'hooks' is not an object" in capsys.readouterr().err
+    assert "settings.local.json: 'hooks' is not an object" in capsys.readouterr().err
 
 
 def test_install_ends_with_the_next_step(tmp_path, capsys):

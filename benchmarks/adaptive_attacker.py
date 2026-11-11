@@ -53,10 +53,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).parent))
-import injection_eval  # noqa: E402
+import injection_eval
 
-from intentshield.evaluation import wilson  # noqa: E402
-from intentshield.mcp_inspect import authority_values, distinctive_values, scan_output, sourced_from  # noqa: E402
+from intentshield.evaluation import wilson
+from intentshield.mcp_inspect import authority_values, distinctive_values, scan_output, sourced_from
 
 
 def canary_for(i: int) -> str:

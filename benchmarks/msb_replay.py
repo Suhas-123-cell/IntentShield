@@ -33,13 +33,13 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import msb  # noqa: E402
+import msb
 
-from intentshield.evaluation import wilson  # noqa: E402
-from intentshield.harness import HarnessGuard, handle  # noqa: E402
-from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError  # noqa: E402
-from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig  # noqa: E402
-from intentshield.models import ToolCall  # noqa: E402
+from intentshield.evaluation import wilson
+from intentshield.harness import HarnessGuard, handle
+from intentshield.mcp_proxy import MCPProxyConfig, MCPProxyRuntime, MCPRemoteToolError
+from intentshield.mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
+from intentshield.models import ToolCall
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDED = ROOT / "results" / "improve" / "msb-replay" / "recorded"

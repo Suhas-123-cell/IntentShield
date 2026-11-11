@@ -381,10 +381,13 @@ def test_facts_about_the_harness_are_notes_and_a_clean_install_prints_no_warning
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 0
     lines = out.splitlines()
-    assert any(line.startswith("note claude") and "prints nothing or malformed JSON" in line for line in lines)
-    assert not any(line.startswith(("warn", "FAIL")) for line in lines)
+    assert not any(line.startswith(("note", "warn", "FAIL")) for line in lines)   # notes are counted, not printed
     assert any(line.startswith("ok   claude") for line in lines)
-    assert "need no action" in out and "no problems found" in out
+    assert "note(s) about how the harnesses behave" in out and "doctor --verbose" in out and "no problems found" in out
+    doctor.doctor(home, cwd, _db(home), verbose=True)
+    verbose = capsys.readouterr().out
+    assert any(line.startswith("note claude") and "prints nothing or malformed JSON" in line for line in verbose.splitlines())
+    assert "note(s) above state how a harness behaves" in verbose
 
 
 def test_a_setting_of_the_users_that_has_a_cost_stays_a_warning(tmp_path: Path, home: Path, capsys, monkeypatch):

@@ -41,7 +41,7 @@ Short answer, with the limits stated in the sections below:
 
 | file | what |
 |---|---|
-| `fixtures.jsonl`, `provenance.md` | the pre-declared set (1133 rows = 467 items rendered per harness; 211 harmful and 256 benign items; 178 and 234 held out as declared, 166 and 234 after the post hoc correction), committed in `32a7e10` before any guard ran; the hash in `provenance.md` is verified before scoring |
+| `fixtures.jsonl`, `provenance.md` | the pre-declared set (1133 rows = 467 items rendered per harness; 211 harmful and 256 benign items; 178 and 234 held out as declared, 166 and 234 after the post hoc correction), committed in `32a7e10` before any guard ran, per the author (that commit is not in this repository's history); the hash in `provenance.md` is verified before scoring |
 | `decisions.jsonl` | one row per (guard, fixture row): the reply class (allow, ask, deny, error), its subtype and the guard's own bytes (first 400 characters), 10932 rows |
 | `delivery.json` | the delivery matrix derived from the committed unwrapped rows |
 | `summary.json`, `table.md` | every k/n and interval (computed at display), per guard and view, per category, per build, paired with IntentShield |

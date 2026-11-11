@@ -1,4 +1,24 @@
-"""Policy-bound bridge from IntentShield to a real upstream MCP server."""
+"""Policy-bound bridge from IntentShield to a real upstream MCP server.
+
+Where things are in this file (line order, top to bottom):
+
+* ``MCPProxyConfig``: the proxy's settings (upstreams, allow, prohibit, pin and read-only lists, limits), read from a JSON file.
+* Schema handling, the functions up to ``_exposed_text``: how a tool's input schema is measured, trimmed to its skeleton for the
+  agent, stripped of patterns, and checked with a bounded validator, so a hostile schema cannot cost unbounded time or memory.
+* Address helpers, ``_canonical_host`` to ``_host_overlap``: hosts named in a description, compared with those in a call.
+* ``MCPProxyRuntime``, the one class that does the work, in these groups of methods:
+
+  - connection: ``connect``, ``close`` and the upstream sessions;
+  - the catalog: ``_list_all_tools``, ``_build_registry`` (poisoning rules, schema quarantine, name clashes, the judge's
+    reading of descriptions, pins against a changed tool) and ``tool_catalog``, ``transparent_tools``, ``hidden_tools``;
+  - before a call: ``_pre_policy_check`` and ``_rule_check`` (the policy, taint, threat memory), ``_redact`` (the arguments that
+    ask for the agent's own data) and ``evaluate_and_execute``, ``forward``, ``evaluate_only``;
+  - after a call: ``_bounded`` (the size limit), ``_inspect_result`` and ``_inspect_error`` (injection rules, the judge, the
+    classifier, learned rules);
+  - approvals and learning: ``decide_approval``, ``decide_and_learn``, ``learn_example``, ``propose_rules``, ``decide_rule``.
+
+The methods of ``MCPProxyRuntime`` share the registry, the taint of each run and the databases.
+"""
 
 from __future__ import annotations
 
@@ -12,11 +32,12 @@ import re
 import threading
 import time
 from collections import Counter
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from time import monotonic as _mono  # a name of its own: tests replace this module's ``time``
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Protocol
 from urllib.parse import unquote, urlsplit
 
 from jsonschema import Draft202012Validator, validators
@@ -578,7 +599,13 @@ def schema_errors(schema: dict[str, Any], instance: Any) -> list[Any]:
     return _bounded_errors(validator, instance)
 
 
-def _bounded_errors(validator: Any, instance: Any) -> list[Any]:
+class _SchemaValidator(Protocol):
+    """What the proxy asks of a jsonschema validator (the package ships no type information)."""
+
+    def iter_errors(self, instance: Any) -> Iterable[Any]: ...
+
+
+def _bounded_errors(validator: _SchemaValidator, instance: Any) -> list[Any]:
     token = _ref_budget.set([REF_BASE_ALLOWANCE + REF_PER_NODE * _nodes(instance)])
     try:
         return list(validator.iter_errors(instance))
@@ -724,6 +751,7 @@ class MCPProxyRuntime:
         self._bound_fingerprints: dict[str, str] = {}
         self._drifted_tools: set[str] = set()
         self._quarantined: dict[str, list[str]] = {}
+        self._said_hidden: set[tuple[str, tuple[str, ...]]] = set()
         self._left_out: dict[str, str] = {}  # tools the proxy cannot serve (bad name or schema): never shown
         self._failed_upstreams: dict[str, str] = {}  # servers that could not list their tools: none of theirs served
         self._description_values: dict[str, set[str]] = {}
@@ -1030,6 +1058,11 @@ class MCPProxyRuntime:
             }
             self._visible_schemas[qualified] = visible
         self._judge_descriptions(pending)
+        for qualified, matched in self._quarantined.items():  # the client just sees fewer tools: say why, once per tool
+            if (qualified, tuple(matched)) not in self._said_hidden:
+                self._said_hidden.add((qualified, tuple(matched)))
+                logger.warning("IntentShield hid the tool %r: its description matched %s. Run `intentshield scan` on the server "
+                               "to see why.", qualified, ", ".join(dict.fromkeys(matched)))
         counts = Counter(tool.qualified_name for tool in tools)
         for tool in tools:
             qualified = tool.qualified_name
@@ -1049,13 +1082,13 @@ class MCPProxyRuntime:
                 continue
             validator = _BoundedValidator(_without_patterns(tool.input_schema))
 
-            def validate(arguments: dict[str, Any], *, current=validator) -> None:
+            def validate(arguments: dict[str, Any], *, current: _SchemaValidator = validator) -> None:
                 errors = sorted(_bounded_errors(current, arguments), key=lambda item: list(item.path))
                 if errors:
                     path = ".".join(str(part) for part in errors[0].path) or "arguments"
                     raise ValueError(f"{path}: {errors[0].message}")
 
-            def execute(parsed: BaseModel, *, current=tool) -> dict[str, Any]:
+            def execute(parsed: BaseModel, *, current: MCPTool = tool) -> dict[str, Any]:
                 if self._loop is None:
                     raise RuntimeError("MCP proxy is not connected")
                 upstream = self.upstreams[current.server_id]
@@ -1683,7 +1716,7 @@ class MCPProxyRuntime:
             "examples": [{"id": e["id"], "status": e["status"]} for e in learned]})
         return learned
 
-    async def learn_example(self, text: str, label: str) -> dict[str, Any]:
+    async def learn_example(self, text: str, label: object) -> dict[str, Any]:
         """Operator-labelled text: ``injection`` or ``benign``."""
         if self._learner is None:
             raise ValueError("learning is not enabled (needs exemplar_index_dir and learning_regression)")
@@ -1707,7 +1740,7 @@ class MCPProxyRuntime:
     async def decide_rule(self, rule_id: str, approve: bool) -> dict[str, Any]:
         if self._rules is None:
             raise ValueError("learning is not enabled (needs exemplar_index_dir and learning_regression)")
-        row = await asyncio.to_thread(self._rules.store.decide, rule_id, approve)
+        row: dict[str, Any] = await asyncio.to_thread(self._rules.store.decide, rule_id, approve)
         self._rules.reload()
         return row
 

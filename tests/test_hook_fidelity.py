@@ -1218,7 +1218,7 @@ def test_unverified_items_gate_execution_until_signed_off(tmp_path):
 def test_signoff_must_be_checkable_not_just_present(tmp_path):
     import hashlib
     good = json.loads(_sign_all(tmp_path / "g.json").read_text())["codex:hooks-table"]
-    check = lambda entry, who=COMMITTER: run.signoff_problems(entry, who, tmp_path)   # noqa: E731
+    check = lambda entry, who=COMMITTER: run.signoff_problems(entry, who, tmp_path)
     assert check(good) == []
     assert check({"reader": "x", "archive": "x", "retrieved": "x"})                                    # the old ceremonial entry
     assert "the reader is the committer" in check(good, "Second Reader")
@@ -1651,7 +1651,7 @@ def test_pilot_script_points_only_at_the_loopback_stub_with_a_fake_key_and_launc
 
 
 def test_pilot_commands_per_harness_follow_the_feasibility_note(tmp_path):
-    shell = lambda h: cells.pilot_cells(h)[1]    # noqa: E731  (the R1 shell cell)
+    shell = lambda h: cells.pilot_cells(h)[1]
     specs = {}
     for harness in ("claude", "codex", "gemini"):
         paths = configs.make_paths(tmp_path / harness)
@@ -1712,7 +1712,7 @@ def test_sweep_table_is_reproducible_from_the_committed_raw_rows_and_has_no_driv
 
 def test_sweep_boundaries_and_the_claims_the_study_makes_from_them():
     table, versions, rows, scenarios = _sweep()
-    cellof = lambda v, s: table.cell(rows[(v, s)])      # noqa: E731
+    cellof = lambda v, s: table.cell(rows[(v, s)])
     older, newer = "0.29.7", "0.30.0"
     for scenario in ("exit126_script_stderr", "nonexec_file_126", "bad_interpreter_shebang", "missing_command_127", "exit3_text",
                      "python3_missing_on_path", "exit1_json_deny_stdout"):

@@ -21,11 +21,11 @@ from typing import Any
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent))
-import msb  # noqa: E402
+import msb
 
-from intentshield.evaluation import wilson  # noqa: E402
-from intentshield.judge import Judge  # noqa: E402
-from intentshield.mcp_inspect import scan_description  # noqa: E402
+from intentshield.evaluation import wilson
+from intentshield.judge import Judge
+from intentshield.mcp_inspect import scan_description
 
 
 def harmful(case: dict[str, Any], step: dict[str, Any]) -> bool:

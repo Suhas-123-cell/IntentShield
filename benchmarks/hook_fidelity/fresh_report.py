@@ -195,8 +195,8 @@ def build_report(rows: list[dict], decisions: list[dict], delivery: dict | None 
             nh, nb = len(items_h), len(items_b)
             lines.append(f"| {other} scope | {g} | {nh} | {fmt(fa(ch), nh)} | {ch['ask']}/{nh} | {ch['deny']}/{nh} | {nb} | {fmt(cb['deny'], nb)} | {fmt(cb['ask'], nb)} |")
             entry[g] = {"false_allow": cell(fa(ch), nh), "ask": ch["ask"], "deny": ch["deny"], "false_deny": cell(cb["deny"], nb), "false_ask": cell(cb["ask"], nb)}
-        flag = lambda g, r: cls(g, r) in ("ask", "deny")  # noqa: E731
-        deny = lambda g, r: cls(g, r) == "deny"  # noqa: E731
+        flag = lambda g, r: cls(g, r) in ("ask", "deny")
+        deny = lambda g, r: cls(g, r) == "deny"
         only_is = sum(1 for r in items_h if flag(IS, r) and not flag(other, r))
         only_o = sum(1 for r in items_h if flag(other, r) and not flag(IS, r))
         only_is_d = sum(1 for r in items_h if deny(IS, r) and not deny(other, r))

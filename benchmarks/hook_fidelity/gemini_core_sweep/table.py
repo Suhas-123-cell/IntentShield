@@ -183,7 +183,7 @@ def cell_consumer(record: dict | None) -> str:
         return "DRIVER-ERROR"
     if record.get("kind") == "direct":
         forced = record.get("forced", {})
-        short = lambda t: t.replace("false(no confirmation: proceeds)", "no-prompt").replace("details:", "prompt:")  # noqa: E731
+        short = lambda t: t.replace("false(no confirmation: proceeds)", "no-prompt").replace("details:", "prompt:")
         return f"no-forced: {short(forced.get('none', '?'))}; ask_user: {short(forced.get('ask_user', '?'))}"
     outcome = record.get("outcome", "?")
     error = record.get("error") or ""

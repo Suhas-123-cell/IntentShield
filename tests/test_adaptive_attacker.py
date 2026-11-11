@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
-import adaptive_attacker as aa  # noqa: E402
+import adaptive_attacker as aa
 
 YES, NO = (lambda prompt: {"answer": "yes"}), (lambda prompt: {"answer": "no"})
 

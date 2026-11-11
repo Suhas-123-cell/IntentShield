@@ -45,7 +45,7 @@ class InjectionClassifier:
         return self.reason is None
 
     def _verified_metadata(self) -> dict[str, Any]:
-        metadata = json.loads((self.artifact_dir / METADATA).read_text(encoding="utf-8"))
+        metadata: dict[str, Any] = json.loads((self.artifact_dir / METADATA).read_text(encoding="utf-8"))
         if metadata.get("id2label") != {str(i): label for i, label in enumerate(LABELS)}:
             raise RuntimeError("injection classifier label mapping is invalid")
         if not 0 < float(metadata.get("threshold", 0)) < 1 or not 8 <= int(metadata.get("max_length", 0)) <= 4096:

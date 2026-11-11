@@ -332,7 +332,7 @@ def _guard(tmp_path: Path, sem) -> HarnessGuard:
 
 
 def _force_ask(monkeypatch):
-    verdict = lambda self, *a, **k: Verdict("ask", "because", user_reason="shown to the user")  # noqa: E731
+    verdict = lambda self, *a, **k: Verdict("ask", "because", user_reason="shown to the user")
     for name in ("shell", "call", "file", "fetch"):
         monkeypatch.setattr(HarnessGuard, name, verdict)
 

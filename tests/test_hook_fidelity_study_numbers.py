@@ -206,3 +206,20 @@ def test_the_coding_is_deterministic_over_the_committed_rows():
         other = summarize.summarize(shuffled)
         assert same(first, other), seed
         assert sorted(summarize.format_report(other).splitlines()) == sorted(summarize.format_report(first).splitlines())
+
+
+def test_the_study_states_the_installed_and_scored_build_counts_not_the_early_sweep_ones():
+    from hook_fidelity import report_numbers as rn
+
+    counts = rn.build_counts(rn.stub_rows())
+    c, x, g = counts["claude"], counts["codex"], counts["gemini"]
+    scored = f"{c['scored']}, {x['scored']} and {g['scored']} scored builds"
+    installed = f"({c['installed']}, {x['installed']} and {g['installed']} installed)"
+    assert f"on {scored} {installed}" in STUDY
+    assert f"The {c['scored']}, {x['scored']} and {g['scored']} are the scored builds" in STUDY
+    assert f"{c['scored']} scored builds with the bisect builds" not in STUDY  # the sampling bullet names the three counts
+    assert f"the scored counts with the bisect builds are {c['scored']}, {x['scored']} and {g['scored']}" in STUDY
+    for stale in ("on 23, 17 and 28 sampled builds", "The 23, 17 and 28 are", "across 17 builds", "across 23 builds"):
+        assert stale not in STUDY, stale
+    assert "Codex 17 of 17 sampled" not in STUDY
+

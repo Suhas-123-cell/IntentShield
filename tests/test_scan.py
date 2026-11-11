@@ -42,7 +42,7 @@ def test_ids_hashes_and_public_material_are_not_credentials(text: str):
 
 def _send(tmp_path: Path, prompt: str, output: str | None = None) -> tuple[str, str]:
     guard = HarnessGuard(tmp_path / "h.db", threats=str(tmp_path / "t.db"))
-    event = lambda name, **fields: {"hook_event_name": name, "session_id": "s", **fields}  # noqa: E731
+    event = lambda name, **fields: {"hook_event_name": name, "session_id": "s", **fields}
     handle("claude", event("UserPromptSubmit", prompt=prompt), guard)
     if output:
         handle("claude", event("PostToolUse", tool_name="mcp__web__read_page", tool_input={}, tool_response=output),

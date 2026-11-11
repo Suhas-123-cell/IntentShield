@@ -22,7 +22,7 @@ def fetch(repo_url: str) -> dict:
         f"https://api.github.com/repos/{slug}",
         headers={"User-Agent": "hook-fidelity-corpus", "Accept": "application/vnd.github+json"},
     )
-    with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (fixed https host)
+    with urllib.request.urlopen(req, timeout=20) as resp:
         data = json.load(resp)
     return {
         "stars": data["stargazers_count"],
@@ -41,7 +41,7 @@ def main(argv: list[str]) -> int:
     for guard in guards:
         try:
             out[guard["id"]] = fetch(guard["repo"])
-        except Exception as exc:  # noqa: BLE001 (record the failure, never guess a number)
+        except Exception as exc:
             out[guard["id"]] = {"error": f"{type(exc).__name__}: {exc}"}
     json.dump(out, sys.stdout, indent=1)
     return 0

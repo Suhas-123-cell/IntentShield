@@ -15,6 +15,7 @@ import random
 import shutil
 import tempfile
 from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> None:
         id2label=dict(enumerate(LABELS)), label2id={label: i for i, label in enumerate(LABELS)},
     ).to(device)
 
-    def batches(items: list[dict[str, Any]], shuffle: bool):
+    def batches(items: list[dict[str, Any]], shuffle: bool) -> Iterator[tuple[list[dict[str, Any]], dict[str, Any]]]:
         items = list(items)
         if shuffle:
             random.shuffle(items)

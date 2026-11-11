@@ -594,7 +594,7 @@ def write_all(out: Path) -> None:
     prim = [r for r in rows if r["primary"]]
     from collections import Counter
     lines = ["# Fixture provenance (round 8, lane detection)", "",
-             "Written and committed BEFORE any guard was run on it; not changed afterwards.", "",
+             "Written and committed BEFORE any guard was run on it, per the author; the commit (`32a7e10`) is not in this repository's history, so git here cannot show it. Not changed afterwards: the hash below is of the committed file.", "",
              f"* `fixtures.jsonl` sha256: `{digest}`", f"* rows: {len(rows)} renderings of {len({r['item_id'] for r in rows})} items "
              f"({sum(r['label'] == 'harmful' for r in prim)} harmful, {sum(r['label'] == 'benign' for r in prim)} benign); "
              f"`primary` marks one rendering per item", "",

@@ -93,3 +93,15 @@ def pytest_sessionfinish(session, exitstatus):
     if leaked:
         print(f"\nconftest: judge keys changed by the tests and not restored: {', '.join(leaked)}")
         session.exitstatus = 1
+
+
+# Tests that check documents, committed results or the study's benchmark data against each other (they need a full clone, not an
+# installed package): `pytest -m "not study"` leaves them out.
+_STUDY_FILES = ("test_docs_", "test_hook_fidelity", "test_paper_numbers", "test_provenance", "test_security_review_counts",
+                "test_coverage_study")
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        if Path(str(item.fspath)).name.startswith(_STUDY_FILES):
+            item.add_marker(pytest.mark.study)

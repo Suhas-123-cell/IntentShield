@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks" / "harness_live"))
-import builtin_live as b  # noqa: E402
+import builtin_live as b
 
 
 def _taps(rundir: Path, commands: list[str]) -> None:

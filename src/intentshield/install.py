@@ -28,7 +28,7 @@ import tempfile
 import time
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import translation
 
@@ -85,7 +85,8 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
     if scope == "project":
         if harness == "codex":
             raise ValueError("Codex CLI reads hooks from ~/.codex/config.toml only; use --scope user")
-        return cwd / {"claude": ".claude/settings.json", "cursor": ".cursor/hooks.json",
+        # settings.local.json is Claude Code's file for one machine, and the hook command holds this machine's paths
+        return cwd / {"claude": ".claude/settings.local.json", "cursor": ".cursor/hooks.json",
                       "gemini": ".gemini/settings.json"}[harness]
     return home / {"claude": ".claude/settings.json", "codex": ".codex/config.toml",
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
@@ -133,7 +134,8 @@ _KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEE
 
 
 def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None = None,
-                     ask=getpass.getpass, judge_url: str | None = None, dry_run: bool = False) -> Path | None:
+                     ask: Callable[[str], str] = getpass.getpass, judge_url: str | None = None,
+                     dry_run: bool = False) -> Path | None:
     """The key a hosted judge needs, stored in ``~/.intentshield/.env`` (0600) where every hook
     process reads it. A key that is only exported in this shell is stored too, since a harness started
     elsewhere would not have it. Asks on the terminal when it is neither given nor set. A custom
@@ -784,13 +786,18 @@ def _say_what_was_replaced(old: list[str], new: str) -> None:
 
 def install(harness: str, scope: str = "user", review: str | None = None, hook: str | None = None,
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
-            judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
+            judge: str | None = None, api_key: str | None = None,
+            ask: Callable[[str], str] = getpass.getpass,
             judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False,
             judge_url: str | None = None, translate: bool = True, allow_ephemeral: bool = False) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched. With ``translate`` (the default) the hooks
     that check a call carry the hook's own deadline and the fail-closed launcher (translation.py), and the harness's version
     is recorded for the hook."""
     path = settings_path(harness, scope, home, cwd)
+    legacy = legacy_project_settings(harness, cwd) if scope == "project" else None
+    if legacy is not None and _holds_our_hooks(legacy):
+        # Both files are read by Claude Code, so a hook left in the shared one would run next to the new one.
+        _uninstall_file(harness, legacy, dry_run, home)
     hook = hook or executable(_HOOK)
     _refuse_ephemeral(hook, "hook command", dry_run, allow_ephemeral)
     command = hook_command(harness, hook, review, judge, judge_outputs, builtin_tools, gemini_ask,
@@ -801,7 +808,11 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         raise ValueError("--judge-url is for --judge custom only")
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
-        tomllib.loads(text)  # refuse to append to a file Codex could not read either
+        try:
+            tomllib.loads(text)  # refuse to append to a file Codex could not read either
+        except tomllib.TOMLDecodeError as exc:
+            raise ValueError(f"{path} is not valid TOML ({exc}); Codex CLI cannot read it either. Fix it, then run `intentshield "
+                             "install codex` again (`--dry-run` prints the block it adds)") from None
         stripped, had_block = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
         new = (stripped.rstrip("\n") + "\n\n" if stripped.strip() else "") + codex_toml(command, builtin_tools, translate)
         tomllib.loads(new)
@@ -857,14 +868,34 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         print("This guards MCP calls only, not the shell or the file tools. To guard those too: "
               f"intentshield install {harness} --builtin-tools")
     if not dry_run:
-        print(f"Next: {NEXT_STEP.format(harness=harness)} It reports FAIL \"no hook has run\" until the harness has run a "
-              "hook, which is expected right after an install.")
+        print(f"Next: {NEXT_STEP.format(harness=harness)} Until the harness has run a hook, `doctor` says \"no hook has run "
+              "yet\" as a warning: that is expected right after an install.")
     return path
+
+
+def legacy_project_settings(harness: str, cwd: Path | None = None) -> Path | None:
+    """The shared ``.claude/settings.json`` of the project, where 0.4.3 and earlier wrote Claude Code's project-scope hooks (now
+    ``settings.local.json``); None for any other harness."""
+    return (cwd or Path.cwd()) / ".claude" / "settings.json" if harness == "claude" else None
+
+
+def _holds_our_hooks(path: Path) -> bool:
+    try:
+        return path.exists() and bool(_our_commands(_read_json(path)))
+    except ValueError:
+        return False
 
 
 def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
               home: Path | None = None, cwd: Path | None = None) -> Path:
     path = settings_path(harness, scope, home, cwd)
+    legacy = legacy_project_settings(harness, cwd) if scope == "project" else None
+    if legacy is not None and _holds_our_hooks(legacy):
+        _uninstall_file(harness, legacy, dry_run, home)  # a hook an earlier version put in the shared file
+    return _uninstall_file(harness, path, dry_run, home)
+
+
+def _uninstall_file(harness: str, path: Path, dry_run: bool, home: Path | None) -> Path:
     if not path.exists():
         print(f"nothing to remove: {path}")
         return path
@@ -1019,8 +1050,23 @@ def _in_repository(path: Path) -> bool:
 NEXT_STEP = "Start {harness} and send any prompt, then run `intentshield doctor`."
 
 
+def _inside(path: Path, directory: Path) -> bool:
+    """``path`` lies in ``directory`` (a project's own file, which ``doctor --connect`` starts only with --connect-project)."""
+    try:
+        path.resolve().relative_to(directory.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+class Wrapped(list[str]):
+    """The servers ``wrap`` put behind the proxy, by label; ``skipped`` is true when it left a stdio server unwrapped because its
+    entry could not be (an unreadable command line, a ``${...}`` interpolation, a form the proxy does not take)."""
+    skipped = False
+
+
 def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
-         dry_run: bool = False, allow_ephemeral: bool = False) -> list[str]:
+         dry_run: bool = False, allow_ephemeral: bool = False) -> Wrapped:
     """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file, the project-scoped
     ones of ``~/.claude.json`` included. Every entry is checked first and one the proxy cannot take is skipped with its reason;
     the proxy configs are written only then, and removed again when the client file cannot be written."""
@@ -1086,7 +1132,8 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
                 skipped = True
                 continue
             plan.append((entries, name, scope, server, config_path, generated))
-    wrapped: list[str] = []
+    wrapped = Wrapped()
+    wrapped.skipped = skipped
     before: dict[str, dict[str, Any]] = {}
     edits: dict[str, tuple[str, list[str] | None]] = {}
     created: list[Path] = []
@@ -1116,6 +1163,12 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         if not dry_run and _in_repository(path):
             print(f"note: {path} now holds absolute paths of this machine (the proxy and its config): do not commit it, or "
                   "run `intentshield unwrap` on it first.")
+        if not dry_run:
+            local = _inside(path, Path.cwd())
+            print(f"Next: restart the MCP client that reads {path} (close it before wrapping ~/.claude.json, which Claude Code "
+                  "rewrites), then run "
+                  f"`intentshield doctor --connect{'-project' if local else ''}` to check that each wrapped server starts "
+                  "through the proxy.")
     elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
         print(f"already wrapped: {path}")
     elif not skipped:
@@ -1277,7 +1330,11 @@ def run(args: argparse.Namespace) -> int:
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":
-            wrap(args.config, args.servers, args.out_dir, dry_run=args.dry_run, allow_ephemeral=args.allow_ephemeral)
+            done = wrap(args.config, args.servers, args.out_dir, dry_run=args.dry_run, allow_ephemeral=args.allow_ephemeral)
+            if done.skipped:  # a script that expects every server wrapped must not read this as a success
+                print("intentshield wrap: at least one server was skipped (see above), so it is not behind the proxy",
+                      file=sys.stderr)
+                return 1
         elif args.command == "unwrap":
             unwrap(args.config, args.servers, dry_run=args.dry_run)
         else:

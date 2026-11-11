@@ -32,7 +32,7 @@ import struct
 import subprocess
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -225,14 +225,15 @@ ANCESTRY_ENV = "INTENTSHIELD_ANCESTRY_SOURCES"   # a comma list of sources to tr
 ANCESTRY_SOURCES = ("proc", "libproc", "ps")
 
 
-class Ancestry(list):
+class Ancestry(list[tuple[str, str]]):
     """(tty, command line) of this process's ancestors, nearest first, as ``_ancestors`` read them, plus what a reader of the mode
     needs to know about the reading: ``source`` (which reader produced it), and ``complete`` (the walk reached the top, or its
     depth limit, without a read failing or the time budget ending). A plain ``list`` handed to ``detect_mode`` is taken as a
     complete chain; an empty or truncated ``Ancestry`` in which the harness is not found says nothing about the harness, and the
     mode is then "unknown", never "headless"."""
 
-    def __init__(self, items=(), source: str = "", complete: bool = False, why: str = "") -> None:
+    def __init__(self, items: Iterable[tuple[str, str]] = (), source: str = "", complete: bool = False,
+                 why: str = "") -> None:
         super().__init__(items)
         self.source, self.complete, self.why = source, complete, why
 
@@ -260,7 +261,7 @@ _NODEV = 0xFFFFFFFF   # e_tdev of a session with no controlling terminal
 _libproc_state: dict[str, Any] = {}
 
 
-def _libproc():
+def _libproc() -> tuple[ctypes.CDLL, ctypes.CDLL] | None:
     if "lib" not in _libproc_state:
         try:
             lib = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
@@ -273,10 +274,11 @@ def _libproc():
             _libproc_state["lib"] = (lib, libc)
         except (OSError, AttributeError):
             _libproc_state["lib"] = None
-    return _libproc_state["lib"]
+    libs: tuple[ctypes.CDLL, ctypes.CDLL] | None = _libproc_state["lib"]
+    return libs
 
 
-def _procargs(libc, pid: int) -> list[str] | None:
+def _procargs(libc: ctypes.CDLL, pid: int) -> list[str] | None:
     """The argument vector of ``pid`` from ``sysctl kern.procargs2`` (what ``ps`` prints as the command), None when unreadable."""
     mib = (ctypes.c_int * 3)(1, 49, pid)                       # CTL_KERN, KERN_PROCARGS2
     size = ctypes.c_size_t(0)
@@ -333,7 +335,7 @@ def _libproc_agrees() -> bool:
     if "agrees" not in _libproc_state:
         own = _read_libproc(os.getpid())
         _libproc_state["agrees"] = own is not None and own[0] == os.getppid()
-    return _libproc_state["agrees"]
+    return bool(_libproc_state["agrees"])
 
 
 def _read_ps(pid: int, timeout: float = 1.0) -> tuple[int, str, str] | None:
@@ -348,7 +350,8 @@ def _read_ps(pid: int, timeout: float = 1.0) -> tuple[int, str, str] | None:
     return int(parts[0]), parts[1], parts[2]
 
 
-def _walk(read, source: str, depth: int, end: float, top: int | None = None) -> Ancestry:
+def _walk(read: Callable[[int], tuple[int, str, str] | None], source: str, depth: int, end: float,
+          top: int | None = None) -> Ancestry:
     """Read the parents from here up. ``top`` is the parent pid that ends the walk once the process holding it has been read: on
     Linux 0 (so PID 1 is read, because in a container it can be the harness itself: ``docker run -it image claude``); on macOS 1
     or less, because pid 1 is ``launchd`` and is never the harness."""
@@ -713,8 +716,9 @@ def findings(harness: str, version: Version | None, gemini_ask: bool = False) ->
     out: list[tuple[str, str]] = []
     shown = _show(version)
     if version is None:
-        out.append(("note", f"{harness}: version unknown, so no measured behaviour applies; run `intentshield doctor` with "
-                            f"{harness} on PATH to record it. Until then asks are sent as refusals"))
+        out.append(("note", f"{harness}: version unknown (it was not found on PATH here), so no measured behaviour applies "
+                            f"and asks are sent as refusals, the safe side. To get asks as prompts, put {harness} on PATH and "
+                            "run `intentshield doctor` once"))
     if harness == "codex":
         bypass = lookup("codex", "bypass", version)
         if bypass in ("hook-skipped", "uncertain"):

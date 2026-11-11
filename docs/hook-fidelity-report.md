@@ -19,7 +19,7 @@ guards see the same call, what does each decide?
 ## 2. Method
 
 Each tool's real binary runs against a local stub model that issues one scripted tool call and then answers "done", so the model is not
-a variable. A cell is one build, mode, tool kind, hook reply and trust state, run two to five times; the stub is deterministic, so repeats
+a variable. A cell is one build, mode, tool kind, hook reply and trust state, run two to five times (ten Codex untrusted-state controls, once); the stub is deterministic, so repeats
 check repeatability and estimate no rate. The oracle is a side effect outside the model and the hook, such as a marker file. A cell is
 scored only if its neutral control showed that the hook ran. The author wrote the expected outcome of each cell from the vendors'
 documentation (see section 7). The committed data are 1,342 stub rows in 507 cells. The builds are the
@@ -78,7 +78,8 @@ scored count. Claude Code's ask cell uses a pre-approval rule, `--allowedTools B
 
 **Finding 1. A deny was enforced wherever the hook ran, and the hook did not always run.** The figure to read is 65 of 65 builds. On 47
 of 271 deny rows the hook did not run and the call ran: a Codex hook the user had not trusted (40 rows), a Claude Code `mcp__.*` matcher
-that does not see a resource read (5), and Gemini CLI before 0.26.0, where hooks were opt-in (2). No cell shows a running hook's deny
+that does not see a resource read (5), and Gemini CLI before 0.26.0, where hooks were opt-in (2). Six more rows, all Gemini CLI 0.66.0 in its
+default approval mode, were blocked without the hook running and are in neither count. No cell shows a running hook's deny
 ignored. This is not a finding that an attacker can bypass a guard.
 
 **Finding 2. An `ask` with no human is handled three ways.**
@@ -89,8 +90,8 @@ ignored. This is not a finding that an attacker can bypass a guard.
 **Finding 3. With the default configuration a timeout fails open on every build tested.** R9 RAN on 22 of 22 Claude Code builds, 12 of 12
 Codex CLI builds and 1 of 1 Gemini CLI build. The other failure replies ran on one to two builds of Claude Code and Codex CLI, so nothing
 general about "a crashed hook" follows. Claude Code's documented `onFailure: "block"` setting, which IntentShield's `install` writes,
-blocked R9, R7, R8, R10a, R10b, R11 and R13 on 2.1.316 in 3 of 3 runs each, but not R5 or R6, and had no effect on 2.1.281, before its
-documented version (2 of 2 RAN).
+changed RAN to BLOCKED for R8, R9, R10a, R10b and R13 on 2.1.316 (RAN in 3 of 3 runs without the key, BLOCKED in 3 of 3 with it). R7 and R11
+were already BLOCKED without it, and R5 and R6 still RAN with it. On 2.1.281 (before that version), R9 RAN 2 of 2 either way and R8 2 of 2 with it.
 
 **Finding 4. State outside the reply decides more than the reply does.** Codex CLI with an untrusted hook ran the hook in 0 of 70 rows and
 the call in all 70, on 12 builds, and printed nothing. The flag meant to trust hooks did nothing in `codex exec` through 0.140.0, a
@@ -99,13 +100,15 @@ publicly reported and fixed bug (openai/codex #26383).
 ## 5. How IntentShield's hook compares with other guards
 
 The comparison is offline, with no model. Both fixture sets were written by the author: 467 fixtures, mostly shell commands and MCP calls,
-and 214 calls to built-in shell, read, write and edit tools. The results point in different directions.
+and 214 calls to built-in shell, read, write and edit tools. The results point in different directions. The items are not a random
+sample: an interval below is sampling noise on these items only.
 
 **Where IntentShield is behind.**
 - 467-fixture set, held-out harmful items, before the dangerous-command rules: IntentShield lets through
   137/166 [76.0, 87.6]%, asks on 29. On their own scopes safety-net lets through 31/130 [17.3, 31.9]% and knox 67/117 [48.2, 65.9]%.
 - 214-call set, denies alone: safety-net 41/85, IntentShield 24/85, with asks on 36 more. An ask is not a stop on Claude Code to 2.1.84,
-  on Codex CLI or on Gemini CLI to 0.37.2, so denies are what count, and there IntentShield trails safety-net.
+  on Codex CLI or on Gemini CLI to 0.37.2, so denies are what count, and there IntentShield trails safety-net. Paired on the same 85 items, safety-net denied 24 that IntentShield
+  did not and IntentShield denied 7 that safety-net did not (exact sign test, p = 0.0033); on knox's 73 items the denies split 18 to 17.
 
 **Where IntentShield is ahead: only on its own rule categories, and post hoc.** The opt-in rules were written after the first set's result was known. The
 214 items sample the same six categories the rules were written from, and the set was built by the same model family. The gain measures

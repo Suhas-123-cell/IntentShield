@@ -218,7 +218,7 @@ def test_the_claude_ask_boundary_is_the_bisected_one():
 # ------------------------------------------------------------------------------------------------ an allow still runs
 def test_an_allow_is_never_turned_into_a_refusal(tmp_path, monkeypatch):
     """The translation changes asks and failures; a call the guard allows must reach the harness as no opinion or allow."""
-    verdict = lambda self, *a, **k: Verdict("allow", "")  # noqa: E731
+    verdict = lambda self, *a, **k: Verdict("allow", "")
     for name in ("shell", "call", "file", "fetch"):
         monkeypatch.setattr(HarnessGuard, name, verdict)
     guard = HarnessGuard(tmp_path / "h.db", builtin_tools=True)

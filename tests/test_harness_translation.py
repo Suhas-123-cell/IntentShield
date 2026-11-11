@@ -133,7 +133,7 @@ def _guard(tmp_path: Path, sem=None, **kwargs) -> HarnessGuard:
 
 
 def _force(monkeypatch, decision: str, reason: str = "because"):
-    verdict = lambda self, *a, **k: Verdict(decision, reason, user_reason="shown to the user")  # noqa: E731
+    verdict = lambda self, *a, **k: Verdict(decision, reason, user_reason="shown to the user")
     for name in ("shell", "call", "file", "fetch"):
         monkeypatch.setattr(HarnessGuard, name, verdict)
 
@@ -396,10 +396,12 @@ def test_doctor_flags_a_hook_installed_without_the_translation(tmp_path, capsys)
     ok.write_text("#!/bin/sh\n")
     ok.chmod(0o755)
     home = _hook_file("codex", tmp_path, install.hook_command("codex", str(ok)), translate=False)
-    doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db")
+    doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db", verbose=True)
     out = capsys.readouterr().out
     assert "installed without the verdict translation" in out
     assert "version unknown" in out                      # no version recorded here: the doctor says what that costs
+    doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db")
+    assert "version unknown" not in capsys.readouterr().out   # a note is printed with --verbose only
 
 
 def test_findings_name_the_measured_conditions_per_version():

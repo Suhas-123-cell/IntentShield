@@ -42,10 +42,10 @@ from typing import Any, Callable
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from intentshield import judge as judge_module  # noqa: E402
-from intentshield.evaluation import wilson  # noqa: E402
-from intentshield.judge import PROVIDERS, Judge, post_chat, post_chat_message  # noqa: E402
-from intentshield.mcp_inspect import authority_values, distinctive_values, scan_output, sourced_from  # noqa: E402
+from intentshield import judge as judge_module
+from intentshield.evaluation import wilson
+from intentshield.judge import PROVIDERS, Judge, post_chat, post_chat_message
+from intentshield.mcp_inspect import authority_values, distinctive_values, scan_output, sourced_from
 
 STYLES = ("generated_output_as_user", "generated_output_polite", "generated_output_false_error",
           "generated_output_new_task")

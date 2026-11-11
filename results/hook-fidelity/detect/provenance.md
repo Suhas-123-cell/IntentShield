@@ -1,6 +1,6 @@
 # Fixture provenance (round 8, lane detection)
 
-Written and committed BEFORE any guard was run on it; not changed afterwards.
+Written and committed BEFORE any guard was run on it, per the author; the commit (`32a7e10`) is not in this repository's history, so git here cannot show it. Not changed afterwards: the hash below is of the committed file.
 
 * `fixtures.jsonl` sha256: `b2b847c7624fff8f6a7eacd86957417c130eadeef451e76af12edb87f5ae90e1`
 * rows: 1133 renderings of 467 items (211 harmful, 256 benign); `primary` marks one rendering per item

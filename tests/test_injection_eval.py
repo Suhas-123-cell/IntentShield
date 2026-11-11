@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
-import injection_eval  # noqa: E402
+import injection_eval
 
 
 def _corpus(tmp_path: Path) -> list[dict]:

@@ -38,14 +38,14 @@ v8/v9/v10/v11 runs on older code and carry `provenance: null` in `results/msb/MA
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off (unconfirmed, note 1 below) |
 | Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`; an in-sample check, see the limits below) |
-| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,454 injections independent of the rules' tuning: rules 2.1%, rules + exemplars 18.1%. Over all 3,717 texts, rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (note 2 below) |
+| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,454 injections independent of the rules' tuning: rules 2.1%, rules + exemplars 18.1% (the rules as before 0.3.5, see the prompt-injection section below). Over all 3,717 texts, rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (note 2 below) |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
 Notes on the table:
 
 1. The v11 traces record no intent evidence and no provenance, so it is not confirmed that the intent model was
    active in that arm; treat the advisory result as unconfirmed.
-2. The rules were tuned on 1,505 of the 2,959 injections. Rules alone catch 49.9% with 2.1% of benign texts flagged, and
+2. The rules were tuned on 1,505 of the 2,959 injections. Rules alone catch 49.9% (before 0.3.5; 50.8% now) with 2.1% of benign texts flagged, and
    Prompt Guard 2 adds 0.7 points. Plain-language injections from independent sources stay mostly undetected.
 
 Paired cluster bootstrap of `user_task`, gateway minus baseline: −8.6 [−16.1, −3.8] (qwen), −14.3
@@ -96,16 +96,20 @@ there in one line each; they are given here in full, with their caveats.
 detectors; the rules were tuned on 1,505 of the 2,959 injections):
 
 - On the 1,454 injections from families independent of the rules' tuning, the rules catch 2.1% (30/1,454) and
-  rules + exemplars 18.1% (263/1,454).
+  rules + exemplars 18.1% (263/1,454). These figures are from the rules as they were before 0.3.5 (the table was made on
+  2026-10-21). With the 0.4.3 rules, `benchmarks/injection_eval.py` (about 2 seconds, needs an InjecAgent checkout) gives 55 of the
+  1,454 for the rules alone; 27 of those are AgentDojo `ignore_previous` rows that a 0.3.5 rule was written from, so they are no
+  longer independent, and without them the rules catch 28 of 1,427 (2.0%). Rules + exemplars were not re-measured with the 0.4.3
+  rules.
 - Most of that 18.1% is in distribution for the exemplar index. The index is built from the train split of the
   same dataset (`exemplars.py`: MCPTox descriptions, outputs written by a local model in four injection styles,
   translations and hard negatives). 228 of the 263 hits are on the 346 generated-output test rows, which share
   their styles and generator with the train rows and differ only by MCPTox server.
 - On the 1,108 injections from sources the index never saw (AgentDojo `direct` and `ignore_previous`, InjecAgent
-  base), rules + exemplars catch 35 (3.2%) and the rules alone 17 (1.5%). That is the figure to read as
-  generalisation. Both come from the per-family rows of `results/injection/table.txt`.
-- Over all 2,959 injections, rules + exemplars on outputs catch 57.8% (rules alone 49.9%). They flag 2.5% of the
-  758 benign texts (rules alone 2.1%).
+  base), rules + exemplars catch 35 (3.2%) and the rules alone 17 (1.5%), as measured before 0.3.5; with the 0.4.3 rules the rules
+  alone catch 44, of which 27 are the `ignore_previous` rows. That is the figure to read as generalisation. Both come from the per-family rows of `results/injection/table.txt`.
+- Over all 2,959 injections, rules + exemplars on outputs catch 57.8% (rules alone 49.9% before 0.3.5 and 50.8%, 1,503 of 2,959,
+  with the 0.4.3 rules). They flag 2.5% of the 758 benign texts (rules alone 2.1%; 16 of 758 with the 0.4.3 rules).
 - Plain-language injections from independent sources stay mostly undetected
   ([detectors.md](detectors.md#adaptive-injection-detection)).
 

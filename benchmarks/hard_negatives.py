@@ -33,7 +33,7 @@ from typing import Any
 import httpx
 
 sys.path.insert(0, str(Path(__file__).parent))
-from injection_data import LANGUAGES, ask  # noqa: E402
+from injection_data import LANGUAGES, ask
 
 TOPICS = ("email", "calendar", "banking", "file storage", "code hosting", "team chat", "travel booking",
           "online shopping", "health records", "customer relationship management", "cloud deployment",
