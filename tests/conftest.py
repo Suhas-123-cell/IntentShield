@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -48,6 +49,30 @@ def demo_proxy_config(tmp_path: Path) -> Path:
     path = tmp_path / "mcp-proxy.demo.json"
     path.write_text(json.dumps(data))
     return path
+
+
+@pytest.fixture(autouse=True)
+def _close_databases_a_test_left_open(monkeypatch):
+    """Close every SQLite connection the package or a test opened during the test. A guard or store that a test drops without
+    closing normally goes when it is collected; under a coverage tracer on a 1,024-descriptor runner they stayed open until
+    the run failed with "Too many open files"."""
+    opened: list[sqlite3.Connection] = []
+    connect = sqlite3.connect
+
+    def recording(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        caller = sys._getframe(1).f_globals.get("__name__", "")
+        if caller.startswith(("intentshield", "test_", "tests.", "hook_fidelity", "conftest")):
+            opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", recording)
+    yield
+    for conn in opened:
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
 
 
 def pytest_sessionfinish(session, exitstatus):
