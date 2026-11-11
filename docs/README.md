@@ -6,13 +6,13 @@ Start with the [README](../README.md) in the repository root. The files here are
 
 | step | what you get | words | minutes |
 |---|---|---|---|
-| the [README](../README.md) down to Results | what it does, how to install it, what it stops and does not stop | 930 | 4 |
+| the [README](../README.md) down to Results | what it does, how to install it, what it stops and does not stop, what is stored locally | 1,430 | 6 |
 | [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,220 | 5 |
-| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,060 | 8 |
-| all three | | 4,210 | 17 |
+| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,170 | 9 |
+| all three | | 4,820 | 19 |
 
-The first two steps alone take 9 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
-and its [appendix](hook-fidelity-report-appendix.md) (4,800 words) holds the denominators, the per-build detail and the long caveats. Everything
+The first two steps alone take 11 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
+and its [appendix](hook-fidelity-report-appendix.md) (5,100 words) holds the denominators, the per-build detail and the long caveats. Everything
 else is reference to look up a number or a protocol.
 
 Where to go next, by what you want:

@@ -45,7 +45,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from . import translation
 
@@ -117,6 +117,19 @@ def _verdict_word(obj: dict[str, Any]) -> tuple[str | None, str, str]:
     return word, reason, ""
 
 
+class _RepeatedKey(ValueError):
+    """A JSON object that holds one key twice: a parser that keeps the first and one that keeps the last read it differently."""
+
+
+def _no_repeated_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    found: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in found:
+            raise _RepeatedKey(repr(key))
+        found[key] = value
+    return found
+
+
 def classify(code: int, stdout: str, stderr: str, on_empty: str = "deny") -> tuple[str, str, bool]:
     """(decision, reason, passthrough) for a guard's finished call check: decision "allow", "ask" or "deny"; ``passthrough`` is
     true when the guard's own stdout is to be sent unchanged (an allow, so a rewrite or a note is kept)."""
@@ -143,7 +156,9 @@ def classify(code: int, stdout: str, stderr: str, on_empty: str = "deny") -> tup
     if len(stdout.encode("utf-8", "replace")) > MAX_OUTPUT:
         return "deny", "the guard's reply is larger than the limit, so it is not read as a verdict", False
     try:
-        obj = json.loads(out)
+        obj = json.loads(out, object_pairs_hook=_no_repeated_keys)
+    except _RepeatedKey as exc:
+        return "deny", f"the guard's reply names {exc} twice, and parsers differ on which one counts", False
     except ValueError:
         return "deny", f"the guard's reply is not JSON ({out[:60]!r}), so it is not read as a verdict", False
     if not isinstance(obj, dict):
@@ -208,7 +223,8 @@ def run_guard(argv: list[str], raw: str, deadline: float | None) -> tuple[int | 
 
 def wrap(harness: str, guard: list[str], raw: str, *, version: str | None = None, mode: str | None = None,
          deadline: float = translation.DEFAULT_DEADLINE_S, hook_timeout: float = 0.0, on_empty: str = "deny",
-         gemini_ask: bool = False, home: Path | None = None, stdout=None, stderr=None) -> int:
+         gemini_ask: bool = False, home: Path | None = None, stdout: TextIO | None = None,
+         stderr: TextIO | None = None) -> int:
     """One hook invocation. Returns the exit code of this process (0 with a reply on stdout, 2 with a reason on stderr for what
     cannot be put into a reply)."""
     stdout = stdout or sys.stdout

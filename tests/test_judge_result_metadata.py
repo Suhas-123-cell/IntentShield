@@ -6,9 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks"))
 
-import adaptive_judge  # noqa: E402
+import adaptive_judge
 
-from intentshield import judge as judge_module  # noqa: E402
+from intentshield import judge as judge_module
 
 
 def test_the_endpoint_record_names_the_native_ollama_url_and_the_context(monkeypatch):

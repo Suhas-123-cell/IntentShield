@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
@@ -17,6 +18,10 @@ _PATH_CAP = 1000      # characters of one path read by the file rules, after rep
 _PATH_CAP_WHY = f"a path longer than {_PATH_CAP} characters, too long to check"
 
 DENY, ASK = "deny", "ask"
+
+# The working directory of the call being read, for the rules that need to open a file a relative path names (set by
+# ``assess_shell`` and ``assess_file``; empty means the process's own).
+_WORKDIR: ContextVar[str] = ContextVar("intentshield_workdir", default="")
 
 
 def _is_opt(arg: str, *names: str) -> bool:

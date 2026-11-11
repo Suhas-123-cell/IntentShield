@@ -26,8 +26,8 @@ from typing import Any
 os.environ.setdefault("INTENTSHIELD_INTENT_MODEL_DIR", "/nonexistent")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from intentshield import credentials  # noqa: E402
-from intentshield.harness import _BUILTIN, HarnessGuard, handle  # noqa: E402
+from intentshield import credentials
+from intentshield.harness import _BUILTIN, HarnessGuard, handle
 
 # Typical development sessions: a prompt, then the agent's calls with the outputs they returned.
 FIXTURE: list[dict[str, Any]] = [

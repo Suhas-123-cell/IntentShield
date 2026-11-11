@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hook_fidelity import coverage_run  # noqa: E402
+from hook_fidelity import coverage_run
 
 
 def version_key(version: str) -> tuple[int, ...]:

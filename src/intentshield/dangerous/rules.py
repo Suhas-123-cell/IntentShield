@@ -33,7 +33,12 @@ _REVERSE_SHELL = re.compile(r"/dev/(?:tcp|udp)/[^\s/'\"]{1,100}/\d{1,5}|\bnc(?:a
                             r"\bsocat\b[^;|&]{0,80}\bexec:|\bbash\s{1,4}-i\s{1,4}>&|\bsh\s{1,4}-i\s{1,4}>&", re.I)
 _REVERSE_STRICT = re.compile(r"(?:\bbash|\bsh|\bzsh)\s{1,4}-i\s{1,4}>&?\s{0,3}/dev/(?:tcp|udp)/|\bnc(?:at)?\s[^;|&]{0,60}\s"
                              r"-[a-z]{0,4}[ec]\s{1,4}"
-                             r"[\w/.-]{1,40}\b|\bsocat\b[^;|&]{0,80}\bexec:|\bexec\s{1,4}\d{1,2}<>\s{0,3}/dev/(?:tcp|udp)/", re.I)
+                             r"[\w/.-]{1,40}\b|\bsocat\b[^;|&]{0,80}\bexec:", re.I)
+# ``exec 3<>/dev/tcp/host/80`` alone is how a script probes a port. It is a shell handed to the socket when something is
+# read from the socket and run, or a shell is told to use it.
+_EXEC_SOCKET = re.compile(r"\bexec\s{1,4}\d{1,2}<>\s{0,3}/dev/(?:tcp|udp)/", re.I)
+_SOCKET_FEED = re.compile(r"\bwhile\b[^;\n]{0,40}\bread\b|(?:^|[|;&\s(])(?:ba|z|da|k)?sh\b|\beval\b|<&\s{0,3}\d|"
+                          r"\$\{?line\b", re.I)
 
 _RM_SHORT_RECURSIVE = frozenset("rR")
 _PROTECTED_BRANCH = re.compile(r"^(?:main|master|develop|development|dev|trunk|prod|production|stable|staging|release|"
@@ -74,6 +79,18 @@ def _branch(ref: str) -> str:
     return ref
 
 
+_GIT_CONFIG_READS = ("--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "--unset", "--unset-all")
+
+
+def _sets_hooks_path(args: list[str]) -> bool:
+    """``git config core.hooksPath VALUE`` (or ``--add``, ``--replace-all``) sets it; ``--get``, ``--list``, ``--unset`` and a
+    name with no value read it or put the repository's own hooks back."""
+    if any(_is_opt(a, *_GIT_CONFIG_READS) or a == "-l" for a in args if a.startswith("-")):
+        return False
+    positional = [a for a in args if not a.startswith("-")]
+    return any(a.lower().startswith("core.hookspath") and ("=" in a or k + 1 < len(positional)) for k, a in enumerate(positional))
+
+
 def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
     sub, args, settings = _git(argv)
     flags = [a for a in args if a.startswith("-")]
@@ -94,7 +111,7 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
                     break
                 if ch == "n":
                     return Hit(ASK, "git commit -n skips the repository's pre-commit hooks.")
-    if sub == "config" and any(a.lower().startswith("core.hookspath") for a in args):
+    if sub == "config" and _sets_hooks_path(args):
         return Hit(ASK, "git config core.hooksPath replaces the repository's hooks.")
     if sub == "push":
         pos = [a for a in args if not a.startswith("-")]

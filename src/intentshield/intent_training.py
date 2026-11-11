@@ -133,7 +133,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
     def collate(batch: list[tuple[str, int]]) -> dict[str, Any]:
         texts, labels = zip(*batch, strict=True)
-        encoded = tokenizer(
+        encoded: dict[str, Any] = tokenizer(
             list(texts),
             padding=True,
             truncation=True,

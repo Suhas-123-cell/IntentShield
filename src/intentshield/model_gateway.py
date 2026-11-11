@@ -263,7 +263,7 @@ def _post_json(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310 - fixed HTTPS URLs
+        with urlopen(request, timeout=timeout_seconds) as response:  # fixed HTTPS URLs
             body = response.read(_MAX_RESPONSE_BYTES + 1)
     except HTTPError as exc:
         message = _redact_message(

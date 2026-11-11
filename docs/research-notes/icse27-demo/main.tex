@@ -222,7 +222,7 @@ argue that review load is the cost against which autonomous defenses should be c
 of cases and added no measured safety; as advisory evidence it moved task completion by at most 3 points; a trained injection classifier flagged 24\% of benign text. Both ship disabled.
 
 \section{Limitations and Related Work}
-Agents were three local 7--9B models and one hosted model on 99 cases; one run each at temperature 0 (rerunning one arm five days later reproduced all 220 call sequences). Our MSB runner deviates from MSB in
+Agents were three local 7--9B models and one hosted model on 99 cases; one run each at temperature 0 (rerunning one arm five days later reproduced all 220 call sequences; the rerun's rows are not committed). Our MSB runner deviates from MSB in
 stated ways (injection text only on the task server, directory listing allowed). The proxy drops MCP
 resources and prompts instead of mediating them. The reviewer is modeled, never measured, and the only
 adaptive attacker was weak (16 of 42 seeds evaded the static defense, 13 with learning). Hook replies were checked for all four harnesses; only Claude Code was run

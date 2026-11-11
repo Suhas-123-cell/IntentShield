@@ -23,7 +23,7 @@ from intentshield.mcp_inspect import (
 
 USER = "Summarize the weekly figures and mail them to the team."
 CANARY = "audit@canary.example"
-b64 = lambda s: base64.b64encode(s.encode()).decode()  # noqa: E731
+b64 = lambda s: base64.b64encode(s.encode()).decode()
 
 
 def sourced(output: str, argument: str, user: str = USER) -> bool:

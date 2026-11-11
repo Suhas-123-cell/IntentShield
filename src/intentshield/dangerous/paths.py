@@ -1,10 +1,11 @@
 """Paths as the rules read them (home, system and protected directories, devices) and the credential stores."""
 from __future__ import annotations
 
+import os
 import posixpath
 import re
 
-from .core import _PATH_CAP, _PATH_CAP_WHY, ASK, DENY, _bin
+from .core import _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, _bin
 
 # --- paths -----------------------------------------------------------------------------------------------------
 
@@ -19,7 +20,8 @@ def _glob_only(segment: str) -> bool:
     rest = _BRACKET.sub("", segment)
     return bool(segment) and set(rest) <= {"?", "*"} and (rest != segment or "?" in segment or "*" in segment)
 _SYSTEM_ROOTS = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/var", "/boot", "/System", "/Library", "/opt", "/private",
-                 "/dev", "/sys", "/proc", "/Applications", "/srv", "/mnt", "/Volumes", "/Users", "/home", "/root", "/snap")
+                 "/dev", "/sys", "/proc", "/Applications", "/srv", "/mnt", "/Volumes", "/Users", "/home", "/root", "/snap",
+                 "/run", "/nix", "/cores", "/lost+found")
 _PROTECTED = frozenset({"/", "~", *_SYSTEM_ROOTS, "/usr/bin", "/usr/lib", "/usr/local", "/usr/local/bin", "/usr/sbin",
                         "/usr/share", "/var/lib", "/var/log", "/var/root", "/System/Library", "/Library/Frameworks",
                         "/private/etc", "/private/var", "/etc/ssh", "/lib/modules"})
@@ -126,7 +128,11 @@ _SOFT_FILES = re.compile(r"(?:^|/)(?:\.kube/config|\.docker/config\.json|\.npmrc
                          r"\.config/rclone/rclone\.conf|\.oci/config|\.git-credentials|"
                          r"\.codex/auth\.json|\.gemini/(?:oauth_creds|mcp-oauth-tokens)\.json|\.claude/\.credentials\.json|"
                          r"\.claude\.json$)")
-_ETC_SECRET = re.compile(r"^/(?:private/)?etc/(?:shadow|gshadow|master\.passwd|sudoers(?:\.d/[\w.-]+)?|ssh/ssh_host_[\w_]+_key)$")
+# The directory of a credential store, or a glob over it (``~/.aws/*``, ``~/.aws/c*``): everything in it is read.
+_SECRET_DIR = re.compile(r"(?:^|/)\.(?:aws|gnupg)(?:/[^/]*[*?\[][^/]*)?$")
+_SOFT_DIR = re.compile(r"(?:^|/)\.(?:kube|docker|config/gh|config/gcloud)(?:/[^/]*[*?\[][^/]*)?$")
+_ETC_SECRET = re.compile(r"^/(?:private/)?etc/(?:shadow|gshadow|master\.passwd|ssh/ssh_host_[\w_]+_key)$")
+_SUDOERS = re.compile(r"^/(?:private/)?etc/sudoers(?:\.d/[\w.-]+)?$")   # a read shows rules, not secrets; a write is a deny
 _PROC_SECRET = re.compile(r"^/proc/(?:self|\d{1,8})/(?:environ|mem|maps)$")
 _BROWSER = re.compile(r"(?:chrome|chromium|firefox|mozilla|brave|safari|microsoft edge|vivaldi)")
 _BROWSER_FILE = re.compile(r"(?:^|/)(?:login data|cookies|cookies\.sqlite|logins\.json|key[34]\.db|web data)$")
@@ -155,6 +161,28 @@ def _pathlike(word: str) -> bool:
     return word.startswith(("/", "~", "$", ".")) or ("/" in word and "://" not in word and not any(c.isspace() for c in word))
 
 
+def _test_fixture(path: str, n: str) -> bool:
+    """``n`` (the lower-cased, normalised ``path``) lies in a test directory and in no directory that starts with a dot. A
+    relative path is the project's by being relative; an absolute one must lie inside the call's working directory, which must
+    itself be neither the home directory nor the root (``~/tests/id_rsa`` is the user's own)."""
+    folders = n.split("/")[:-1]
+    if not _TEST_DIRS & set(folders) or any(f.startswith(".") and f not in (".", "..") for f in folders):
+        return False
+    if not path.startswith(("/", "~", "$")):
+        return True
+    try:
+        cwd = _WORKDIR.get() or os.getcwd()
+    except OSError:
+        return False
+    if _norm(cwd) in ("", "~", "/"):
+        return False
+    if path.startswith("/") and cwd.startswith("/"):   # as spelled: _norm would make /Users/a and /Users/b the same ~
+        here, project = posixpath.normpath(path).lower(), posixpath.normpath(cwd).lower()
+    else:
+        here, project = n, _norm(cwd).lower()
+    return here.startswith(project.rstrip("/") + "/")
+
+
 def _cred_level(path: str) -> tuple[str, str] | None:
     """(decision, what) when ``path`` names a credential store. A path over ``_PATH_CAP`` characters (after repeated slashes are
     collapsed) is not read: it is asked about, never passed as safe."""
@@ -168,16 +196,22 @@ def _cred_level(path: str) -> tuple[str, str] | None:
     base = n.rpartition("/")[2]
     if _ETC_SECRET.match(n) or _PROC_SECRET.match(n):
         return DENY, "a system secret file"
+    if _SUDOERS.match(n):
+        return ASK, "the sudo rules"
     if base.endswith(".pub"):
         return None
     if _CLOUD_FILES.search(n):
         return DENY, "a cloud credential store or keychain"
+    if _SECRET_DIR.search(n):
+        return DENY, "a directory of credentials"
+    if _SOFT_DIR.search(n):
+        return ASK, "a directory of credential files"
     if "/.ssh/" in "/" + n + "/" or n.endswith("/.ssh") or n == ".ssh" or n.startswith(".ssh/"):
         if base in ("known_hosts", "config", "authorized_keys", "known_hosts.old") or n.endswith(".ssh/*"):
             return (DENY, "the SSH directory") if n.endswith(".ssh/*") or raw.endswith(".ssh/*") else None
         return DENY, "an SSH private key" if base != ".ssh" else "the SSH directory"
     if _KEY_NAME.match(base):
-        if not path.startswith(("/", "~", "$")) and _TEST_DIRS & set(n.split("/")[:-1]):  # tests/fixtures/id_rsa: a sample key
+        if _test_fixture(path, n):   # tests/fixtures/id_rsa, relative or absolute: a sample key
             return ASK, "a file named like an SSH private key, in a test directory"
         return DENY, "an SSH private key"
     if base in (".netrc", "_netrc"):
@@ -276,6 +310,34 @@ def _cred_args(argv: list[str]) -> tuple[str, str, str] | None:
             if hit and (best is None or hit[0] == DENY and best[0] != DENY):
                 best = (hit[0], hit[1], c)
     return best
+
+
+# Programs that name a file without reading or sending what is in it: a listing, a mode, a count, a signing login, a message.
+_NAMES_ONLY = frozenset({"ls", "ll", "stat", "file", "test", "[", "[[", "wc", "du", "df", "realpath", "readlink", "dirname",
+                         "basename", "ssh", "ssh-keygen", "ssh-add", "ssh-keyscan", "ssh-copy-id", "chmod", "chown", "chgrp",
+                         "touch", "mkdir", "cd", "pushd", "popd", "echo", "printf", "which", "command", "type", "rm", "unlink",
+                         "rmdir", "mv", "shred", "truncate", "find", "grep", "egrep", "fgrep", "rg", "ag", "ack", "open"})
+_IDENTITY_OPTIONS = frozenset({"-i", "-I", "--identity-file"})
+
+
+def _named_secret(argv: list[str]) -> tuple[str, str, str] | None:
+    """(decision, what, path) for a key, cloud credential or system secret that any program but a listing or a login names
+    among its arguments: not read by a rule of its own (``git add ~/.ssh/id_rsa``, ``gh gist create``, ``zip``, ``curl
+    file://...``, ``rsync`` to a local directory), so asked about. A path that is only the identity a login signs with
+    (``-i``, ``-o IdentityFile=``) is not named for reading."""
+    name = _bin(argv[0])
+    if name in _NAMES_ONLY:
+        return None
+    args = argv[1:]
+    for k, a in enumerate(args):
+        if (k and args[k - 1] in _IDENTITY_OPTIONS) or a in _IDENTITY_OPTIONS or a.lower().startswith("identityfile"):
+            continue
+        for c in [*_candidates(a), a[7:] if a.lower().startswith("file://") else a]:
+            c = c.strip("\"'")
+            hit = _cred_level(c) if _pathlike(c) and "://" not in c else None
+            if hit and hit[0] == DENY:
+                return ASK, hit[1], c
+    return None
 
 
 _CRON = re.compile(r"(?:^|/)(?:etc/(?:cron[\w.]*|anacrontab)|var/(?:spool/cron|at/tabs)|crontab)(?:/|$)")

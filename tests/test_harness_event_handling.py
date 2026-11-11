@@ -222,9 +222,13 @@ def test_a_run_by_the_harness_is_ok(tmp_path, capsys):
     assert any(line.startswith("ok") and "claude" in line for line in _doctor(home, capsys).splitlines())
 
 
-def test_no_event_at_all_is_still_a_fail(tmp_path, capsys):
+def test_no_event_at_all_is_a_fail_once_the_install_is_not_new(tmp_path, capsys, monkeypatch):
     home = tmp_path / "home"
     _installed(home)
+    out = _doctor(home, capsys)   # just installed: expected, so a warning
+    assert any(line.startswith("warn") and "no hook has run yet" in line for line in out.splitlines())
+    assert not any(line.startswith("FAIL") for line in out.splitlines())
+    monkeypatch.setattr(doctor, "FRESH_SECONDS", 0)
     out = _doctor(home, capsys)
     assert any(line.startswith("FAIL") and "no hook has run" in line for line in out.splitlines())
 

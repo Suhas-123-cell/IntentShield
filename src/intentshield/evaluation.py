@@ -63,7 +63,7 @@ class Case:
 def build_cases() -> list[Case]:
     cases: list[Case] = []
 
-    def add(label: str, category: str, intent: str, tool: str, args: dict[str, Any], drift: bool = False):
+    def add(label: str, category: str, intent: str, tool: str, args: dict[str, Any], drift: bool = False) -> None:
         cases.append(Case(f"{category}-{len(cases):03d}", label, category, intent, tool, args, drift))
 
     for intent in READ_INTENTS:

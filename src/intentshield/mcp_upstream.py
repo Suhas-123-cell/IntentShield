@@ -386,7 +386,7 @@ class MCPUpstream:
     @property
     def connection_info(self) -> dict[str, Any]:
         client = self._require_client()
-        return _redact({
+        info: dict[str, Any] = _redact({
             "server_id": self.config.server_id,
             "transport": self.config.transport,
             "protocol_version": _normalize(getattr(client, "protocol_version", None)),
@@ -394,6 +394,7 @@ class MCPUpstream:
             "server_capabilities": _normalize(getattr(client, "server_capabilities", None)),
             "instructions": _normalize(getattr(client, "instructions", None)),
         }, self._credential_values)
+        return info
 
     async def __aenter__(self) -> "MCPUpstream":
         return await self.connect()

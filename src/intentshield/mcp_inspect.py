@@ -920,6 +920,42 @@ def scan_description(text: str, other_tools: Iterable[str] = ()) -> list[str]:
     return findings
 
 
+# What each description rule looks for, in a few words, for a person reading a scan.
+RULE_MEANINGS = {
+    "instruction_override": "tells the agent to ignore or replace its instructions",
+    "hidden_directive": "a tag such as <IMPORTANT> that marks hidden instructions",
+    "cross_tool_directive": "orders what to do before or after using a tool",
+    "tool_call_directive": "orders the agent to call a particular tool first",
+    "prerequisite_call": "says another tool must be called before this one",
+    "threat_coercion": "warns of damage if the agent does not comply",
+    "concealment": "tells the agent not to tell the user",
+    "sensitive_target": "names a key, a credential or a secrets file",
+    "argument_override": "tells the agent to change the arguments it sends",
+    "forced_payload": "orders extra content into what the agent sends",
+    "priority_claim": "claims its rules outrank the user's or the system's",
+    "mandatory_policy": "presents an order as a mandatory policy",
+    "cross_tool_data": "asks for the data of other tools",
+    "external_send": "sends data to a fixed outside address",
+    "hidden_text": "contains invisible Unicode text",
+}
+
+
+def explain_rules(text: str, rules: Iterable[str], width: int = 70) -> str:
+    """One line for a person: each rule of ``rules`` that fired on ``text``, what it means and the first words it matched
+    (cut to ``width`` characters). A rule that fires only on a server's tools read together has no single place in ``text``."""
+    shown = readable(text)
+    parts = []
+    for name in rules:
+        pattern = dict(_DESCRIPTION_RULES).get(name)
+        meaning = RULE_MEANINGS.get(name.removeprefix("split_"))
+        found = next(iter(pattern.finditer(shown)), None) if pattern is not None else None
+        quote = " ".join(found.group(0).split()) if found else ""
+        if len(quote) > width:
+            quote = quote[:width - 3] + "..."
+        parts.append(f"{name}" + (f" ({meaning})" if meaning else "") + (f": \"{quote}\"" if quote else ""))
+    return "; ".join(parts)
+
+
 def scan_server(texts: Iterable[str]) -> list[str]:
     """Rules that fire only when one server's tool texts are read together, in catalog
     order and with line breaks folded: one instruction split across tools (ShareLock)."""

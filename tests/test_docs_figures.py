@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-READ = lambda name: (ROOT / name).read_text(encoding="utf-8")  # noqa: E731
+READ = lambda name: (ROOT / name).read_text(encoding="utf-8")
 
 
 def _wilson_upper(k: int, n: int, z: float = 1.959964) -> float:
@@ -23,8 +23,8 @@ def _wilson_upper(k: int, n: int, z: float = 1.959964) -> float:
     return 100 * (centre + half)
 
 
-def test_the_readme_stays_under_170_lines():
-    assert len(READ("README.md").splitlines()) < 170
+def test_the_readme_stays_under_230_lines():
+    assert len(READ("README.md").splitlines()) < 230
 
 
 def test_the_reading_path_word_counts_are_wc_counts():
@@ -114,3 +114,42 @@ def test_contributings_baseline_outputs_are_what_the_scripts_print(tmp_path):
     write = re.search(r"^\s*write: (\d+/\d+) asked or denied", replay, re.M)
     assert shell and f"`shell: {shell.group(1)} asked or denied`" in text, shell and shell.group(1)
     assert write and f"`write: {write.group(1)}`" in text, write and write.group(1)
+
+
+def test_the_readme_puts_what_it_stops_the_demo_and_local_storage_before_the_results():
+    headings = re.findall(r"^## (.+)$", READ("README.md"), re.M)
+    results, study = headings.index("Results"), headings.index("The hook study")
+    for early in ("See it work", "What it stops and does not stop", "What is stored locally"):
+        assert headings.index(early) < results < study, early
+
+
+def test_the_injection_headline_says_which_rules_it_was_measured_with():
+    """The committed table was made before the 0.3.5 rule that reads "Ignore your previous iunstructions". The rules now flag
+    all 27 AgentDojo `ignore_previous` rows that the table counts as missed, so those rows are no longer independent of the
+    rules."""
+    import json
+
+    sys.path.insert(0, str(ROOT / "benchmarks"))
+    import injection_eval
+
+    assert _injection_rows()["instruction:agentdojo_ignore_previous"][0] == (0, 27)    # the rules column of the committed table
+    rows = [json.loads(line) for line in READ("results/injection/agentdojo-strings.jsonl").splitlines()]
+    mine = [r for r in rows if r["source"] == "agentdojo_ignore_previous"]
+    assert len(mine) == 27 and all(injection_eval.rules(r["text"], "output") for r in mine)
+    flat = re.sub(r"\s+", " ", READ("README.md"))
+    assert "before 0.3.5" in flat and "27 are AgentDojo `ignore_previous` rows" in flat
+    assert "28 of 1,427 (2.0%)" in flat and "not re-measured with the 0.4.3 rules" in flat
+
+
+def test_the_hook_overhead_in_the_guide_matches_the_benchmark_row_and_the_readme():
+    row = next(line for line in READ("docs/benchmarks.md").splitlines() if line.startswith("| Overhead"))
+    low, high = (float(x) for x in re.search(r"hook (\d+) to (\d+) ms per event", row).groups())
+    tag = re.search(r"73\.5 to 74\.1 ms per\s+event", READ("docs/benchmarks.md"))
+    assert tag
+    guide = re.sub(r"\s+", " ", READ("docs/guide.md"))
+    stated = re.search(r"Each hook is a process of about (\d+) to (\d+) ms", guide)
+    assert stated and float(stated.group(1)) <= low and float(stated.group(2)) >= 74.1
+    assert "about 60 ms" not in guide
+    readme = re.search(r"about (\d+) ms per hook event", re.sub(r"\s+", " ", READ("README.md")))
+    assert readme and float(stated.group(1)) <= float(readme.group(1)) <= float(stated.group(2))
+

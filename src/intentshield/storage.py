@@ -223,7 +223,8 @@ class Storage:
             ).fetchone()
         if not row or not row["result_json"]:
             return None
-        return json.loads(row["result_json"])
+        result: dict[str, Any] = json.loads(row["result_json"])
+        return result
 
     def list_approvals(self, status: str | None = None) -> list[dict[str, Any]]:
         # The operator decides with the user's request and the reasons for review in view.

@@ -24,9 +24,10 @@ import os
 import posixpath
 import re
 import sys
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
@@ -40,6 +41,9 @@ from .models import GatewayResult, ToolCall
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
 from .storage import default_database
+
+if TYPE_CHECKING:
+    from .mcp_proxy import MCPProxyRuntime
 
 try:  # Keep the core gateway importable when the optional MCP SDK is absent.
     from mcp.server import MCPServer
@@ -174,7 +178,7 @@ class IntentShieldMCPFacade:
         }
 
 
-def _require_mcp() -> Any:
+def _require_mcp() -> type[MCPServer]:
     if MCPServer is None:
         raise RuntimeError(
             "The MCP SDK is required for this server. Install the project's MCP dependency "
@@ -276,7 +280,7 @@ def create_proxy_mcp_server(config: Any) -> Any:
     runtime = MCPProxyRuntime(config)
 
     @asynccontextmanager
-    async def lifespan(_server: Any):
+    async def lifespan(_server: Any) -> AsyncIterator[dict[str, Any]]:
         async with runtime:
             yield {"runtime": runtime}
 
@@ -356,7 +360,7 @@ def create_proxy_mcp_server(config: Any) -> Any:
 
     # Exposed for trusted embedding applications and the integration harness;
     # it is intentionally not registered as an MCP tool.
-    server.intentshield_runtime = runtime
+    server.intentshield_runtime = runtime  # type: ignore[attr-defined]  # an attribute of the embedding API, not of the SDK's class
     return server
 
 
@@ -405,7 +409,7 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         temporary.replace(path)
 
     @asynccontextmanager
-    async def lifespan(_server: Any):
+    async def lifespan(_server: Any) -> AsyncIterator[dict[str, Any]]:
         async with runtime:
             if config.tool_catalog_dir:
                 write_catalog([tool for tool, _ in await runtime.transparent_tools()])
@@ -467,7 +471,7 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
     routes behind the control token, and the rate limit in front of both."""
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
-    from starlette.responses import JSONResponse
+    from starlette.responses import JSONResponse, Response
 
     normalized = posixpath.normpath(streamable_http_path)
     if not normalized.startswith("/") or normalized == "/control" or normalized.startswith("/control/"):
@@ -487,7 +491,7 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
     )
 
     if agent_token:
-        async def require_agent_token(request: Request, call_next):
+        async def require_agent_token(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
             if is_control(request.url.path):  # a route that checks the control token itself, no other path
                 return await call_next(request)
             supplied = request.headers.get("authorization", "")
@@ -499,7 +503,7 @@ def _proxy_http_app(server: Any, *, host: str, streamable_http_path: str,
 
     limiter = RateLimiter.from_env()
     if limiter is not None:
-        async def rate_limit(request: Request, call_next):
+        async def rate_limit(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
             client = request.client.host if request.client else "unknown"
             if is_control(request.url.path):
                 # Every local process shares one client address: junk posted to /mcp must not lock the
@@ -540,10 +544,11 @@ async def _json_object(request: Any) -> dict[str, Any]:
 def _approve(payload: dict[str, Any]) -> bool:
     if payload.get("decision") not in ("approve", "reject"):  # a tuple: a list or dict here must not raise
         raise _Unprocessable("decision must be approve or reject")
-    return payload["decision"] == "approve"
+    decision: str = payload["decision"]
+    return decision == "approve"
 
 
-def _add_control_routes(app: Any, runtime: Any, control_token: str) -> list[str]:
+def _add_control_routes(app: Any, runtime: MCPProxyRuntime, control_token: str) -> list[str]:
     """Operator routes under /control/, every one behind the one bearer check. A request to fix is
     a 422, an unknown id a 404 and a refused state change (a POST's ValueError) a 409; any other
     error is a real bug and surfaces as one."""
@@ -552,9 +557,10 @@ def _add_control_routes(app: Any, runtime: Any, control_token: str) -> list[str]
 
     expected = f"Bearer {control_token}".encode()
     paths: list[str] = []
+    Handler = Callable[[Request], Awaitable[dict[str, Any]]]
 
-    def route(path: str, method: str, not_found: str | None = None):
-        def register(handler):
+    def route(path: str, method: str, not_found: str | None = None) -> Callable[[Handler], Handler]:
+        def register(handler: Handler) -> Handler:
             async def endpoint(request: Request) -> JSONResponse:
                 if not hmac.compare_digest(request.headers.get("authorization", "").encode(), expected):
                     return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -691,7 +697,7 @@ def run_mcp_server(
     """Run IntentShield for a real MCP client over stdio or Streamable HTTP."""
     if transport == "streamable-http" and host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError(
-            "Remote MCP binding is disabled in this MVP; use a loopback host or embed "
+            "Remote MCP binding is disabled; use a loopback host or embed "
             "IntentShield behind an authenticated TLS reverse proxy."
         )
     if transparent:
@@ -784,8 +790,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--db", default=os.getenv("INTENTSHIELD_DB") or str(Path.home() / ".intentshield" / "gateway.db"),
                         help="SQLite audit database of the built-in demo gateway (default ~/.intentshield/gateway.db; "
                              "a --config names its own)")
-    parser.add_argument("--host", default="127.0.0.1", help="bind address for streamable-http (loopback only "
-                                                              "unless a token is set)")
+    parser.add_argument("--host", default="127.0.0.1", help="bind address for streamable-http (a loopback "
+                                                              "address only: any other is refused, token or not)")
     parser.add_argument("--port", type=int, default=8001, help="port for streamable-http")
     parser.add_argument("--path", default="/mcp", help="URL path of the streamable-http endpoint")
     parser.add_argument(

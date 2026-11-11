@@ -25,11 +25,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from adaptive_judge import judge_endpoint  # noqa: E402
+from adaptive_judge import judge_endpoint
 
-from intentshield.evaluation import wilson  # noqa: E402
-from intentshield.judge import Judge  # noqa: E402
-from intentshield.mcp_inspect import scan_output  # noqa: E402
+from intentshield.evaluation import wilson
+from intentshield.judge import Judge
+from intentshield.mcp_inspect import scan_output
 
 
 def rows(split: str, per_source: int) -> list[dict]:

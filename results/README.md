@@ -100,7 +100,8 @@ which need Docker and the agent model to regenerate, 19 of which carry `provenan
 
 **Reproducibility.** Agents ran at temperature 0, one run per arm. Rerunning llama3.1:8b `none`
 five days later reproduced all 220 call sequences and every per-case metric; 24 final answers
-differed only in wording.
+differed only in wording. The rerun's rows are not committed (item 5 below), so this is the author's report and cannot be
+re-checked here.
 
 **Numbers with no raw data here.** (1) The review-load figures in `CHANGELOG.md`, `docs/security-review.md` and the report (for
 example shell asks 4/1,707, 7/1,713 and 8/1,713, MCP asks 741/3,405 and 53 to 55 of 126, and the 830/3,720 in IntentShield's own
@@ -116,7 +117,8 @@ per cell, reported by the author and not re-checkable here.
 (3) The AgentDojo qwen2.5:7b runs of `docs/benchmarks.md` (slack 10/32 to 5/32 successful attacks, benign utility 6/8 to 4/8, and
 the travel and workspace suites): the per-case rows are kept by the author, not in the repository; only the structural replay of
 AgentDojo's published GPT-4o logs (`agentdojo/`) is committed. (4) Earlier figures that a doc quotes as "before" (for example the
-hook alone holding 27 of 30 jailbreak sends before the review's fixes) come from runs whose rows were not committed.
+hook alone holding 27 of 30 jailbreak sends before the review's fixes) come from runs whose rows were not committed. (5) The llama3.1:8b `none` rerun of the Reproducibility paragraph: the committed
+llama file in `results/msb` is the first run, and the rerun's file was not kept.
 
 **Known gaps.** Cases a server failed to start for (`c0343`) or the agent timed out on are listed
 per arm by `paper_numbers.py` and dropped from every arm of that model. The descriptions-exposed and

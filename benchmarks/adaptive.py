@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).parent))
-import mcptox  # noqa: E402
+import mcptox
 
-from intentshield.evaluation import wilson  # noqa: E402
-from intentshield.mcp_inspect import distinctive_values, scan_description  # noqa: E402
+from intentshield.evaluation import wilson
+from intentshield.mcp_inspect import distinctive_values, scan_description
 
 _LOOKALIKE = str.maketrans({"a": "а", "e": "е", "o": "о", "p": "р", "c": "с", "i": "і"})  # Cyrillic
 _LEET = str.maketrans({"a": "4", "e": "3", "i": "1", "o": "0", "s": "5", "t": "7"})

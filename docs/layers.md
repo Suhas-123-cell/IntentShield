@@ -109,7 +109,11 @@ read (an unknown event name, or a command, path or URL that is missing or not te
   programs (`sudo`, `env`, `flock`, `ssh host`, `find -exec`, ...), and a command past a limit (more than 8 wrappers, 200
   substitutions or a long brace list) asks and is never allowed. The `PowerShell` tool is read as the POSIX commands its
   cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content`, `Invoke-WebRequest` uploads, a download run with
-  `Invoke-Expression`); other cmdlets are not read (the list is in the guide).
+  `Invoke-Expression`); other cmdlets are not read (the list is in the guide). The wrappers, the limits and the PowerShell
+  cmdlets are on main, after 0.4.3.
+- The text rules read the harness's own tools. With `--builtin-tools` they also read (on main, after 0.4.3) the path and command
+  arguments of MCP tools (`path`, `file`, `filename`, `command`, `cmd` and a few more); anything else an MCP filesystem or shell
+  server is asked to do is not read.
 - One difference between the tools: in a session where an output tried to instruct the agent, `curl` to a host the user did
   not name asks, but `WebFetch` to one does not (fetching a page an output linked to is how agents browse); it is refused only
   when the address came from the injected output or carries a credential.
@@ -172,7 +176,7 @@ the gateway's tools and the proxy config keys are in
 
 `install` merges the hook entries into the harness's own settings file (`~/.claude/settings.json`,
 `~/.codex/config.toml`, `~/.cursor/hooks.json`, `~/.gemini/settings.json`; `--scope project` uses the file in
-the current directory), naming the installed executable by absolute path, and leaves every other setting alone.
+the current directory, and for Claude Code that is `.claude/settings.local.json` on main, after 0.4.3), naming the installed executable by absolute path, and leaves every other setting alone.
 Both `install` and `wrap` are idempotent and reversible (`uninstall`, `unwrap`), and `--dry-run` prints the file
 instead of writing it.
 
@@ -188,7 +192,8 @@ of your shell's environment, so name any other variable it needs (a proxy settin
 in `env`.
 
 Both write absolute paths of the machine they ran on. Do not commit a project file they changed
-(`.mcp.json`, `.claude/settings.json`, `.cursor/hooks.json`, `.gemini/settings.json`): a teammate who clones
+(`.mcp.json`, `.claude/settings.json`, `.cursor/hooks.json`, `.gemini/settings.json`; on main, after 0.4.3, Claude Code's project hooks
+go to `.claude/settings.local.json` instead of `.claude/settings.json`): a teammate who clones
 it gets a server entry or hook that points at a path that does not exist, and a hook launcher that refuses every
 MCP call. Run `install` and `wrap` on each machine instead.
 

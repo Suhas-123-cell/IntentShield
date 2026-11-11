@@ -30,7 +30,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hook_fidelity import cells  # noqa: E402
+from hook_fidelity import cells
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -286,7 +286,7 @@ def cursor_deny_profile(real_home: str) -> str:
     exception the run dies with EPERM before any model call), so the slugs of workspaces under the system temp directory
     (``private-var-folders-...``) stay readable and writable; the user's own projects (``Users-...``) and everything else
     under ~/.cursor stay denied."""
-    quote = lambda rel: f'(subpath "{real_home}/{rel}")'  # noqa: E731
+    quote = lambda rel: f'(subpath "{real_home}/{rel}")'
     reads = " ".join(quote(r) for r in PROTECTED_HOME_DIRS)
     writes = " ".join(quote(r) for r in WRITE_PROTECTED_HOME_DIRS)
     env_file = ROOT.parents[2] if ROOT.parent.name == "worktrees" else ROOT

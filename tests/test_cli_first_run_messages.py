@@ -304,7 +304,7 @@ def test_doctor_reads_codex_toml_and_vscode_files_too(tmp_path, home, capsys):
     install.wrap(vscode, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path))
     doctor.doctor(home, tmp_path, home / "hooks.db")
     out = capsys.readouterr().out
-    assert f"ok   {toml}" in out and f"ok   {vscode}" in out
+    assert f"ok   {str(toml).replace(str(home), '~')}" in out and f"ok   {vscode}" in out  # a path under home is written ~/...
 
 
 def test_doctor_connect_starts_a_wrapped_server_through_its_proxy_and_lists_its_tools(tmp_path, home, capsys):

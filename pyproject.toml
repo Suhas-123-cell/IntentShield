@@ -93,6 +93,7 @@ testpaths = ["tests"]
 # A misspelled marker or config key is an error, not a silently ignored name.
 addopts = ["--strict-markers", "--strict-config"]
 xfail_strict = true
+markers = ["study: reads docs/, results/ or the benchmark data of the hook-fidelity and paper work (needs a full clone); `pytest -m 'not study'` runs the code-only tests"]
 
 # Run with: pytest --cov. A report, not a goal: the full suite measured 90% on macOS (Python 3.14) on 2026-11-11, and the floor sits
 # five points below so a skipped test or a platform difference does not fail the build but a module left untested does.
@@ -122,8 +123,7 @@ packages = ["src/intentshield"]
 python_version = "3.11"
 files = ["src/intentshield"]
 # Everything in --strict except warn_unused_ignores, which depends on whether the optional ML packages are installed.
-# The flags below that still fail in some modules are switched off for those modules only, in the lists that follow;
-# a module leaves its list when it passes, and a new module starts under the full set.
+# No module is exempt from any of them: a new module is held to the full set.
 check_untyped_defs = true
 no_implicit_optional = true
 no_implicit_reexport = true
@@ -139,36 +139,6 @@ disallow_untyped_calls = true
 disallow_any_generics = true
 warn_return_any = true
 
-# Still failing disallow_untyped_defs:
-[[tool.mypy.overrides]]
-module = ["intentshield.api", "intentshield.evaluation", "intentshield.injection_training", "intentshield.install", "intentshield.mcp_proxy", "intentshield.mcp_server", "intentshield.rule_packs", "intentshield.translation", "intentshield.wrap_hook"]
-disallow_untyped_defs = false
-
-# Still failing disallow_incomplete_defs:
-[[tool.mypy.overrides]]
-module = ["intentshield.api", "intentshield.evaluation", "intentshield.injection_training", "intentshield.install", "intentshield.mcp_proxy", "intentshield.mcp_server", "intentshield.translation", "intentshield.wrap_hook"]
-disallow_incomplete_defs = false
-
-# Still failing disallow_untyped_decorators:
-[[tool.mypy.overrides]]
-module = ["intentshield.mcp_server"]
-disallow_untyped_decorators = false
-
-# Still failing warn_return_any:
-[[tool.mypy.overrides]]
-module = ["intentshield.api", "intentshield.harness", "intentshield.injection_classifier", "intentshield.intent_classifier", "intentshield.intent_training", "intentshield.mcp_proxy", "intentshield.mcp_server", "intentshield.mcp_upstream", "intentshield.storage", "intentshield.threat_memory", "intentshield.translation"]
-warn_return_any = false
-
-# Still failing disallow_untyped_calls:
-[[tool.mypy.overrides]]
-module = ["intentshield.exemplars", "intentshield.threat_memory", "intentshield.translation"]
-disallow_untyped_calls = false
-
-# Still failing disallow_any_generics:
-[[tool.mypy.overrides]]
-module = ["intentshield.signatures", "intentshield.threat_memory", "intentshield.translation"]
-disallow_any_generics = false
-
 # Optional or untyped third-party packages: the ML extras are not installed in CI, jsonschema ships no stubs.
 [[tool.mypy.overrides]]
 module = ["torch", "torch.*", "transformers", "huggingface_hub", "jsonschema", "jsonschema.*"]
@@ -182,9 +152,14 @@ extend-exclude = ["artifacts", "results", "benchmarks/hook_fidelity/prevalence"]
 
 [tool.ruff.lint]
 # Beyond the base set (E, F, W, I, B, UP): the families the whole tree already passes, so that they stay clean (shadowed builtins,
-# logging calls, debugger statements, version checks, banned relative-import tricks, blanket noqa and type: ignore, __future__).
-select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT"]
+# logging calls, debugger statements, version checks, banned relative-import tricks, blanket noqa and type: ignore, __future__),
+# unused noqa comments (RUF100) and a ceiling on a function's complexity (C901, below).
+select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT", "RUF100", "C901"]
 ignore = ["E741", "E731", "B008", "B023", "B905", "UP035", "UP037"]
+
+[tool.ruff.lint.mccabe]
+# A ceiling just above the most complex function today (_stage_hits, 57); lower it as the large functions are split.
+max-complexity = 60
 
 [tool.ruff.lint.per-file-ignores]
 # The corpus readings are prose data (long quoted lines, printf-style row builders): not code style.

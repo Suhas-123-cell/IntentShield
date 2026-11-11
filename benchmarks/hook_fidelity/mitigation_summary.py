@@ -110,7 +110,7 @@ def markdown(summary: dict) -> str:
     out = ["| harness | build | scenario | translation off | translation on |", "|---|---|---|---|---|"]
     for key, arms in summary["cells"].items():
         harness, version, scenario = key.split("|")
-        count = lambda xs: ", ".join(f"{o} {xs.count(o)}/{len(xs)}" for o in dict.fromkeys(xs)) or "-"  # noqa: E731
+        count = lambda xs: ", ".join(f"{o} {xs.count(o)}/{len(xs)}" for o in dict.fromkeys(xs)) or "-"
         out.append(f"| {harness} | {version} | {scenario} | {count(arms['off'])} | {count(arms['on'])} |")
     out += ["", "Changed from RAN or HUNG (off) to BLOCKED (on), paired runs:"]
     for h, d in summary["changed_off_ran_or_hung_to_blocked"].items():

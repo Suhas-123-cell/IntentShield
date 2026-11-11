@@ -44,7 +44,7 @@ from typing import Any
 from . import credentials, translation
 from .harness import is_mutation
 from .install import _HOOK, server_stem, strip_json_comments
-from .mcp_inspect import scan_description, scan_server, self_disclosure_fields, tool_text
+from .mcp_inspect import explain_rules, scan_description, scan_server, self_disclosure_fields, tool_text
 
 ERROR, WARNING, NOTE = "error", "warning", "note"
 # What each finding means, for the text report and the SARIF rules.
@@ -112,14 +112,16 @@ class Finding:
     server: str
     message: str
     tool: str | None = None
+    detail: str = ""   # what a person reading the scan needs to judge it: what each rule means and the words it matched
 
     @property
     def level(self) -> str:
         return RULES[self.rule][0]
 
     def as_dict(self) -> dict[str, Any]:
-        return {"rule": self.rule, "level": self.level, "config": str(self.path), "server": self.server,
-                "tool": self.tool, "message": self.message}
+        found = {"rule": self.rule, "level": self.level, "config": str(self.path), "server": self.server,
+                 "tool": self.tool, "message": self.message}
+        return {**found, "detail": self.detail} if self.detail else found
 
 
 def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Server]:
@@ -306,7 +308,7 @@ def _tool_findings(servers: list[Server], pins: dict[str, str]) -> list[Finding]
                 hits = scan_description(text, others)
                 if rules := [hit for hit in hits if hit != "shadowing"]:
                     findings.append(Finding("tool_poisoning", server.path, server.name,
-                                            f"rules: {', '.join(rules)}", tool["name"]))
+                                            f"rules: {', '.join(rules)}", tool["name"], explain_rules(text, rules)))
                 if "shadowing" in hits:
                     findings.append(Finding("shadowing", server.path, server.name,
                                             "its description names another server's tool", tool["name"]))
@@ -437,6 +439,8 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
     for f in sorted(findings, key=lambda f: ("error", "warning", "note").index(f.level)):
         if f.rule != "not_scanned":
             lines.append(f"{f.level.upper():7} {f.rule}: {f.server}{':' + f.tool if f.tool else ''}: {f.message}")
+            if f.detail:
+                lines.append(f"        {f.detail}")
     errors = sum(f.level == ERROR for f in findings)
     warnings = sum(f.level == WARNING for f in findings)
     left = sum(1 for s in servers if s.error or (s.skipped and connected))

@@ -312,3 +312,40 @@ def test_no_percentage_in_the_study_documents_disagrees_with_its_k_over_n():
     files += [p for p in sorted((ROOT / "results" / "hook-fidelity").rglob("README.md")) if "vendor-archive" not in p.parts]
     bad = {path.name: percentage_mismatches(path.read_text()) for path in files}
     assert not {name: found for name, found in bad.items() if found}
+
+
+def test_the_onfailure_paragraph_lists_only_the_replies_the_setting_changed():
+    line = rn.onfailure()
+    changed = line.split("changed by the key: ")[1].split("; already BLOCKED")[0]
+    assert [part.split(" (")[0] for part in changed.split("; ")] == ["R8", "R9", "R10a", "R10b", "R13"]
+    assert all("RAN 3 of 3, with the key BLOCKED 3 of 3" in part for part in changed.split("; "))
+    assert "already BLOCKED without it: R7, R11; still RAN with it: R5, R6" in line
+    assert "R9 RAN 2 of 2 (without it: RAN 2 of 2), R8 RAN 2 of 2" in line
+    assert "changed RAN to BLOCKED for R8, R9, R10a, R10b and R13 on 2.1.316" in FLAT
+    assert "R7 and R11 were already BLOCKED without it, and R5 and R6 still RAN with it" in FLAT
+    assert "R9, R7, R8" not in FLAT and "R9, R7, R8" not in _flat(APPENDIX)
+    assert "RAN without the key and BLOCKED with it in 3 of 3 runs each for R8" in _flat(APPENDIX)
+
+
+def test_the_deny_rows_in_neither_count_are_named_with_their_number():
+    text = rn.findings(rn.stub_rows())["deny"]
+    assert "in neither count: 6 (Gemini CLI 0.66.0 in mode M1, mcp rows 3, Gemini CLI 0.66.0 in mode M1, shell rows 3)" in text
+    assert "Six more rows, all Gemini CLI 0.66.0 in its default approval mode, were blocked without the hook running" in FLAT
+
+
+def test_every_cell_ran_two_to_five_times_except_the_ten_single_controls():
+    from collections import Counter
+
+    per_cell = Counter(re.sub(r"\|\d+$", "", r["run_key"]) for r in rn.stub_rows())
+    sizes = Counter(per_cell.values())
+    assert sum(sizes.values()) == 507 and sizes[1] == 10 and set(sizes) == {1, 2, 3, 5}
+    assert "run two to five times (ten Codex untrusted-state controls, once)" in FLAT
+
+
+def test_the_paired_counts_and_the_sampling_caveat_are_in_the_report():
+    assert "an interval below is sampling noise on these items only" in FLAT
+    text = rn.guards()["fresh_paired"]
+    assert "safety-net scope, flagged: only IntentShield 23, only safety-net 4" in text
+    assert "denies alone: only IntentShield 7, only safety-net 24 (p = 0.0033)" in text
+    assert "safety-net denied 24 that IntentShield did not and IntentShield denied 7 that safety-net did not" in FLAT
+

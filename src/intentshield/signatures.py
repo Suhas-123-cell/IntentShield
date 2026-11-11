@@ -79,7 +79,7 @@ MAX_SCAN = 20_000  # characters of a text that rules read
 _WINDOW = 200  # a repeat bounded above this backtracks like an unbounded one on MAX_SCAN characters
 
 
-def _wide(body: list) -> bool:
+def _wide(body: list[Any]) -> bool:
     """A repeated item that can swallow words: ``.``, ``\\w``, ``\\S``, a negated class, a range
     (``[a-z ]``) or any class with a letter in it."""
     if len(body) != 1:
@@ -93,7 +93,7 @@ def _wide(body: list) -> bool:
     return True
 
 
-def _kinds(item: tuple) -> set[str] | None:
+def _kinds(item: tuple[Any, Any]) -> set[str] | None:
     """Coarse character kinds of one item (word, space, punctuation); None when unknown."""
     op, av = item
     chars: list[Any] = [chr(av)] if op is _C.LITERAL else []
@@ -112,7 +112,7 @@ def _kinds(item: tuple) -> set[str] | None:
     return {"w" if c == "w" or c.isalnum() or c == "_" else "s" if c.isspace() else "p" for c in chars}
 
 
-def _delimited(body: list) -> bool:
+def _delimited(body: list[Any]) -> bool:
     """Each repeat in a short bounded group is followed by an item it cannot match (``(\\w+\\s){3}``),
     so the group splits one way only."""
     if len(body) == 1 and body[0][0] is _C.SUBPATTERN:
@@ -129,7 +129,7 @@ def _delimited(body: list) -> bool:
     return True
 
 
-def _spaces(body: list) -> bool:
+def _spaces(body: list[Any]) -> bool:
     """A repeated item that can match a space, so its run is not confined to one word."""
     if len(body) != 1:
         return True
@@ -143,10 +143,10 @@ def _spaces(body: list) -> bool:
     return space != any(o is _C.NEGATE for o, _ in av)
 
 
-def _inlined(items: list) -> list:
+def _inlined(items: list[Any]) -> list[Any]:
     """``items`` with each capturing group replaced by its body: ``(\\d+)(\\d+)`` runs two repeats together
     like ``\\d+\\d+`` (the parser inlines non-capturing groups already)."""
-    flat: list = []
+    flat: list[Any] = []
     for item in items:
         if item[0] is _C.SUBPATTERN:
             flat.extend(_inlined(list(item[1][-1])))
@@ -155,7 +155,7 @@ def _inlined(items: list) -> list:
     return flat
 
 
-def _overlapping(items: list) -> bool:
+def _overlapping(items: list[Any]) -> bool:
     """Repeats in one sequence that can match the same character with nothing between them that must match
     another (``\\d+\\d+\\d+``, ``\\d+\\s*\\d+``): the text can be split between them in as many ways as the
     product of their bounds, and the search tries each. A separator that cannot be their character
@@ -195,7 +195,7 @@ def _overlapping(items: list) -> bool:
     return False
 
 
-def _nullable(items: list) -> bool:
+def _nullable(items: list[Any]) -> bool:
     """``items`` can match the empty string: every one is optional, an anchor, or a group or branch that can."""
     for op, av in items:
         if op in _REPEATS:
@@ -212,7 +212,7 @@ def _nullable(items: list) -> bool:
     return True
 
 
-def _optional(items: list) -> bool:
+def _optional(items: list[Any]) -> bool:
     """An item that may match nothing (``x?``) anywhere in ``items``, groups included."""
     for op, av in items:
         if op in _REPEATS:
@@ -226,7 +226,7 @@ def _optional(items: list) -> bool:
     return False
 
 
-def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
+def _backtracking(items: list[Any], inside: bool, wide: list[int]) -> str | None:
     if _overlapping(items):
         return "adjacent repeats of the same characters"
     for op, av in items:
@@ -259,7 +259,7 @@ def _backtracking(items: list, inside: bool, wide: list[int]) -> str | None:
     return None
 
 
-def _leading_wildcard(items: list) -> bool | None:
+def _leading_wildcard(items: list[Any]) -> bool | None:
     """Whether the first item ``search`` must match is a wildcard; optional items (``e?``) are
     skipped, None when every item is optional."""
     for op, av in items:

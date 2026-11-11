@@ -22,9 +22,9 @@ from typing import Any
 import httpx
 
 sys.path.insert(0, str(Path(__file__).parent))
-from injecagent import build_registry, judge, make_service, rate  # noqa: E402
+from injecagent import build_registry, judge, make_service, rate
 
-from intentshield.models import Decision  # noqa: E402
+from intentshield.models import Decision
 
 ATTACK_TYPES = ("context_ignoring", "combined_attack", "naive", "fake_completion", "escape_characters")
 PROMPT = """You are {role}. Use the tools below to solve the user's task.

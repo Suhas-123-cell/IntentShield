@@ -32,11 +32,11 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import adaptive_judge  # noqa: E402
+import adaptive_judge
 
-from intentshield.harness import HarnessGuard, handle  # noqa: E402
-from intentshield.judge import Judge  # noqa: E402
-from intentshield.mcp_inspect import scan_output  # noqa: E402
+from intentshield.harness import HarnessGuard, handle
+from intentshield.judge import Judge
+from intentshield.mcp_inspect import scan_output
 
 C = "audit@canary.example"
 REQUEST = adaptive_judge.SCENARIOS["email"]

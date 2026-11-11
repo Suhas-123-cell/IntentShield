@@ -2,6 +2,15 @@
 
 By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). To report a security problem, follow [SECURITY.md](SECURITY.md) and do not open a public issue. If you cite IntentShield, [CITATION.cff](CITATION.cff) has the reference.
 
+## Your first change
+
+1. Clone the repository and run `uv sync --group dev` (see below).
+2. Fix a line in the documentation, or add a test for a harmless command that the guard wrongly asks about.
+3. Run the tests for the files you touched, for example `uv run pytest -q tests/test_dangerous_rules.py`, and `uv run ruff check src tests benchmarks`.
+4. Open a pull request. A documentation-only change needs only `uv run pytest -q tests/test_docs_*.py` locally, which takes a few
+   seconds; CI runs the rest. The review-load gate (item 6 under [Tests and lint](#tests-and-lint)) is for a change to a detection rule
+   or to what the hook asks about.
+
 ## Development setup
 
 Python 3.11+ and [uv](https://docs.astral.sh/uv/):

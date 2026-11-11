@@ -3,20 +3,21 @@ from __future__ import annotations
 import asyncio
 import hmac
 import os
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .envfile import load_environment, require_tokens
 from .mcp_proxy import MCPProxyConfig, MCPProxyRuntime, RunLimitError
-from .model_gateway import ModelGateway, ModelProviderError
-from .models import ApprovalDecisionRequest, ModelRunRequest, RunCreateRequest, ToolCall
+from .model_gateway import ModelGateway, ModelProviderError, ModelProviderStatus
+from .models import ApprovalDecisionRequest, GatewayResult, ModelRunRequest, RunCreateRequest, ToolCall
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
 
@@ -85,7 +86,7 @@ def create_app(
         allowed_hosts=["127.0.0.1", "localhost", "testserver"],
     )
     @app.middleware("http")
-    async def security_headers(request: Request, call_next):
+    async def security_headers(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         response = await call_next(request)
         # The dashboard holds an approve button: it must not be framed by another site.
         response.headers.setdefault("X-Frame-Options", "DENY")
@@ -94,13 +95,13 @@ def create_app(
         return response
 
     @app.exception_handler(RunLimitError)
-    async def run_limit(_request: Request, exc: RunLimitError):
+    async def run_limit(_request: Request, exc: RunLimitError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=429)
 
     limiter = RateLimiter.from_env()
     if limiter is not None:
         @app.middleware("http")
-        async def rate_limit(request: Request, call_next):
+        async def rate_limit(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
             client = request.client.host if request.client else "unknown"
             if approval_token and request.url.path.startswith("/api/approvals") and hmac.compare_digest(
                     request.headers.get("authorization", "").encode(), f"Bearer {approval_token}".encode()):
@@ -118,7 +119,7 @@ def create_app(
     app.state.proxy_runtime = runtime
 
     def service() -> IntentShieldService:
-        current = app.state.service
+        current: IntentShieldService | None = app.state.service
         if current is None:
             raise RuntimeError("IntentShield service is not ready")
         return current
@@ -156,7 +157,7 @@ def create_app(
         return {"status": "ok", "mode": "mcp-proxy" if runtime else "offline"}
 
     @app.post("/api/runs", status_code=201)
-    async def create_run(request: RunCreateRequest, _authorized: None = Depends(require_run_access)):
+    async def create_run(request: RunCreateRequest, _authorized: None = Depends(require_run_access)) -> GatewayResult:
         if bool(request.scenario) == bool(request.call):
             raise HTTPException(422, "Provide exactly one of scenario or call")
         if request.scenario:
@@ -179,11 +180,12 @@ def create_app(
         )
 
     @app.get("/api/models")
-    def list_models():
+    def list_models() -> list[ModelProviderStatus]:
         return models.statuses()
 
     @app.post("/api/model-runs", status_code=201)
-    async def create_model_run(request: ModelRunRequest, _authorized: None = Depends(require_run_access)):
+    async def create_model_run(request: ModelRunRequest,
+                               _authorized: None = Depends(require_run_access)) -> dict[str, Any]:
         statuses = {item.provider: item for item in models.statuses()}
         selected = statuses[request.provider]
         if runtime is not None:
@@ -258,18 +260,18 @@ def create_app(
     def list_runs(
         limit: int = Query(default=100, ge=1, le=500),
         _authorized: None = Depends(require_run_access),
-    ):
+    ) -> list[dict[str, Any]]:
         return service().storage.list_runs(limit)
 
     @app.get("/api/runs/{run_id}")
-    def get_run(run_id: str, _authorized: None = Depends(require_run_access)):
+    def get_run(run_id: str, _authorized: None = Depends(require_run_access)) -> dict[str, Any]:
         run = service().storage.get_run(run_id)
         if not run:
             raise HTTPException(404, "Run not found")
         return {**run, "events": service().storage.list_events(run_id)}
 
     @app.get("/api/runs/{run_id}/events")
-    def get_events(run_id: str, _authorized: None = Depends(require_run_access)):
+    def get_events(run_id: str, _authorized: None = Depends(require_run_access)) -> list[dict[str, Any]]:
         if not service().storage.get_run(run_id):
             raise HTTPException(404, "Run not found")
         return service().storage.list_events(run_id)
@@ -278,7 +280,7 @@ def create_app(
     def list_approvals(
         status: str | None = None,
         _authorized: None = Depends(require_approval_access),
-    ):
+    ) -> list[dict[str, Any]]:
         return service().storage.list_approvals(status.upper() if status else None)
 
     @app.post("/api/approvals/{approval_id}/decision")
@@ -286,7 +288,7 @@ def create_app(
         approval_id: str,
         request: ApprovalDecisionRequest,
         _authorized: None = Depends(require_approval_access),
-    ):
+    ) -> GatewayResult:
         try:
             if runtime is not None:
                 return await runtime.decide_approval(
@@ -301,17 +303,17 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/tools", dependencies=[Depends(require_run_access)])
-    async def tools():
+    async def tools() -> list[dict[str, Any]]:
         if runtime is not None:
             return await runtime.tool_catalog()
         return service().tool_catalog()
 
     @app.get("/api/metrics", dependencies=[Depends(require_run_access)])
-    def metrics():
+    def metrics() -> dict[str, Any]:
         return service().storage.metrics()
 
     @app.get("/api/security/status", dependencies=[Depends(require_run_access)])
-    def security_status():
+    def security_status() -> dict[str, Any]:
         return service().security_status()
 
     static_dir = Path(__file__).with_name("static")
@@ -320,7 +322,7 @@ def create_app(
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
         @app.get("/", include_in_schema=False)
-        def dashboard():
+        def dashboard() -> FileResponse:
             return FileResponse(static_dir / "index.html")
 
     return app

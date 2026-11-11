@@ -1,6 +1,6 @@
 # IntentShield: architecture, module map and testing guide
 
-This guide describes the modules, not a snapshot; for test counts, run pytest. Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
+This guide describes the modules, not a snapshot; for test counts, run pytest (section 8 gives the counts from one date). Run commands from the repository root in every terminal. Replace `/path/to/IntentShield` with your checkout directory. Environments, databases, credentials and trained artifacts are local files and are not included in a fresh clone.
 
 Contents:
 [1 What it does](#1-what-the-application-currently-does), [2 Module map](#2-components-and-responsibilities),
@@ -330,14 +330,14 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --group dev --frozen` and has none of those variables set.
 
-Expect every test to pass. Measured at the working tree after `1979d0e`:
+Expect every test to pass. Measured on 2026-11-11 at the working tree after `bb1eb71` (the v0.4.3 tag plus the changes listed under
+"Unreleased" in the changelog):
 
 | platform | result |
 |---|---|
-| macOS, Python 3.14, 2026-11-11 | 5672 passed, 5 skipped |
-| macOS, Python 3.11 | 5672 passed, 5 skipped |
-| macOS, Python 3.12, with `--cov` (91.4% covered; the floor is 85%) | 5672 passed, 5 skipped |
-| the lowest allowed versions of the direct dependencies, Python 3.11, on a copy of the tracked files | 5671 passed, 6 skipped |
+| macOS, Python 3.14 | 5837 passed, 6 skipped |
+| macOS, Python 3.11, with `--cov` (91.7% covered; the floor is 85%) | 5837 passed, 6 skipped |
+| the lowest allowed versions of the direct dependencies, Python 3.11, on a copy of the tracked files | 5836 passed, 7 skipped |
 
 The totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The number of
 skips depends on the machine (a handful on macOS, more on Linux, which skips the platform-specific tests) and on whether the optional
@@ -421,6 +421,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_doctor_install_and_wrap.py` | what `doctor`, `install`, `wrap` and `unwrap` say and do |
 | `test_scan.py`, `test_scan_surface.py`, `test_mcp_scan_command.py` | credential egress and `intentshield scan`; rules reading line breaks, tabs and Unicode tricks in structured values; scan edge cases |
 | `test_cli_first_run_messages.py` | what a person sees on a first run: the "Next:" line, a settings file that does not parse, `unwrap` of a missing file, `doctor` with nothing installed, a wrapped server whose command is gone, `wrap-hook --print-entry` |
+| `test_first_run_output_and_guard_replies.py` | the doctor right after an install, wrap's next step and exit status, the Codex TOML error, a project install of Claude Code's hooks (`settings.local.json`), the scan's rule detail, the proxy's log line for a hidden tool, loosening settings in the hook's reply, long results, a wrap-hook guard that repeats a key, and the two demo proxy configs |
 | `test_missing_dependency_message.py` | with the proxy's packages unimportable (a `--no-deps` install) the commands that need them print one line and exit 2 |
 | `test_cli_input_edges.py` | config shapes that once broke `wrap`, `unwrap` or `scan` |
 
@@ -446,6 +447,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_dangerous_wrappers.py` | programs that run another program (`sudo`, `flock`, `taskset`, `ssh host`, `find -exec` and the rest of the list in `dangerous`) do not hide what they run: a deny behind a wrapper is the same deny |
 | `test_dangerous_powershell.py` | the PowerShell tool is read as the POSIX commands its cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content` of a credential file, an `Invoke-WebRequest` upload, a download run with `Invoke-Expression`); other cmdlets are not read, and the tests say so |
 | `test_builtin_shell_tools.py` | `PowerShell`, `Monitor` and `apply_patch` run through the shell tool get the same rules as `Bash` with `--builtin-tools` |
+| `test_dangerous_guard_files_and_credential_paths.py` | `dangerous/` beyond a plain read or delete: the guard's own programs, package and wrapped client files, a key named by a program that no rule reads, a key fixture in the project's test directory, and the path and command arguments of an MCP tool (`--builtin-tools` only) |
 | `test_dangerous_control_flow.py` | `dangerous/` and the hook: one-line control keywords, a deny that wins over a session ask, softening only for an exact target, `cd` and variables inside one command line, the guard's own files |
 | `test_shell_parser.py`, `test_shell_linear.py`, `test_shell_shifts.py` | `shell.py`: newlines, here-documents, variables, wrappers, indirection, send detection, linear cost on long input |
 
@@ -475,8 +477,9 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_msb_scoring.py`, `test_paper_numbers.py` | MSB scoring on synthetic traces; the headline cells replayed from the committed traces in `results/msb` |
 | `test_injection_eval.py`, `test_adaptive_attacker.py`, `test_self_disclosure_eval.py` | injection evaluation corpus and per-family scoring; the adaptive-attacker protocol; self-disclosure stripping over recorded catalogs |
 | `test_docs_inventory.py`, `test_docs_links.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository, and the README links to its own sections by `#anchor` |
-| `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, no paragraph in the front-door documents is longer than 900 characters (500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
-| `test_docs_figures.py` | the README stays under 170 lines; the reading path's word counts are `wc -w` counts; the split of the exemplar detector's 18.1% and the upper bounds beside 0.0% cells match the committed data; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
+| `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, no paragraph in the front-door documents or the guide is longer than 900 characters (500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
+| `test_docs_figures.py` | the README stays under 230 lines; the reading path's word counts are `wc -w` counts; the split of the exemplar detector's 18.1% and the upper bounds beside 0.0% cells match the committed data; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
+| `test_docs_unreleased.py` | a statement in `README.md` or `docs/guide.md` about a feature under "Unreleased" in `CHANGELOG.md` says "on main, after 0.4.3" until it is released; a new "Added" entry has to be listed in the test |
 | `test_import_declarations.py` | every third-party package that `src/intentshield` imports is declared in `pyproject.toml` |
 | `test_workflow_files.py` | the workflow files parse (no `: ` in a plain step name), nothing installs the removed `dev` extra, and every supported Python has a classifier and a CI job |
 | `test_coverage_study.py`, `test_security_review_counts.py` | coverage-study instrumentation; `docs/security-review.md` table counts equal its finding rows |
