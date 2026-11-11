@@ -19,6 +19,7 @@ BENCH = Path(__file__).resolve().parents[1] / "benchmarks" / "hook_fidelity"
 sys.path.insert(0, str(BENCH.parent))
 sys.path.insert(0, str(BENCH))
 import pty_lane as pl  # noqa: E402
+from timelimits import limit  # noqa: E402
 
 
 # ------------------------------------------------------------------------------------------------ text
@@ -322,7 +323,7 @@ def test_driver_times_out_when_no_prompt_appears(tmp_path):
     t0 = time.monotonic()
     obs, clean, root = _drive_fake(tmp_path, "silent", prompt_wait=2.0)
     assert obs.permission_at is None and obs.stop_reason.startswith("timeout")
-    assert time.monotonic() - t0 < 12
+    assert time.monotonic() - t0 < limit(12)
 
 
 def test_driver_sees_the_marker(tmp_path):

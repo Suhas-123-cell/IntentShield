@@ -40,7 +40,7 @@ from typing import Any
 # tokens a minute and 1,000 requests a day per organisation, which a busy coding session exhausts;
 # Gemini's free gemini-2.5-flash allows only 20 requests a day, flash-lite far more. ``ollama`` runs a
 # local model (``OLLAMA_HOST`` to point elsewhere) with no key and no quota, at local latency.
-PROVIDERS = {
+PROVIDERS: dict[str, tuple[str | None, str | None, str | None, dict[str, Any]]] = {
     "groq": ("https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", "openai/gpt-oss-120b",
              {"reasoning_effort": "low"}),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY",
@@ -356,7 +356,8 @@ class Judge:
                  max_windows: int = 6, budget: float | None = None) -> None:
         if provider not in PROVIDERS:
             raise ValueError(f"judge provider must be one of {sorted(PROVIDERS)}")
-        self.url, env, default, self.extra = PROVIDERS[provider]
+        url, env, default, self.extra = PROVIDERS[provider]
+        self.url: str = url or ""  # set below for the local and custom judges
         self.provider, self.model = provider, model or default
         if not self.model:
             raise ValueError(f"the {provider} judge needs a model: --judge {provider}:<model>")
@@ -367,9 +368,10 @@ class Judge:
                 if not os.getenv(JUDGE_URL_ENV):
                     raise ValueError(f"the custom judge needs {JUDGE_URL_ENV}")
                 self.url = checked_judge_url(os.environ[JUDGE_URL_ENV])
-            self.api_key = api_key or os.getenv(env)
-            if not self.api_key:
+            key = api_key or os.getenv(env)
+            if not key:
                 raise ValueError(f"the {provider} judge needs {env}")
+            self.api_key = key
         self.timeout, self.retries, self.errors = timeout, retries, 0
         # Seconds one call, output or tool check may take in all, windows and retries included: a hook that
         # outlives the harness's own timeout is killed, and Claude Code then blocks the call. None: no cap.
@@ -442,6 +444,7 @@ class Judge:
                 return None
             timeout, retries = min(timeout, left / (retries + 1)), retries
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        body: dict[str, Any]
         if self.provider == "ollama":
             body = {"model": self.model, "messages": messages, "stream": False, "format": "json",
                     "options": {"temperature": 0, "num_ctx": OLLAMA_CONTEXT}}

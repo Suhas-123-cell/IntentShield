@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield.harness import HarnessGuard, handle
 from intentshield.shell import parse
@@ -291,7 +292,7 @@ def test_a_patch_of_thousands_of_files_is_read_in_a_second(tmp_path: Path):
     g = _flagged_codex(tmp_path)
     start = time.time()
     reply = handle("codex", _event("PreToolUse", tool_name="apply_patch", tool_input={"input": patch}), g)
-    assert _decision(reply) in ("ask", "deny") and time.time() - start < 1.5
+    assert _decision(reply) in ("ask", "deny") and time.time() - start < limit(1.5)
 
 
 # --- hooks-9 and hooks-10, round 3 ---------------------------------------------------------------------------
@@ -318,4 +319,4 @@ def test_a_patch_header_with_a_huge_run_of_spaces_is_read_in_linear_time(tmp_pat
     g = _flagged_codex(tmp_path)
     start = time.time()
     reply = handle("codex", _event("PreToolUse", tool_name="apply_patch", tool_input={"input": patch}), g)
-    assert _decision(reply) in ("ask", "deny") and time.time() - start < 2
+    assert _decision(reply) in ("ask", "deny") and time.time() - start < limit(2)

@@ -42,7 +42,15 @@ from intentshield import install, translation  # noqa: E402
 SCRATCH = Path(os.environ.get("HF_SCRATCH") or os.path.join(tempfile.gettempdir(), "intentshield-hook-fidelity"))
 RELEASES = Path(os.environ.get("HF_RELEASES", SCRATCH / "releases"))
 EXTRA_GEMINI = SCRATCH / "r3" / "releases" / "gemini-cli"
-VENV_PYTHON = str(ROOT / ".venv" / "bin" / "python")
+# The interpreter written into generated hook scripts and shims: the repository's `.venv` when it exists (the default of
+# `uv sync`), otherwise the interpreter running this code, so a clone whose environment lives elsewhere
+# (UV_PROJECT_ENVIRONMENT) still works.
+def pick_python(root: Path) -> str:
+    repo_python = root / ".venv" / "bin" / "python"
+    return str(repo_python) if repo_python.exists() else sys.executable
+
+
+VENV_PYTHON = pick_python(ROOT)
 HOOK_TIMEOUT_S = 3      # configured on every hook, as in the lane runs
 DEADLINE_S = 2.0        # the translated hook's own deadline: under HOOK_TIMEOUT_S
 STALL_S = 15            # a slow guard: well past the hook timeout

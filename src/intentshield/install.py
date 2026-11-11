@@ -37,7 +37,7 @@ _HOOK = "intentshield-hook"
 _PROXY = "intentshield-mcp"
 _MCP_MATCHER = "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?"
 # Claude Code's built-in tools the hook reads with --builtin-tools: calls it checks, results it scans.
-_BUILTIN_CALLS = "Bash|WebFetch|Read|Write|Edit|MultiEdit|NotebookEdit"
+_BUILTIN_CALLS = "Bash|WebFetch|Read|Grep|Write|Edit|MultiEdit|NotebookEdit"
 _BUILTIN_RESULTS = "Bash|WebFetch|WebSearch|Read"
 _SERVER_ID = re.compile(r"[^A-Za-z0-9_.-]")
 
@@ -51,6 +51,32 @@ def executable(name: str) -> str:
             if candidate.exists():
                 return str(candidate)
     return shutil.which(name) or name
+
+
+# Where `uvx`, `pipx run` and `npx` unpack a program for one run: a cache that is cleaned, so a path recorded there stops working.
+_EPHEMERAL = re.compile(r"/(?:archive-v\d+|builds-v\d+|environments-v\d+|\.cache/uv|uv/cache|pipx/\.cache|"
+                        r"\.local/pipx/\.cache|_npx|\.npm/_npx|npx-cache)/", re.I)
+
+
+def ephemeral_location(path: str) -> bool:
+    """True when ``path`` lies in the cache of a run-once launcher (uvx, pipx run, npx)."""
+    return bool(_EPHEMERAL.search(str(path).replace("\\", "/")))
+
+
+def _refuse_ephemeral(path: str, what: str, dry_run: bool, allowed: bool) -> None:
+    """A command installed from a run-once cache (``uvx --from intentshield-mcp intentshield install claude``) would name a
+    path that a cache clean deletes, after which every MCP call is refused. Refused, with the way to install it for good;
+    ``allowed`` (--allow-ephemeral) installs it anyway, and a dry run only warns."""
+    if allowed or not ephemeral_location(path):
+        return
+    message = (f"{path} is in the cache of a run-once launcher (uvx, pipx run, npx), which is cleaned: the {what} recorded "
+               "there would stop working and every guarded call would be refused. Install IntentShield first "
+               "(`uv tool install intentshield-mcp` or `pipx install intentshield-mcp`) and run the command from that "
+               "install; --allow-ephemeral records it anyway.")
+    if dry_run:
+        print(f"warning: {message}", file=sys.stderr)
+        return
+    raise ValueError(message)
 
 
 def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path | None = None) -> Path:
@@ -107,12 +133,13 @@ _KEY_FOR = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY", "deepseek": "DEE
 
 
 def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None = None,
-                     ask=getpass.getpass, judge_url: str | None = None) -> Path | None:
+                     ask=getpass.getpass, judge_url: str | None = None, dry_run: bool = False) -> Path | None:
     """The key a hosted judge needs, stored in ``~/.intentshield/.env`` (0600) where every hook
     process reads it. A key that is only exported in this shell is stored too, since a harness started
     elsewhere would not have it. Asks on the terminal when it is neither given nor set. A custom
     judge's endpoint (``judge_url``) is stored beside it. Returns the file written, or None when
-    nothing was needed."""
+    nothing was needed. With ``dry_run`` the arguments are checked exactly as for a real install (a custom judge's
+    endpoint, ``--judge-url`` on another judge) but nothing is stored, asked for or printed."""
     provider = judge.partition(":")[0]
     env = _KEY_FOR.get(provider)
     if env is None:  # ollama: local, no key
@@ -120,17 +147,25 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
     if provider == "custom":
         from .judge import JUDGE_URL_ENV, checked_judge_url
         if judge_url:
-            _store_env(home, JUDGE_URL_ENV, checked_judge_url(judge_url))
+            checked = checked_judge_url(judge_url)
+            if not dry_run:
+                _store_env(home, JUDGE_URL_ENV, checked)
         elif not _read_env(home).get(JUDGE_URL_ENV):
             if not os.getenv(JUDGE_URL_ENV):
                 raise ValueError("--judge custom needs --judge-url <OpenAI-compatible chat completions URL>")
             # Exported in this shell only: stored, and checked now, like the key (a hook does not see this shell).
-            stored_url = _store_env(home, JUDGE_URL_ENV, checked_judge_url(os.environ[JUDGE_URL_ENV]))
-            print(f"{JUDGE_URL_ENV} is set in this shell only; storing it in {stored_url}, which every hook reads")
+            checked = checked_judge_url(os.environ[JUDGE_URL_ENV])
+            if not dry_run:
+                stored_url = _store_env(home, JUDGE_URL_ENV, checked)
+                print(f"{JUDGE_URL_ENV} is set in this shell only; storing it in {stored_url}, which every hook reads")
     elif judge_url:
         raise ValueError("--judge-url is for --judge custom only")
     stored = _read_env(home)
     if not api_key and stored.get(env):
+        return None
+    if dry_run:  # what a real install would fail on without a terminal to ask at
+        if not api_key and not os.getenv(env) and not sys.stdin.isatty() and ask is getpass.getpass:
+            raise ValueError(f"{env} is not set; pass --api-key or export it before `install --judge {provider}`")
         return None
     path = _env_path(home)
     if not api_key and os.getenv(env):
@@ -146,6 +181,17 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
         if not api_key:
             raise ValueError(f"no {env} given")
     return _store_env(home, env, api_key)
+
+
+def _private_dir(directory: Path) -> None:
+    """Creates ``directory``; ``~/.intentshield`` (API keys, prompts, backups) is readable by its owner only."""
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700 if directory.name == ".intentshield" else 0o777)
+    if directory.name == ".intentshield" and os.name == "posix":
+        try:
+            if directory.stat().st_mode & 0o077 and directory.stat().st_uid == os.getuid():
+                directory.chmod(0o700)
+        except OSError:
+            pass
 
 
 def _env_path(home: Path | None) -> Path:
@@ -176,7 +222,7 @@ def _store_env(home: Path | None, env: str, value: str) -> Path:
     entry = f"{env}={value}"
     replaced = [entry if line.strip().partition("=")[0] == env else line for line in lines]
     lines = replaced if env in stored else [*lines, entry]
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _private_dir(path.parent)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".env.")  # created 0600: the key is never readable by others
     try:
         with os.fdopen(fd, "w") as handle:
@@ -468,8 +514,13 @@ def _remember_servers(path: Path, servers: dict[str, dict[str, Any]]) -> None:
     except (OSError, ValueError):
         return
     if isinstance(saved, dict):
-        saved["servers"] = {**(saved.get("servers") if isinstance(saved.get("servers"), dict) else {}), **servers}
+        known = saved.get("servers")
+        saved["servers"] = {**(known if isinstance(known, dict) else {}), **servers}
         _write(backup, json.dumps(saved), False)
+
+
+def _without_empty_hooks(data: Any) -> Any:
+    return {k: v for k, v in data.items() if not (k == "hooks" and v == {})} if isinstance(data, dict) else data
 
 
 def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[str, bool]:
@@ -478,7 +529,9 @@ def _undone_text(path: Path, data: dict[str, Any], home: Path | None) -> tuple[s
     if backup.exists():
         original = json.loads(backup.read_text(encoding="utf-8"))["text"]
         try:
-            if _parse(original or "{}", path) == data:
+            # An empty "hooks" object the file had is dropped when the last hook goes (remove_hooks), which is not a change
+            # of the user's: compared without it, the original text, comments included, comes back.
+            if _without_empty_hooks(_parse(original or "{}", path)) == _without_empty_hooks(data):
                 return original, True
         except json.JSONDecodeError:
             pass
@@ -511,7 +564,7 @@ def _record_install(path: Path, home: Path | None, when: float | None = None) ->
             known.pop(str(path.resolve()), None)
         else:
             known[str(path.resolve())] = when
-        record.parent.mkdir(parents=True, exist_ok=True)
+        _private_dir(record.parent)
         record.write_text(json.dumps(known, indent=2) + "\n", encoding="utf-8")
     except (OSError, ValueError):  # evidence for doctor only: it falls back to the file's modification time
         pass
@@ -521,15 +574,19 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             dry_run: bool = False, home: Path | None = None, cwd: Path | None = None,
             judge: str | None = None, api_key: str | None = None, ask=getpass.getpass,
             judge_outputs: bool = False, builtin_tools: bool = False, gemini_ask: bool = False,
-            judge_url: str | None = None, translate: bool = True) -> Path:
+            judge_url: str | None = None, translate: bool = True, allow_ephemeral: bool = False) -> Path:
     """Register the hooks in the harness's settings file. Returns the file touched. With ``translate`` (the default) the hooks
     that check a call carry the hook's own deadline and the fail-closed launcher (translation.py), and the harness's version
     is recorded for the hook."""
     path = settings_path(harness, scope, home, cwd)
-    command = hook_command(harness, hook or executable(_HOOK), review, judge, judge_outputs, builtin_tools, gemini_ask,
+    hook = hook or executable(_HOOK)
+    _refuse_ephemeral(hook, "hook command", dry_run, allow_ephemeral)
+    command = hook_command(harness, hook, review, judge, judge_outputs, builtin_tools, gemini_ask,
                            deadline=translation.DEFAULT_DEADLINE_S if translate else None)
-    if judge and not dry_run:  # after the spec is checked, so a refused --judge stores nothing
-        ensure_judge_key(judge, home, api_key, ask, judge_url)
+    if judge:  # after the spec is checked, so a refused --judge stores nothing; a dry run checks the same, stores nothing
+        ensure_judge_key(judge, home, api_key, ask, judge_url, dry_run=dry_run)
+    elif judge_url:
+        raise ValueError("--judge-url is for --judge custom only")
     if harness == "codex":
         text = path.read_text() if path.exists() else ""
         tomllib.loads(text)  # refuse to append to a file Codex could not read either
@@ -544,7 +601,12 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             _record_install(path, home, time.time())
     else:
         existed = path.exists()
-        settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools, translate))
+        try:
+            settings, changed = merge_hooks(_read_json(path), hook_entries(harness, command, builtin_tools, translate))
+        except ValueError as exc:
+            if str(path) in str(exc):
+                raise
+            raise ValueError(f"{path}: {exc}") from None
         if not changed:
             print(f"already installed: {path}")
             return path
@@ -568,6 +630,9 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         # session runs unguarded with no warning from Codex.
         print("Codex runs a new hook only after you trust it: start `codex` once and approve the IntentShield "
               "hooks when it asks. Until then Codex is NOT guarded by them.")
+    if not dry_run:
+        print(f"Next: start {harness} and make one tool call, then run `intentshield doctor`. It reports FAIL "
+              "\"no hook has run\" until the harness has run a hook, which is expected right after an install.")
     return path
 
 
@@ -668,10 +733,25 @@ def _label(name: str, scope: str) -> str:
     return f"{name} [{scope}]" if scope else name
 
 
+def _entry_problem(server: Any) -> str:
+    """Why a stdio server entry cannot be put behind the proxy, or "": its command is not text, its args are not a list of
+    text, its env is not an object of text."""
+    if not isinstance(server.get("command"), str):
+        return "command must be a string"
+    args = server.get("args")
+    if args is not None and not (isinstance(args, list) and all(isinstance(a, str) for a in args)):
+        return "args must be a list of strings"
+    env = server.get("env")
+    if env is not None and not isinstance(env, dict):
+        return "env must be an object"
+    return ""
+
+
 def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
-         dry_run: bool = False) -> list[str]:
+         dry_run: bool = False, allow_ephemeral: bool = False) -> list[str]:
     """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file, the project-scoped
-    ones of ``~/.claude.json`` included."""
+    ones of ``~/.claude.json`` included. Every entry is checked first and one the proxy cannot take is skipped with its reason;
+    the proxy configs are written only then, and removed again when the client file cannot be written."""
     out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
     if not path.exists():
         raise FileNotFoundError(f"{path} does not exist")
@@ -684,8 +764,9 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         if missing:
             raise ValueError(f"no such server in {path}: {', '.join(missing)}")
     proxy = proxy or executable(_PROXY)
-    wrapped: list[str] = []
-    before: dict[str, dict[str, Any]] = {}
+    _refuse_ephemeral(proxy, "proxy command", dry_run, allow_ephemeral)
+    from .mcp_proxy import MCPProxyConfig  # the proxy must accept each config before the client file changes
+    plan: list[tuple[dict[str, Any], str, str, dict[str, Any], Path, dict[str, Any]]] = []
     skipped = False
     for scope, entries in groups:
         for name, server in entries.items():
@@ -707,20 +788,45 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
                       "which is kept) and wrap again")
                 skipped = True
                 continue
+            if problem := _entry_problem(server):
+                print(f"skipped {_label(name, scope)}: {problem}")
+                skipped = True
+                continue
             config_path = out_dir / f"{server_stem(_label(name, scope), path)}.json"
             generated = proxy_config(name, server, out_dir, scope)
-            from .mcp_proxy import MCPProxyConfig  # the proxy must accept it before the client file changes
-            MCPProxyConfig.model_validate(generated)
+            try:
+                MCPProxyConfig.model_validate(generated)
+            except ValueError as exc:  # pydantic's ValidationError: the first problem, in a line
+                errors: list[Any] = getattr(exc, "errors", lambda: [])()
+                why = (f"{'.'.join(str(x) for x in errors[0].get('loc', ()))}: {errors[0].get('msg', '')}" if errors
+                       else str(exc).splitlines()[0])
+                print(f"skipped {_label(name, scope)}: the proxy would not accept it ({why})")
+                skipped = True
+                continue
+            plan.append((entries, name, scope, server, config_path, generated))
+    wrapped: list[str] = []
+    before: dict[str, dict[str, Any]] = {}
+    created: list[Path] = []
+    try:
+        for entries, name, scope, server, config_path, generated in plan:
+            if not dry_run and not config_path.exists():
+                created.append(config_path)
             _write(config_path, json.dumps(generated, indent=2) + "\n", dry_run)
             before[json.dumps([scope, name])] = {"command": server["command"],
                                                  **({"args": server["args"]} if "args" in server else {})}
             entries[name] = {**server, "command": proxy, "args": ["--transparent", "--config", str(config_path)]}
             wrapped.append(_label(name, scope))
+        if wrapped:
+            _keep_original(path, None, dry_run)
+            if not dry_run:
+                _remember_servers(path, before)
+            _write(path, _json_text(data), dry_run)
+    except BaseException:
+        for config_path in created:  # the client file was not changed: no config of this run is left behind
+            config_path.unlink(missing_ok=True)
+            _SEEN.pop(config_path.resolve(), None)
+        raise
     if wrapped:
-        _keep_original(path, None, dry_run)
-        if not dry_run:
-            _remember_servers(path, before)
-        _write(path, _json_text(data), dry_run)
         print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
     elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
         print(f"already wrapped: {path}")
@@ -762,6 +868,11 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
                 missing.append(f"{_label(name, scope)} (its entry names no --config)")
                 continue
             config = Path(str(args[args.index("--config") + 1]))
+            if args != ["--transparent", "--config", str(config)]:
+                shown = " ".join(map(str, args))
+                print(f"warning: {_label(name, scope)} has other arguments than the ones wrap wrote ({shown}); "
+                      "unwrap restores the server's original command and arguments, so those changes are dropped.",
+                      file=sys.stderr)
             try:
                 generated = json.loads(config.read_text())
                 upstream = generated["upstreams"][0]
@@ -794,9 +905,9 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
             entries[name] = original
             restored.append(_label(name, scope))
     if restored:
-        text, original = _undone_text(path, data, None)
+        text, exact = _undone_text(path, data, None)
         _write(path, text, dry_run)
-        if original and not dry_run:
+        if exact and not dry_run:
             _backup_path(path, None).unlink()
         print(f"{'would unwrap' if dry_run else 'unwrapped'} {len(restored)} server(s) in {path}: {', '.join(restored)}")
         kept = [str(p) for p in residue if p.exists()]
@@ -837,6 +948,9 @@ def add_subcommands(sub: Any) -> None:
             p.add_argument("--no-translate", action="store_true",
                            help="send the guard's verdicts as they are, with no deadline and no fail-closed launcher "
                                 "(the hook as it was before the verdict translation)")
+            p.add_argument("--allow-ephemeral", action="store_true",
+                           help="record the hook's path even when it lies in the cache of uvx, pipx run or npx, which is "
+                                "cleaned (install refuses that by default)")
             p.add_argument("--judge-outputs", action="store_true",
                            help="the judge also reads each tool result the rules pass (catches plain-language "
                                 "injections; one request per result, about 1 s locally, 4 s on Gemini)")
@@ -851,6 +965,9 @@ def add_subcommands(sub: Any) -> None:
         if verb == "wrap":
             p.add_argument("--out-dir", type=Path, default=None,
                            help="where generated proxy configs and databases go (default ~/.intentshield/proxies)")
+            p.add_argument("--allow-ephemeral", action="store_true",
+                           help="record the proxy's path even when it lies in the cache of uvx, pipx run or npx, which is "
+                                "cleaned (wrap refuses that by default)")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -861,11 +978,11 @@ def run(args: argparse.Namespace) -> int:
             install(args.harness, args.scope, args.review, dry_run=args.dry_run, judge=args.judge,
                     api_key=args.api_key, judge_url=args.judge_url, judge_outputs=args.judge_outputs,
                     builtin_tools=args.builtin_tools, gemini_ask=args.gemini_ask,
-                    translate=not args.no_translate)
+                    translate=not args.no_translate, allow_ephemeral=args.allow_ephemeral)
         elif args.command == "uninstall":
             uninstall(args.harness, args.scope, dry_run=args.dry_run)
         elif args.command == "wrap":
-            wrap(args.config, args.servers, args.out_dir, dry_run=args.dry_run)
+            wrap(args.config, args.servers, args.out_dir, dry_run=args.dry_run, allow_ephemeral=args.allow_ephemeral)
         elif args.command == "unwrap":
             unwrap(args.config, args.servers, dry_run=args.dry_run)
         else:

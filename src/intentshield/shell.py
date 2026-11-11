@@ -446,7 +446,16 @@ _ASSIGN = re.compile(r"([A-Za-z_]\w*)(\+?)=")
 _USE = re.compile(r"\$(?:\{([A-Za-z_]\w*)(\}?)|([A-Za-z_]\w*))")
 _BRACED = re.compile(r"\$\{([^}${]{0,300})\}")  # bounded: an unclosed ${ must not make every later one rescan
 _USE_ASSIGN = re.compile(r"\$\{[A-Za-z_]\w*:?=")
+_OPTION_LETTERS = re.compile(r"-([A-Za-z]*)")
 _USE_DEFAULT = re.compile(r"\$\{([A-Za-z_]\w*):?[-=][^}]{0,300}\}")  # ${name:-default}: the value when there is one
+
+
+def _option_letters(arg: str) -> str:
+    """The letters of a ``-abc`` option cluster; the pattern matches any word that starts with ``-``."""
+    m = _OPTION_LETTERS.match(arg)
+    return m[1] if m else ""
+
+
 # Commands that give a variable a value this does not follow: read H, mapfile H, getopts o H, printf -v H, unset H;
 # eval and source can set any of them.
 _SETTERS = frozenset({"read", "mapfile", "readarray", "getopts", "printf", "unset", "eval", "source", "."})
@@ -533,9 +542,9 @@ def _expand_word(word: str, values: dict[str, str], used: set[str], stale: _Stal
                 name = m[1] or m[3]
                 used.add(name)
                 value = values.get(name)
-                if hits is not None and m[1] and _USE_ASSIGN.match(word, k):
+                if hits is not None and stale is not None and m[1] and _USE_ASSIGN.match(word, k):
                     stale.add(name)  # ${H:=x} sets H when it has no value yet
-                if hits is not None and (name in stale or (m[1] and not m[2] and value is not None)):
+                if hits is not None and stale is not None and (name in stale or (m[1] and not m[2] and value is not None)):
                     default = _USE_DEFAULT.match(word, k)
                     if default and name not in stale and value:  # ${name:-default} is the value
                         _spend(len(value))
@@ -819,7 +828,7 @@ def _has_option(args: list[str], long: tuple[str, ...], short: str) -> bool:
                     and any(name.startswith(option) for name in long):
                 return True
         elif short and arg.startswith("-") and len(arg) > 1:
-            if any(letter in short for letter in re.match(r"-([A-Za-z]*)", arg)[1]):
+            if any(letter in short for letter in _option_letters(arg)):
                 return True
     return False
 
@@ -928,7 +937,7 @@ def _loads_code(name: str, args: list[str]) -> bool:
             continue
         if prefixes and arg.startswith(prefixes):
             return True
-        if letters and any(c in letters for c in re.match(r"-([A-Za-z]*)", arg)[1]):
+        if letters and any(c in letters for c in _option_letters(arg)):
             return True
         if name in ("pytest", "py.test") and arg.startswith("-p") and not (
                 arg[2:].startswith("no:") or arg == "-p" and args[k + 1:k + 2] and args[k + 1].startswith("no:")):
@@ -1744,8 +1753,9 @@ def _read(command: str, depth: int, env: dict[str, str] | None, loops: frozenset
                     carried, hidden = None, True
                     found.read_only = False
                     found.ordinary = False
-            if token == ")" and groups and groups[-1] is not None:
-                outer, outer_piped, fetches = groups.pop()  # <(...) ends: its place in the command is a file
+            if token == ")" and groups and (group := groups[-1]) is not None:
+                groups.pop()
+                outer, outer_piped, fetches = group  # <(...) ends: its place in the command is a file
                 program = _program(outer)
                 runner = bool(program) and (program[0] in (".", "source")
                                             or _binary(program[0]) in _RUNNERS - _NETWORK)

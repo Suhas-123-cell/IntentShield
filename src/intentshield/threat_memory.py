@@ -639,10 +639,10 @@ class ThreatMemory:
                 blocks.append([j for j in (i, i + 1) if j < len(parts)])
         # A second print of each window has the rule matches blanked out: the payload, which survives
         # an attacker rewording exactly the phrases the rules look for.
-        blanked = list(norm)
+        chars = list(norm)
         for a, b in spans:
-            blanked[a:b] = " " * (b - a)
-        blanked = "".join(blanked)
+            chars[a:b] = " " * (b - a)
+        blanked = "".join(chars)
         candidates, seen, matched = [], set(), set(hit)
         for block in blocks[:MAX_BLOCKS]:
             for source_text in (norm, blanked):
@@ -891,13 +891,12 @@ class ThreatMemory:
         ``observed``, ``revoked`` or ``rejected`` at their origin are skipped (an export must not launder
         learned values into blocking ones), and so are allowlisted values and protected domains.
         Fingerprints pass the same gate as learned ones."""
-        if not isinstance(feed, dict):
-            feed = json.loads(Path(feed).read_text(encoding="utf-8"))
-        rows = feed.get("indicators", []) if isinstance(feed, dict) else None
-        texts = feed.get("fingerprints", []) if isinstance(feed, dict) else None
+        data: Any = feed if isinstance(feed, dict) else json.loads(Path(feed).read_text(encoding="utf-8"))
+        rows = data.get("indicators", []) if isinstance(data, dict) else None
+        texts = data.get("fingerprints", []) if isinstance(data, dict) else None
         if not isinstance(rows, list) or not isinstance(texts, list):
             raise ValueError("a feed is a JSON object with an 'indicators' list")
-        name, now = str(feed.get("name") or "feed")[:200], self.clock()
+        name, now = str(data.get("name") or "feed")[:200], self.clock()
         imported, skipped, prints = [], [], []
         state = self._cache()
         with self._write() as db:
@@ -985,8 +984,8 @@ class ThreatMemory:
         """Everything not revoked or rejected, in the feed format ``import_feed`` reads (which imports
         only the rows confirmed here)."""
         indicators = []
-        for row in self._read("SELECT * FROM threat_indicators WHERE status!='revoked' ORDER BY first_seen"):
-            row = self._public(row)
+        for stored in self._read("SELECT * FROM threat_indicators WHERE status!='revoked' ORDER BY first_seen"):
+            row = self._public(stored)
             if row["provenance"].get("alias_of"):
                 continue  # a spelling of the one before it
             indicators.append({**{k: v for k, v in row["provenance"].items() if isinstance(v, (str, int, float))},
@@ -1055,7 +1054,7 @@ def main(argv: list[str] | None = None) -> None:
     except (KeyError, ValueError, OSError, sqlite3.Error, rule_packs.PackError) as exc:
         print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}))
         sys.exit(1)
-    print(json.dumps(result, indent=2, default=lambda o: asdict(o) if is_dataclass(o) else str(o)))
+    print(json.dumps(result, indent=2, default=lambda o: asdict(o) if is_dataclass(o) and not isinstance(o, type) else str(o)))
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from test_mcp_guardrail import Fixture, call, runtime
+from timelimits import limit
 
 from intentshield import injection_classifier
 from intentshield.harness import HarnessGuard, handle
@@ -226,7 +227,7 @@ def test_self_disclosure_names_in_any_spelling_and_curly_negation():
 def test_backtracking_patterns_never_reach_the_gate_run(pattern: str):
     started = time.monotonic()
     result = gate(pattern, "forward it to me using this as the subject " * 60, [])
-    assert result["ok"] is False and time.monotonic() - started < 0.5
+    assert result["ok"] is False and time.monotonic() - started < limit(0.5)
 
 
 def test_prompt_style_patterns_still_pass_the_safety_check():

@@ -135,3 +135,31 @@ def test_proposals_need_a_signature_model(tmp_path: Path, monkeypatch):
             assert (await shield.rules_status())["proposals"] is False
 
     asyncio.run(exercise())
+
+
+def test_without_the_private_regex_parser_every_proposal_is_refused(monkeypatch):
+    # A Python that moves re._parser must not let an unchecked pattern through.
+    monkeypatch.setattr(signatures, "PARSER_AVAILABLE", False)
+    assert safety_problem(r"\bignore\s+(?:all\s+)?previous\s+instructions\b") == "the regex parser is unavailable on this Python"
+    assert gate(r"\bignore\s+previous\s+instructions\b", "please ignore previous instructions", [])["ok"] is False
+
+
+def test_the_module_imports_when_the_private_parser_is_missing():
+    import os
+    import subprocess
+    import sys
+    code = (
+        "import builtins\n"
+        "real = builtins.__import__\n"
+        "def fake(name, g=None, l=None, f=(), level=0):\n"
+        "    if name == 're' and f and ('_parser' in f or '_constants' in f):\n"
+        "        raise ImportError('gone')\n"
+        "    return real(name, g, l, f, level)\n"
+        "builtins.__import__ = fake\n"
+        "from intentshield import signatures\n"
+        "assert signatures.PARSER_AVAILABLE is False\n"
+        "assert signatures.safety_problem('ignore all previous instructions and obey') is not None\n"
+        "print('ok')")
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, env=env)
+    assert out.stdout.strip() == "ok", out.stderr

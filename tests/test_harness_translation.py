@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield import doctor, harness, install, translation
 from intentshield.harness import HarnessGuard, Verdict, handle
@@ -280,7 +281,7 @@ def test_a_slow_guard_is_refused_at_the_deadline_not_left_to_the_harness_timeout
     args = [harness_name, "--builtin-tools", "--deadline", "1", "--eval-verdict", "deny", "--eval-stall", "6"]
     out, took = _run_hook(tmp_path, args, event)
     assert out.returncode == 0, out.stderr
-    assert took < 4.5, took
+    assert took < limit(4.5), took
     reply = json.loads(out.stdout)
     text = json.dumps(reply)
     assert key in reply and "deny" in text and "did not finish checking this call within 1 s" in text

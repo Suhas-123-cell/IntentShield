@@ -22,8 +22,9 @@ import detect_validate as dv  # noqa: E402
 DETECT = ROOT / "results/hook-fidelity/detect"
 
 
-# The other guards' hook entries are read from clones of their repositories, which are not committed: set HF_SCRATCH to
-# the directory that holds ``corpus/`` (docs/hook-fidelity-corpus.md) to run these.
+# Running a guard, and checking that every row was decided by a guard that ran, reads the other guards' hook entries from clones
+# of their repositories, which are not committed: ``benchmarks/hook_fidelity/fetch_corpus.py`` clones them into HF_SCRATCH
+# (the directory that holds ``corpus/``, docs/hook-fidelity-corpus.md). Reporting from the committed decisions needs no clone.
 needs_corpus = pytest.mark.skipif(not (dc.CLONES / "cc-safe-setup" / "repo" / "hooks" / "hooks.json").exists(),
                                   reason="needs the guard corpus clones under HF_SCRATCH")
 
@@ -244,7 +245,6 @@ def test_decisions_cover_the_fixtures(rows, decisions):
     assert not [d for d in decisions if d["class"] == "error"], "no guard produced an error reply on a fixture"
 
 
-@needs_corpus
 def test_summary_recomputes_from_decisions(rows, decisions):
     summary = dc.summarize(rows, decisions, dc.derive_delivery())
     committed = json.loads((DETECT / "summary.json").read_text())
@@ -258,7 +258,6 @@ def test_third_party_guards_never_ran_unsandboxed_and_nothing_was_executed():
     assert "Written and committed BEFORE any guard was run" in prov
 
 
-@needs_corpus
 def test_not_run_guards_are_named_with_a_reason():
     run = {g.id.split("[")[0] for g in dc.specs()}
     corpus = {g["id"] for g in json.loads((ROOT / "results/hook-fidelity/corpus.json").read_text())["guards"]}

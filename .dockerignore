@@ -6,4 +6,4 @@
 .claude
 artifacts
 *.db
-docs/icse27-demo/*.pdf
+docs/research-notes/icse27-demo/*.pdf

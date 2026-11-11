@@ -43,9 +43,10 @@ class PromptGuard:
         if model not in MODELS:
             raise ValueError(f"prompt guard model must be one of {MODELS}")
         self.model, self.threshold = model, threshold
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        if not self.api_key:
+        key = api_key or os.getenv("GROQ_API_KEY")
+        if not key:
             raise ValueError("prompt guard needs GROQ_API_KEY")
+        self.api_key = key
         self.timeout, self.retries, self.errors, self.last_error = timeout, retries, 0, ""
         self.cache_path = Path(cache) if cache else None
         if self.cache_path and self.cache_path.exists():
@@ -68,7 +69,7 @@ class PromptGuard:
         try:
             score = float(content) if content is not None else None
         except ValueError:
-            score, error = None, f"unparsable score: {content[:80]!r}"
+            score, error = None, f"unparsable score: {(content or '')[:80]!r}"
         if score is None or not 0.0 <= score <= 1.0:
             self.errors, self.last_error = self.errors + 1, error or "score out of range"
             return None

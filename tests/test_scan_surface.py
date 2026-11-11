@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from test_mcp_guardrail import Fixture, call, runtime
+from timelimits import limit
 
 from intentshield.mcp_inspect import (
     distinctive_values,
@@ -82,7 +83,7 @@ def test_unbounded_recipient_rule_stays_linear():
     call_ = ToolCall(tool_name="unregistered", arguments={"a": "send " * 40_000})
     started = time.monotonic()
     DeterministicDetectionAgent().analyze("Read my note", call_, None)
-    assert time.monotonic() - started < 2
+    assert time.monotonic() - started < limit(2)
 
 
 def test_injection_after_line_breaks_still_taints_the_run(tmp_path: Path):

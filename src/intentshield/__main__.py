@@ -27,6 +27,7 @@ def serve(port: int = 8000) -> None:
     from .logs import configure_logging
 
     configure_logging()
+    print(f"IntentShield dashboard on http://127.0.0.1:{port}, Ctrl-C to stop; `intentshield --help` for commands", flush=True)
     # No proxy headers: every local client would be a trusted proxy and could pick its own
     # address in X-Forwarded-For, dodging the rate limit.
     uvicorn.run("intentshield.api:create_app", factory=True, host="127.0.0.1", port=port, reload=False,

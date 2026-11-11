@@ -49,7 +49,7 @@ Candidate contributions that survive the search, strongest first:
    descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks
    carried the prompt; the proxy mediates descriptions and does not expose resources or
    prompts (functionality lost, not mediated). See [coverage-study.md](coverage-study.md), [contribution.md](contribution.md)
-   and [paper-draft.md](paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in
+   and [paper-draft.md](research-notes/paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in
    mechanisms, not third-party guards) and CapScope (hooks for coding-agent authority, not MCP
    channels). Still a hypothesis until confirmed with live per-channel attacks (§3.5 of the
    draft); findings in shipping harnesses need responsible disclosure.

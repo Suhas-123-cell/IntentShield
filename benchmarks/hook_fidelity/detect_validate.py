@@ -120,7 +120,7 @@ def reply_bytes(pick: dict, rows: list[dict], scratch: Path) -> dict:
             g.close()
         out = (json.dumps(reply) + "\n").encode() if reply else b""
         return {"exit_code": 0, "stdout": out, "stderr": b"", "entry_matcher": None}
-    spec = next(s for s in dc.specs() if s.id == guard)
+    spec = next(s for s in dc.specs(strict=True) if s.id == guard)
     tool = fx["payload"]["tool_name"]
     entries = [(i, e) for i, e in enumerate(spec.entries) if e.harness == fx["harness"] and e.matches(tool)]
     want = pick["class"]

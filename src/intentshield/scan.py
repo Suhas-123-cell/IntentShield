@@ -14,6 +14,10 @@ guard's own rules. Nothing is sent anywhere and no API key is needed.
 - **Changes since the last scan:** a tool description that changed after it was first seen (rug pull).
   The hashes are kept in ``~/.intentshield/scan-pins.json``.
 
+Exit status: 0 when no error-level finding was made and at least one server was read; 1 when an error-level finding
+remains; 2 when nothing could be scanned (no such file, a config that cannot be read, or every server failed to start or
+was left unstarted because a config in the current directory named it).
+
 Starting a server runs its code, as the client would, with a minimal environment (no API keys of yours);
 ``--no-connect`` checks the configs only. A server named by a config in the current directory is code the
 repository chose, so it is started only with ``--connect-project``.
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import hashlib
 import json
 import os
@@ -190,6 +195,35 @@ def upstream_config(server: Server) -> dict[str, Any] | None:
     return None
 
 
+@contextlib.contextmanager
+def _server_stderr() -> Iterator[Any]:
+    """Collects what the servers started inside it write to stderr (their file descriptor 2 is this process's), so the reason
+    a server did not start can be shown instead of lost in the terminal. Yields a callable returning the text so far."""
+    try:
+        sys.stderr.flush()
+        saved = os.dup(2)
+        capture = tempfile.TemporaryFile(mode="w+b")
+    except OSError:  # no descriptor to redirect: the server's own output goes to the terminal, as before
+        yield lambda: ""
+        return
+    try:
+        os.dup2(capture.fileno(), 2)
+        yield lambda: (capture.seek(0), capture.read(20_000))[1].decode("utf-8", "replace")
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
+        capture.close()
+
+
+def _stderr_reason(text: str) -> str:
+    """One line of a server's stderr that says why it died: the first, or for a traceback its last."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    line = lines[-1] if lines[0].startswith("Traceback") else lines[0]
+    return credentials.mask(line)[:200]
+
+
 async def _list_tools(server: Server, timeout: float) -> None:
     from .mcp_upstream import MCPUpstream, MCPUpstreamConfig
 
@@ -203,7 +237,7 @@ async def _list_tools(server: Server, timeout: float) -> None:
         return
     # The proxy's config refuses literal credentials so that none is written into its file; the scan writes
     # none, and starts the server with the entry's own environment and headers over a minimal inherited one.
-    secrets = {key: config.pop(key) for key in ("env", "headers") if key in config}
+    secrets: dict[str, Any] = {key: config.pop(key) for key in ("env", "headers") if key in config}
     try:
         async with asyncio.timeout(timeout):
             validated = MCPUpstreamConfig.model_validate(config).model_copy(update=secrets)
@@ -355,9 +389,13 @@ def scan(servers: list[Server], *, connect: bool = True, timeout: float = 30.0,
     if connect:
         for server in servers:
             if server.error is None and server.skipped is None:
-                asyncio.run(_list_tools(server, timeout))
+                with _server_stderr() as seen:
+                    asyncio.run(_list_tools(server, timeout))
+                    heard = seen() if server.error else ""
+                if heard and (why := _stderr_reason(heard)):
+                    server.error = f"{server.error}; the server's stderr says: {why}"
     findings = _config_findings(servers) + _tool_findings(servers, {} if pins is None else pins)
-    findings += [Finding("not_scanned", s.path, s.name, s.error or s.skipped) for s in servers
+    findings += [Finding("not_scanned", s.path, s.name, s.error or s.skipped or "") for s in servers
                  if s.error or (s.skipped and connect)]
     return findings
 
@@ -379,16 +417,22 @@ def sarif(findings: list[Finding]) -> dict[str, Any]:
 
 def report(servers: list[Server], findings: list[Finding], home: Path, connected: bool = True) -> str:
     lines = []
+    not_started = False
     for client in dict.fromkeys(s.client for s in servers):
         group = [s for s in servers if s.client == client]
-        state = "hooks installed" if guarded(client, home) else "no IntentShield hooks"
+        state = ", IntentShield hooks installed" if guarded(client, home) else ""
         tools = f", {sum(len(s.tools) for s in group)} tool(s)" if connected else ""
-        lines.append(f"{client} ({state}): {len(group)} server(s){tools}")
+        lines.append(f"{client}: {len(group)} server(s){tools}{state}")
         for server in group:
+            skipped = bool(server.skipped and connected)
+            not_started = not_started or skipped
             status = f"not scanned: {server.error}" if server.error else \
-                f"not started: {server.skipped}" if server.skipped and connected else \
+                "not started (config in the current directory)" if skipped else \
                 f"{len(server.tools)} tool(s)" if connected else "config only"
             lines.append(f"  {server.name}  {server.path}  [{status}]")
+    if not_started:  # one hint for all of them, not the same sentence on every line
+        lines.append("Servers named by a config in the current directory are code the repository chose, so they are not started; "
+                     "pass --connect-project to start them.")
     for f in sorted(findings, key=lambda f: ("error", "warning", "note").index(f.level)):
         if f.rule != "not_scanned":
             lines.append(f"{f.level.upper():7} {f.rule}: {f.server}{':' + f.tool if f.tool else ''}: {f.message}")
@@ -402,7 +446,9 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
 
 
 def add_subcommand(sub: Any) -> None:
-    p = sub.add_parser("scan", help="find the MCP servers your agents use and check them offline")
+    p = sub.add_parser("scan", help="find the MCP servers your agents use and check them offline",
+                       epilog="exit status: 0 nothing wrong found, 1 an error-level finding, 2 nothing could be scanned "
+                              "(a missing or unreadable config, or no server was started)")
     p.add_argument("files", nargs="*", type=Path, help="MCP config files to scan instead of the installed ones")
     p.add_argument("--no-connect", action="store_true", help="check the configs only; start no server")
     p.add_argument("--connect-project", action="store_true",

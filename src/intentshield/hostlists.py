@@ -179,4 +179,6 @@ def shared_host(host: str | None, first_party: frozenset[str] = COMMON_FIRST_PAR
     """``host`` is a site of ``first_party`` or a name under one, or a tenant platform's bare suffix. A name under a
     tenant suffix is not: it is one tenant's own site."""
     # Not by joining each suffix of the host: a hostile host of 50,000 labels would cost a quadratic number of characters.
-    return bool(host) and (host in TENANT_SUFFIXES or any(host == known or host.endswith("." + known) for known in first_party))
+    if not host:
+        return False
+    return host in TENANT_SUFFIXES or any(host == known or host.endswith("." + known) for known in first_party)

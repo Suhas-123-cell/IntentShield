@@ -229,7 +229,7 @@ _OVERRIDE_ENGLISH = (
     r"(?:as\s+follows|the\s+following|now)\b|"
     r"your\s+instructions\s+(?:have|has)\s+(?:changed|been\s+(?:updated|changed|replaced))[ \t]*(?:[.:!\n]|$))")
 # Rules for text that should describe a tool, not instruct the agent.
-_DESCRIPTION_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
+_DESCRIPTION_RULES: tuple[tuple[str, _Rule], ...] = (
     ("instruction_override", _Translated(_WithTypos(_OVERRIDE_ENGLISH),
         _OVERRIDE_TRANSLATED, ("instru", "anweisung", "befehl", "vorgabe", "anfrage", "indica", "rdenes", "consigne",
                                "directive", "orienta", "ordens", "istruz", "opdracht", "aanwijzing", "regel", "regla", "regle",
@@ -466,7 +466,8 @@ class _ImageExfiltration:
             yield self._Hit(text, start, found[start])
 
 
-_OUTPUT_RULES: tuple[tuple[str, re.Pattern[str] | _Translated], ...] = (
+_Rule = re.Pattern[str] | _Translated | _Negated | _ImageExfiltration  # what a rule table holds
+_OUTPUT_RULES: tuple[tuple[str, _Rule], ...] = (
     _DESCRIPTION_RULES[0],
     _DESCRIPTION_RULES[1],
     _DESCRIPTION_RULES[3],
@@ -642,14 +643,14 @@ def _decoded(text: str) -> list[str]:
                         else base64.b64decode(padded, validate=True)
                 except (binascii.Error, ValueError):
                     continue
-                if (decoded := _readable(raw)) is not None:
-                    next_layer.append(decoded)
+                if (text_of := _readable(raw)) is not None:
+                    next_layer.append(text_of)
             for token in _HEX.findall(item):
-                if (decoded := _readable(bytes.fromhex(token))) is not None:
-                    next_layer.append(decoded)
+                if (text_of := _readable(bytes.fromhex(token))) is not None:
+                    next_layer.append(text_of)
             for token in _SPACED_HEX.findall(item) if " " in item or ":" in item else ():
-                if (decoded := _readable(bytes.fromhex(re.sub(r"[ :,\-]", "", token)))) is not None:
-                    next_layer.append(decoded)
+                if (text_of := _readable(bytes.fromhex(re.sub(r"[ :,\-]", "", token)))) is not None:
+                    next_layer.append(text_of)
             if "\\" in item and (decoded := _ESCAPES.sub(lambda m: chr(int(m[1] or m[2], 16)), item)) != item:
                 next_layer.append(decoded)
         if not next_layer:
@@ -810,7 +811,7 @@ def normalized_intent(text: str) -> str:
     return " ".join(_normalize(text).lower().split())
 
 
-def _scan(text: str, rules: tuple[tuple[str, re.Pattern[str] | _Translated], ...], trusted: str = "",
+def _scan(text: str, rules: tuple[tuple[str, _Rule], ...], trusted: str = "",
           collapse: bool = False, hidden: bool = False) -> list[str]:
     text = readable(text)
     if hidden:

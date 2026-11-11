@@ -235,7 +235,7 @@ MAX_TAINTED = 20_000
 MAX_OUTPUT_TAINT = 2_000
 
 
-class _RecentSet(set):
+class _RecentSet(set[str]):
     """A set that keeps the newest ``limit`` values, oldest out; a value seen again counts as new. Add with
     ``update`` (``|=`` and ``add`` would skip the bound)."""
 
@@ -497,7 +497,7 @@ def _without_patterns(schema: dict[str, Any], *, strip_data: bool = False) -> di
     has_ref = holds_pattern = False
 
     def copy(value: Any, names: bool = False) -> Any:
-        container = {} if isinstance(value, dict) else [] if isinstance(value, list) else None
+        container: dict[Any, Any] | list[Any] | None = {} if isinstance(value, dict) else [] if isinstance(value, list) else None
         if container is not None:
             stack.append((value, container, names))
         return value if container is None else container
@@ -732,11 +732,11 @@ class MCPProxyRuntime:
         # Distinctive values from outputs that carried injection text. Kept for the whole
         # session, not per run: the agent opens runs itself, so a fresh run must not wash
         # a value clean.
-        self._tainted: set[str] = _RecentSet()
+        self._tainted: _RecentSet = _RecentSet()
         # Hosts and mailboxes of those outputs, canonicalised (see ``_network_values``): a read that only
         # reuses the host of an injected address is still the injection's.
-        self._tainted_hosts: set[str] = _RecentSet()
-        self._tainted_boxes: set[str] = _RecentSet()
+        self._tainted_hosts: _RecentSet = _RecentSet()
+        self._tainted_boxes: _RecentSet = _RecentSet()
         self._runs = 0
         self._transparent_run: str | None = None
         self._judge_errors_seen = 0
@@ -807,7 +807,7 @@ class MCPProxyRuntime:
         self._judge = Judge.from_spec(config.judge, timeout=15, retries=1, budget=30) if config.judge else None
         # Tools whose description passed the rules but not the classifier or the judge.
         self._suspect_tools: dict[str, ReasonCode] = {}
-        self._suspect_values: set[str] = _RecentSet()
+        self._suspect_values: _RecentSet = _RecentSet()
         self._taint_incomplete = False  # a cap dropped tainted values: see MAX_TAINTED
         self._memory: Any = None
         if config.threat_memory:
@@ -906,8 +906,8 @@ class MCPProxyRuntime:
             except BaseException as exc:  # cancellation: close the rest, then let it propagate as itself
                 interrupted = interrupted or exc
         if interrupted is not None:
-            for exc in errors:  # not lost behind the cancellation
-                logger.warning("upstream close failed", extra={"error": type(exc).__name__})
+            for error in errors:  # not lost behind the cancellation
+                logger.warning("upstream close failed", extra={"error": type(error).__name__})
             raise interrupted
         if errors:
             raise RuntimeError(f"Failed to close {len(errors)} upstream MCP connection(s)") from errors[0]
@@ -999,10 +999,10 @@ class MCPProxyRuntime:
                 text = f"{text}\n{exposed}"
             if schema_flags and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *schema_flags]
-            own = names_by_server[tool.server_id]
+            own_names = names_by_server[tool.server_id]
             foreign = set().union(*(names for sid, names in names_by_server.items() if sid != tool.server_id),
                                   catalog_names)
-            findings = scan_description(text, foreign - own)
+            findings = scan_description(text, foreign - own_names)
             if findings and self.config.quarantine_poisoned_tools:
                 self._quarantined[qualified] = [*self._quarantined.get(qualified, []), *findings]
             if findings:  # one listing is one "run": several poisoned tools must not count as many

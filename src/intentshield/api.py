@@ -35,10 +35,10 @@ def create_app(
     require_tokens(refused, tuple(name for name, given in (("INTENTSHIELD_CONTROL_TOKEN", control_token),
                                                            ("INTENTSHIELD_AGENT_TOKEN", agent_token)) if not given))
     proxy_path = proxy_config or os.getenv("INTENTSHIELD_PROXY_CONFIG")
-    approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN", "")).strip()
+    approval_token = (control_token or os.getenv("INTENTSHIELD_CONTROL_TOKEN") or "").strip()
     # Optional: when set, proposing calls and reading runs (which hold executed tool results)
     # needs this token or the operator's.
-    run_token = (agent_token or os.getenv("INTENTSHIELD_AGENT_TOKEN", "")).strip()
+    run_token = (agent_token or os.getenv("INTENTSHIELD_AGENT_TOKEN") or "").strip()
     if proxy_path and not approval_token:
         raise ValueError(
             "INTENTSHIELD_CONTROL_TOKEN is required when the web MCP proxy is enabled"

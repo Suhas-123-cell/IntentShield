@@ -26,7 +26,9 @@ answers (exit code, stdout, stderr) and sends the harness ONE reply in the harne
   ``allow`` lets it through, which re-opens the empty-reply fail-open path the study measured on Claude Code.
 
 Only events that check a call (``translation.CALL_EVENTS``) are translated and held to the deadline; any other event is passed
-to the guard and its exit code, stdout and stderr returned unchanged. The deadline is ``--deadline`` (default 30 s, under
+to the guard and its exit code, stdout and stderr returned unchanged. An event that carries a tool but whose name is not a call
+event nor a documented result or lifecycle event (a missing, re-cased or new name: ``translation.looks_like_call``) is treated as
+a call, so a guard that crashes on it is refused, not passed through. The deadline is ``--deadline`` (default 30 s, under
 Gemini CLI's 60 s default hook timeout); with ``--hook-timeout`` (what the harness's configuration gives this hook) it is kept
 under that timeout, which every harness lets through. Only the standard library is imported, because the harness waits for this
 process.
@@ -206,7 +208,7 @@ def wrap(harness: str, guard: list[str], raw: str, *, version: str | None = None
     except ValueError as exc:
         print(f"IntentShield wrap-hook could not read the harness's event ({exc}); this call is refused.", file=stderr)
         return 2
-    if event.get("hook_event_name") not in translation.CALL_EVENTS:
+    if event.get("hook_event_name") not in translation.CALL_EVENTS and not translation.looks_like_call(event):
         code, out, err, problem = run_guard(guard, raw, None)
         if problem:
             print(f"IntentShield wrap-hook: {problem}", file=stderr)
@@ -286,8 +288,11 @@ def main(argv: list[str] | None = None) -> None:
     if not guard:
         print("intentshield wrap-hook: no guard command after `--`", file=sys.stderr)
         sys.exit(2)
-    if args.deadline <= 0:
-        print("intentshield wrap-hook: --deadline must be positive", file=sys.stderr)
+    if not 0 < args.deadline <= 3600:  # also false for nan; inf cannot be waited for
+        print("intentshield wrap-hook: --deadline must be a number of seconds from 0 (exclusive) to 3600", file=sys.stderr)
+        sys.exit(2)
+    if not 0 <= args.hook_timeout <= 86_400:
+        print("intentshield wrap-hook: --hook-timeout must be a number of seconds from 0 to 86400", file=sys.stderr)
         sys.exit(2)
     try:
         raw = sys.stdin.read()

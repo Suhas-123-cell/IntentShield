@@ -204,7 +204,7 @@ def create_mcp_server(
 
     mcp_server = _require_mcp()
     gateway = service or IntentShieldService.default(
-        database_path or os.getenv("INTENTSHIELD_DB", "intentshield.db")
+        database_path or str(os.getenv("INTENTSHIELD_DB", "intentshield.db"))
     )
     facade = IntentShieldMCPFacade(gateway)
     server = mcp_server(
@@ -455,7 +455,7 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
                                     is_error=result.is_error)
 
     server = Server("IntentShield", lifespan=lifespan, on_list_tools=list_tools, on_call_tool=call_tool)
-    server.intentshield_runtime = runtime
+    server.intentshield_runtime = runtime  # type: ignore[attr-defined]  # read by the HTTP control routes
     return server
 
 
@@ -738,8 +738,8 @@ def main(argv: list[str] | None = None) -> None:
     except* (FileNotFoundError, ValueError, MCPUpstreamError) as group:
         # A missing config, a bad config or an upstream that cannot start: one line each on
         # stderr, not the anyio exception-group traceback the transport would otherwise print.
-        for exc in _leaves(group):
-            print(f"intentshield-mcp: {exc}", file=sys.stderr)
+        for leaf in _leaves(group):
+            print(f"intentshield-mcp: {leaf}", file=sys.stderr)
         sys.exit(1)
 
 

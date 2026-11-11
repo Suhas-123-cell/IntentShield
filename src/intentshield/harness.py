@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import posixpath
 import re
@@ -46,6 +47,7 @@ from .mcp_inspect import (
     sourced_from,
     traced_urls,
 )
+from .shell import Command as ShellCommand
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 ENV_FILE = Path.home() / ".intentshield" / ".env"  # API keys `intentshield install --judge` stored
@@ -176,6 +178,36 @@ INTENT_LIMIT = 200_000
 INTENT_HEAD = 20_000
 
 
+def _private_dir(directory: Path) -> None:
+    """Creates ``directory``, and keeps ``~/.intentshield`` (prompts, API keys, tool catalogs) readable by its owner only."""
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700 if directory.name == ".intentshield" else 0o777)
+    if directory.name == ".intentshield" and os.name == "posix":
+        try:
+            if directory.stat().st_mode & 0o077 and directory.stat().st_uid == os.getuid():
+                directory.chmod(0o700)
+        except OSError:  # the files in it are 0600 either way
+            pass
+
+
+def _credential_mark(token: str) -> str:
+    """What the stored prompt keeps in place of a credential the user pasted: a short hash, enough to tell later that the user
+    gave this very value (``_given``) and no more than that."""
+    return "[credential:" + hashlib.sha256(b"intentshield-credential\0" + token.encode()).hexdigest()[:20] + "]"
+
+
+def _scrub_credentials(text: str) -> str:
+    """``text`` with every credential in it (``credentials.find``) replaced by its mark, so that ``hooks.db`` does not keep an
+    API key or token the user typed into a prompt."""
+    for token in sorted(credentials.find(text), key=len, reverse=True):
+        text = text.replace(token, _credential_mark(token))
+    return text
+
+
+def _given(token: str, intent: str) -> bool:
+    """Whether the user's prompts gave this credential: as its mark, or as typed (a session stored before the scrub)."""
+    return token in intent or _credential_mark(token) in intent
+
+
 def _window(intent: str) -> str:
     return intent if len(intent) <= INTENT_LIMIT else \
         f"{intent[:INTENT_HEAD]}\n{intent[INTENT_HEAD - INTENT_LIMIT:]}"
@@ -202,6 +234,9 @@ class HarnessGuard:
         self.translation: translation.Semantics | None = None
         # The working directory of the event being handled (one per hook process), to read relative paths.
         self.cwd = ""
+        # Whether the harness's own process started this hook: False when the process tree is read and holds none (an event piped
+        # in by hand), None when that is not known (the default, and what a caller that is no hook process leaves).
+        self.from_harness: bool | None = None
         # As the proxy's setting: a value from a tool output always asks on a side-effecting
         # call; this decides it for reads.
         self.sourced_reads = review_output_sourced_arguments
@@ -239,7 +274,7 @@ class HarnessGuard:
             self.classifier = InjectionClassifier(classifier)
             if not self.classifier.ready:
                 raise ValueError(f"injection classifier is not usable: {self.classifier.reason}")
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        _private_dir(Path(path).parent)
         if not Path(path).exists():  # prompts and taint of every session: the user's only
             Path(path).touch(mode=0o600)
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
@@ -263,6 +298,9 @@ class HarnessGuard:
                         "PRIMARY KEY (session, value))")
         # When each harness last ran a hook: `intentshield doctor` tells hooks that never run from quiet ones.
         self.db.execute("CREATE TABLE IF NOT EXISTS harness_events (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
+        # Events that reached the hook from a process that is not the harness (a person piping one in by hand): kept apart, so
+        # `intentshield doctor` does not take them for proof that the harness runs the hooks.
+        self.db.execute("CREATE TABLE IF NOT EXISTS harness_piped (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
         # ... and in which working directories: a project's settings file is only run for sessions inside it.
         self.db.execute("CREATE TABLE IF NOT EXISTS harness_dirs (harness TEXT NOT NULL, cwd TEXT NOT NULL, "
                         "last REAL NOT NULL, PRIMARY KEY (harness, cwd))")
@@ -347,7 +385,10 @@ class HarnessGuard:
         """A hook event of the session: it is live, whatever the event was, so its TTL starts over."""
         now = time.time()
         self.db.execute("UPDATE sessions SET updated = ? WHERE id = ?", (now, session))
-        if harness:
+        if harness and self.from_harness is False:
+            self.db.execute("INSERT INTO harness_piped VALUES (?, ?) ON CONFLICT(harness) DO UPDATE SET "
+                            "last = excluded.last", (harness, now))
+        elif harness:
             self.db.execute("INSERT INTO harness_events VALUES (?, ?) ON CONFLICT(harness) DO UPDATE SET "
                             "last = excluded.last", (harness, now))
             if self.cwd:
@@ -396,7 +437,7 @@ class HarnessGuard:
         note naming the MCP tools that match the prompt, or an empty string."""
         with self._tx():
             intent, taint = self._load(session)
-            self._save(session, _window(f"{intent}\n{text}".strip()), taint)
+            self._save(session, _window(f"{intent}\n{_scrub_credentials(text)}".strip()), taint)
             self.db.execute("UPDATE sessions SET refused = 0 WHERE id = ?", (session,))
         return self.tool_hint(text)
 
@@ -468,7 +509,7 @@ class HarnessGuard:
                                    f"instructions, not from the user: {', '.join(_show(v) for v in sorted(untrusted)[:3])}.")
         # A credential the user did not type, leaving in an argument: what an injection that got the agent to
         # read a token or a key file sends. After an injection it is denied; otherwise the user decides.
-        leaving = {c: kind for c, kind in credentials.find(arguments).items() if c not in intent}
+        leaving = {c: kind for c, kind in credentials.find(arguments).items() if not _given(c, intent)}
         if leaving:
             shown = ", ".join(credentials.masked(c, kind) for c, kind in sorted(leaving.items())[:3])
             if taint or self._flagged(session, soft=False):
@@ -539,7 +580,7 @@ class HarnessGuard:
 
     def _pause_judge(self) -> str:
         """Pauses the judge after an offline or refused-key failure; the note for stderr."""
-        if self._judge_pause is None or not _JUDGE_OFFLINE.search(self.judge.last_error or ""):
+        if self._judge_pause is None or self.judge is None or not _JUDGE_OFFLINE.search(self.judge.last_error or ""):
             return ""
         try:
             self._judge_pause.write_text(str(time.time() + JUDGE_PAUSE))
@@ -551,13 +592,24 @@ class HarnessGuard:
         return self.review == "always" or (self.review == "tainted" and bool(taint or self._flagged(session)))
 
     def shell(self, session: str, tool: str, command: str) -> Verdict:
-        """The session rules' verdict (below), or, when they allow, the text rules of ``dangerous.py``."""
+        """The stricter of the session rules' verdict (below) and the text rules of ``dangerous.py``: a deny of the text rules
+        is a deny even where the session rules only ask (a deny > an ask > an allow)."""
         verdict = self._shell_session(session, tool, command)
-        if verdict.decision != "allow":
+        if verdict.decision == "deny":
             return verdict
-        risky = dangerous.assess_shell(command, self._load(session)[0])
-        if risky and (risky.decision == "deny" or self.review != "never"):
-            return Verdict(risky.decision, f"IntentShield: {risky.reason}")
+        return self._stricter(verdict, dangerous.assess_shell(command, self._load(session)[0]))
+
+    def _stricter(self, verdict: Verdict, risky: "dangerous.Hit | None") -> Verdict:
+        """``verdict`` of the session rules against the text rules' hit: the text rules only ever make it stricter. An ask of
+        the text rules is dropped under ``--review never``; a deny never is."""
+        if risky is None or (risky.decision != "deny" and self.review == "never"):
+            return verdict
+        found = Verdict(risky.decision, f"IntentShield: {risky.reason}")
+        if verdict.decision == "allow":
+            return found
+        if verdict.decision == "ask" and found.decision == "deny":  # the session rules' reason stays as context
+            found.reason += f" ({verdict.reason})" if verdict.reason else ""
+            return found
         return verdict
 
     def _shell_session(self, session: str, tool: str, command: str) -> Verdict:
@@ -574,7 +626,7 @@ class HarnessGuard:
                                    f"injected instructions, not from the user: "
                                    f"{', '.join(_show(v) for v in sorted(untrusted)[:3])}.")
         hard = bool(taint) or self._flagged(session, soft=False)
-        leaving = {c: kind for c, kind in credentials.find(command).items() if c not in intent}
+        leaving = {c: kind for c, kind in credentials.find(command).items() if not _given(c, intent)}
         # Data leaving for somewhere the user did not name (or for an unnamed remote: "git push").
         outbound = found.sends and (bool(destinations) or not found.destinations)
         if leaving and (found.sends or found.destinations):
@@ -618,7 +670,7 @@ class HarnessGuard:
             return self._judged(Verdict(), intent, tool, {"command": command})
         return Verdict()
 
-    def _ordinary(self, found: shell.Command, command: str, intent: str, taint: set[str]) -> bool:
+    def _ordinary(self, found: ShellCommand, command: str, intent: str, taint: set[str]) -> bool:
         """A build, test or local version-control command that may run after an output tried to instruct the
         agent: Codex and Gemini cannot ask, so refusing every one stops the session's ordinary work. It still asks
         under ``--review always``, for a path that sets up code later sessions run, and when the command carries a
@@ -637,7 +689,7 @@ class HarnessGuard:
         if untrusted:
             return Verdict("deny", "The address came from a tool output that contained injected instructions, not "
                                    f"from the user: {', '.join(_show(v) for v in sorted(untrusted)[:3])}.")
-        leaving = {c: kind for c, kind in credentials.find(target).items() if c not in intent}
+        leaving = {c: kind for c, kind in credentials.find(target).items() if not _given(c, intent)}
         if leaving and self.review != "never":
             shown = ", ".join(credentials.masked(c, kind) for c, kind in sorted(leaving.items())[:3])
             hard = bool(taint) or self._flagged(session, soft=False)
@@ -646,14 +698,11 @@ class HarnessGuard:
         return Verdict()
 
     def file(self, session: str, tool: str, path: str, content: Any = None, write: bool = False) -> Verdict:
-        """The session rules' verdict (below), or, when they allow, the text rules of ``dangerous.py``."""
+        """The stricter of the session rules' verdict (below) and the text rules of ``dangerous.py``."""
         verdict = self._file_session(session, tool, path, content, write)
-        if verdict.decision != "allow":
+        if verdict.decision == "deny":
             return verdict
-        risky = dangerous.assess_file(path, content, write, self._load(session)[0])
-        if risky and (risky.decision == "deny" or self.review != "never"):
-            return Verdict(risky.decision, f"IntentShield: {risky.reason}")
-        return verdict
+        return self._stricter(verdict, dangerous.assess_file(path, content, write, self._load(session)[0]))
 
     def _file_session(self, session: str, tool: str, path: str, content: Any = None, write: bool = False) -> Verdict:
         """A file read or write by a built-in tool. Light by design: only after an output tried to instruct
@@ -835,7 +884,12 @@ _BUILTIN = {
     "Write": ("write", "file_path"), "write_file": ("write", "file_path"), "Edit": ("write", "file_path"),
     "MultiEdit": ("write", "file_path"), "replace": ("write", "file_path"), "NotebookEdit": ("write", "notebook_path"),
     "apply_patch": ("patch", "input"),  # Codex CLI's edit tool: the argument is a patch naming its files
+    # Search tools that print what is in the files under ``path``. Their path is optional (the working directory). The tools that
+    # only list names (Glob, LS, Gemini's list_directory and glob) are not guarded: they return no file content.
+    "Grep": ("read", "path"), "search_file_content": ("read", "dir_path"), "grep_search": ("read", "dir_path"),
 }
+_OPTIONAL_TARGET = frozenset({"Grep", "search_file_content", "grep_search"})
+_PATH_FIELDS = ("absolute_path", "path", "dir_path", "paths", "file_path")
 # The header's path is read to the end of the line and trimmed afterwards: a lazy ``(.+?)\s*$`` is quadratic on a
 # long run of spaces, and a hook that times out fails open.
 _PATCH_FILE = re.compile(r"^[ \t]*\*\*\* (?:(?:Update|Add|Delete) File|Move to): ([^\r\n]*)|^\+\+\+ (?:b/)?(\S+)", re.M)
@@ -892,15 +946,39 @@ def _shell_script(path: str, text: str) -> bool:
     return bool(_SHELL_FILE.search(path)) or bool(_SHELL_SHEBANG.match(text))
 
 
-def _builtin_target(kind: str, field_name: str, arguments: dict[str, Any]) -> str:
+def _builtin_value(kind: str, field_name: str, arguments: dict[str, Any]) -> Any:
+    """What a built-in tool call names as its target, as the harness sent it (None when the call has none)."""
     value = arguments.get(field_name)
     if value is None and kind == "shell":
         value = arguments.get("command") if field_name != "command" else arguments.get("cmd")
     if value is None and kind in ("read", "write"):
-        value = arguments.get("absolute_path") or arguments.get("path")
+        value = next((arguments[k] for k in _PATH_FIELDS if arguments.get(k)), None)
+    if value is None and set(arguments) == {"value"}:
+        value = arguments["value"]  # tool_input that was a bare string, not an object
+    return value
+
+
+def _builtin_target(kind: str, field_name: str, arguments: dict[str, Any]) -> str:
+    value = _builtin_value(kind, field_name, arguments)
     if isinstance(value, list):  # an argv (Codex: ["bash", "-lc", "..."]), or several paths
         return shlex.join(str(v) for v in value) if kind == "shell" else " ".join(str(v) for v in value)
     return "" if value is None else str(value)
+
+
+def _shape_problem(tool: str, arguments: dict[str, Any]) -> str:
+    """Why the call of a built-in tool cannot be read, or "": the field that names what it runs, reads or writes is missing
+    or is not a string (or a list, for an argv or several paths). A call that cannot be read must not pass as one with
+    nothing in it."""
+    kind, field_name = _BUILTIN[tool]
+    if kind == "search":
+        return ""
+    if kind == "patch":
+        values = [arguments.get(k) for k in (field_name, "command", "patch", "diff")]
+        return "" if any(isinstance(v, (str, list)) and v for v in values) else "it carries no patch text"
+    value = _builtin_value(kind, field_name, arguments)
+    if value is None:
+        return "" if tool in _OPTIONAL_TARGET else f"it has no {field_name!r} value"
+    return "" if isinstance(value, (str, list)) else f"its {field_name!r} value is not text"
 
 
 def _builtin_content(arguments: dict[str, Any]) -> list[Any]:
@@ -940,6 +1018,11 @@ def _builtin_local(kind: str, target: str) -> bool:
 def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[str, Any]) -> Verdict | None:
     """The verdict on a built-in tool call, or None when it is not one the guard reads before it runs."""
     kind, field_name = _BUILTIN[tool]
+    if problem := _shape_problem(tool, arguments):
+        reason = (f"IntentShield could not read this {tool} call ({problem}), so it is refused rather than let through "
+                  "unchecked; update IntentShield or the harness.")
+        print(reason, file=sys.stderr)
+        return Verdict("deny", reason)
     target = _builtin_target(kind, field_name, arguments)
     label = f"builtin:{tool}"
     if kind == "shell":
@@ -994,18 +1077,35 @@ def _session_key(event: dict[str, Any]) -> str:
     return key
 
 
-def _unnamed_call(harness: str, event: dict[str, Any]) -> dict[str, Any] | None:
-    """A reply when an event carries an MCP tool but no event name: the harness changed its schema, and
-    nothing says whether it is the call or the result, so the call is refused rather than waved through."""
+# The hook events each harness's handler below acts on. A call of a tool under any other name (a missing or changed one)
+# cannot be told from a call or a result.
+_HANDLED_EVENTS = {
+    "claude": ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit"),
+    "codex": ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit"),
+    "cursor": ("beforeSubmitPrompt", "beforeMCPExecution", "afterMCPExecution", "beforeShellExecution", "afterShellExecution",
+               "beforeReadFile"),
+    "gemini": ("BeforeAgent", "BeforeTool", "AfterTool"),
+}
+
+
+def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = False) -> dict[str, Any] | None:
+    """A reply when an event carries a tool but no event name (or, with ``--builtin-tools``, one this hook does not act on): the
+    harness changed its schema, and nothing says whether it is the call or the result, so the call is refused rather than
+    waved through. With ``--builtin-tools`` the built-in tools are held to this like the MCP tools."""
+    name = event.get("hook_event_name") or ""
+    if name and (not builtin_tools or name in _HANDLED_EVENTS.get(harness, ())):
+        return None
     if harness in ("claude", "codex"):
         tool = str(event.get("tool_name", ""))
-        mcp = _split_claude(tool) is not None or tool in _RESOURCE_TOOLS
+        mcp = _split_claude(tool) is not None or tool in _RESOURCE_TOOLS or (builtin_tools and tool in _BUILTIN)
+    elif harness == "cursor":
+        mcp = bool(event.get("tool_name")) or (builtin_tools and any(k in event for k in ("command", "file_path")))
     else:
-        mcp = bool(event.get("tool_name")) if harness == "cursor" else "mcp_context" in event
+        mcp = "mcp_context" in event or (builtin_tools and str(event.get("tool_name") or "") in _BUILTIN)
     if not mcp:
         return None
-    reason = ("IntentShield could not tell what this hook event is (it has no hook_event_name), so it refused "
-              "the MCP call; update IntentShield or the harness.")
+    reason = ("IntentShield could not tell what this hook event is (its hook_event_name is "
+              f"{name!r}), so it refused the call; update IntentShield or the harness.")
     print(f"IntentShield: {reason}", file=sys.stderr)
     if harness in ("claude", "codex"):
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
@@ -1040,7 +1140,7 @@ def handle(harness: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str
     session = _session_key(event)
     guard.cwd = str(event.get("cwd") or "")
     guard.touch(session, harness)
-    if not name and (denial := _unnamed_call(harness, event)):
+    if denial := _unnamed_call(harness, event, guard.builtin_tools):
         return denial
     if harness in ("claude", "codex"):
         return _claude(harness, name, session, event, guard)
@@ -1138,7 +1238,7 @@ def _claude_result(harness: str, name: str, session: str, tool: str, event: dict
                    guard: HarnessGuard, source: str | None = None, local: bool = False) -> dict[str, Any] | None:
     # A tool that returned isError:true arrives as PostToolUseFailure with its text in ``error``, and an
     # attacker controls that text as much as any result: every field that can carry it is scanned.
-    fields = ("tool_response", "tool_output")
+    fields: tuple[str, ...] = ("tool_response", "tool_output")
     if name == "PostToolUseFailure":
         fields = ("error", *fields)
     parts = [event[f] for f in fields if event.get(f) is not None]
@@ -1177,7 +1277,10 @@ def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
         return _cursor_reply(v)
     if guard.builtin_tools and name == "beforeShellExecution":
         # Here an "ask" held the command (allowlisted or not) and "allow" did not skip Cursor's own approval.
-        v = guard.shell(session, "builtin:shell", str(event.get("command") or ""))
+        if not isinstance(event.get("command"), str):
+            return _cursor_reply(Verdict("deny", "IntentShield could not read this shell call (it has no 'command' text), so it "
+                                                 "is refused rather than let through unchecked." + NO_RETRY))
+        v = guard.shell(session, "builtin:shell", event["command"])
         if v.decision == "deny":
             v.reason += NO_RETRY
         return _cursor_reply(v)
@@ -1201,7 +1304,10 @@ def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
     if guard.builtin_tools and name == "beforeReadFile":
         # Cursor hands over the file before the agent reads it: the content is scanned as a result here, and a
         # denial keeps it from the agent (beforeReadFile has no ask).
-        path = str(event.get("file_path") or "")
+        if not isinstance(event.get("file_path"), str):
+            return {"permission": "deny", "user_message": "IntentShield could not read this file call (it has no 'file_path' "
+                                                          "text), so it is refused rather than let through unchecked."}
+        path = event["file_path"]
         v = guard.file(session, "builtin:read", path)
         note = ""
         # An ask from the text rules (a .env, an .npmrc, a key file) cannot be put to the user here, and a refusal is stricter
@@ -1309,12 +1415,40 @@ def _gemini_builtin(name: str, session: str, tool: str, event: dict[str, Any],
     return None
 
 
+MAX_DEADLINE = 3600.0
+
+
+def _valid_deadline(value: float) -> bool:
+    """A deadline is a finite number of seconds from 0 (none) to an hour: nan and inf cannot be waited for, a negative one is
+    never reached, and a timer past the platform's limit raises."""
+    return math.isfinite(value) and 0 <= value <= MAX_DEADLINE
+
+
 def _env_seconds(name: str) -> float:
-    """A number of seconds from the environment; 0 (none) when it is unset or not a number, so a typo cannot crash the hook."""
-    try:
-        return float(os.getenv(name) or 0)
-    except ValueError:
+    """The deadline of the environment: 0 (none) when it is unset, and the default when it is set to something that is not a
+    number of seconds from 0 to an hour, so a typo does not switch the deadline off."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
         return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if _valid_deadline(value):
+        return value
+    print(f"IntentShield: {name}={raw!r} is not a number of seconds from 0 to {MAX_DEADLINE:g}; using the default, "
+          f"{translation.DEFAULT_DEADLINE_S:g} s.", file=sys.stderr)
+    return translation.DEFAULT_DEADLINE_S
+
+
+def _deadline_arg(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number of seconds") from None
+    if not _valid_deadline(value):
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number of seconds from 0 (no deadline) to {MAX_DEADLINE:g}")
+    return value
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -1360,10 +1494,11 @@ def main(argv: list[str] | None = None) -> None:
                         default=os.getenv("INTENTSHIELD_HOOK_TRANSLATE", "").lower() in ("0", "off", "false", "no"),
                         help="send each verdict as the guard made it: no choice of ask or deny by the harness's measured "
                              "behaviour, and no deadline (translation.py)")
-    parser.add_argument("--deadline", type=float, default=_env_seconds("INTENTSHIELD_HOOK_DEADLINE"),
-                        help="seconds after which a hook still checking a call answers with a refusal, so that a slow "
-                             "judge or a stuck database is not read as a timeout, which every harness measured lets "
-                             "through (0: no deadline; `intentshield install` sets it under the harness's timeout)")
+    parser.add_argument("--deadline", type=_deadline_arg, default=_env_seconds("INTENTSHIELD_HOOK_DEADLINE"),
+                        help="seconds (0 to 3600) after which a hook still checking a call answers with a refusal, so that "
+                             "a slow judge or a stuck database is not read as a timeout, which every harness measured lets "
+                             "through (0: no deadline; `intentshield install` sets it under the harness's timeout). An "
+                             "INTENTSHIELD_HOOK_DEADLINE that is not a number in that range means the default, 30")
     parser.add_argument("--judge-outputs", action="store_true",
                         help="the judge also reads each tool result the rules pass, for plain-language injections "
                              "(one request per result: latency, and free-tier quota)")
@@ -1403,11 +1538,13 @@ def main(argv: list[str] | None = None) -> None:
             if event.get("hook_event_name") in translation.CALL_EVENTS:
                 for note in guard.translation.overrides():   # a project's settings can set these: never silently
                     print(f"IntentShield: {note} replaces what the hook would detect", file=sys.stderr)
+        guard.from_harness = translation.harness_running(args.harness)
         reply = handle(args.harness, event, guard)
     except Exception as exc:  # fail closed on calls, open on everything else
         name = event.get("hook_event_name")
         print(f"IntentShield hook failed: {exc}", file=sys.stderr)
-        if name in ("PreToolUse", "BeforeTool", "beforeMCPExecution", "beforeShellExecution", "beforeReadFile"):
+        if name in ("PreToolUse", "BeforeTool", "beforeMCPExecution", "beforeShellExecution", "beforeReadFile") or (
+                args.builtin_tools and translation.looks_like_call(event)):  # a tool under a name this hook does not know
             _REPLY.acquire()  # the deadline's refusal, if it was first, ends the process; this one is the same refusal
             sys.exit(2)
         if name in ("PostToolUse", "PostToolUseFailure", "AfterTool", "afterMCPExecution", "afterShellExecution"):
@@ -1452,7 +1589,7 @@ def _arm_deadline(harness: str, seconds: float) -> threading.Timer:
             sys.stdout.flush()
             os._exit(0)
 
-    timer = threading.Timer(seconds, fire)
+    timer = threading.Timer(min(seconds, MAX_DEADLINE), fire)
     timer.daemon = True
     timer.start()
     return timer

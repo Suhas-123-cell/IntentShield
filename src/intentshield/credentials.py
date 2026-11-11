@@ -150,8 +150,11 @@ _BASES = {"dec": 10, "dec4": 10, "oct": 8}
 
 def _unescaped(text: str) -> str:
     def escape(m: re.Match[str]) -> str:
+        name = m.lastgroup
+        if name is None:
+            return m[0]
         try:
-            return chr(int(m[m.lastgroup], _BASES.get(m.lastgroup, 16)))
+            return chr(int(m[name], _BASES.get(name, 16)))
         except (ValueError, OverflowError):
             return m[0]
 

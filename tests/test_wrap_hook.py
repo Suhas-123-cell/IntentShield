@@ -12,6 +12,7 @@ import sys
 import time
 
 import pytest
+from timelimits import limit
 
 from intentshield import translation, wrap_hook
 
@@ -112,7 +113,7 @@ def test_a_shell_string_with_a_dead_interpreter_is_refused(tmp_path):
 def test_a_guard_still_running_at_the_deadline_is_refused_and_killed(tmp_path):
     t0 = time.monotonic()
     _c, reply, _t, _e = run("claude", guard(tmp_path, GEMINI_DENY, sleep=20), deadline=1.0)
-    assert time.monotonic() - t0 < 6
+    assert time.monotonic() - t0 < limit(6)
     decision, reason = verdict(reply)
     assert decision == "deny" and "did not answer within 1 s" in reason and "Do not retry" in reason
 
@@ -128,7 +129,7 @@ def test_the_deadline_is_kept_under_the_harness_timeout():
 def test_the_hook_timeout_bounds_a_slow_guard(tmp_path):
     t0 = time.monotonic()
     _c, reply, _t, _e = run("claude", guard(tmp_path, CLAUDE_DENY, sleep=20), deadline=30, hook_timeout=3)
-    assert time.monotonic() - t0 < 5
+    assert time.monotonic() - t0 < limit(5)
     assert verdict(reply)[0] == "deny"
 
 

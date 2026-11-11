@@ -40,6 +40,7 @@ class Hit:
     decision: str
     reason: str
     trigger: str = ""   # the path or text a user may have asked for, to soften a deny to an ask
+    escalate: bool = False  # an ask that is a deny where the text is written to a file that runs later, unseen
 
 
 @dataclass
@@ -65,10 +66,26 @@ _OPS = frozenset({"|", "&&", "||", ";", "&", "|&", ";;", "(", ")", "<(", ">("})
 _REDIRECTS = frozenset({">", ">>", ">|", "&>", "&>>", "<", "<<<", ">&", "<&", "<>"})
 _WRAPPERS = frozenset({"nohup", "time", "command", "exec", "nice", "ionice", "setsid", "stdbuf", "caffeinate", "builtin",
                        "timeout", "chronic", "unbuffer", "xargs", "watch", "doas", "env", "sudo"})
+# Shell reserved words that start a command on the same line (``if x; then rm -rf /; fi``, ``{ rm -rf /; }``, ``! rm``):
+# the command is what follows them.
+_KEYWORDS = frozenset({"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}", "time", "coproc"})
 _SUDO_VALUED = frozenset({"-u", "-g", "-h", "-p", "-C", "-r", "-t", "-D", "-U", "-T", "--user", "--group", "--host"})
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish", "ash", "csh", "tcsh"})
 _INTERPRETERS = frozenset({"python", "python3", "python2", "perl", "ruby", "node", "php", "deno", "bun", "lua", "pwsh"})
 _FETCHERS = frozenset({"curl", "wget", "fetch", "aria2c", "lwp-download", "http", "https", "xh"})
+
+
+def _strip_keywords(argv: list[str]) -> list[str]:
+    """``argv`` without the reserved words at its front (``then``, ``do``, ``{``, ``!``...) and without ``function NAME``."""
+    i = 0
+    while i < len(argv):
+        if argv[i] in _KEYWORDS:
+            i += 1
+        elif argv[i] == "function" and i + 1 < len(argv):
+            i += 2
+        else:
+            break
+    return argv[i:]
 
 
 def _bin(word: str) -> str:
@@ -212,9 +229,46 @@ def _mask_data(text: str) -> str:
     return "".join(buf)
 
 
+_ANSI_C = re.compile(r"\$'((?:[^'\\]|\\.){0,2000})'")
+_ANSI_SIMPLE = {"n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "v": "\v",
+                "\\": "\\", "'": "'", '"': '"', "?": "?"}
+
+
+def _decode_ansi_c(match: re.Match[str]) -> str:
+    """``$'\\x72m'`` is the word ``rm`` to bash: the quoted text with its escapes decoded, as a plain single-quoted word."""
+    body, out, i = match[1], [], 0
+    while i < len(body):
+        c = body[i]
+        if c != "\\" or i + 1 >= len(body):
+            out.append(c)
+            i += 1
+            continue
+        n = body[i + 1]
+        if n in _ANSI_SIMPLE:
+            out.append(_ANSI_SIMPLE[n])
+            i += 2
+        elif n in "xuU" or n in "01234567":
+            digits, base, width = ("", 16, {"x": 2, "u": 4, "U": 8}[n]) if n in "xuU" else (n, 8, 3)
+            j = i + 2
+            while j < len(body) and len(digits) < width and body[j] in ("0123456789abcdefABCDEF" if base == 16 else "01234567"):
+                digits += body[j]
+                j += 1
+            try:
+                out.append(chr(int(digits, base)) if digits else "\\" + n)
+            except (ValueError, OverflowError):
+                out.append("?")
+            i = j
+        else:
+            out.append("\\" + n)
+            i += 2
+    return "'" + "".join(out).replace("'", "'\\''") + "'"
+
+
 def _stages(text: str) -> list[_Stage] | None:
     """The simple commands of ``text``, or None when it cannot be tokenized (unbalanced quotes)."""
     text = _strip_heredocs(text[:_MAX]).replace("\r", " ").replace("\n", " ; ")
+    if "$'" in text:
+        text = _ANSI_C.sub(_decode_ansi_c, text)
     lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     lexer.commenters = ""
@@ -241,6 +295,7 @@ def _stages(text: str) -> list[_Stage] | None:
 
     def flush() -> None:
         nonlocal argv, redirects, piped
+        argv = _strip_keywords(argv)
         if argv or redirects:
             stages.append(_Stage(argv, redirects, piped, pipeline))
         argv, redirects, piped = [], [], False
@@ -282,6 +337,7 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[str]]:
     sudo, assigns = stage.sudo, list(stage.assigns)
     inner: list[str] = []
     for _ in range(8):
+        argv = _strip_keywords(argv)
         while argv and _ASSIGN.match(argv[0]):
             assigns.append(argv.pop(0))
         if not argv:
@@ -393,7 +449,8 @@ _ENV_SAMPLE = re.compile(r"\.(?:example|sample|template|dist|defaults|schema|tpl
 _CLOUD_FILES = re.compile(r"(?:^|/)(?:\.aws/(?:credentials|sso/cache|cli/cache)|\.vault-token|\.config/gcloud/"
                           r"(?:credentials\.db|access_tokens\.db|application_default_credentials\.json|legacy_credentials)|"
                           r"\.gnupg/(?:private-keys-v1\.d|secring\.gpg|trustdb\.gpg)|library/keychains|\.local/share/keyrings)")
-_SOFT_FILES = re.compile(r"(?:^|/)(?:\.kube/config|\.docker/config\.json|\.npmrc|\.pypirc|\.azure/(?:accesstokens|msal)|"
+_SOFT_FILES = re.compile(r"(?:^|/)(?:\.kube/config|\.docker/config\.json|\.npmrc|\.pypirc|\.azure/(?:accesstokens|msal|credentials)|"
+                         r"\.config/doppler/|\.doppler\.ya?ml|"
                          r"\.config/gcloud|\.config/gh/hosts\.yml|\.config/hub|\.terraform\.d/credentials|\.heroku/|"
                          r"\.config/doctl|\.config/op/|\.pgpass|\.my\.cnf|\.s3cfg|\.boto|\.gnupg|\.password-store/|\.cargo/credentials|"
                          r"\.config/rclone/rclone\.conf|\.oci/config|\.git-credentials)")
@@ -401,7 +458,10 @@ _ETC_SECRET = re.compile(r"^/(?:private/)?etc/(?:shadow|gshadow|master\.passwd|s
 _PROC_SECRET = re.compile(r"^/proc/(?:self|\d{1,8})/(?:environ|mem|maps)$")
 _BROWSER = re.compile(r"(?:chrome|chromium|firefox|mozilla|brave|safari|microsoft edge|vivaldi)")
 _BROWSER_FILE = re.compile(r"(?:^|/)(?:login data|cookies|cookies\.sqlite|logins\.json|key[34]\.db|web data)$")
-_KEYISH = re.compile(r"\.(?:pem|p12|pfx|ppk|key|keystore|jks|asc)$")
+_KEYISH = re.compile(r"\.(?:p12|pfx|ppk|key|keystore|jks)$")
+_PEMISH = re.compile(r"\.(?:pem|asc)$")
+# A .pem or .asc that is a certificate, a CA bundle or a public key (the usual ones), unless the name says private or secret.
+_PUBLIC_NAME = re.compile(r"(?:^|[-_.])(?:certs?|certificates?|chain|fullchain|ca|bundle|pub|public|sig|signature)(?:[-_.]|$)")
 _APP_SECRET = re.compile(r"(?:^|/)(?:credentials\.json|client_secrets?[\w-]{0,20}\.json|service[-_]?account[\w-]{0,30}\.json|"
                          r"secrets\.(?:ya?ml|json|toml)|terraform\.tfstate|[\w-]{1,30}\.tfvars)$")
 
@@ -435,6 +495,10 @@ def _cred_level(path: str) -> tuple[str, str] | None:
         return ASK, "a browser credential store"
     if _KEYISH.search(base) or _APP_SECRET.search(n):
         return ASK, "a key or secret file"
+    if _PEMISH.search(base):
+        private = bool(re.search(r"priv|secret", base))
+        if private or (base.endswith(".pem") and not _PUBLIC_NAME.search(base)):
+            return ASK, "a key or secret file"
     return None
 
 
@@ -559,7 +623,7 @@ def persistence_path(path: str) -> tuple[str, str] | None:
 
 def path_risk(path: str) -> bool:
     """True for a path the file rules look at."""
-    return bool(_cred_level(path) or persistence_path(path))
+    return bool(_cred_level(path) or persistence_path(path) or guard_surface(path))
 
 
 def _git(argv: list[str]) -> tuple[str, list[str], list[str]]:
@@ -735,6 +799,11 @@ def _disk_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
     return None
 
 
+_BREW_DIRS = frozenset({"/usr/local", "/usr/local/bin", "/usr/local/lib", "/usr/local/share", "/usr/local/etc", "/usr/local/include",
+                        "/usr/local/sbin", "/usr/local/var"})
+_OWN_NAME = re.compile(r"\$\{?(?:USER|LOGNAME)\}?(?::\$?\{?[\w-]{0,40}\}?)?")
+
+
 def _mode_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
     flags = [a for a in argv[1:] if a.startswith("-") and len(a) > 1 and not a[1:].isdigit()]
     pos = [a for a in argv[1:] if a not in flags]
@@ -762,6 +831,10 @@ def _mode_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
         if _SETUID.search(mode) and targets:
             return Hit(ASK, f"chmod {mode} sets a setuid or setgid bit{note}.")
         return None
+    if (name in ("chown", "chgrp") and recursive and prot and _OWN_NAME.fullmatch(mode)
+            and all(_norm(t) in _BREW_DIRS for t in prot)):
+        # Homebrew's own advice: `sudo chown -R $(whoami) /usr/local/...`. One ask, not a refusal.
+        return Hit(ASK, f"recursive {name} of {prot[0]} to the current user{note}.", prot[0])
     if recursive and prot and (_norm(prot[0]) != "~" or sudo) and any(_norm(t) != "~" for t in prot):
         return Hit(DENY, f"recursive {name} on {prot[0]}{note}.", prot[0])
     if recursive and prot:
@@ -803,7 +876,7 @@ def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
     elif name == "defaults" and "write" in args and any("LoginItems" in a or "loginwindow" in a for a in args):
         return Hit(ASK, "defaults write sets up a login item.")
     for t in targets:
-        hit = persistence_path(t)
+        hit = persistence_path(t) or guard_surface(t)
         if hit:
             return Hit(hit[0], f"writes {t}, {hit[1]}.", t)
     return None
@@ -859,8 +932,18 @@ def _data_files(name: str, argv: list[str]) -> list[str]:
     return out
 
 
-def _sensitive_source(path: str) -> bool:
-    return path == "-" or bool(_cred_level(path)) or _protected(path) or bool(re.search(r"(?:^|/)\.(?:ssh|aws|gnupg|kube)(?:/|$)", _norm(path)))
+def _source_level(paths: list[str]) -> str | None:
+    """DENY when one of the paths a command sends out is a key, a cloud credential, a system secret or a protected directory,
+    ASK when it is only an ``.env``, a kube config or another file that holds secrets, None otherwise."""
+    level = None
+    for path in paths:
+        cred = _cred_level(path)
+        if (path == "-" or _protected(path) or (cred and cred[0] == DENY)
+                or re.search(r"(?:^|/)\.(?:ssh|aws|gnupg|kube)(?:/|$)", _norm(path))):
+            return DENY
+        if cred:
+            level = ASK
+    return level
 
 
 # Options of the copy tools whose next word is a setting (an identity file, a remote shell), not a file that is sent.
@@ -876,14 +959,15 @@ def _net_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool
         hosts = _remote_hosts(argv) or ([] if any(shell.is_loopback(v) for a in argv[1:] for v in shell.network_values(a)) else ["?"])
         if not hosts:
             return None
-        named = all(h.lower() in intent.lower() for h in hosts if h != "?") and "?" not in hosts
+        named = all(_named(h, intent) for h in hosts if h != "?") and "?" not in hosts
         files = [f for f in _data_files(name, argv) if f]
         if named:  # a destination the user named takes their files, unless it is a key or a cloud credential
             files = [f for f in files if (_cred_level(f) or ("", ""))[0] == DENY or f != "-" and _protected(f)]
         stdin_data = "-" in files or stage.piped and any(a in ("-d", "@-", "--data-binary", "-T") or a.endswith("@-") for a in argv[1:])
         for f in files:
-            if f != "-" and _sensitive_source(f):
-                return Hit(DENY, f"uploads {f}, a sensitive file, to {hosts[0]}.", f)
+            if f != "-" and (level := _source_level([f])):
+                return Hit(level, f"uploads {f}, a sensitive file, to {hosts[0]}." if level == DENY else
+                           f"uploads {f}, a file that holds secrets, to {hosts[0]}; confirm it.", f, escalate=True)
         if sensitive_upstream and (stdin_data or files):
             return Hit(DENY, f"sends credential or home-directory data on to {hosts[0]}.")
         if files and not named:
@@ -908,10 +992,11 @@ def _net_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool
         if any(_REMOTE.match(s) for s in srcs):
             return None
         for s in srcs:
-            if _sensitive_source(s):
-                return Hit(DENY, f"{name} sends {s}, a sensitive path, to {dest}.", s)
+            if level := _source_level([s]):
+                return Hit(level, f"{name} sends {s}, a sensitive path, to {dest}." if level == DENY else
+                           f"{name} sends {s}, a file that holds secrets, to {dest}; confirm it.", s, escalate=True)
         host = dest.partition(":")[0].rpartition("@")[2]
-        if host.lower() in intent.lower() and host:
+        if host and _named(host, intent):
             return None
         return Hit(ASK, f"{name} copies local files to the remote {dest}, which the user did not name.", dest)
     if name in ("nc", "ncat", "netcat", "socat"):
@@ -924,20 +1009,24 @@ def _net_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool
             return None
         if pos and not all(shell.is_loopback(p) for p in pos[:1]):
             fed = [t for op, t in stage.redirects if op == "<"]
-            if any(_sensitive_source(t) for t in fed) or sensitive_upstream:
+            level = _source_level(fed)
+            if level == DENY or sensitive_upstream:
                 return Hit(DENY, f"{name} sends a sensitive file to {pos[0]}.")
+            if level == ASK:
+                return Hit(ASK, f"{name} sends a file that holds secrets to {pos[0]}; confirm it.", pos[0], escalate=True)
             if fed or stage.piped:
                 return Hit(ASK, f"{name} sends data to {pos[0]}.", pos[0])
         return None
     if name in ("mail", "mailx", "sendmail"):
         fed = [t for op, t in stage.redirects if op == "<"]
-        if any(_sensitive_source(t) for t in fed) or sensitive_upstream:
+        level = _source_level(fed)
+        if level == DENY or sensitive_upstream:
             return Hit(DENY, f"{name} mails a sensitive file.")
-        return None
+        return Hit(ASK, f"{name} mails a file that holds secrets; confirm it.", escalate=True) if level == ASK else None
     if name == "aws" and len(argv) > 3 and argv[1] == "s3" and argv[2] in ("cp", "sync", "mv"):
         pos = [a for a in argv[3:] if not a.startswith("-")]
         if len(pos) >= 2 and pos[-1].startswith("s3://") and not pos[0].startswith("s3://"):
-            if any(_sensitive_source(p) for p in pos[:-1]):
+            if _source_level(pos[:-1]) == DENY:
                 return Hit(DENY, f"aws s3 {argv[2]} uploads {pos[0]}, a sensitive path.", pos[0])
             return Hit(ASK, f"aws s3 {argv[2]} uploads local files to {pos[-1]}.", pos[-1])
     return None
@@ -955,6 +1044,243 @@ def _data_flag_before(argv: list[str], arg: str) -> list[bool]:
     return [i > 0 and argv[i - 1] in _CURL_DATA]
 
 
+# --- what the user named --------------------------------------------------------------------------------------
+
+_NEGATION = re.compile(r"\b(?:never|not|no|don'?t|do\s+not|doesn'?t|shouldn'?t|mustn'?t|can'?t|cannot|won'?t|avoid|without|stop|"
+                       r"forbid\w*|prohibit\w*|refuse\w*|nor|neither|instead\s+of|rather\s+than)\b|n't\b", re.I)
+_HOST_LIKE = re.compile(r"[a-z0-9][a-z0-9.-]{2,253}(?::\d{1,5})?", re.I)
+_SENTENCE_END = re.compile(r"[!?\n;]|\.\s")
+
+
+def _named(needle: str, intent: str) -> bool:
+    """True when the user's prompts name ``needle`` itself: a path, host or command that stands alone in the text, not a
+    part of a longer path or host (``/Users/me`` is not named by ``open /Users/me/proj``, ``evil.com`` not by ``notevil.com``),
+    and not in a sentence that forbids it (``never run rm -rf /``, ``don't touch ~/.ssh/id_rsa``)."""
+    needle = needle.strip()
+    if needle[:1] in ("/", "~", "$") and len(needle) > 1:
+        needle = needle.rstrip("/")
+    if len(needle) <= 3 or not intent:
+        return False
+    host = bool(_HOST_LIKE.fullmatch(needle)) and "." in needle and ".." not in needle  # a host sits in a URL (after ``//``, before ``/path`` or ``:port``)
+    for count, m in enumerate(re.finditer(re.escape(needle), intent, re.I)):
+        if count >= 50:
+            break
+        start, end = m.span()
+        before = intent[start - 1:start]
+        if before and (before.isalnum() or before in ("_.-" if host else "_/.~$-")):
+            continue
+        after = intent[end:end + 1]
+        if after and (after.isalnum() or after in "_~$-"):
+            continue
+        if after == "." or (after == "/" and not host):
+            following = intent[end + 1:end + 2]
+            if following and (following.isalnum() or following in "_~$-.*"):
+                continue  # a child path, a file extension or a longer host name
+        sentence = _SENTENCE_END.split(intent[max(0, start - 120):start])[-1]
+        if _NEGATION.search(" ".join(sentence.split()[-6:])):
+            continue
+        return True
+    return False
+
+
+# --- variables, brace expansion and the working directory of one command line ----------------------------------
+
+_VAR_REF = re.compile(r"\$(?:\{(\w{1,40})\}|(\w{1,40}))")
+_MAX_VARIANTS = 8
+_DECLARERS = frozenset({"export", "declare", "readonly", "local", "typeset"})
+_BRACE = re.compile(r"(?<!\$)\{([^{}\s]{0,100},[^{}\s]{0,100})\}")
+# Programs whose arguments are paths that a brace list (``rm -rf {/,}``, ``cat ~/.ssh/{id_rsa,x}``) may spell.
+_EXPANDED = frozenset({"rm", "rmdir", "unlink", "chmod", "chown", "chgrp", "mv", "shred", "truncate", "find"}) | _READERS
+
+
+def _braces(arg: str, depth: int = 0) -> list[str]:
+    """The words bash makes of ``arg`` when it holds a brace list: ``{/,}`` is ``/`` and the empty word."""
+    m = _BRACE.search(arg) if depth < 4 and len(arg) <= 300 else None
+    if not m:
+        return [arg]
+    out: list[str] = []
+    for alt in m[1].split(",")[:16]:
+        out.extend(_braces(arg[:m.start()] + alt + arg[m.end():], depth + 1))
+        if len(out) >= 64:
+            break
+    return out[:64]
+
+
+def _under(cwd: str, arg: str) -> str:
+    """``arg`` as a path from the directory ``cwd`` when it is relative, else as it is."""
+    if not arg or arg.startswith(("-", "/", "~", "$")) or "://" in arg:
+        return arg
+    return _norm(cwd + "/" + arg)
+
+
+def _in_dir(cwd: str, name: str, argv: list[str]) -> list[str]:
+    """``argv`` with the relative paths of the program resolved against ``cwd``, for the programs whose target a
+    ``cd`` before them decides."""
+    head, args = argv[0], argv[1:]
+    if name in ("chmod", "chown", "chgrp"):
+        out, skipped = [], False
+        for a in args:
+            if not skipped and not a.startswith("-"):
+                skipped = True
+                out.append(a)  # the mode or the owner
+            else:
+                out.append(_under(cwd, a))
+        return [head, *out]
+    if name == "find":
+        out, stopped = [], False
+        for a in args:
+            stopped = stopped or a.startswith("-") or a in ("(", "!", ")")
+            out.append(a if stopped else _under(cwd, a))
+        return [head, *out]
+    return [head, *(a if "=" in a or "@" in a else _under(cwd, a) for a in args)]
+
+
+def _cd_target(argv: list[str], cwd: str | None) -> str | None:
+    """The directory a ``cd`` or ``pushd`` moves to: None when it is not known (``cd -``, a variable, a relative path from an
+    unknown directory)."""
+    args = [a for a in argv[1:] if a != "--" and not (a.startswith("-") and a != "-")]
+    if not args:
+        return "~" if _bin(argv[0]) == "cd" else cwd
+    target = args[0]
+    if target == "-" or "$" in target.replace("$HOME", "").replace("${HOME}", "") or "`" in target or "*" in target:
+        return None
+    if target.startswith(("/", "~", "$HOME", "${HOME}")):
+        return _norm(target)
+    return _norm(cwd + "/" + target) if cwd else None
+
+
+def _track(st: _Stage, env: dict[str, list[str]], where: dict[str, Any]) -> None:
+    """What one stage changes for the stages after it: variables it sets (``X=v``, ``export X=v``, ``for x in a b``) and
+    the directory a ``cd``, ``pushd`` or ``popd`` moves to."""
+    bare, _ = _unwrap(st)
+    if not bare.argv:
+        for a in bare.assigns:
+            key, _, value = a.partition("=")
+            if "$" in value or "`" in value:
+                env.pop(key, None)
+            else:
+                env[key] = [value]
+        return
+    name = _bin(bare.argv[0])
+    if name in _DECLARERS:
+        for a in bare.argv[1:]:
+            if _ASSIGN.match(a):
+                key, _, value = a.partition("=")
+                if "$" in value or "`" in value:
+                    env.pop(key, None)
+                else:
+                    env[key] = [value]
+    elif name == "for" and len(bare.argv) >= 4 and bare.argv[2] == "in":
+        words = bare.argv[3:]
+        if any("$" in w or "`" in w for w in words) or len(words) > _MAX_VARIANTS:
+            env.pop(bare.argv[1], None)
+        else:
+            env[bare.argv[1]] = list(words)
+    elif name in ("read", "unset") or name == "mapfile":
+        for a in bare.argv[1:]:
+            env.pop(a, None)
+    elif name in ("cd", "pushd"):
+        if name == "pushd":
+            where.setdefault("stack", []).append(where.get("cwd"))
+        where["cwd"] = _cd_target(bare.argv, where.get("cwd"))
+    elif name == "popd":
+        stack = where.setdefault("stack", [])
+        where["cwd"] = stack.pop() if stack else None
+
+
+def _expand_vars(st: _Stage, env: dict[str, list[str]]) -> list[_Stage]:
+    """The stage with the variables set earlier in the same command line replaced by their values (one stage for each value
+    a ``for`` variable takes): ``RM=rm; $RM -rf /`` is ``rm -rf /``."""
+    if not env:
+        return [st]
+    names = {n for a in [*st.argv, *(t for _, t in st.redirects)] for m in _VAR_REF.finditer(a) for n in (m[1] or m[2],) if n in env}
+    if not names:
+        return [st]
+    combos: list[dict[str, str]] = [{}]
+    for n in sorted(names):
+        combos = [{**c, n: v} for c in combos for v in env[n]][:_MAX_VARIANTS]
+
+    def fill(text: str, values: dict[str, str]) -> str:
+        return _VAR_REF.sub(lambda m: values.get(m[1] or m[2], m[0]), text)
+
+    return [_Stage([fill(a, c) for a in st.argv], [(op, fill(t, c)) for op, t in st.redirects], st.piped, st.pipeline,
+                   st.sudo, list(st.assigns)) for c in combos]
+
+
+# --- the guard's own surface -------------------------------------------------------------------------------------
+
+_GUARD_SURFACE = re.compile(
+    r"(?:^|/)(?:\.claude/(?:settings[\w.-]*\.json|hooks/)|\.codex/(?:config\.toml|hooks\.json)|\.cursor/hooks\.json|"
+    r"\.gemini/settings\.json|\.intentshield(?:/|$)|claude-code/managed-settings[\w.-]*\.json|claudecode/managed-settings\.json)", re.I)
+_SELF_FILES = re.compile(r"(?:^|[;&|(\n]\s{0,5})(?:sudo\s+)?(?:rm|mv|unlink|chmod|chown|truncate|shred|rmdir)\b[^;&|\n]{0,200}"
+                         r"(?:\.intentshield\b|\b(?:hooks|threats)\.db\b|(?:bin/|Scripts/|which\s+|command\s+-v\s+|type\s+-p\s+)"
+                         r"intentshield[\w-]*)")
+_SELF_SQL = re.compile(r"(?:^|[;&|(\n]\s{0,5})sqlite3?\b[^\n]{0,1200}\b(?:hooks|threats)\.db\b", re.I)
+_SQL_WRITE = re.compile(r"\b(?:delete\s+from|drop\s+(?:table|index|view)|update\s+\w|insert\s+(?:or\s+\w+\s+)?into|replace\s+into|"
+                        r"alter\s+table|vacuum)\b", re.I)
+_PACKAGE_MANAGERS = frozenset({"pip", "pip3", "pipx", "uv", "conda", "mamba", "poetry", "pdm", "brew", "python", "python3"})
+_SELF_WRITE_CODE = re.compile(r"\b(?:write|dump|unlink|remove|rmtree|replace|rename|truncate|write_text|copyfile|move)\b|"
+                              r"open\([^)]{0,200}['\"][wa]", re.I)
+
+
+def guard_surface(path: str) -> tuple[str, str] | None:
+    """(decision, why) when ``path`` holds the hook settings of a harness or IntentShield's own state (database, API key):
+    what an agent would change to switch the guard off."""
+    p = path.strip().strip("\"'").replace("\\", "/")
+    if not p or len(p) > 1000:
+        return None
+    n = _norm(p) if p.startswith(("~", "$", "/")) else posixpath.normpath(p)
+    if _GUARD_SURFACE.search(n):
+        return ASK, "the hook settings of a harness or IntentShield's own state, which is how the guard is switched off"
+    return None
+
+
+def _guard_text(data: str, text: str) -> Hit | None:
+    """Commands that delete or change IntentShield's own files or programs, or edit its database, by their text (a command
+    that starts with the program, so a commit message that names them does not count)."""
+    if _SELF_FILES.search(data):
+        return Hit(ASK, "this deletes or changes IntentShield's own files or programs, which switches the guard off.")
+    if _SELF_SQL.search(text) and _SQL_WRITE.search(text):
+        return Hit(ASK, "this edits IntentShield's own database (sessions, taint, threat memory).")
+    return None
+
+
+def _guard_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
+    """A program that deletes, empties or moves a file of the guard's own surface (a harness's hook settings, the state
+    directory). Writes by redirect, ``tee``, ``cp``, ``sed -i`` are read by ``_persist_hit``."""
+    words = [_bin(a) for a in argv[:5]]
+    if "intentshield" in words:
+        rest = argv[words.index("intentshield") + 1:]
+        if rest and rest[0] in ("uninstall", "unwrap", "install", "wrap") and "--dry-run" not in argv:
+            return Hit(ASK, f"intentshield {rest[0]} changes or removes the guard.")
+    if name in _PACKAGE_MANAGERS and any(a in ("uninstall", "remove") for a in argv[1:4]) and any(
+            a.lower().startswith("intentshield") for a in argv[1:]):
+        return Hit(ASK, f"{name} uninstalls the IntentShield package, which removes the guard.")
+    if name in ("rm", "unlink", "rmdir", "truncate", "shred", "mv", "chmod", "chown", "chgrp"):
+        args = [a for a in argv[1:] if not a.startswith("-")]
+        for a in args[:-1] if name == "mv" and len(args) > 1 else args:
+            if (hit := guard_surface(a)):
+                return Hit(hit[0], f"{name} changes {a}, {hit[1]}.", a)
+    if name in _INTERPRETERS:
+        joined = " ".join(argv[1:])
+        if _GUARD_SURFACE.search(joined.replace("\\", "/")) and _SELF_WRITE_CODE.search(joined):
+            return Hit(ASK, "this program's code writes or deletes a file of the guard's own surface (hook settings, IntentShield's state).")
+    return None
+
+
+def _erase_hit(name: str, argv: list[str]) -> Hit | None:
+    """rm, unlink, truncate, shred or mv of a key, a cloud credential file or an access file: not a read, but the way to lose one."""
+    if name not in ("rm", "unlink", "truncate", "shred", "mv"):
+        return None
+    args = [a for a in argv[1:] if not a.startswith("-")]
+    for a in args[:-1] if name == "mv" and len(args) > 1 else args:
+        cred, pers = _cred_level(a), persistence_path(a)
+        found = cred if cred and cred[0] == DENY else pers if pers and pers[0] == DENY else None
+        if found:
+            return Hit(ASK, f"{name} removes or empties {a}, {found[1]}.", a)
+    return None
+
+
 def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
     bare, _ = _unwrap(stage)
     argv = bare.argv
@@ -964,11 +1290,13 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
             if op.startswith(">"):
                 if _device(target):
                     out.append(Hit(DENY, f"redirect into the block device {target}.", target))
-                elif (p := persistence_path(target)):
+                elif (p := persistence_path(target) or guard_surface(target)):
                     out.append(Hit(p[0], f"writes {target}, {p[1]}.", target))
         return out
     name = _bin(argv[0])
     sudo = bare.sudo
+    if name in _EXPANDED and any("{" in a for a in argv[1:]):
+        argv = [argv[0], *(w for a in argv[1:] for w in _braces(a))][:400]
     # text a shell runs: bash -c '...', eval ..., su -c
     if name in _SHELLS or name in ("su", "eval"):
         code = None
@@ -987,8 +1315,8 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
                 out.append(Hit(DENY, f"redirect into the block device {target}.", target))
         elif op == "<<<" and name in _SHELLS and depth < _MAX_DEPTH and not any(not a.startswith("-") or "c" in a[1:] for a in argv[1:]):
             out.extend(_analyse(target, intent, depth + 1, state, sudo))  # bash <<< 'rm -rf /': the string is the program
-        elif op == "<" and _cred_level(target) and _cred_level(target)[0] == DENY and name in _READERS | _NET_SINKS:
-            out.append(Hit(DENY, f"{name} reads {target}, {_cred_level(target)[1]}.", target))
+        elif op == "<" and name in _READERS | _NET_SINKS and (level := _cred_level(target)) and level[0] == DENY:
+            out.append(Hit(DENY, f"{name} reads {target}, {level[1]}.", target))
     # destruction
     if name == "rm" or name == "unlink" or name == "rmdir":
         hit = _rm_hit(argv, sudo)
@@ -1011,6 +1339,9 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
     hit = _disk_hit(name, argv, sudo)
     if hit:
         out.append(hit)
+    for hit in (_erase_hit(name, argv), _guard_hit(name, argv, bare)):
+        if hit:
+            out.append(hit)
     # credential reads
     cred = None
     if name in _READERS or name in _INTERPRETERS:
@@ -1078,19 +1409,21 @@ def _pipe_hits(stages: list[_Stage], intent: str) -> list[Hit]:
         by_pipe.setdefault(s.pipeline, []).append(s)
     for chain in by_pipe.values():
         fetched: str | None = None
-        secret = False
+        secret: str | None = None  # DENY after a key or cloud credential, ASK after an .env or kube config
         for st in chain:
             bare, _ = _unwrap(st)
             if not bare.argv:
                 continue
             name = _bin(bare.argv[0])
             reader = _cred_args(bare.argv) if name in _READERS else None
-            if reader and reader[0] == DENY or (reader and reader[0] == ASK):
-                secret = True
+            if reader and secret != DENY:
+                secret = DENY if reader[0] == DENY else ASK
             if bare.piped and secret and name in _NET_SINKS:
                 host = (_remote_hosts(bare.argv) or ["a remote host"])[0]
                 if name in ("curl", "wget", "nc", "ncat", "netcat", "socat", "scp", "ssh", "ftp", "telnet", "http", "https", "xh"):
-                    out.append(Hit(DENY, f"credential data is piped to {name} for {host}."))
+                    out.append(Hit(secret, f"credential data is piped to {name} for {host}." if secret == DENY else
+                                   f"a file that holds secrets is piped to {name} for {host}; confirm it.",
+                                   escalate=secret != DENY))
             if bare.piped and fetched and (name in _SHELLS or (name in _INTERPRETERS and not [a for a in bare.argv[1:] if not a.startswith("-")]) or name in ("xargs",)):
                 plain = _tls_less(chain)
                 sudo = st.sudo or bare.sudo or any(_bin(x.argv[0]) in ("sudo", "doas") for x in chain if x.argv)
@@ -1186,18 +1519,34 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     if re.search(r"rmtree\(\s{0,3}(?:os\.path\.expanduser\(\s{0,3}['\"]~['\"]\s{0,3}\)|['\"](?:/|~|\$HOME)['\"]|Path\.home\(\)|"
                  r"os\.environ\[['\"]HOME['\"]\])", data):
         hits.append(Hit(DENY, "code that deletes the home or root directory tree."))
+    own = _guard_text(data, text) if depth == 0 else None
+    if own:
+        hits.append(own)
     stages = _stages(text)
     if stages is None:
         return hits
     state_pipe_secret = False
+    env: dict[str, list[str]] = {}
+    where: dict[str, Any] = {"cwd": None, "stack": []}   # the directory after the cd and pushd of this command line
     for k, st in enumerate(stages):
         if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
             hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
         local = dict(state)
         local["prev_secret"] = state_pipe_secret
         st.sudo = st.sudo or sudo
-        found = _stage_hits(st, intent, depth, local)
-        hits.extend(found)
+        for variant in _expand_vars(st, env):
+            found = _stage_hits(variant, intent, depth, local)
+            hits.extend(found)
+            cwd = where["cwd"]
+            if cwd:  # after a cd, a relative target is read from where the cd went
+                bare, _ = _unwrap(variant)
+                name = _bin(bare.argv[0]) if bare.argv else ""
+                if name in _EXPANDED:
+                    moved = _Stage(_in_dir(cwd, name, bare.argv), variant.redirects, variant.piped, variant.pipeline, bare.sudo,
+                                   list(bare.assigns))
+                    if moved.argv != bare.argv:
+                        hits.extend(h for h in _stage_hits(moved, intent, depth, dict(local)) if h not in found)
+        _track(st, env, where)
         if not st.piped:
             state_pipe_secret = False
         if local.get("secret") and not state.get("secret"):
@@ -1216,15 +1565,18 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
 
 
 def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
+    """The hit that decides. A deny becomes an ask only when every deny of the command is for a target the user's prompts name
+    exactly (``_named``: the whole path or host, not a part of a longer one, and not in a sentence that forbids it)."""
     if not hits:
         return None
-    best = next((h for h in hits if h.decision == DENY), hits[0])
-    if best.decision == DENY and best.trigger and len(best.trigger) > 3 and best.trigger in intent:
-        return Hit(ASK, best.reason + " (the user named it, so confirm it)", best.trigger)
-    if best.decision == ASK and best.trigger and len(best.trigger) > 3 and best.trigger in intent and (
-            "did not name" in best.reason):
-        return None
-    return best
+    denies = [h for h in hits if h.decision == DENY]
+    if denies:
+        unnamed = [h for h in denies if not (h.trigger and _named(h.trigger, intent))]
+        if unnamed:
+            return unnamed[0]
+        return Hit(ASK, denies[0].reason + " (the user named it, so confirm it)", denies[0].trigger)
+    left = [h for h in hits if not (h.trigger and "did not name" in h.reason and _named(h.trigger, intent))]
+    return left[0] if left else None
 
 
 def assess_shell(command: str, intent: str = "") -> Hit | None:
@@ -1234,7 +1586,7 @@ def assess_shell(command: str, intent: str = "") -> Hit | None:
     hits = _analyse(command, intent, 0, {})
     if len(command) > _MAX and not any(h.decision == DENY for h in hits):  # the rest was not read: do not pass it as safe
         hits.append(Hit(ASK, f"the command is longer than {_MAX} characters, too long to read in full; check the part after that."))
-    if command.strip() and command.strip() in intent and hits and all(h.decision == DENY for h in hits):
+    if command.strip() and hits and all(h.decision == DENY for h in hits) and _named(command.strip(), intent):
         return Hit(ASK, hits[0].reason + " (the user typed this command, so confirm it)")
     return _worst(hits, intent)
 
@@ -1254,11 +1606,14 @@ def assess_file(path: str, content: Any = None, write: bool = False, intent: str
     hits: list[Hit] = []
     if pers:
         hits.append(Hit(pers[0], f"writing {path}, {pers[1]}.", path))
-        if _MALICIOUS_CONTENT.search(text) or any(h.decision == DENY for h in _analyse(text, intent, 1, {})):
+        if _MALICIOUS_CONTENT.search(text) or any(h.decision == DENY or h.escalate for h in _analyse(text, intent, 1, {})):
             hits.append(Hit(DENY, f"the new text of {path} downloads and runs code, opens a shell or sends data out."))
     cred = _cred_level(path)
     if cred and cred[0] == DENY and path.strip():
         hits.append(Hit(ASK, f"writing {path}, {cred[1]}.", path))
+    own = guard_surface(path)
+    if own:
+        hits.append(Hit(own[0], f"writing {path}, {own[1]}.", path))
     return _worst(hits, intent)
 
 

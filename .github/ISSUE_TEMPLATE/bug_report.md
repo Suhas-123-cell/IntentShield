@@ -14,5 +14,8 @@ The decision (ALLOW / REVIEW / BLOCK, or allow / ask / deny) and what you expect
 **Reproduction**
 The smallest config, hook event or tool call that shows it. Replace real addresses, keys and personal data with benign markers; never paste credentials.
 
+**`intentshield doctor`**
+Its output, if the problem is an install or a hook that did not run (it exits 1 until a harness has run a hook once; see the guide's Troubleshooting).
+
 **Logs**
 Relevant stderr or JSON log lines (decision lines carry run, tool, decision and reason codes, never arguments).

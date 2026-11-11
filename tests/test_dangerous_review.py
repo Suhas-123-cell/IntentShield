@@ -238,8 +238,8 @@ def test_a_version_file_of_the_wrong_shape_is_treated_as_absent(tmp_path, conten
     doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db")   # does not raise
 
 
-@pytest.mark.parametrize("raw,expected", [("abc", 0.0), ("", 0.0), ("2.5", 2.5), ("1e", 0.0)])
-def test_the_deadline_from_the_environment_falls_back_to_none(monkeypatch, raw, expected):
+@pytest.mark.parametrize("raw,expected", [("abc", 30.0), ("", 0.0), ("2.5", 2.5), ("1e", 30.0)])
+def test_the_deadline_from_the_environment_falls_back_to_the_default(monkeypatch, raw, expected):
     monkeypatch.setenv("INTENTSHIELD_HOOK_DEADLINE", raw)
     assert _env_seconds("INTENTSHIELD_HOOK_DEADLINE") == expected
 

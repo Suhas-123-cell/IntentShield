@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from timelimits import limit
 
 from intentshield.mcp_upstream import (
     MCPUpstream,
@@ -514,7 +515,7 @@ def test_a_real_child_that_prints_garbage_and_exits_is_a_bounded_error():
         started = time.monotonic()
         with pytest.raises(MCPUpstreamError) as info:
             await MCPUpstream(config).connect()
-        assert time.monotonic() - started < 30
+        assert time.monotonic() - started < limit(30)
         assert info.value.code.startswith("MCP_") and "Traceback" not in info.value.message
 
     asyncio.run(exercise())

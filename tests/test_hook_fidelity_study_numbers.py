@@ -159,3 +159,50 @@ def test_round_8_detection_headline_figures_in_the_study():
     assert summary["fixtures"]["heldout"] == {"harmful": 166, "benign": 234}
     for fragment in ("137/166", "20/24", "29/29", "10/10", "61/61", "**59 lines (30 invalid, 29 valid)**"):
         assert fragment in STUDY, fragment
+
+
+def test_codex_round4_rows_are_51_not_47():
+    parts = (("r4-gaps", "runs.jsonl"), ("r4-gaps", "nojson-debug", "runs.jsonl"), ("r4-integration", "runs.jsonl"),
+             ("r4-integration", "bisect", "runs.jsonl"))
+    counts = [len(rows("codex", *p)) for p in parts]
+    assert counts == [39, 2, 6, 4]
+    ids = {r["run_id"] for p in parts for r in rows("codex", *p)}
+    assert len(ids) == sum(counts) == 51
+    assert "plus pilots and 51 round-4 rows" in STUDY and "51 run ids, 39 gap runs + 2" in STUDY
+
+
+def _committed_stub_rows() -> list[dict]:
+    gemini = [r for d in ("main", "sweep", "enable-default") for r in rows("gemini", d, "runs.jsonl")]
+    return rows("claude", "all-runs.jsonl") + rows("codex", "runs.jsonl") + gemini
+
+
+def test_the_coding_is_deterministic_over_the_committed_rows():
+    """Re-running the coder (cell grouping, liveness, prediction hit or miss, deviation class, kill criterion) over the committed raw
+    rows gives the same codes: twice in the same order, and under seeded shuffles. This checks the coder; it does not re-run any
+    launch (the 6 cells x 20 repeats determinism run on the stub was not done) and does not re-score a launch from its evidence."""
+    import random
+
+    from hook_fidelity import summarize
+
+    allrows = _committed_stub_rows()
+    assert len(allrows) == 1342
+    first = summarize.summarize(allrows)
+    again = summarize.summarize(allrows)
+    assert summarize.format_report(first) == summarize.format_report(again)
+    assert len(first["table"]) == 507 and first["informative"] == 245
+    assert first["hits"][("docs", True)] == 263 and first["hits"][("docs", False)] == 14
+
+    def same(a: dict, b: dict) -> bool:
+        # only the order of the flip lines (and of dict keys) depends on the order of the input rows
+        def flips(summary: dict) -> list:
+            return sorted((repr(key), sorted(by_build.items())) for key, by_build in summary["flips"])
+
+        return all(a[k] == b[k] for k in a if k != "flips") and flips(a) == flips(b)
+
+    assert same(first, again)
+    for seed in (0, 1, 2):
+        shuffled = allrows[:]
+        random.Random(seed).shuffle(shuffled)
+        other = summarize.summarize(shuffled)
+        assert same(first, other), seed
+        assert sorted(summarize.format_report(other).splitlines()) == sorted(summarize.format_report(first).splitlines())

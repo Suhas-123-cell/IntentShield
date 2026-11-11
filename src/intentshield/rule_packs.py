@@ -55,6 +55,7 @@ import tempfile
 import threading
 import time
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -238,7 +239,8 @@ def compile_pack(pack: Any, verified_by: str | None) -> LoadedPack:
     rules, seen = [], set()
     for entry in entries["rules"][:MAX_RULES]:
         entry = entry if isinstance(entry, dict) else {}
-        rule_id, pattern, target = entry.get("id"), entry.get("pattern"), entry.get("target", "output")
+        rule_id, target = entry.get("id"), entry.get("target", "output")
+        pattern = entry["pattern"] if isinstance(entry.get("pattern"), str) else ""  # not a string: "empty" below
         reason = ("needs an 'id' of letters, digits, '.', '_' or '-'" if not isinstance(rule_id, str)
                   or not _NAME.fullmatch(rule_id) else "duplicate id" if rule_id in seen
                   else f"unknown target {target!r}" if target not in TARGETS
@@ -258,7 +260,7 @@ def compile_pack(pack: Any, verified_by: str | None) -> LoadedPack:
         if reason:
             rejected.append({"rule": str(rule_id)[:64], "reason": reason})
             continue
-        rules.append((rule_id, target, level_of(entry, "review"), compiled))
+        rules.append((str(rule_id), target, level_of(entry, "review"), compiled))
 
     exact: dict[str, tuple[str, str]] = {}
     domains: dict[str, tuple[str, str]] = {}
@@ -406,11 +408,11 @@ class PackSet:
             for fid, own, level in pack.fingerprints:
                 key = f"{pack.name}/{fid}"
                 prints[key] = (pack.name, own, level)
-                for item in own:
-                    index.setdefault(item, []).append(key)
+                for shingle in own:
+                    index.setdefault(shingle, []).append(key)
         self._rules, self._exact, self._domains, self._prints, self._index = rules, exact, domains, prints, index
 
-    def check_values(self, values: set[str], trusted_domains: set[str] = frozenset()) -> list[ThreatMatch]:
+    def check_values(self, values: set[str], trusted_domains: Iterable[str] = frozenset()) -> list[ThreatMatch]:
         """Pack indicators among ``values`` (canonical, already without user-typed and allowlisted ones)."""
         self.refresh()
         matches = []
@@ -432,7 +434,7 @@ class PackSet:
         """Pack rules and fingerprints that already ``readable`` text matches."""
         self.refresh()
         collapsed = " ".join(norm.split())[:MAX_TEXT]  # as learned rules: matching time stays bounded
-        found = [{"name": f"pack:{rule_id}", "pack": pack, "level": level}
+        found: list[dict[str, Any]] = [{"name": f"pack:{rule_id}", "pack": pack, "level": level}
                  for pack, rule_id, rule_target, level, pattern in self._rules
                  if rule_target == target and pattern.search(collapsed)]
         if target != "argument" and self._prints:
