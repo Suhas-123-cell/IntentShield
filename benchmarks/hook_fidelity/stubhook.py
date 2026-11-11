@@ -15,9 +15,9 @@ timeout was honoured.
 Independence: this file imports nothing from IntentShield (not harness.py). The byte tables below are written
 from the vendors' public hook documentation, not from IntentShield's adapters, so a shared reading of the
 code cannot confirm itself. Each table row names the documentation it comes from; none of the rows has had a
-second reader yet (docs/hook-fidelity-study.md section 6), and they are what a hook emitting these exact bytes
-does, not what every guard emits. Replies that are a property of the hook FILE rather than its bytes (R10a a
-file that is not executable, R10b a shebang to a missing interpreter, R13 a missing script) are built by
+second reader yet (section 6 of docs/research-notes/hook-fidelity/hook-fidelity-study.md), and they are what a hook
+emitting these exact bytes does, not what every guard emits. Replies that are a property of the hook FILE rather than its
+bytes (R10a a file that is not executable, R10b a shebang to a missing interpreter, R13 a missing script) are built by
 configs.py, not here.
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # Hook fidelity study: how often do guard hooks run with no human present?
 
-Status: measurement note for `docs/hook-fidelity-study.md` (its section 10, threats to validity, cites the prevalence numbers).
+Status: measurement note for `docs/research-notes/hook-fidelity/hook-fidelity-study.md` (its section 10, threats to validity, cites the prevalence numbers).
 The scripts that produced it are committed (`benchmarks/hook_fidelity/prevalence/`, read-only GitHub code search through `gh`), but they hard-code the scratch directory of the run, and the 378 MB of fetched file text and the list of the 36 repositories are not committed: **the numbers are not reproducible offline from this branch** (section 8). Data collected 2026-10-31, 18:58 to 20:41 UTC (code search) and 20:41 to about 21:30 UTC (file fetches).
 
 ## 1. What was measured, in one paragraph
@@ -252,7 +252,7 @@ Cannot show:
 - Rates over time. Everything is a snapshot of one day, and no query was repeated to measure the engine's run-to-run
   variance (the two unsharded totals I did see twice, 22,912 and 1,672, matched an hour apart).
 - Anything about vendor behaviour. This note does not measure enforcement; the harness cells in
-  `docs/hook-fidelity-study.md` do.
+  `docs/research-notes/hook-fidelity/hook-fidelity-study.md` do.
 - Hook-config snapshot skew: workflow files are read at the commit the index holds; hook files at the default branch
   head on 2026-10-31. A repo can have changed in between, or a workflow may check out another ref.
 
@@ -274,5 +274,5 @@ this should become part of the study, move the scripts under `benchmarks/hook_fi
 regexes.
 
 Compute and access notes: 703 code-search requests and roughly 52,000 raw-file GETs, all read-only, under the user's own
-`gh` login for search. The CLAUDE.md note that `gh` is not logged in was out of date for this session. No claude, codex,
+`gh` login for search. No claude, codex,
 cursor-agent or gemini process was started, and no model API was called.

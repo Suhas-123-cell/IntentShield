@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Regenerates every number of docs/hook-fidelity-corpus.md from the data files, and checks the document against them.
+"""Regenerates every number of docs/research-notes/hook-fidelity/hook-fidelity-corpus.md from the data files,
+and checks the document against them.
 
     python3 benchmarks/hook_fidelity/corpus_counts.py            # prints the derived numbers as JSON
     python3 benchmarks/hook_fidelity/corpus_counts.py --check    # exit 1 unless the stored summary and measured blocks and the
@@ -26,7 +27,7 @@ from counts import derive, derive_measured  # noqa: E402
 CORPUS = ROOT / "results" / "hook-fidelity" / "corpus.json"
 GUARDS = ROOT / "results" / "hook-fidelity" / "guards"
 GITHUB = HERE / "corpus_build" / "github_meta.json"
-DOC = ROOT / "docs" / "hook-fidelity-corpus.md"
+DOC = ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-corpus.md"
 
 
 def derive_all() -> dict:

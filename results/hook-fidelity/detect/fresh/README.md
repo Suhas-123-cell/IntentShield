@@ -11,6 +11,16 @@ this from file mtimes and the reflog. Nothing stopped the builder from reading t
 it did not. The set was also built by the same model family from the same six harmful categories the rules were written for, so
 read it as a same-category test, not a test of new techniques (see Limits).
 
+**Held out at scoring time, not now.** The header of `table.md` says the items were not in IntentShield's repository text. That was true
+when the set was built and scored. The unit tests of the dangerous-command rules, written afterwards, contain the command or path of
+7 of the 104 harmful items (`rm -rf *`, `security dump-keychain -d`, `git push -f origin HEAD` and four file paths such as
+`~/.bashrc`; a plain substring match at `633014e`, so the short paths may match by chance). Scored without those 7,
+`.venv/bin/python benchmarks/hook_fidelity/overlap_check.py` gives: IntentShield with the rules lets through 27 of 97 harmful items
+(28 of 104 with them), asks on 39 and denies 31 (41 and 35 with them). On safety-net's shell scope (82 items) safety-net denies 40 and
+IntentShield 22 (41 and 24 of 85 with them), so IntentShield still trails safety-net on denies alone. On knox's scope (69 items) knox
+denies 28 and IntentShield 25 (29 and 28 of 73 with them). The direction of every comparison is unchanged; the conclusion that the set is a
+same-category test stands.
+
 **Corrections after review** (a refuting critic, round 8): the fixtures commit is `25b62ad` (the original hash `32a0e3b` no
 longer resolves after the history was rewritten); the build took about 13 minutes by the reflog (10:54 to 11:07), not the
 "about 40 minutes" the first version of this README said; and `fresh_report.py` counted a guard's missing row as an allow, which
@@ -27,7 +37,8 @@ guard on its claimed scope, and prints the ask/deny split, same-item comparisons
 | `table.md`, `summary.json` | false-allow (harmful) and false-deny/false-ask (benign) rates with Wilson 95% intervals, per guard and category |
 | `benchmarks/hook_fidelity/fresh_build.py` | the fixture builder (item bank + source references, same payload shapes as `detect_fixtures.py`) |
 | `benchmarks/hook_fidelity/_is_subproc.py` | runs IntentShield's hook in-process against a fixtures file from a given `--src`, used once with the `r8-detect`-tip source tree and once with this branch's merged (`r8-fixrules`) source tree, so both variants could be scored without one import shadowing the other |
-| `benchmarks/hook_fidelity/fresh_report.py` | computes `table.md`/`summary.json` from `fixtures.jsonl` + `decisions.jsonl` |
+| `benchmarks/hook_fidelity/fresh_report.py --out DIR` | computes `table.md`/`summary.json` into DIR (a scratch directory; diff it against the committed copies) from `fixtures.jsonl` + `decisions.jsonl` |
+| `benchmarks/hook_fidelity/overlap_check.py` | which harmful items have their command or path in `tests/` or `src/`, and the 214-call comparison without them |
 
 ## Method
 

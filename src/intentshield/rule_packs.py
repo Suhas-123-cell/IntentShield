@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
+from . import translation
 from .mcp_inspect import readable
 from .signatures import safety_problem
 from .threat_memory import (
@@ -311,7 +312,7 @@ def load(pack: dict[str, Any], trust: Trust) -> LoadedPack:
 
 
 def _write_atomic(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    translation.private_dir(path.parent)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

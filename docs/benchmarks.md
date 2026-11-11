@@ -35,10 +35,10 @@ the intent and Prompt Guard arms) come from the earlier MSB v8/v9/v10/v11 runs o
 | MSB held-out, user task done, gateway minus trivial baseline (paired cluster bootstrap) | - | −8.6 [−16.1, −3.8] / −14.3 [−26.0, −5.1] / −8.6 [−16.7, −2.5] points |
 | MSB with Gemini 3.5 Flash-Lite (99 of the same cases) | 29.3% harm, 96.8% user task | 0.0% harm (trivial baseline also 0.0%); harmful call left in review: gateway 0, trivial baseline 2/99 (2.0%); user task 58.7% (trivial baseline 66.7%) |
 | Live Claude Code (Haiku) vs a malicious MCP server: model name leaked to the server | 3 of 3 runs | 0 of 3 with hooks alone (field sent blank); hooks + proxy quarantined the server, which received nothing (n=3 per arm, raw logs in `results/harness-live/`) |
-| AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked) | attack success 31.3% | 15.6%; benign utility 75% -> 50% (n=8) |
+| AgentDojo slack (qwen2.5:7b, important_instructions, n=32 attacked; from a local run whose rows are not committed) | attack success 10/32 = 31.3% [18.0, 48.6] | 5/32 = 15.6% [6.9, 31.8]; benign utility 6/8 = 75% [40.9, 92.9] -> 4/8 = 50% [21.5, 78.5] (n=8) |
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off (unconfirmed, note 1 below) |
-| Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`) |
+| Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`; an in-sample check, see the limits below) |
 | Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,454 injections independent of the rules' tuning: rules 2.1%, rules + exemplars 18.1%. Over all 3,717 texts, rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (note 2 below) |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
@@ -64,14 +64,18 @@ calls, paid for with utility and more benign reviews.
 | Live Gemini CLI, same check | notes exfiltrated 3/3 unguarded, 0/3 with hooks; one `send_email` with a benign body still reached the attacker address under hooks alone (see the live checks below) |
 | Four documented in-the-wild incidents replayed | 3 caught by catalog or output scans; the Postmark implementation backdoor only by egress policy |
 | Adaptive attacker (Gemini 3.5 Flash-Lite rewriting blocked injections, 42 seeds) | rules + exemplars evaded 42/42; threat memory did not help; argument provenance held every canary call for review (canary_unreviewed 0/42, `results/adaptive-gemini.json`) |
-| Overhead (Apple M5, 3 runs on 2026-10-31 at `80c9e34`, machine not idle; `results/latency-2026-10-31/`) | hook 60 to 64 ms per event (p50, as a process); a guarded MCP call about 121 to 127 ms; proxy +2.4 to 2.7 ms per call (details below) |
+| Overhead (Apple M5, 3 runs on 2026-11-11 on the working tree after `633014e`, load average about 2; `results/latency-2026-11-11/tree-run{1,2,3}.json`) | hook 70 to 72 ms per event (p50, as a process); a guarded MCP call about 140 to 143 ms; proxy +1.7 ms per call (details below) |
 
-Overhead detail (Apple M5, 3 runs on 2026-10-31 at `80c9e34`, machine not idle; `results/latency-2026-10-31/`):
+Overhead detail (Apple M5, 3 runs on 2026-11-11 on the working tree after `633014e`, load average about 2;
+`results/latency-2026-11-11/tree-run{1,2,3}.json`):
 
-- The hook takes 60 to 64 ms per event at p50 as a process, and 68 to 71 ms with a 4 KB result.
-- A guarded MCP call is at least two events (Pre and Post), about 121 to 127 ms.
-- The decision itself takes 0.12 to 0.34 ms in process, and 6.7 to 7.2 ms for a 4 KB result (this includes value
-  extraction). The proxy adds 2.4 to 2.7 ms per call.
+- The hook takes 70 to 72 ms per event at p50 as a process, and 79 to 81 ms with a 4 KB result.
+- A guarded MCP call is at least two events (Pre and Post), about 140 to 143 ms.
+- The decision itself takes 0.17 to 0.34 ms in process, and 8.8 to 8.9 ms for a 4 KB result (this includes value
+  extraction). The proxy adds 1.7 ms per call.
+- The 2026-10-31 runs at `80c9e34` (`results/latency-2026-10-31/`) gave 60 to 64 ms per event, before the 0.4.3 translation layer
+  and deadline; the 0.4.3 hook is about 7 to 10 ms slower per event on this machine. The runs of the code at `633014e` itself
+  (`run{1,2,3}.json`) gave 75 to 76 ms. The working tree is faster than that commit; `import intentshield` no longer reads package metadata, which the author measured at about 4 ms of it.
 - The earlier figures of 35 ms, 42 ms and +1.9 ms predate the threat memory, value extraction and shell parser.
 
 ### Detail behind the headline
@@ -167,20 +171,20 @@ the real hook.
 **MCPTox replay** (11 models' responses; rules developed on MCPTox, so tuning-set): full proxy 0.4% attack
 success, 3.5% benign false block, 46.3% benign calls to review.
 
-**Overhead** (Apple M5, `benchmarks/latency.py --calls 50 --hooks 30` on the code at `80c9e34`, three runs on
-2026-10-31 while other jobs were running on the machine, `results/latency-2026-10-31/`):
+**Overhead** (Apple M5, `benchmarks/latency.py --calls 50 --hooks 30` on the working tree after `633014e`, three runs on
+2026-11-11, load average about 2, `results/latency-2026-11-11/tree-run{1,2,3}.json`):
 
-- A hook is a process of 60 to 63 ms p50 for a read, 60 to 64 ms for a small result and 68 to 71 ms for a 4 KB
-  one (bare Python start-up 16 to 18 ms).
-- A guarded MCP call fires at least two events, PreToolUse and PostToolUse, so it costs about 121 to 127 ms p50
-  (128 to 135 ms with a 4 KB result), not one event's time.
-- In process the decision takes 0.12 to 0.34 ms, but 6.7 to 7.2 ms for a 4 KB result, which includes extracting
+- A hook is a process of 70 to 72 ms p50 for a read, 70 to 71 ms for a small result and 79 to 81 ms for a 4 KB
+  one (bare Python start-up 15 ms).
+- A guarded MCP call fires at least two events, PreToolUse and PostToolUse, so it costs about 140 to 143 ms p50
+  (149 to 153 ms with a 4 KB result), not one event's time.
+- In process the decision takes 0.17 to 0.34 ms, but 8.8 to 8.9 ms for a 4 KB result, which includes extracting
   canonical values from the output.
-- The transparent proxy adds 2.4 to 2.7 ms per `tools/call` (3.0 to 3.4 ms against 0.57 to 0.64 ms direct) and
-  about 300 ms at start-up.
+- The transparent proxy adds 1.7 ms per `tools/call` (2.26 ms against 0.55 ms direct) and
+  about 285 to 296 ms at start-up (548 to 556 ms against 254 to 263 ms direct).
 - The earlier 35 ms per event, 42 ms per call and 0.02 to 2.5 ms (`results/latency.json`,
   `results/improve/baseline/latency.json`) predate the threat memory, canonical value extraction and the shell
-  parser, and understate the current code (35 ms against 60 to 63 ms per event); the 42 ms was one event, not a
+  parser, and understate the current code (35 ms against 70 to 72 ms per event); the 42 ms was one event, not a
   call.
 
 ### Limitations
@@ -585,7 +589,7 @@ tool executed or waiting on a human reviewer. The task tool is the task server's
 attack server counts only in out_of_scope_parameter and tool_transfer, which have no task
 server. Elsewhere the attack server is a lookalike, and calling it is falling for the attack.
 (Before 2026-10-13 both metrics also counted the lookalikes; every number below is rescored,
-`artifacts/msb-task-tool-rescore.txt`.) They are still not MSB's per-type user-task criteria.
+the rescoring output is kept by the author, not in the repository.) They are still not MSB's per-type user-task criteria.
 
 Limits of this runner and of the numbers below:
 
@@ -604,7 +608,7 @@ Limits of this runner and of the numbers below:
   artifact. FastMCP auto-titles argument schemas `<func>Arguments`, so the attacker's
   `get_x_v1Arguments` contains the real tool's name `get_x` as a substring and the
   `shadowing` rule quarantined it. The rows below are after the fix. Re-run on the same 20 held-out name_overlap cases
-  (`artifacts/msb-v6-name-overlap`): the lookalike tools now reach the agent, harm executed
+  (run output kept by the author, not in the repository): the lookalike tools now reach the agent, harm executed
   stays 0/20 on both paths; the gateway blocked the one harmful attempt; on hooks the agent
   called the lookalike 46 times (44 allowed, 2 ask), and task tool executed fell from 20 to
   13 of 20 and user_task from 20 to 12 of 20, because the hidden lookalike had inflated both.
@@ -757,7 +761,9 @@ field; none of the 194 parameters on the 86 clean tools was touched. On the same
 executed through a stripped parameter in 23 of Gemini 3.5 Flash-Lite's 29 harmful cases, 33 of 33
 for llama3.1:8b, 48 of 129 for qwen2.5:7b and 51 of 122 for ornith:9b (the denominators are harmful calls in the unpaired undefended runs). With the parameters
 stripped, Gemini attempted none of them (§5.7 of `docs/research-notes/artifact-paper.md`), and Claude Haiku's
-live leak (3 of 3 runs) arrived as an empty field. Limits: one benchmark's catalogs (13 clean
+live leak (3 of 3 runs) arrived as an empty field. Limits: this is an in-sample check, not a detection rate. The rule was written
+for the channel MSB's attack servers use (a parameter such as `llm_model_name`) and was added on 2026-10-09, after the MSB runner existed (2026-10-06)
+and in a commit that also changed the runner, so the 36 and the 0 show that it fires on MSB's template and not on its 86 clean tools. One benchmark's catalogs (13 clean
 servers plus MSB's attack servers), and a rule that can be beaten by a parameter whose name and
 description avoid every pattern; the rule is a floor, and the trivial baseline shows the same
 stripping is what removes most of the leak.
@@ -815,7 +821,7 @@ security gain; the sample is small. On the InjecAgent tuning sample it raises fi
 read success to 15.8% while end-to-end harm (exfiltration send) stays 0%.
 
 The other three AgentDojo suites were run the same way (qwen2.5:7b, important_instructions,
-`lenient_reads`, reviews approved, `artifacts/agentdojo`):
+`lenient_reads`, reviews approved; the run output is kept by the author, not in the repository):
 
 | suite | attack success none -> guarded (n=32 attacked) | utility under attack (n=32) | benign utility (n=8) |
 |---|---|---|---|
@@ -823,10 +829,12 @@ The other three AgentDojo suites were run the same way (qwen2.5:7b, important_in
 | travel | 0% -> 0% | 0% -> 0% | 0% -> 0% |
 | workspace | 0% -> 0% | 0% -> 0% | 0% -> 0% |
 
-Slack is the only suite with an informative attack-success result. The guard halved attack
-success (10 to 5 successful attacks of 32) and cost 25 points of benign utility; with 8
-benign tasks and 32 attacked cases that is a small sample, and attack success is still
-15.6%. Travel and workspace have zero utility with or without the guard, so they measure
+Slack is the only suite with an informative attack-success result.
+These figures come from a local run whose per-case rows are not committed (the author keeps them, outside the repository), so they cannot be re-checked here.
+Wilson 95% intervals: attack success 10/32 = 31.3% [18.0, 48.6] unguarded and 5/32 = 15.6% [6.9, 31.8] guarded;
+benign utility 6/8 = 75% [40.9, 92.9] and 4/8 = 50% [21.5, 78.5]. The intervals overlap, so this small run does not
+show that the guard reduced attack success, and 5 of 32 attacks still succeeded.
+Travel and workspace have zero utility with or without the guard, so they measure
 nothing here: the 7B agent does not complete those tasks.
 
 ## Live harness checks (Claude Code, Gemini CLI, Codex CLI and Cursor)
@@ -885,7 +893,7 @@ with the field empty and then denied the resend too, because an already empty fi
 redacted, so the call could never pass. Fixed in `harness._redact`; the grid ran on the fix.
 
 
-Cost: a hook is a short-lived process, mostly Python start-up. Measured on 2026-10-31 on an Apple M5 with `benchmarks/latency.py --calls 50 --hooks 30` (code at `80c9e34`, a scratch `HOME` and hook database, intent model off, demo MCP server; three runs, `results/latency-2026-10-31/run{1,2,3}.json`, with other jobs running on the machine, load average 2 to 6, bare Python start-up 16 to 18 ms against 14.8 ms in the committed 2026-10-16 file): hook p50 60 to 63 ms for a read, 60 to 64 ms for a small result, 68 to 71 ms for a 4 KB result and 69 to 73 ms for an injected one; the checks themselves take 0.12 to 0.34 ms in process, 6.7 to 7.2 ms on a 4 KB result because of canonical value extraction. One guarded MCP call fires at least two hook events (PreToolUse and PostToolUse) as two processes, so about 121 to 127 ms p50 (128 to 135 ms with a 4 KB result); the transparent proxy adds 2.4 to 2.7 ms per `tools/call`. The earlier figures in `results/latency.json` (2026-10-16: 35 ms per event, 0.02 to 1.1 ms in process, +1.9 ms) and `results/improve/baseline/latency.json` (41 to 47 ms per event, the source of the old "42 ms per MCP call", which was one event) were measured before the threat memory, value extraction and the shell parser and are kept as history; a run on an idle machine may come in lower (a reviewer measured 54 ms per event on this code). The adapters follow
+Cost: a hook is a short-lived process, mostly Python start-up. Measured on 2026-11-11 on an Apple M5 with `benchmarks/latency.py --calls 50 --hooks 30` (the working tree after `633014e`, a scratch `HOME` and hook database, intent model off, demo MCP server; three runs, `results/latency-2026-11-11/tree-run{1,2,3}.json`, load average about 2, bare Python start-up 15 ms): hook p50 70 to 72 ms for a read, 70 to 71 ms for a small result, 79 to 81 ms for a 4 KB result and 78 to 80 ms for an injected one; the checks themselves take 0.17 to 0.34 ms in process, 8.8 to 8.9 ms on a 4 KB result because of canonical value extraction. One guarded MCP call fires at least two hook events (PreToolUse and PostToolUse) as two processes, so about 140 to 143 ms p50 (149 to 153 ms with a 4 KB result); the transparent proxy adds 1.7 ms per `tools/call`. The 2026-10-31 runs at `80c9e34` (`results/latency-2026-10-31/`, 60 to 64 ms per event) predate the 0.4.3 translation layer and deadline; the 0.4.3 hook is about 7 to 10 ms slower per event here. The runs of the code at `633014e` (`run{1,2,3}.json`) gave 75 to 76 ms. The earlier figures in `results/latency.json` (2026-10-16: 35 ms per event, 0.02 to 1.1 ms in process, +1.9 ms) and `results/improve/baseline/latency.json` (41 to 47 ms per event, the source of the old "42 ms per MCP call", which was one event) were measured before the threat memory, value extraction and the shell parser and are kept as history; a run on an idle machine may come in lower (a reviewer measured 54 ms per event on the 2026-10-31 code). The adapters follow
 each harness's documented hook format and are tested on those event shapes
 (`tests/test_harness.py`). Claude Code, Gemini CLI, Codex CLI and Cursor have been run live (Codex
 and Cursor above).

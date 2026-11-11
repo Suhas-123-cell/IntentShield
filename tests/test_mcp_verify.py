@@ -199,15 +199,50 @@ def test_stdio_wire_mode_launches_real_downstream_subprocess(tmp_path: Path, mon
     assert report["artifacts"]["verification_mode"] == "stdio_wire"
 
 
-def test_demo_flag_needs_no_config_file_or_path(tmp_path: Path, monkeypatch, capsys):
-    """``--demo`` writes a config that launches the bundled server with this interpreter."""
-    import tempfile
+def test_demo_flag_needs_no_config_file_or_path(monkeypatch, capsys):
+    """``--demo`` writes a config that launches the bundled server with this interpreter, and removes it afterwards."""
+    from intentshield import mcp_verify
 
-    monkeypatch.setattr(tempfile, "mkdtemp", lambda prefix="": str(tmp_path))
+    seen: dict[str, object] = {}
+    real = mcp_verify.demo_config
+
+    def spy(directory: Path) -> Path:
+        path = real(directory)
+        seen["directory"], seen["config"] = directory, json.loads(path.read_text())
+        return path
+
+    monkeypatch.setattr(mcp_verify, "demo_config", spy)
     monkeypatch.setenv("PATH", "")
     assert main(["--demo"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "PASS" and len(report["checks"]) == 13
-    written = json.loads((tmp_path / "mcp-proxy.demo.json").read_text())
+    written = seen["config"]
     assert written["upstreams"][0]["command"] == sys.executable
-    assert written["database_path"] == str(tmp_path / "intentshield-demo.db")
+    assert written["database_path"] == str(seen["directory"] / "intentshield-demo.db")
+    assert not seen["directory"].exists()  # nothing of the demo is left behind
+
+
+def test_a_failed_run_says_on_stderr_which_kind_of_failure_it_was_without_quoting_it(monkeypatch, capsys):
+    from intentshield import mcp_verify
+
+    async def broken(*args, **kwargs):
+        raise ExceptionGroup("group", [RuntimeError("sk-live-0123456789abcdef in a message")])
+
+    monkeypatch.setattr(mcp_verify, "verify_mcp", broken)
+    monkeypatch.setattr(mcp_verify, "_child_stderr_tail", lambda path: "intentshield: the child said why")
+    assert main(["--demo", "--stdio"]) == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "FAIL"
+    assert "FAIL: ExceptionGroup > RuntimeError" in captured.err
+    assert "the child said why" in captured.err
+    assert "sk-live" not in captured.err and "sk-live" not in captured.out
+
+
+def test_a_proxy_that_cannot_start_shows_its_own_message_on_stderr(tmp_path: Path, capsys):
+    config = json.loads(_write_config(tmp_path).read_text())
+    config["upstream"]["command"] = str(tmp_path / "no-such-server")
+    path = tmp_path / "broken.json"
+    path.write_text(json.dumps(config))
+    assert main(["--config", str(path), "--stdio"]) == 1
+    err = capsys.readouterr().err
+    assert "FAIL:" in err and "does not exist" in err

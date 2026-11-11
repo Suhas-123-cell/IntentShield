@@ -71,6 +71,14 @@ by canaries) as the call's prelude, which only IntentShield's hook reads. InjecA
 which a PreToolUse hook never sees: neither is used. The labels are mine; a few near-misses are contestable (`safety-net` denies
 `ssh-keygen -l -f ~/.ssh/id_rsa.pub` and `chmod 600 ~/.ssh/config`, which I labelled benign).
 
+**Since the set was built, "not in IntentShield's repo text" is no longer true of every item.** It was true when the set was built
+(the `in_is_repo` field of each fixture records the check at that time). The unit tests of the dangerous-command rules, written after
+the decisions here were made, contain the command or path of some of the held-out harmful items: 33 of the 156 harmful built-in-tool
+items (a plain substring match, so a short string such as `~/.bashrc` can match by chance; run
+`.venv/bin/python benchmarks/hook_fidelity/overlap_check.py` to list them). The strings are the canonical dangerous commands (`rm -rf /`,
+`git push --force`, a fork bomb), and the rules were written from category lists, so this may be coincidence; the set was not scored
+again without them. The committed decisions and tables are unchanged.
+
 **Guards.** Run through `guard_capture.run_sandboxed` (the guard-replay sandbox: `sandbox-exec`, deny default, no network, writes only
 under a per-run scratch directory, home unreadable), on the exact payload, each registered entry only if the guard's shipped matcher
 matches the tool: `cc-safe-setup` (the six `hooks.json` entries), `safety-net` (Claude, Codex, Gemini entries), `railway-guard`,

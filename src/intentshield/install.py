@@ -185,13 +185,7 @@ def ensure_judge_key(judge: str, home: Path | None = None, api_key: str | None =
 
 def _private_dir(directory: Path) -> None:
     """Creates ``directory``; ``~/.intentshield`` (API keys, prompts, backups) is readable by its owner only."""
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700 if directory.name == ".intentshield" else 0o777)
-    if directory.name == ".intentshield" and os.name == "posix":
-        try:
-            if directory.stat().st_mode & 0o077 and directory.stat().st_uid == os.getuid():
-                directory.chmod(0o700)
-        except OSError:
-            pass
+    translation.private_dir(directory)
 
 
 def _env_path(home: Path | None) -> Path:
@@ -502,7 +496,7 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
         return
     if path.is_symlink():  # a dotfiles link: write its target, not a regular file in its place
         path = path.resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _private_dir(path.parent)
     if path.resolve() in _COMMENTED and strip_json_comments(text) == text:  # JSON has nowhere to keep them
         print(f"warning: {path} has comments or trailing commas, which are not kept when it is rewritten; its original "
               "text is saved and `intentshield uninstall` (or `unwrap`) puts it back, comments included.", file=sys.stderr)
@@ -826,7 +820,7 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
             if not isinstance(server, dict) or not server.get("command") or server.get("url"):
                 # HTTP servers are not launched by the client, so there is no process to stand in front of.
                 print(f"skipped {_label(name, scope)}: not a stdio server (guard HTTP servers with the gateway, "
-                      "see docs/guide.md)")
+                      "see https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/gateway.md#real-mcp-proxy)")
                 continue
             if _is_wrapped(server):
                 continue

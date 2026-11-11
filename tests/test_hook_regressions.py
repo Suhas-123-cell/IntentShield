@@ -574,3 +574,59 @@ def test_a_relative_path_meets_the_absolute_one_an_output_named_through_the_work
                                 tool_response="Keys are kept in /Users/me/proj/secrets/api/keys.json."), g2)
     assert harness.handle("claude", ev(hook_event_name="PreToolUse", tool_name="mcp__mail__send_file",
                                        tool_input={"to": "bob@corp.example", "path": "secrets/api/keys.json"}), g2) is None
+
+
+# --- an environment variable that loosens the guard is never silent ---------------------------------------------------------
+
+LOOSENING = [
+    ("INTENTSHIELD_HOOK_REVIEW", "never"), ("INTENTSHIELD_HOOK_TRANSLATE", "off"), ("INTENTSHIELD_HOOK_DEADLINE", "0"),
+    ("INTENTSHIELD_HOOK_SOURCED_READS", "allow"), ("INTENTSHIELD_THREAT_MEMORY", "0"),
+    ("INTENTSHIELD_HOOK_DB", "/tmp/elsewhere.db"),
+    ("INTENTSHIELD_THREAT_DB", "/tmp/elsewhere-threats.db"), ("INTENTSHIELD_THREAT_PACKS", "/tmp/packs"),
+    ("INTENTSHIELD_HOOK_CATALOG", "/tmp/catalog"),
+]
+
+
+@pytest.fixture
+def no_loosening_variable(monkeypatch):
+    """The suite's own settings (conftest turns the translation off) are not what these tests look at."""
+    for name, _ in LOOSENING:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.parametrize(("name", "value"), LOOSENING)
+def test_each_variable_that_loosens_the_hook_is_named_on_stderr(name, value, no_loosening_variable, monkeypatch):
+    notes = harness.loosening_env([])
+    assert notes == []
+    monkeypatch.setenv(name, value)
+    notes = harness.loosening_env([])
+    assert len(notes) == 1 and notes[0].startswith(f"{name}={value} (from the environment)")
+
+
+@pytest.mark.parametrize(("name", "value"), [
+    ("INTENTSHIELD_HOOK_REVIEW", "always"), ("INTENTSHIELD_HOOK_REVIEW", "tainted"), ("INTENTSHIELD_HOOK_TRANSLATE", "on"),
+    ("INTENTSHIELD_HOOK_DEADLINE", "20"), ("INTENTSHIELD_HOOK_SOURCED_READS", "review"), ("INTENTSHIELD_THREAT_MEMORY", "1"),
+    ("INTENTSHIELD_HOOK_BUILTIN_TOOLS", "1"), ("INTENTSHIELD_HOOK_OUTPUTS", "block"),
+])
+def test_a_variable_that_keeps_or_tightens_the_guard_is_not_reported(name, value, no_loosening_variable, monkeypatch):
+    monkeypatch.setenv(name, value)
+    assert harness.loosening_env([]) == []
+
+
+def test_a_flag_on_the_hook_command_takes_the_place_of_the_variable_and_is_not_reported(no_loosening_variable, monkeypatch):
+    monkeypatch.setenv("INTENTSHIELD_HOOK_REVIEW", "never")
+    assert harness.loosening_env(["--review", "tainted"]) == []
+    assert harness.loosening_env(["--review=tainted"]) == []
+    assert len(harness.loosening_env(["--builtin-tools"])) == 1
+
+
+def test_the_hook_says_so_on_stderr_when_a_call_runs_under_such_a_variable(tmp_path, no_loosening_variable, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(claude("PreToolUse", tool_name="mcp__x__y", tool_input={}))))
+    monkeypatch.setenv("INTENTSHIELD_HOOK_REVIEW", "never")
+    monkeypatch.setenv("INTENTSHIELD_THREAT_MEMORY", "0")
+    harness.main(["claude", "--db", str(tmp_path / "hooks.db"), "--catalog", str(tmp_path / "c")])
+    err = capsys.readouterr().err
+    assert "INTENTSHIELD_HOOK_REVIEW=never (from the environment)" in err and "INTENTSHIELD_THREAT_MEMORY=0" in err
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(claude("UserPromptSubmit", prompt="hi"))))
+    harness.main(["claude", "--db", str(tmp_path / "hooks.db"), "--catalog", str(tmp_path / "c")])
+    assert "from the environment" not in capsys.readouterr().err  # only a call is held to it: no noise on other events

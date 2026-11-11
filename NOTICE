@@ -10,4 +10,4 @@ This repository includes third-party material:
 - results/msb/cases.jsonl, results/injection/ and results/mcptox/: case text and strings derived from the MSB,
   MCPTox, InjecAgent and AgentDojo benchmarks, which remain under their authors' terms; see results/README.md.
 - results/hook-fidelity/: the recorded output of third-party command-line tools (Claude Code, Codex CLI, Gemini CLI
-  and the hook guards named in docs/hook-fidelity-corpus.md) run for measurement.
+  and the hook guards named in docs/research-notes/hook-fidelity/hook-fidelity-corpus.md) run for measurement.

@@ -249,3 +249,58 @@ def test_the_cli_runs_end_to_end_and_exits_zero_with_a_reply(tmp_path):
     done = subprocess.run([sys.executable, "-m", "intentshield", "wrap-hook", "--harness", "claude"], input="{}",
                           capture_output=True, text=True, timeout=60)
     assert done.returncode == 2 and "no guard command" in done.stderr
+
+
+# --- a reply that names a verdict in more than one place ---------------------------------------------------------------------
+
+CONFLICTS = [
+    ({"hookSpecificOutput": {"permissionDecision": "allow"}, "decision": "block", "reason": "no"}, "deny"),
+    ({"hookSpecificOutput": {"permissionDecision": "ask"}, "decision": "block", "reason": "no"}, "deny"),
+    ({"hookSpecificOutput": {"permissionDecision": "deny", "permissionDecisionReason": "no"}, "decision": "approve"}, "deny"),
+    ({"hookSpecificOutput": {"permissionDecision": "allow"}, "permissionDecision": "deny", "reason": "no"}, "deny"),
+    ({"permission": "allow", "decision": "deny", "reason": "no"}, "deny"),
+    ({"decision": "allow", "permission": "ask"}, "ask"),
+    ({"hookSpecificOutput": {"permissionDecision": "allow"}, "decision": "ask", "reason": "sure?"}, "ask"),
+    ({"hookSpecificOutput": {"permissionDecision": "allow"}, "continue": False, "stopReason": "stop"}, "deny"),
+    ({"hookSpecificOutput": {"permissionDecision": "ask"}, "continue": False}, "deny"),
+    ({"hookSpecificOutput": {"permissionDecision": "allow", "decision": "block"}}, "deny"),
+    ({"hookSpecificOutput": {"permissionDecision": "approve"}, "decision": "allow"}, "allow"),
+]
+
+
+@pytest.mark.parametrize(("reply", "expected"), CONFLICTS)
+def test_the_strictest_verdict_of_a_reply_that_names_several_wins(reply, expected):
+    decision, _reason, _passthrough = wrap_hook.classify(0, json.dumps(reply), "")
+    assert decision == expected
+
+
+@pytest.mark.parametrize(("reply", "reason"), [
+    ({"hookSpecificOutput": {"permissionDecision": "allow"}, "decision": "block", "reason": "no"}, "no"),
+    ({"hookSpecificOutput": {"permissionDecision": "ask", "permissionDecisionReason": "sure?"}, "decision": "block"}, "sure?"),
+    ({"hookSpecificOutput": {"permissionDecision": "allow"}, "continue": False}, "the guard asked to stop (continue: false)"),
+])
+def test_a_conflicting_reply_is_refused_with_a_reason(reply, reason):
+    decision, said, passthrough = wrap_hook.classify(0, json.dumps(reply), "")
+    assert decision == "deny" and said == reason and not passthrough
+
+
+def test_a_conflicting_reply_is_not_passed_through_to_the_harness(tmp_path):
+    reply = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"},
+             "decision": "block", "reason": "no"}
+    code, sent, text, _err = run("claude", guard(tmp_path, json.dumps(reply)))
+    assert code == 0 and verdict(sent) == ("deny", "no") and "allow" not in text
+
+
+def test_a_verdict_that_is_not_text_in_any_place_is_malformed_even_beside_a_valid_one():
+    for reply in ({"decision": "block", "permission": 3},
+                  {"hookSpecificOutput": {"permissionDecision": ["deny"]}, "decision": "allow"},
+                  {"decision": "deny", "permission": "maybe"}):
+        decision, reason, _ = wrap_hook.classify(0, json.dumps(reply), "")
+        assert decision == "deny" and "malformed" in reason
+
+
+def test_the_help_is_plain_text_a_pip_user_can_follow():
+    text = wrap_hook.build_parser().format_help()
+    assert "``" not in text and "translation." not in text and "results/" not in text and ".py" not in text
+    assert "exit 2" in text and "--on-empty" in text and "strictest" in text
+    assert "https://github.com/" in text

@@ -103,7 +103,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         )
     except ImportError as exc:
         raise RuntimeError(
-            "training dependencies are missing; install requirements-ml.txt"
+            "training dependencies are missing; install requirements-ml.txt from a clone of the repository"
         ) from exc
 
     dataset_path = Path(args.dataset).resolve()

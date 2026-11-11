@@ -16,7 +16,7 @@ sys.path.insert(0, str(BENCH))
 import report_numbers as rn  # noqa: E402
 
 REPORT = (ROOT / "docs" / "hook-fidelity-report.md").read_text()
-STUDY = (ROOT / "docs" / "hook-fidelity-study.md").read_text()
+STUDY = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md").read_text()
 CONTRIBUTION = (ROOT / "docs" / "contribution.md").read_text()
 HISTORY = (ROOT / "docs" / "research-notes" / "contribution-history.md").read_text()
 
@@ -47,9 +47,9 @@ def test_report_matrix_and_findings_are_the_recomputed_ones():
 def test_report_headline_figures():
     rows = rn.stub_rows()
     f = rn.findings(rows)
-    assert f["deny"].startswith("deny enforced where the hook ran: 66 of 66 builds, 220/220 ")
-    assert "84 deterministic cells on 66 builds" in f["deny"] and "bounds repeatability, not a population rate" in f["deny"]
-    assert "47 of 273" in f["deny"]
+    assert f["deny"].startswith("deny enforced where the hook ran: 65 of 65 builds, 218/218 ")
+    assert "83 deterministic cells on 65 builds" in f["deny"] and "bounds repeatability, not a population rate" in f["deny"]
+    assert "47 of 271" in f["deny"]
     assert f["ask_claude"].endswith("last RAN 2.1.84, first BLOCKED 2.1.85")
     assert f["ask_gemini"].endswith("last RAN 0.37.2, first HUNG 0.38.0")
     assert "Gemini CLI BLOCKED on 22 of 26, RAN on 4 of 26" in f["fail_dead"]
@@ -104,8 +104,8 @@ def test_study_points_to_the_report_and_opens_with_a_five_line_status():
 
 def test_the_order_of_writing_is_stated_as_the_authors_word_everywhere():
     pattern = re.compile(r"registered in advance|before any matrix run|author-registered|advance registration", re.I)
-    files = [ROOT / "docs" / name for name in ("hook-fidelity-report.md", "hook-fidelity-study.md", "contribution.md")]
-    files += sorted((ROOT / "docs" / "research-notes").glob("*.md")) + [ROOT / "results" / "hook-fidelity" / "README.md"]
+    files = [ROOT / "docs" / name for name in ("hook-fidelity-report.md", "contribution.md")]
+    files += sorted((ROOT / "docs" / "research-notes").rglob("*.md")) + [ROOT / "results" / "hook-fidelity" / "README.md"]
     files += sorted(BENCH.glob("*.py"))
     for path in files:
         for line in path.read_text().splitlines():
@@ -237,7 +237,7 @@ def test_the_checker_catches_the_slip_it_was_written_for():
 def test_no_percentage_in_the_study_documents_disagrees_with_its_k_over_n():
     docs = ROOT / "docs"
     files = sorted(docs.glob("hook-fidelity-*.md")) + [docs / "contribution.md", docs / "coverage-study.md"]
-    files += sorted((docs / "research-notes").glob("*.md")) + [ROOT / "results" / "README.md"]
+    files += sorted((docs / "research-notes").rglob("*.md")) + [ROOT / "results" / "README.md"]
     files += [p for p in sorted((ROOT / "results" / "hook-fidelity").rglob("README.md")) if "vendor-archive" not in p.parts]
     bad = {path.name: percentage_mismatches(path.read_text()) for path in files}
     assert not {name: found for name, found in bad.items() if found}

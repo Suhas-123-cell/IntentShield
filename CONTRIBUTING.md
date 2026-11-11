@@ -19,6 +19,17 @@ uv pip install --python .venv/bin/python -r requirements-ml.txt
 
 A plain `uv sync` removes them again. CI runs without them (`uv sync --extra dev --frozen`), so a new third-party import must be declared in `pyproject.toml` (then `uv lock`); the local `.venv` can hide a missing declaration.
 
+## Sending a change
+
+Fork the repository on GitHub, branch from `main`, make the change with its tests, run the gates under
+[Tests and lint](#tests-and-lint), and open a pull request against `main`; the pull-request template lists what to include.
+Contributions are licensed under the Apache License 2.0, the licence of the project ([LICENSE](LICENSE)): what you send is
+licensed to the project and to everyone who uses it on the same terms (inbound = outbound), and you confirm you have the right to
+send it. There is no separate contributor agreement.
+
+Questions, and ideas you want to talk over before writing code, go in a [GitHub issue](https://github.com/Suhas-123-cell/IntentShield/issues).
+There is no discussion board or chat.
+
 ## What contributions are wanted
 
 - **False-positive reports.** A call, tool result or command the guard refused or asked about that was fine. Include the
@@ -120,12 +131,12 @@ A change a user can see (a flag, a message, a decision, a fix) gets one line in 
 
 ## Releasing
 
-For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the wheel (`.github/workflows/publish.yml`), so before it:
+For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the wheel (`.github/workflows/publish.yml`), so before it. The workflow's first step stops the release unless `pyproject.toml`, `CITATION.cff`, `uv.lock` and a `## X.Y.Z - date` heading in `CHANGELOG.md` name the same version and the tag is `vX.Y.Z`; it then runs `twine check` and installs the wheel in a clean environment (`intentshield --help`, `intentshield demo`, the README's demo one-liner).
 
-1. Set the version in `pyproject.toml` and in `CITATION.cff` (`version` and `date-released`).
+1. Set the version in `pyproject.toml` and in `CITATION.cff` (`version` and `date-released`), then run `uv lock` and commit `uv.lock`: the lock records the package's own version, and a later non-frozen `uv sync` would otherwise rewrite it and leave the tree dirty.
 2. In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z - YYYY-MM-DD` and start a new empty `## Unreleased` above it.
 3. Check that no document still calls a released feature unreleased: `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
-4. Run the tests and lint as above, and check the wheel's rendered description on TestPyPI: PyPI does not rewrite the README's relative links.
+4. Run the tests, `ruff` and `mypy` as above, and check the wheel's rendered description on TestPyPI: PyPI does not rewrite the README's relative links.
 
 ## Benchmark numbers
 

@@ -1,8 +1,9 @@
-# Running IntentShield: hooks, proxy, gateway and API
+# Running IntentShield: hooks, proxy, scan and troubleshooting
 
 This guide covers what the [README](../README.md) leaves out: guarding an agent harness with hooks and the
-transparent proxy, what to do when the guard blocks something legitimate, troubleshooting, threat memory, and the
-gateway, dashboard and REST API. A feature marked "since 0.4.3" needs that version or a later one.
+transparent proxy, what to do when the guard blocks something legitimate, scanning the servers you already use, wrapping a
+third-party hook, threat memory, and troubleshooting. The gateway, dashboard, REST API and production settings are in
+[gateway.md](gateway.md). A feature marked "since 0.4.3" needs that version or a later one.
 
 ## Contents
 
@@ -13,51 +14,44 @@ gateway, dashboard and REST API. A feature marked "since 0.4.3" needs that versi
 | cut the tokens spent on tool descriptions | [Point the model at the right tool](#point-the-model-at-the-right-tool) |
 | understand a refusal or a prompt, or stop a false positive | [When the guard blocks or asks about something legitimate](#when-the-guard-blocks-or-asks-about-something-legitimate) |
 | run another guard's hook with a deadline and a fail-closed launcher | [Wrapping a third-party hook](#wrapping-a-third-party-hook) |
+| check the MCP servers you already use | [Scan the servers you use](#scan-the-servers-you-use) |
 | check that the install works, or fix it | [Troubleshooting](#troubleshooting) |
 | let the guard learn attacks, or ship new rules as data | [Adaptive threat memory and threat packs](#adaptive-threat-memory-and-threat-packs) |
-| see the list of features | [What is implemented](#what-is-implemented) |
-| put the gateway or the transparent proxy in front of an MCP server | [Real MCP proxy](#real-mcp-proxy) |
-| set tokens, rate limits and environment variables | [Production settings](#production-settings) |
-| run the dashboard, the tests or the demo | [Run locally](#run-locally) |
-| use the Gemini proposal path or the REST API | [Gemini model integration](#gemini-model-integration), [API](#api) |
+| run the gateway, the dashboard or the REST API, or set tokens and limits | [gateway.md](gateway.md) |
 
 ## Guard an agent harness (Claude Code, Codex CLI, Cursor, Gemini CLI)
 
 Harnesses that call MCP tools get two layers that share IntentShield's rules:
 
-- **Hooks** (`intentshield-hook <harness>`) see what the model cannot forge: the
-  user's real prompt and every MCP call and result. Per session (SQLite at
-  `~/.intentshield/hooks.db`, or `INTENTSHIELD_HOOK_DB`) they:
-  - send parameters that ask for the agent's model, system prompt or conversation
-    (`llm_name`, `system_prompt`, ...) empty;
-  - deny a call whose arguments carry injected instructions, or a value that came
-    from a tool output with injected instructions and not from the user;
-  - scan every MCP result; an injected one taints the session and the model is told
-    it is data, not a request (`--outputs block` replaces the result instead);
-  - ask before any MCP call carrying a recipient, URL, account or path that came
-    only from a tool output, flagged or not (unless `--review never`;
-    `--allow-sourced-reads` or `INTENTSHIELD_HOOK_SOURCED_READS=allow` stops asking for reads only);
-  - ask before state-changing MCP calls once the session is tainted
-    (`--review always|tainted|never`, or `INTENTSHIELD_HOOK_REVIEW`; `--outputs` reads
-    `INTENTSHIELD_HOOK_OUTPUTS`);
-  - optionally run the injection classifier on results the rules pass
-    (`--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`; loads PyTorch in every
-    result hook, so it is off by default), or the LLM judge (the hook's `--judge` with no value means the local
-    `ollama:qwen2.5:7b`; `--judge groq` or `gemini[:model]` for a hosted one; note that `intentshield install --judge`
-    with no value means Groq, so name the provider in both places). With
-    `--judge-outputs` (or `INTENTSHIELD_HOOK_JUDGE_OUTPUTS=on`) the judge also reads each result
-    the rules pass, for plain-language injections: a result it objects to is treated like a
-    classifier hit (the agent is warned, and any value from it asks before use), never as an
-    injection. It costs one request per result: about 1 s with local qwen2.5:7b and 4 s with
-    Gemini Flash-Lite, and on Groq's free tier (200,000 tokens a day) about 200 results a day,
-    after which the judge has no opinion until the next day;
-  - refuse to start on an unknown `--review` or `--outputs` value, from the command line or the
-    environment, instead of silently skipping every review branch.
-  A hook that crashes denies the call; for Claude Code the example config adds
-  `"onFailure": "block"` so a hook that is missing, times out or exits with another code
-  denies it too. MCP resource reads (`ReadMcpResourceTool`) are scanned like tool results.
-  Built-in tools (shell, file and web tools) are left to the harness unless the hook is installed with
-  `--builtin-tools`; see [Built-in tools and the dangerous-command rules](#built-in-tools-and-the-dangerous-command-rules).
+- **Hooks** (`intentshield-hook <harness>`) see what the model cannot forge: the user's real prompt and every MCP call and
+  result. State is kept per session in SQLite at `~/.intentshield/hooks.db` (or `INTENTSHIELD_HOOK_DB`). A hook:
+  - sends parameters that ask for the agent's model, system prompt or conversation (`llm_name`, `system_prompt`, ...) empty;
+  - denies a call whose arguments carry injected instructions, or a value that came from a tool output with injected
+    instructions and not from the user;
+  - scans every MCP result, including MCP resource reads (`ReadMcpResourceTool`); an injected result taints the session and the
+    model is told it is data, not a request (`--outputs block` replaces the result instead);
+  - asks before an MCP call that carries a recipient, URL, account or path that came only from a tool output
+    (unless `--review never`; `--allow-sourced-reads` or `INTENTSHIELD_HOOK_SOURCED_READS=allow` stops asking for reads only);
+  - asks before state-changing MCP calls once the session is tainted (`--review always|tainted|never`, or
+    `INTENTSHIELD_HOOK_REVIEW`; `--outputs` reads `INTENTSHIELD_HOOK_OUTPUTS`);
+  - refuses to start on an unknown `--review` or `--outputs` value, from the command line or the environment, instead of
+    silently skipping every review branch;
+  - denies the call when the hook itself crashes. For Claude Code the entry `install` writes adds `"onFailure": "block"`, so a
+    hook that is missing, times out or exits with another code denies the call too.
+
+  Built-in tools (shell, file and web tools) are left to the harness unless the hook is installed with `--builtin-tools`; see
+  [Built-in tools and the dangerous-command rules](#built-in-tools-and-the-dangerous-command-rules).
+
+  Two optional readers of results, both off by default:
+  - **Injection classifier** on results the rules pass: `--classifier DIR` or `INTENTSHIELD_HOOK_CLASSIFIER`. It loads PyTorch in
+    every result hook.
+  - **LLM judge**: the hook's `--judge` with no value means the local `ollama:qwen2.5:7b`; `--judge groq` or `gemini[:model]`
+    names a hosted one. `intentshield install --judge` with no value means Groq, so name the provider in both places.
+  - **Judge on results** (`--judge-outputs`, or `INTENTSHIELD_HOOK_JUDGE_OUTPUTS=on`): the judge also reads each result the rules
+    pass, for plain-language injections. A result it objects to is treated like a classifier hit (the agent is warned, and any
+    value from it asks before use), never as an injection.
+  - **Cost of the judge:** one request per result, about 1 s with local qwen2.5:7b and 4 s with Gemini Flash-Lite. On Groq's
+    free tier (200,000 tokens a day) that is about 200 results a day, after which the judge has no opinion until the next day.
 - **Transparent proxy** (`intentshield-mcp --transparent --config <file>`, stdio only)
   wraps each MCP server the harness launches. It shows the upstream's own tools, hides
   any whose description matches poisoning rules or that changed after connect (rug pull),
@@ -88,7 +82,7 @@ them. By hand, the entry looks like this:
 ```
 
 Servers reached over HTTP (`"url"`) are not launched by the client, so `wrap` leaves them alone;
-guard those with the [gateway](#real-mcp-proxy).
+guard those with the [gateway](gateway.md#real-mcp-proxy).
 
 **Check the install.** Right after `install`, `intentshield doctor` exits 1 and prints
 `FAIL <harness> ...: installed, but no hook has run since <time>` for each harness. That is expected. Start the
@@ -124,10 +118,42 @@ have asked. They read the call's text alone, parsed safely (`shlex` stages, wrap
 `$(...)`, here-documents, never executed), with linear-time patterns. They are **text rules and opt-in**, not a
 sandbox:
 
-| decision | what it covers |
-|---|---|
-| deny | recursive delete, `chmod` or `chown` of root or a system directory; `find ~ -delete` and `find / -delete` with no test on the name (`-type`, `-mtime` and `-size` do not count); writes to a block device, `mkfs`, `wipefs`; a fork bomb; force-push or deletion of a shared branch; a read of an SSH private key, a cloud credential file, `~/.netrc` or a keychain; a sensitive file sent to a network destination; a reverse shell; a write to `authorized_keys` or sudoers |
-| ask | hook bypass (`--no-verify`, `git commit -n`, `core.hooksPath`); other force-pushes; `git reset --hard`, `git restore .` and `git clean -f` (not `git clean -n`, which deletes nothing); `curl ... \| sh` (a deny when the shell runs as root, as in `curl ... \| sudo sh`, or the script comes over plain HTTP or from a bare IP address that is not on this machine; `sudo curl ... \| sh` and a script from `localhost` are an ask); a delete by `find` at a system directory, or with `-o` or `-prune`, that names the files it removes; `rm -rf` of a variable that may be empty, also after a root (`$DIR`, `/$DIR`, `~/$DIR`, `$HOME/$DIR`); a read of `.env`, a `.pem` that is not a certificate or a cloud token; a read of a harness's own credential file (`~/.codex/auth.json`, `~/.gemini/oauth_creds.json`, `~/.gemini/mcp-oauth-tokens.json`, `~/.claude.json`; `~/.claude/.credentials.json` is covered too, on a report that some Claude Code installs keep it there, which the vendor pages archived here do not confirm); an `.env` or similar file that holds secrets sent out (a key or cloud credential sent out is a deny); an upload of a file (`curl -d @data.json`, `aws s3 cp`) to a host the user did not name; a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow; `chmod 777`; a non-recursive `chmod` or `chown` on a system path, and `chown -R $USER` of a `/usr/local` directory (Homebrew's own advice); deleting or emptying a key or an access file; anything that changes the guard itself (below) |
+**Deny** (a deny cannot be approved in the prompt, so these are the cases where the target is plainly the whole machine or a secret):
+
+- Destruction: a recursive `rm` of root, the home directory or a system directory (`/`, `~`, `/etc`, `/usr`, `/var/lib`);
+  a recursive `chmod` or `chown` of root or a system directory whatever the mode (`chmod -R 644 /`, `chown -R me /usr/lib`),
+  and of the home directory with `sudo` or a zero or world-writable mode; `find ~ -delete` and `find / -delete` with no
+  test on the name (`-type`, `-mtime` and `-size` do not count); a write to a block device, `mkfs`, `wipefs`; a fork bomb.
+- Git: a force-push or deletion of a shared branch (`main`, `master`, `develop`, `release`, `release/...`, `release-1.2`,
+  `hotfix`, ...), also by refspec (`HEAD:main`).
+- Credentials: a read of an SSH private key, a cloud credential file, `~/.netrc` or a keychain; a sensitive file sent to
+  a network destination; a reverse shell; a write to `authorized_keys` or sudoers.
+
+**Ask** (a prompt in an interactive Claude Code session; a refusal where nobody can answer):
+
+- Git: hook bypass (`--no-verify`, `git commit -n`, `core.hooksPath`); any other force-push, including the usual one after
+  a rebase (`git push --force-with-lease origin HEAD`, `git push -f origin my-feature`) and a branch such as
+  `release-candidate`; `git reset --hard`, `git restore .` and `git clean -f` (not `git clean -n`, which deletes nothing).
+- Downloads: `curl ... | sh`. It is a deny when the shell runs as root (`curl ... | sudo sh`) or the script comes over
+  plain HTTP or from a bare IP address that is not on this machine; `sudo curl ... | sh` and a script from `localhost`
+  are an ask.
+- Deletes: `sudo rm -rf` of a direct subdirectory of a system directory (`/opt/app`, `/etc/app.d`; a deny cannot be
+  approved, and these are common clean-ups); a delete by `find` at a system directory, or with `-o` or `-prune`, that names
+  the files it removes; `rm -rf` of a variable that may be empty, also after a root or home (`$DIR`, `/$DIR`, `~/$DIR`,
+  `$HOME/$DIR`, `/*$DIR`).
+- Permissions: `chmod 777`; a non-recursive `chmod` or `chown` on a system path; a recursive `chmod` or `chown` of the home
+  directory (without `sudo`) or of a `/usr/local` directory, and `chown -R $USER` or `chown -R $(whoami)` of a
+  `/usr/local` directory (Homebrew's own advice).
+- Credentials read or sent: a read of `.env`, a `.pem` that is not a certificate, a cloud token, or a file named like a
+  key inside a test directory (`tests/fixtures/id_rsa`); a read of a harness's own credential file (`~/.codex/auth.json`,
+  `~/.gemini/oauth_creds.json`, `~/.gemini/mcp-oauth-tokens.json`, `~/.claude.json`; `~/.claude/.credentials.json` is
+  covered too, on a report that some Claude Code installs keep it there, which the vendor pages archived here do not
+  confirm); an `.env` or similar file that holds secrets sent out as a file (a key or cloud credential sent out is a deny, and so is
+  the output of `cat .env` put into a request to a host the user did not name); an upload
+  of a file (`curl -d @data.json`, `aws s3 cp`) to a host the user did not name.
+- Persistence and the guard: a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow;
+  deleting or emptying a key or an access file; anything that changes the guard itself (below).
+- Too big to read: a path, a command, a brace list or a loop past a limit (next sections).
 
 **What the parser reads.** A command inside a one-line control structure (`if ...; then X; fi`,
 `for ...; do X; done`, `while`, `{ X; }`, `! X`, `time`, a one-line function body) is read like the same command alone.
@@ -136,13 +162,22 @@ directory's `Documents`), variables set earlier in that line (`RM=rm; $RM -rf /`
 `$'...'` quoting and brace lists (`rm -rf {/,}`, `{rm,-rf,/}`). The directory a `cd` went to is not known across two calls.
 Spellings the shell reads as nothing are read as nothing: a line continuation (`rm \` and a new line before `-rf /`), a
 tab, a form feed or vertical tab, `${IFS}` for a space, empty quotes or a backslash inside a word (`r''m`, `\rm`), a comment
-after the command. A `find` that deletes only the files it names (`find ~ -name .DS_Store -delete`,
+after the command, `$@` or `$()` or `${X:-}` (empty where they stand), a default that is spelled out (`${RM:-rm} -rf /` is
+`rm -rf /`), NUL bytes (bash ignores them in a script), and a long option cut short the way the program accepts it
+(`git push --del origin main`, `git reset --har`, `rm --rec --fo ~`, `chmod --rec 000 /etc`, `sudo --us root rm -rf /`).
+A `$(...)` inside a word does not end the command (`rm -rf $(pwd) /`). A glob made of glob characters alone at the root
+or home (`/[a-z]*`, `/?`) is read as everything in it, and `echo / | xargs rm -rf` is read as `rm -rf /`. A `find` that
+deletes only the files it names (`find ~ -name .DS_Store -delete`,
 `find ~ -name '*.pyc' -delete`) is read like `rm` of those files and allowed under the home directory; asked at a
 system directory.
 
 **Limits on what is read.** The parser reads at most 50,000 characters, 400 commands, 20,000 words and three levels of
 nesting (`bash -c`, `eval`, `$(...)`). A command that goes past any of them is **asked about, with the limit named**,
-never allowed: a deny hidden after the limit cannot get through by padding the command.
+never allowed: a deny hidden after the limit cannot get through by padding the command. The same holds for the rest: a
+path is read to 1,000 characters after repeated slashes and `/./` are collapsed (so `~/.ssh/./././id_rsa` padded to any
+length is still the key), and a path that is still longer is asked about; a brace list of more than 300 characters, 16
+alternatives, 64 words or four levels is asked about; a variable set by a `for` loop over more than 32 words is asked about
+where it is used; a patch is read file by file whatever its size.
 
 **When the user named it.** A command the user typed in their prompt, or a path or host they named, turns a deny into
 an ask, never into an allow. The prompt must name the target itself: `/etc/hosts` does not name `/etc`, `/Users/me/proj`
@@ -159,7 +194,11 @@ write, edit or delete of a harness's hook settings (`~/.claude/settings*.json`, 
 with shell access can still switch a user-space hook off by a route these text rules do not read (a script file it wrote
 earlier, an interpreter one-liner, a program the harness's own tools run), and the user can approve the ask. Without
 `--builtin-tools` none of this is checked. An `export INTENTSHIELD_HOOK_REVIEW=never` in the agent's shell does not
-reach the hook, which the harness starts, so it is not asked about (written into a shell startup file it is).
+reach the hook, which the harness starts, so it is not asked about (written into a shell startup file it is). A hook that
+does start with such a setting in its environment (`INTENTSHIELD_HOOK_REVIEW=never`, `INTENTSHIELD_HOOK_TRANSLATE=off`,
+`INTENTSHIELD_HOOK_DEADLINE=0`, `INTENTSHIELD_HOOK_SOURCED_READS=allow`, `INTENTSHIELD_THREAT_MEMORY=0`, or a moved
+`INTENTSHIELD_HOOK_DB`, `INTENTSHIELD_THREAT_DB`, `INTENTSHIELD_THREAT_PACKS` or `INTENTSHIELD_HOOK_CATALOG`) says so on
+stderr for every call, unless a flag on its command line takes the place of the variable.
 
 **What it does not see.** A command built at run time from pieces (`$(printf ...)`, a variable set in an earlier
 call or read from the environment), an interpreter script file and a language one-liner that wraps the real action are
@@ -175,10 +214,11 @@ sends to the hook. A built-in tool call whose
 event name or tool input the hook cannot read (a missing or re-cased `hook_event_name`, a `command` that is not text) is
 refused, because a changed event schema must not read as an allow.
 
-What the study measured about them (`docs/hook-fidelity-study.md` section 6e, rows in
+What the study measured about them (`docs/research-notes/hook-fidelity/hook-fidelity-study.md` section 6e, rows in
 `results/hook-fidelity/detect/fresh/`; the figures below are those of the rules before the stricter-verdict change above,
-which turns 6 of the 41 asked harmful calls into denies when the set is run again: 35 asked and 41 denied, the 28 let
-through and the 5 benign asks unchanged): on a fresh set of 214 built-in shell, read, write and edit calls (104
+which turns 6 of the 41 asked harmful calls into denies, and one denied call (`git push -f origin HEAD`, an ask now
+that `HEAD` may be a feature branch) into an ask, when the set is run again: 36 asked and 40 denied, the 28 let through
+and the 5 benign asks unchanged): on a fresh set of 214 built-in shell, read, write and edit calls (104
 harmful, 110 benign; one author, offline decisions, no model in the loop), the hook with `--builtin-tools` and
 **without** the rules let through 96/104 harmful calls (92%). With the rules it let through 28/104 (27%, Wilson
 [19, 36]): 41 were asked and 35 denied, and 5/110 benign calls were asked, none denied. That is evidence that the
@@ -285,7 +325,7 @@ changes. What you can change, narrowest first:
    as the harness table above lists them.
 
 For the gateway and the transparent proxy the approval is a human decision through the control endpoint, see
-[Human approval for mutations](#human-approval-for-mutations). A tool the proxy hid because its description
+[Human approval for mutations](gateway.md#human-approval-for-mutations). A tool the proxy hid because its description
 changed after connect stays hidden for the rest of that session; restart the client after you have looked at the
 change. For `intentshield scan`, `--update-pins` accepts the tools as they are.
 
@@ -313,7 +353,10 @@ explains an unexpected refusal in a session you were attending.
 
 If the reading is wrong for your session, `INTENTSHIELD_HARNESS_MODE=interactive|headless|yolo` and
 `INTENTSHIELD_HARNESS_VERSION=X.Y.Z` override it, and the hook says on stderr that it was overridden. A project's
-settings can set them for a session, so do not set them for a repository you do not trust.
+settings can set these, and the other `INTENTSHIELD_HOOK_*` and `INTENTSHIELD_THREAT_*` variables
+(`INTENTSHIELD_HOOK_REVIEW=never`, `INTENTSHIELD_HOOK_TRANSLATE=off`, `INTENTSHIELD_HOOK_DEADLINE=0`,
+`INTENTSHIELD_HOOK_SOURCED_READS=allow`, `INTENTSHIELD_THREAT_MEMORY=0`, and the database, pack and catalog paths), for a
+session. The hook names each one that loosens it on stderr. Do not set them for a repository you do not trust.
 
 ## Wrapping a third-party hook
 
@@ -321,7 +364,7 @@ Since 0.4.3, `intentshield wrap-hook` runs any hook command under the same fail-
 launcher, deadline and version-keyed verdict translation that `install` writes for IntentShield's own hook. It
 exists because the hook-fidelity study found that the harnesses let a call run when a hook crashes, is slow or
 prints nothing, and that a guard's `ask` is dropped, run or hung on some builds
-([study](hook-fidelity-study.md), [mitigation](hook-fidelity-mitigation.md)). The harness runs the shim in place
+([study](research-notes/hook-fidelity/hook-fidelity-study.md), [mitigation](research-notes/hook-fidelity/hook-fidelity-mitigation.md)). The harness runs the shim in place
 of the guard; the shim pipes the harness's event to the guard and sends the harness one reply in its own shape.
 
 ```sh
@@ -351,6 +394,7 @@ the guard's reply:
 | exit 2, with or without text on stderr | a deny with a reason (a bare exit 2 is not a refusal on every build: Codex 0.166.0 ran the call) |
 | any other non-zero exit, cannot be started, still running at the deadline (30 s by default) | a deny that says so |
 | exit 0 with a deny or block verdict | a deny in the harness's own shape |
+| exit 0 with several verdicts (for example in `hookSpecificOutput` and at the top level, or `continue: false`) | the strictest: deny over ask over allow |
 | exit 0 with `ask` | an ask only where this build, in this mode, is measured to enforce one; otherwise a deny that says what the guard wanted |
 | exit 0 with JSON that names no verdict, or an explicit allow | the guard's bytes unchanged, so a rewrite or note still arrives |
 | exit 0 with a verdict word it does not know, text that is not a JSON object, or more than 1 MB | a deny |
@@ -381,11 +425,28 @@ and is left out on Windows. `--no-translate`, or `INTENTSHIELD_HOOK_TRANSLATE=of
 it was before: verdicts are sent as the guard made them, with no deadline and no launcher. `intentshield doctor`
 warns about a call hook installed without them.
 
+## Scan the servers you use
+
+```sh
+intentshield scan                  # every MCP config found; or name files: intentshield scan .mcp.json
+intentshield scan --no-connect     # read the configs only; start no server
+intentshield scan --format sarif   # for GitHub code scanning; also --format json
+```
+
+`scan` starts each server as its client would (with only the environment its config names plus basics such as `PATH` and `HOME`),
+lists its tools without calling any, and checks them offline: poisoned descriptions, split instructions, self-disclosure
+parameters, shadowed names, credentials written into a config, and tools that changed since the last scan. It exits 0 when no
+error-level finding remains (also when no MCP config is found), 1 when one does, and 2 when a named file is missing or unreadable
+or no server could be started or read. The full description and exit codes are in
+[layers.md](layers.md#scan-the-mcp-servers-you-already-use).
+
 ## Troubleshooting
 
 **`intentshield doctor`** checks every harness's user and project settings file, then the MCP configs it finds
-(Claude Code, Cursor and Gemini CLI). A line is `ok`, `warn`, `FAIL` or `--` (no IntentShield hooks for that
-harness); it exits 1 when any line is `FAIL`, and `warn` lines do not change the exit code. Apart from recording
+(Claude Code, Cursor and Gemini CLI). A line is `ok`, `note`, `warn`, `FAIL` or `--` (no IntentShield hooks for that
+harness); it exits 1 when any line is `FAIL`, and `note` and `warn` lines do not change the exit code. A `note` line is a measured
+fact about your harness version (for example that a hook which prints nothing lets the call run) and needs no action; only
+`FAIL` is a fault. A repeated line is printed and counted once. Apart from recording
 each harness's version it only reads. Messages from a run against a fresh install:
 
 - `FAIL <harness> (<file>): installed, but no hook has run since <time>.` Right after `install` this is expected:
@@ -538,475 +599,3 @@ process when small, and about 20 ms before a call and 40 ms after a result at it
 500 fingerprints). Poisoning is bounded rather than prevented: an attacker can get a colleague's address
 learned, at review level; boilerplate after an injection is not learned (fingerprints are anchored on the
 injected sentence, and a bare trigger's payload is learned only when it names a destination).
-
-## What is implemented
-
-- Deterministic policy enforcement with stable reason codes
-- Registered-tool and schema-hash checks
-- Tool allow/prohibit lists, argument validation, and resource/destination scope
-- Call budgets, intent-alignment and injection signals
-- Atomic idempotency protection for mutations; uncertain executor outcomes enter a persistent `IN_DOUBT` state and are never retried automatically
-- Human approval bound to the exact run, tool, arguments, and expiry
-- SQLite audit trail for runs, events, approvals, and executions
-- Real MCP 2.2 client support over stdio and Streamable HTTP
-- Guarded connections to multiple real upstream MCP servers over stdio or Streamable HTTP
-- Upstream JSON Schema validation, namespaced tool identities, and fail-closed catalog drift checks
-- MCP poisoning defense: description scanning with quarantine, cross-server shadowing detection, and rug-pull fingerprints over descriptions and annotations
-- Tool-output injection scanning (including user impersonation and task hijack) with session taint, and argument-provenance blocking of attacker-supplied values
-- Self-disclosure parameter redaction: parameters that ask for the agent's model, system prompt or conversation are hidden from the agent and never reach the server with a value
-- Harness hooks for Claude Code, Codex CLI, Cursor and Gemini CLI (`intentshield-hook`), bound to the user's real prompt
-- Transparent proxy mode (`intentshield-mcp --transparent`) for the MCP servers a harness launches
-- Gemini-native function calling for the web proposal path (the optional LLM judge can also use Groq; see [detectors.md](detectors.md#llm-judge-on-tool-results-plain-language-injections))
-- Evidence-only detection and grounding agents feeding the deterministic policy engine
-- A locally trained DeBERTa-v3-small intent classifier with abstention and artifact integrity checks
-- Optional learned injection detectors beside the rules, all evidence only:
-  - Llama Prompt Guard 2 on Groq's free tier.
-  - A local embedding nearest-neighbour detector (exemplars).
-  - Learning from operator labels, behind a regression gate.
-  - Regex rules proposed by a local model that the operator approves.
-- Model proposals normalized into the same deterministic policy and approval boundary
-- A deterministic local MCP server and end-to-end harness; no API key or paid model required
-- FastAPI endpoints and scripted benign, injection, and approval scenarios
-
-## Real MCP proxy
-
-IntentShield is an MCP server to the agent and an MCP client to the guarded
-upstream server. The agent never receives a direct upstream connection.
-
-**From a clone.** This section, [Production settings](#production-settings) and [Run locally](#run-locally) are written for
-a repository clone: they use `.venv/bin/<tool>` and `configs/...` paths. With a pip install, drop the `.venv/bin/`
-prefix (the tools are on your `PATH`) and copy the config you need from the repository's `configs/` directory. The
-package carries only the demo config, which `intentshield-mcp-verify --demo` uses, and
-`python -c "import intentshield.mcp_verify as m; print(m.demo_config_path())"` prints its path.
-
-The included demo config launches a real upstream MCP server over stdio:
-
-```bash
-.venv/bin/intentshield-mcp \
-  --transport streamable-http \
-  --config configs/mcp-proxy.demo.json \
-  --host 127.0.0.1 \
-  --port 8001
-```
-
-Point any MCP client at:
-
-```text
-http://127.0.0.1:8001/mcp
-```
-
-### Connect Codex or Claude Code
-
-This gateway mode exposes IntentShield's own tools, so the model must route calls
-through `intentshield_call` and state the user's intent itself. For a harness, prefer
-[hooks plus the transparent proxy](#guard-an-agent-harness-claude-code-codex-cli-cursor-gemini-cli):
-the hooks read the user's real prompt and see every MCP call.
-
-Start the server above in one terminal and leave it running. In another
-terminal, register the local endpoint with either client:
-
-```bash
-# Codex CLI and desktop app share this MCP configuration.
-codex mcp add intentshield --url http://127.0.0.1:8001/mcp
-codex mcp list
-
-# Claude Code: user scope makes it available across projects.
-claude mcp add --transport http --scope user intentshield http://127.0.0.1:8001/mcp
-claude mcp list
-```
-
-In Claude Code, `/mcp` shows the connection. Other MCP clients can use the
-same local Streamable HTTP URL. The client sees IntentShield's five gateway
-tools, not the upstream tools directly. To try an allowed read, ask the client
-to list guarded tools, create a run with your exact request, then call the
-chosen tool using its current schema hash.
-
-The demo upstream needs no API key, and neither Codex nor Claude Code needs
-`GEMINI_API_KEY` to use this MCP server. `INTENTSHIELD_REMOTE_AUTHORIZATION`
-is only for a separate online MCP server that IntentShield connects to as an
-upstream; obtain that credential from the upstream provider if it requires
-one. `INTENTSHIELD_CONTROL_TOKEN` is generated by you and protects the
-separate human approval endpoint for mutations. It does not authenticate the
-agent-facing `/mcp` endpoint, which is bound to localhost in this release; set
-`INTENTSHIELD_AGENT_TOKEN` to require a bearer token there (see
-[production settings](#production-settings)).
-
-The proxy exposes five stable MCP tools:
-
-- `intentshield_create_run`
-- `intentshield_list_tools`
-- `intentshield_call`
-- `intentshield_get_run`
-- `intentshield_get_approval`
-
-A client creates a run using the user's exact intent, reads the guarded catalog,
-and sends the selected tool name, arguments, and exact `schema_hash` to
-`intentshield_call`. `BLOCK` and `REVIEW` never contact the upstream tool.
-
-Verify the complete policy and wiring before connecting an agent:
-
-```bash
-# Fast in-process preflight
-.venv/bin/intentshield-mcp-verify --config configs/mcp-proxy.demo.json
-
-# Real downstream stdio subprocess
-.venv/bin/intentshield-mcp-verify --config configs/mcp-proxy.demo.json --stdio
-
-# A running Streamable HTTP gateway
-.venv/bin/intentshield-mcp-verify \
-  --config configs/mcp-proxy.demo.json \
-  --url http://127.0.0.1:8001/mcp
-```
-
-The verifier discovers every upstream, checks policy coverage and schemas, then
-proves that an unregistered canary is `BLOCK` and a safe mutation proposal is
-`REVIEW` with `executed=false`. Mutation verification uses the gateway's
-non-persistent `dry_run` path, so it neither executes nor creates an approval
-that could later be granted.
-
-To exercise both upstream transports together, start the HTTP fixture in one
-terminal and verify the mixed config from another:
-
-```bash
-# Terminal 1: real Streamable HTTP upstream
-.venv/bin/intentshield-demo-mcp \
-  --transport streamable-http --host 127.0.0.1 --port 8010
-
-# Terminal 2: real stdio client -> IntentShield -> stdio + HTTP upstreams
-.venv/bin/intentshield-mcp-verify \
-  --config configs/mcp-proxy.mixed-demo.json --stdio
-```
-
-No API key is needed for the deterministic demo or mixed-transport harness.
-
-To run the web dashboard and Gemini proposal path against that same real MCP
-catalog rather than the simulated tools, set:
-
-```dotenv
-INTENTSHIELD_PROXY_CONFIG=configs/mcp-proxy.demo.json
-INTENTSHIELD_CONTROL_TOKEN=replace-with-a-long-random-value
-INTENTSHIELD_AGENT_TOKEN=replace-with-another-long-random-value
-```
-
-Then start `.venv/bin/intentshield`. The FastAPI lifespan opens the configured
-upstream connections, Gemini sees the guarded qualified catalog, and every
-proposal reaches the same policy-bound MCP executor used by the proxy server.
-Enter the same control token in the dashboard's approval queue field; it stays
-in memory and is sent only as a bearer credential to the local approval API.
-The web proxy refuses to start without this token.
-
-The real HTTP upstream, downstream, authenticated control endpoint, and clean
-shutdown path also have an opt-in process-level test:
-
-```bash
-INTENTSHIELD_RUN_HTTP_E2E=1 \
-  .venv/bin/pytest -q tests/test_mcp_http_e2e.py
-```
-
-### Human approval for mutations
-
-Approval is intentionally not an agent-callable MCP tool. For the HTTP mode,
-enable the localhost control endpoint with a high-entropy bearer token:
-
-```bash
-export INTENTSHIELD_CONTROL_TOKEN="replace-with-a-long-random-value"
-.venv/bin/intentshield-mcp \
-  --transport streamable-http \
-  --config configs/mcp-proxy.demo.json \
-  --host 127.0.0.1 \
-  --port 8001
-```
-
-After an MCP call returns `REVIEW` and an `approval_id`, a trusted operator can
-approve it:
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer $INTENTSHIELD_CONTROL_TOKEN" \
-  -H "content-type: application/json" \
-  -d '{"decision":"approve"}' \
-  http://127.0.0.1:8001/control/approvals/APPROVAL_ID
-```
-
-The endpoint is absent when `INTENTSHIELD_CONTROL_TOKEN` is unset. Bind to
-localhost unless you have added TLS and a production authentication layer.
-A `/control` request that carries the control token is rate-limited in its own bucket, so traffic
-to `/mcp` from the same address cannot lock the operator out.
-
-Approving a call does not clear the threat memory's hostile mark on the server whose output the call's
-values came from: one approval is about one call. Send `{"decision":"approve","trust_source":true}`
-to also vouch for that server.
-
-Two config caps bound what one proxy session can do: `max_runs` (default 50) runs per session, after
-which `intentshield_create_run` is refused (HTTP 429 from the REST API), and `max_dry_runs_per_run`
-(default 20) dry runs per run, after which a dry run is blocked with `BLOCK_DRY_RUN_LIMIT`. A dry run
-is logged as a `DRY_RUN` event, so probing the policy shows up in the log.
-
-### Configure another upstream server
-
-Use the `upstreams` array to connect one or more servers. For a local stdio
-server that needs an API key:
-
-```json
-{
-  "upstreams": [
-    {
-      "server_id": "filesystem",
-      "transport": "stdio",
-      "command": "/absolute/path/to/server-command",
-      "args": ["--flag", "value"],
-      "env_from_env": {
-        "UPSTREAM_API_KEY": "INTENTSHIELD_FILESYSTEM_API_KEY"
-      }
-    }
-  ]
-}
-```
-
-Export the secret locally. The JSON contains only its environment-variable
-name:
-
-```bash
-export INTENTSHIELD_FILESYSTEM_API_KEY="your-real-key"
-```
-
-You can keep local values in `.env` by copying `.env.example` and editing the
-placeholders:
-
-```bash
-cp .env.example .env
-```
-
-IntentShield loads `.env` automatically. `.env` is ignored by Git; keep the
-placeholder-only `.env.example` committed. Variables already present in the
-process environment take precedence over `.env`.
-
-For a deployed Streamable HTTP server, place the complete header value in an
-environment variable—for example, `Bearer ...`—and reference it with
-`headers_from_env`:
-
-```json
-{
-  "upstreams": [
-    {
-      "server_id": "remote",
-      "transport": "streamable_http",
-      "url": "https://mcp.example.com/mcp",
-      "headers_from_env": {
-        "Authorization": "INTENTSHIELD_REMOTE_AUTHORIZATION"
-      }
-    }
-  ]
-}
-```
-
-```bash
-export INTENTSHIELD_REMOTE_AUTHORIZATION="Bearer your-real-token"
-```
-
-Missing or empty referenced variables fail startup. Credential values are
-redacted from connection metadata, tool results, exceptions and verifier JSON.
-Do not put API-key values directly in committed configuration files. A complete
-template is available at `configs/mcp-proxy.real.example.json`.
-
-`read_only_tools` is a local trust decision. Every upstream tool not explicitly
-listed there is treated as a mutation and requires idempotency plus human
-approval. Upstream descriptions and MCP annotations are never trusted to lower
-that classification. Raw upstream descriptions are withheld by default; set
-`expose_upstream_descriptions` only for a server whose catalog you trust. Every
-returned tool result is labeled `UNTRUSTED_MCP_OUTPUT` for downstream agents.
-`allowed_tools` defaults to an empty list, so each deployment must deliberately
-allow exact names or scoped patterns such as `filesystem:read_*`.
-All patterns and resource/destination rules must use qualified
-`server_id:tool_name` identities. Per-tool scope rules use
-`resource_fields` with `allowed_resources_by_tool`, or `destination_fields`
-with `allowed_destinations_by_tool`; global scope lists are rejected for MCP
-proxy configurations to prevent policy bleeding between servers. Every allowed
-tool must also have a nonempty `grounding_terms_by_tool` entry containing the
-operator-owned nouns that must appear in the user's request, such as `note`,
-`invoice`, or `status`. Startup fails if a discovered allowed tool has no such
-entry. When wildcard allow rules are used, map every tool they can admit.
-
-For desktop clients that launch MCP subprocesses, use the absolute executable
-and config paths:
-
-```json
-{
-  "mcpServers": {
-    "IntentShield": {
-      "command": "/absolute/path/to/IntentShield/.venv/bin/intentshield-mcp",
-      "args": [
-        "--transport", "stdio",
-        "--config", "/absolute/path/to/IntentShield/configs/mcp-proxy.demo.json"
-      ]
-    }
-  }
-}
-```
-
-The Streamable HTTP mode is recommended when the protected human approval
-endpoint is needed. This release deliberately refuses non-loopback downstream HTTP
-bindings; place an authenticated TLS reverse proxy or a production MCP auth
-layer in front before remote deployment. Remote upstream URLs must use HTTPS;
-plain HTTP upstreams are accepted only on loopback. The stdio mode is useful for
-read-only tools and embedded applications that provide their own trusted
-approval UI.
-
-## Production settings
-
-These variables apply to a pip install and to a clone alike; `configs/policy.json` below is in the repository (the package
-carries a copy as `intentshield/configs/policy.json`).
-
-| Variable | Purpose |
-|---|---|
-| `INTENTSHIELD_AGENT_TOKEN` | Bearer token for the agent-facing routes (details below the table). |
-| `INTENTSHIELD_CONTROL_TOKEN` | Bearer token for the human approval endpoint. |
-| `INTENTSHIELD_RATE_LIMIT_PER_MIN` | Per-client request limit for the web API and, in proxy mode over Streamable HTTP, `/mcp` (default 120, `0` disables). In memory, per process. |
-| `INTENTSHIELD_THREAT_DB`, `INTENTSHIELD_THREAT_MEMORY`, `INTENTSHIELD_THREAT_PACKS` | Hook threat memory file, on/off switch (default on) and threat pack directory. |
-| `INTENTSHIELD_PACK_PINS`, `INTENTSHIELD_PACK_HMAC_KEY`, `INTENTSHIELD_PACK_ED25519_KEYS` | What a threat pack must verify against to load (see above). |
-| `INTENTSHIELD_DB` | The database of the web API and of the demo gateway (`intentshield-mcp --db`); default `~/.intentshield/gateway.db`. A path you give is used as given. |
-| `INTENTSHIELD_LOG_LEVEL` | JSON log level (default `INFO`). Decision lines carry run, tool, decision and reason codes, never arguments. |
-
-`INTENTSHIELD_AGENT_TOKEN` is required on the agent-facing `/mcp` endpoint (proxy mode over Streamable HTTP) and, in the
-web API, on proposing calls, reading runs, the tool list, metrics and security status. The operator token works there
-too, and needs `INTENTSHIELD_CONTROL_TOKEN`. Like the control token, it is required whenever
-`INTENTSHIELD_PROXY_CONFIG` is set; left unset in the simulated mode it leaves those routes open on loopback.
-
-Since 0.4.3 the library's default databases are in `~/.intentshield/`, not in the working directory of whatever project calls
-it: `Storage()`, `IntentShieldService.default()` and `create_mcp_server()` use `~/.intentshield/intentshield.db`, and a proxy
-config with no `database_path` uses `~/.intentshield/intentshield-mcp.db`. `INTENTSHIELD_DB` still overrides. The committed
-`configs/mcp-proxy.demo.json` and `mcp-proxy.uvx.json` name `intentshield-mcp.db` in the working directory themselves. A
-database of that name an earlier version left in the working directory keeps being used; move or delete it to switch.
-
-`configs/policy.json` is validated strictly: unknown keys, a tool both allowed and prohibited, and catch-all destination patterns are rejected at startup.
-
-## Run locally
-
-From a clone. This section is the local dashboard, the scripted demo and the development setup. Hook and proxy users do
-not need it. With a pip install, the dashboard is `intentshield` with no command and the scripted check is
-`intentshield-mcp-verify --demo --stdio`.
-
-Requires Python 3.12 or later.
-
-```bash
-uv sync --extra dev
-.venv/bin/intentshield
-```
-
-Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.1:8000/docs>.
-
-The app loads `.env` automatically without overriding variables already exported
-by the parent process. Scripted scenarios remain offline. Only live Gemini runs
-need an API key.
-
-Run the test suite:
-
-```bash
-.venv/bin/pytest -q
-```
-
-Or, without installing anything but Docker (no ML extras):
-
-```bash
-docker build -t intentshield .
-docker run --rm intentshield              # verifies the demo proxy end to end
-docker run --rm intentshield pytest -q    # the test suite
-```
-
-Optional extras:
-
-- `requirements-ml.txt` (torch, transformers, sentencepiece, protobuf) is needed for the local
-  DeBERTa intent and injection classifiers and the exemplar embedder. Install it with
-  `uv pip install --python .venv/bin/python -r requirements-ml.txt`. A plain `uv sync` removes it
-  again.
-- `--extra learning` (numpy) is needed for the exemplar detector and for learning from operator
-  labels.
-- `--extra dev` includes both pytest and numpy, which is what CI runs: `uv sync --extra dev --frozen`.
-
-The learned detectors and the LLM judge are described in [detectors.md](detectors.md); the operator-label
-and induced-rule endpoints in [Teach the detector](detectors.md#teach-the-detector-operator-labels-and-induced-rules).
-
-For the current architecture, complete testing sequence, expected decisions,
-and failure diagnosis, see the [architecture and testing guide](architecture-and-testing.md).
-The guide includes the [manual MCP walkthrough](../scripts/mcp_walkthrough.py),
-which verifies HTTP approval and guarded execution against the local demo.
-
-## Gemini model integration
-
-The dashboard and `POST /api/model-runs` use Gemini to turn user intent into one
-native function-call proposal. Gemini output is never trusted or executed
-directly. IntentShield first runs local injection preflight, maps the proposed
-function back to the registered tool, attaches the trusted schema hash and a
-gateway-generated idempotency key for mutations, runs detection and grounding,
-and finally invokes the deterministic policy and approval flow.
-
-From a clone, copy the template (`.env.example` is in the repository, not the package) and add the Gemini key locally,
-or export the variables below, or put them in `~/.intentshield/.env`. Never commit `.env` or paste the key into the dashboard:
-
-```bash
-cp .env.example .env
-```
-
-```dotenv
-GEMINI_API_KEY=
-INTENTSHIELD_GEMINI_MODEL=gemini-3.8-flash
-INTENTSHIELD_MODEL_MAX_CONCURRENCY=2
-# Optional, off by default (see detectors.md):
-# INTENTSHIELD_INTENT_MODEL_DIR=artifacts/intent-deberta-v3-small-v2
-```
-
-`GET /api/models` reports Gemini readiness and the configured model name without
-returning credential values. A missing key fails before any network request.
-The adapter accepts exactly one known tool proposal, offers Gemini an explicit
-safe no-action function, and fails closed on missing, multiple, malformed, or
-unknown calls. Model requests are bounded by a server-side concurrency limit.
-
-Example:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/model-runs \
-  -H 'content-type: application/json' \
-  -d '{"provider":"gemini","user_intent":"Read my two most recent inbox messages"}'
-```
-
-On this path only Gemini receives the user intent and registered public tool schemas,
-and only after local injection preflight succeeds. API keys, policy configuration,
-approval state, detector evidence, and tool results are not sent to Gemini. The
-flow stops after the guarded tool result; it does not send the result back for a
-second generation. Gemini is not the only remote provider overall: if you turn on the
-optional LLM judge (`"judge": "groq"` or `"gemini"`, or the hooks' `--judge`), the user's
-prompt and each checked call's name and arguments, plus tool descriptions the rules
-pass, are sent to Groq or Gemini; with `--judge-outputs` (hooks) or `"judge_outputs": true` (proxy),
-every tool result the rules pass is sent too. The judge is off by default.
-
-## API
-
-- `GET /api/health`
-- `POST /api/runs`
-- `GET /api/models`
-- `GET /api/security/status`
-- `POST /api/model-runs`
-- `GET /api/runs`
-- `GET /api/runs/{run_id}`
-- `GET /api/runs/{run_id}/events`
-- `GET /api/approvals`
-- `POST /api/approvals/{approval_id}/decision`
-- `GET /api/tools`
-- `GET /api/metrics`
-
-Create a scripted run:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/runs \
-  -H 'content-type: application/json' \
-  -d '{"user_intent":"Read my inbox","scenario":"benign"}'
-```
-
-Use `"scenario":"injection"` to demonstrate a blocked attack or
-`"scenario":"review"` to create an approval request. Scripted scenarios are
-available in local simulated mode; set `INTENTSHIELD_PROXY_CONFIG` for live MCP
-catalog and execution from the web dashboard.
-
-When the web dashboard uses a real MCP proxy, both approval endpoints require
-`Authorization: Bearer <INTENTSHIELD_CONTROL_TOKEN>`. The local simulated mode
-can run without a token for development.

@@ -1,4 +1,4 @@
-"""The figures docs/hook-fidelity-study.md cites, recomputed from the committed rows (no harness is launched), the way
+"""The figures docs/research-notes/hook-fidelity/hook-fidelity-study.md cites, recomputed from the committed rows (no harness is launched), the way
 benchmarks/paper_numbers.py does for the MSB papers. A reviewer found 20 count and wording mismatches between the study and the
 rows;
 this pins the ones that were wrong so they cannot drift back."""
@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "benchmarks"))
 RES = ROOT / "results" / "hook-fidelity"
-STUDY = (ROOT / "docs" / "hook-fidelity-study.md").read_text()
+STUDY = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md").read_text()
 
 
 def rows(*parts: str) -> list[dict]:

@@ -6,7 +6,7 @@ below still says "prediction" or "unknown until the pilot", section 8 supersedes
 account (Cursor's three launches used the user's free plan and hit the usage limit).
 
 Files: `benchmarks/hook_fidelity/stub_model.py` (endpoint), `tests/test_hook_fidelity_stub.py` (37 tests, no harness
-launched; the request shapes in them are written from source and docs, none was recorded from a live client). Protocol context: `docs/hook-fidelity-study.md`, section "Arms".
+launched; the request shapes in them are written from source and docs, none was recorded from a live client). Protocol context: `docs/research-notes/hook-fidelity/hook-fidelity-study.md`, section "Arms".
 
 Labels: DOC = vendor docs; SRC = vendor source read in this task (Codex `rust-v0.165.0`, Gemini CLI `v0.66.0` and the
 installed 0.66.0 bundle); BLIND = closed source or not read, so a guess; PILOT = cannot be known without running.

@@ -1,6 +1,6 @@
 """``intentshield doctor``: is the guard actually in the path of the agent?
 
-    intentshield doctor [--home DIR] [--db FILE]
+    intentshield doctor [--db FILE]
 
 For each harness it checks that the settings file holds every IntentShield hook, that the hook command names an
 executable that exists, that a hosted judge has its API key, and that the harness has run a hook since the hooks
@@ -9,9 +9,11 @@ told from a run by the harness (the harness's own process is not among the hook'
 that cannot be told. It also lists stdio MCP servers that are
 not behind the transparent proxy, whose tool descriptions the hooks never see. For each harness it records the
 version it finds on PATH (``~/.intentshield/harness-versions.json``, which the hooks read to choose their replies) and
-prints what the hook-fidelity study measured for that version. Exit status: 1 on any problem (a line that starts with
-FAIL), else 0; when no hook and no wrapped server is found it says that nothing is installed and still exits 0. Apart from
-that record it reads only. Only the standard library is imported.
+prints what the hook-fidelity study measured for that version. A line starts with ``ok``, ``--`` (nothing installed),
+``note`` (a fact about the harness that IntentShield already works around: nothing to do), ``warn`` (worth a look) or
+``FAIL`` (a problem). Exit status: 1 on any problem (a line that starts with FAIL), else 0; when no hook and no wrapped server
+is found it says that nothing is installed and still exits 0. Apart from that record it reads only. Only the standard library is
+imported.
 """
 from __future__ import annotations
 
@@ -59,9 +61,16 @@ def gemini_version() -> tuple[int, ...] | None:
 class Report:
     def __init__(self) -> None:
         self.problems = 0
+        self.notes = 0
+        self._seen: set[tuple[str, str, str]] = set()
 
     def line(self, level: str, subject: str, message: str) -> None:
+        """One line of the report. The same line is printed and counted once (two hook commands can name one program)."""
+        if (level, subject, message) in self._seen:
+            return
+        self._seen.add((level, subject, message))
         self.problems += level == "FAIL"
+        self.notes += level == "note"
         print(f"{level:<4} {subject}: {message}")
 
 
@@ -261,7 +270,7 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
     version = _harness_version(harness, home)
     if before is None and why_stale and not why_stale.startswith("no version"):
         # What the hook saw until this run: it sent every ask as a refusal, because it could not trust the recorded version.
-        report.line("warn", subject, f"the recorded harness version was stale ({why_stale.split(' (run')[0]}); refreshed now. "
+        report.line("note", subject, f"the recorded harness version was stale ({why_stale.split(' (run')[0]}); refreshed now. "
                                      "Until then the hook sent every ask as a refusal")
     missing = [event for event in REQUIRED[harness] if event not in hooks]
     if missing:
@@ -463,7 +472,59 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
               "Install the hooks with `intentshield install <harness>` (claude, codex, cursor or gemini).")
     else:
         print("\nno problems found")
+    if report.notes:
+        print(f"{report.notes} note(s) state how the harness behaves and what IntentShield does about it; they need no action.")
     return 1 if report.problems else 0
+
+
+# Three sample calls for ``intentshield demo``: what the hook says to each is its own, none is run.
+_DEMO_CALLS = (("ls -la", "allow"), ("git reset --hard HEAD~1", "ask"), ("cat ~/.ssh/id_rsa", "deny"))
+
+
+def _demo_decision(code: int, out: str) -> tuple[str, str]:
+    """(allow, ask or deny, reason) of what the hook printed for one call."""
+    if code == 2:
+        return "deny", ""
+    try:
+        reply = json.loads(out) if out.strip() else {}
+    except ValueError:
+        return "?", out.strip()[:80]
+    spot = reply.get("hookSpecificOutput", reply) if isinstance(reply, dict) else {}
+    return (str(spot.get("permissionDecision") or "allow"), str(spot.get("permissionDecisionReason") or ""))
+
+
+def demo() -> int:
+    """Feeds three sample shell calls to the hook the way a harness does and prints what it says to each. Nothing is run and
+    nothing outside a temporary directory is written."""
+    import tempfile
+
+    print("Three sample Claude Code shell calls, sent to the IntentShield hook with --builtin-tools. Nothing is run.\n")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("INTENTSHIELD_")}
+    failures = 0
+    with tempfile.TemporaryDirectory(prefix="intentshield-demo-") as tmp:
+        base = Path(tmp)
+        argv = [sys.executable, "-m", "intentshield.harness", "claude", "--builtin-tools", "--no-translate",
+                "--db", str(base / "hooks.db"), "--threats", str(base / "threats.db"), "--catalog", str(base / "tools")]
+        for command, expected in _DEMO_CALLS:
+            event = {"hook_event_name": "PreToolUse", "session_id": "intentshield-demo", "cwd": str(base),
+                     "tool_name": "Bash", "tool_input": {"command": command}}
+            try:
+                done = subprocess.run(argv, input=json.dumps(event), capture_output=True, text=True, env=env, timeout=60)
+            except (OSError, subprocess.SubprocessError) as exc:
+                print(f"intentshield demo: could not run the hook ({type(exc).__name__}: {exc})", file=sys.stderr)
+                return 1
+            decision, reason = _demo_decision(done.returncode, done.stdout)
+            reason = reason or " ".join(done.stderr.split())[:200]
+            failures += decision != expected
+            print(f"{decision:<5} $ {command}")
+            if reason:
+                print(f"      {reason}")
+    print("\nA harness shows an ask as a prompt, a deny as a refusal the agent sees, and an allow as nothing.")
+    return 1 if failures else 0
+
+
+def add_demo_subcommand(sub: Any) -> None:
+    sub.add_parser("demo", help="send three sample shell calls to the hook and print its allow, ask and deny (runs nothing)")
 
 
 def add_subcommand(sub: Any) -> None:

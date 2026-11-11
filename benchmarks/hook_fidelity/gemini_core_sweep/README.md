@@ -13,7 +13,7 @@ npm prefix with `--ignore-scripts`; hook scripts are written by the driver, noth
   (`evaluateBeforeToolHook`). The scheduler, the tools, `HookSystem`/`HookRegistry`/`HookPlanner` (matcher selection, trust, enable
   flags, `sequential`, dedupe) are **not** run.
 * `ask` is reported as `ask/ask-kept`: the aggregator kept the ask. That is NOT a statement about prompting. The consumer reads it
-  afterwards (see "Not covered" in docs/hook-fidelity-study.md section 12).
+  afterwards (see "Not covered" in docs/research-notes/hook-fidelity/hook-fidelity-study.md section 12).
 
 Not exercised: the 60 s default timeout; stdin payload fields `mcp_context` and `original_request_name`; Windows (the 126/127 split and
 the error text come from bash on macOS; Windows runs hooks under PowerShell with an appended exit-code line); environment redaction

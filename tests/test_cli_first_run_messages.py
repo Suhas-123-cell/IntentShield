@@ -200,3 +200,41 @@ def test_print_entry_quotes_the_words_of_a_guard_given_as_words(capsys):
 
 def test_wrapped_command_accepts_a_list():
     assert " -- pnpm dlx 'a b' " in wrap_hook.wrapped_command("claude", ["pnpm", "dlx", "a b"])
+
+
+# --- the hook shown without a harness -------------------------------------------------------------------------------------
+
+def test_the_demo_command_prints_an_allow_an_ask_and_a_deny_from_the_real_hook(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["intentshield", "demo"])
+    with pytest.raises(SystemExit) as done:
+        cli.main()
+    assert done.value.code == 0
+    lines = [line for line in capsys.readouterr().out.splitlines() if line[:5].strip() in ("allow", "ask", "deny")]
+    assert [line.split()[0] for line in lines] == ["allow", "ask", "deny"]
+    assert "ls -la" in lines[0] and "git reset --hard" in lines[1] and ".ssh/id_rsa" in lines[2]
+
+
+def test_the_demo_runs_nothing_and_writes_only_to_a_temporary_directory(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(tmp_path)
+    assert doctor.demo() == 0
+    capsys.readouterr()
+    assert not (tmp_path / "home").exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_demo_is_listed_in_the_help(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert "demo" in capsys.readouterr().out
+
+
+def test_wrap_points_a_remote_server_to_a_url_not_to_a_path_only_a_clone_has(tmp_path, capsys):
+    mcp = tmp_path / ".mcp.json"
+    mcp.write_text(json.dumps({"mcpServers": {"remote": {"url": "https://mcp.example.org/sse"}}}))
+    install.wrap(mcp, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
+    said = capsys.readouterr().out
+    assert "skipped remote: not a stdio server" in said
+    assert "https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/gateway.md#real-mcp-proxy" in said
+    assert " docs/gateway.md" not in said.replace("/blob/main/docs/gateway.md", "")

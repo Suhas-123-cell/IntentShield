@@ -5,7 +5,8 @@
 
 Stages (each a list of cells; nothing here launches anything):
 
-  pilot  the 10 runs of docs/hook-fidelity-study.md section 17, as cells of this lane's modes (kept for the record; the
+  pilot  the 10 runs of section 17 of docs/research-notes/hook-fidelity/hook-fidelity-study.md, as cells of this lane's modes
+         (kept for the record; the
          pilot of the study was a bash script, see results/hook-fidelity/claude/pilot/)
   core   2.1.316, kinds shell / write / mcp / resource, replies R0 R1 R3 R4, n=5, in M1h (--allowedTools, the default of -p) and
          M2 (--dangerously-skip-permissions), and M1 (prompts none) for shell and mcp; M0h (nothing pre-approved) for

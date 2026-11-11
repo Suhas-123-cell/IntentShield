@@ -1564,7 +1564,8 @@ def test_claude_arm_m_is_a_paid_arm_and_refused_without_explicit_approval(monkey
 
 
 def test_the_study_document_names_the_go_variable_the_signoff_file_and_the_pilot():
-    doc = (Path(__file__).resolve().parents[1] / "docs" / "hook-fidelity-study.md").read_text()
+    study = Path(__file__).resolve().parents[1] / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md"
+    doc = study.read_text()
     for needle in ("HOOK_FIDELITY_GO=<n>", "signoffs.json", "KEY-UNCONFIRMED", "native_gate_declared", "Pilot plan"):
         assert needle in doc, needle
 
@@ -1583,7 +1584,7 @@ def test_corpus_summary_is_derived_from_the_records_and_the_document_quotes_it()
     data = _corpus()
     derived = counts.derive(data)
     assert derived == data["summary"]
-    doc = (CORPUS_DIR / "docs" / "hook-fidelity-corpus.md").read_text()
+    doc = (CORPUS_DIR / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-corpus.md").read_text()
     s = derived
     st = s["rows_by_status"]
     for needle in (f"{s['emit_ask_to_a_harness']} of {s['guards_total']} guards can emit",

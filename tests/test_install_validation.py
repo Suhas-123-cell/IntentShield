@@ -338,3 +338,65 @@ def test_the_dashboard_line_names_the_port_and_the_help_command(monkeypatch, cap
     cli.main(["serve", "--port", "8123"])
     assert capsys.readouterr().out.strip() == ("IntentShield dashboard on http://127.0.0.1:8123, Ctrl-C to stop; "
                                                "`intentshield --help` for commands")
+
+
+# --- ~/.intentshield is private on every path that creates it ---------------------------------------------------------------
+
+def _mode(path: Path) -> int:
+    import stat
+
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+@pytest.fixture
+def fresh_home(tmp_path, monkeypatch) -> Path:
+    home = tmp_path / "fresh-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+def test_wrap_creates_the_state_directory_private(fresh_home, tmp_path):
+    mcp = _mcp(tmp_path, {"a": {"command": "npx", "args": ["x"]}})
+    install.wrap(mcp, proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
+    assert _mode(fresh_home / ".intentshield") == 0o700
+
+
+def test_install_creates_the_state_directory_private(fresh_home, tmp_path):
+    install.install("claude", home=fresh_home, hook="/opt/is/bin/intentshield-hook")
+    assert _mode(fresh_home / ".intentshield") == 0o700
+
+
+def test_a_proxy_database_and_its_catalog_and_threat_memory_create_it_private(fresh_home):
+    from intentshield.storage import Storage
+    from intentshield.threat_memory import ThreatMemory
+
+    Storage(fresh_home / ".intentshield" / "proxies" / "x.db")
+    assert _mode(fresh_home / ".intentshield") == 0o700
+    other = fresh_home.parent / "other-home"
+    other.mkdir()
+    ThreatMemory(other / ".intentshield" / "threats.db")
+    assert _mode(other / ".intentshield") == 0o700
+    third = fresh_home.parent / "third-home"
+    third.mkdir()
+    translation.private_dir(third / ".intentshield" / "tools")
+    assert _mode(third / ".intentshield") == 0o700
+
+
+def test_the_hook_creates_it_private_and_an_existing_loose_one_is_tightened(fresh_home):
+    from intentshield.harness import HarnessGuard
+
+    HarnessGuard(fresh_home / ".intentshield" / "hooks.db").close()
+    assert _mode(fresh_home / ".intentshield") == 0o700
+    loose = fresh_home.parent / "loose-home" / ".intentshield"
+    loose.mkdir(parents=True)
+    loose.chmod(0o755)
+    HarnessGuard(loose / "hooks.db").close()
+    assert _mode(loose) == 0o700
+
+
+def test_a_directory_that_is_not_the_state_directory_is_just_created(tmp_path):
+    other = tmp_path / "project" / "out"
+    translation.private_dir(other)
+    assert other.is_dir() and not (tmp_path / "project" / ".intentshield").exists()

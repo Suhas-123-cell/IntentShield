@@ -48,10 +48,10 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
     process.send_signal(signal.SIGINT)
     try:
         process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         process.kill()
         process.wait(timeout=5)
-        raise AssertionError("MCP server did not shut down after SIGINT")
+        raise AssertionError("MCP server did not shut down after SIGINT") from exc
 
 
 def test_real_streamable_http_upstream_gateway_control_and_shutdown(

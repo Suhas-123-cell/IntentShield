@@ -1,15 +1,14 @@
 # Channel coverage: what a hook-scoped MCP guard sees, and what a proxy sees
 
 Experiment run 2026-10-12 with `benchmarks/coverage/run.py` (probe server plus a passive
-logging hook, four benign prompts, headless Claude Code and Gemini CLI). Raw logs in
-`artifacts/coverage/<harness>-<mode>/` (gitignored).
+logging hook, four benign prompts, headless Claude Code and Gemini CLI). Raw logs are kept by the author, not in the repository; the committed rows of the later re-run are in `results/hook-fidelity/coverage/`.
 
 **Status of the data.** The stored artifacts came from the first version of the instrumentation,
 which had five problems (listed under "Instrumentation fixes"). Every cell below was re-scored
 by hand from the stored `hooks.jsonl`, `probe.jsonl` and answer files, not read from the stored
 `summary.json`, whose "hook events carrying it" lists mix input delivery with the model's own
 output. The re-run with the fixed instrumentation (2026-10-13, below) confirms these cells and
-corrects one; the 2026-10-12 artifacts are kept in `artifacts/coverage-2026-10-12/`.
+corrects one; the 2026-10-12 raw logs are kept by the author, not in the repository.
 
 **Scope.** n = 1 run per cell, one model per harness (Claude Haiku; Gemini 3.1 Flash-Lite as the
 main model), benign markers, nothing blocks: this measures visibility only. The Gemini "tools"
@@ -103,8 +102,7 @@ harness made:
 ## Re-run with the fixed instrumentation (2026-10-13)
 
 Same harnesses and models (Claude Haiku; gemini-3.1-flash-lite), five prompts, each in its own
-project directory, all four runs exited cleanly. Data in `artifacts/coverage/<harness>-<mode>/`,
-compact table in `artifacts/coverage-2026-10-13-table.txt`. "Reached" is whether the marker reached
+project directory, all four runs exited cleanly. Raw logs and the compact table are kept by the author, not in the repository. "Reached" is whether the marker reached
 the model's context (transcript or answer); "delivered by" lists hook events that carried it as
 input, not as the model's own output.
 
@@ -150,4 +148,4 @@ proxy are not covered here. See [contribution.md](contribution.md) for what this
 
 ## Re-run on installed releases without a model (2026-11-01)
 
-The visibility half of this study was re-measured against Claude Code 2.0.41 to 2.1.316, Codex 0.131.0 to 0.166.0 and Gemini CLI 0.37.1 to 0.66.0 with a stub model endpoint, adding server instructions and a longitudinal table. See [hook-fidelity-coverage-rerun.md](hook-fidelity-coverage-rerun.md); the data is in `results/hook-fidelity/coverage/`.
+The visibility half of this study was re-measured against Claude Code 2.0.41 to 2.1.316, Codex 0.131.0 to 0.166.0 and Gemini CLI 0.37.1 to 0.66.0 with a stub model endpoint, adding server instructions and a longitudinal table. See [hook-fidelity-coverage-rerun.md](research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md); the data is in `results/hook-fidelity/coverage/`.

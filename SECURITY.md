@@ -64,7 +64,7 @@ Each hook event renews a session's 7 days. Working directories are deleted after
 hook next opens the file.
 
 `hooks.db`, `threats.db` and `.env` are created readable by their owner only (mode 0600), and `~/.intentshield` itself is created
-with mode 0700 (an existing one that you own is tightened to 0700 the next time the hook or `install` opens it). A file made by an
+with mode 0700 (an existing one that you own is tightened to 0700 the next time the hook, `install`, `wrap`, a proxy, `scan` or a threat pack uses it). A file made by an
 older version may be more open, so run `chmod 600` on it. The hash that replaces a credential in a stored prompt is only there so
 the guard can tell later that you gave that very value; it does not keep the value. A credential the guard does not recognise
 stays in the prompt text as you typed it.

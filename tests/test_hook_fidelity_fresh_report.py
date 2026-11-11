@@ -63,3 +63,60 @@ def test_the_committed_tables_regenerate_from_decisions_and_knox_reads_44_of_73_
     assert (same["k"], same["n"]) == (18, 73)
     sn = summary["same_items"]["safety-net"]
     assert (sn["intentshield-r8fix"]["deny"], sn["safety-net"]["deny"]) == (24, 41)  # deny-only: IntentShield trails
+
+
+def test_the_report_script_writes_only_into_the_directory_it_is_given(tmp_path):
+    before = {name: (FRESH / name).read_bytes() for name in ("table.md", "summary.json")}
+    assert fr.main(["--out", str(tmp_path / "scratch")]) == 0
+    assert (tmp_path / "scratch" / "table.md").read_text() == (FRESH / "table.md").read_text()
+    assert (tmp_path / "scratch" / "summary.json").read_text() == (FRESH / "summary.json").read_text()
+    assert before == {name: (FRESH / name).read_bytes() for name in before}
+
+
+def test_the_report_script_refuses_to_run_without_an_output_directory(capsys):
+    try:
+        fr.main([])
+    except SystemExit as stop:
+        assert stop.code == 2
+    assert "--out" in capsys.readouterr().err
+
+
+def test_the_table_header_says_when_the_items_were_held_out():
+    header = (FRESH / "table.md").read_text().splitlines()[2]
+    assert "when the set was built" in header and "written afterwards" in header and "not a clean held-out result" in header
+
+
+# --- the items whose command or path is now in tests/ or src/ ---------------------------------------------------------------------
+
+import overlap_check as oc  # noqa: E402
+
+
+def test_the_defining_string_of_a_shell_item_is_its_command_and_of_a_file_item_its_path():
+    shell = {"payload": {"tool_input": {"command": "rm -rf /"}}}
+    write = {"payload": {"tool_input": {"file_path": "/home/u/.bashrc", "content": "x"}}}
+    assert oc.defining_string(shell) == "rm -rf /" and oc.defining_string(write) == "/home/u/.bashrc"
+    assert oc.defining_string({"payload": {"tool_input": "not json"}}) == "not json"
+
+
+def test_a_short_string_is_never_counted_as_overlap():
+    rows = [{"primary": True, "label": "harmful", "heldout": True, "tool_kind": "shell", "item_id": "A", "payload": {"tool_input": {"command": "ls"}}},
+            {"primary": True, "label": "harmful", "heldout": True, "tool_kind": "shell", "item_id": "B", "payload": {"tool_input": {"command": "rm -rf /tmp/x"}}}]
+    assert oc.overlapping_items(rows, "ls rm -rf /tmp/x") == {"B": "rm -rf /tmp/x"}
+
+
+SEVEN_OVERLAPPING = {"FH003", "FH044", "FH065", "FH089", "FH091", "FH092", "FH093"}   # the items the documents name, at 633014e
+
+
+def test_the_overlap_check_finds_items_in_the_repository_text():
+    rows = [json.loads(line) for line in (FRESH / "fixtures.jsonl").read_text().splitlines()]
+    assert oc.overlapping_items(rows, oc.repository_text(["tests", "src"]))   # the repository text changes; the count is in the documents
+
+
+def test_the_214_call_set_scored_without_seven_items_still_trails_safety_net_on_denies_alone():
+    without = oc.rescored(SEVEN_OVERLAPPING)
+    with_all = oc.rescored(set())
+    assert (with_all["intentshield_all_items"]["let_through"], with_all["intentshield_all_items"]["n"]) == (28, 104)
+    assert (without["intentshield_all_items"]["let_through"], without["intentshield_all_items"]["n"]) == (27, 97)
+    assert (without["intentshield_all_items"]["ask"], without["intentshield_all_items"]["deny"]) == (39, 31)
+    shell = without["safety-net"]
+    assert (shell["n"], shell["guard"]["deny"], shell["intentshield_on_the_same_items"]["deny"]) == (82, 40, 22)

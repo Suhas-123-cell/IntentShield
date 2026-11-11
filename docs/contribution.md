@@ -18,16 +18,20 @@ are off by default or evidence-only ([detectors.md](detectors.md)).
 1. **A versioned measurement of what Claude Code (23 builds), Codex CLI (17) and Gemini CLI (28) do with the verdict a hook returns.**
    A `deny` was enforced on every build and in every mode where the hook ran. Whether the hook ran depended on state outside its
    reply: trust, matchers and flags. An `ask` with nobody to answer it is handled three different ways, and one of them changed between
-   two adjacent Claude Code releases. A hook that runs past its timeout let the call run on every build tested. Account:
-   [hook-fidelity-report.md](hook-fidelity-report.md).
+   two adjacent Claude Code releases. A hook that runs past its timeout let the call run on every build tested with the default hook
+   configuration; Claude Code's documented `onFailure: "block"` setting, which IntentShield's `install` writes, blocked it on
+   2.1.316 (3 of 3 runs) and had no effect on 2.1.281 (2 of 2 RAN). Account: [hook-fidelity-report.md](hook-fidelity-report.md).
    *Limits:* a scripted stub model, headless runs, macOS only, one author, sampled builds, Cursor not measured, most behaviours already
    documented by the vendors, no attacker-reachable trigger shown. It measures the tools, not IntentShield. The coding was done by the
    same AI agents that ran the cells, and no second human coder exists (the report's Tooling paragraph and Limits).
 2. **Self-disclosure parameter stripping.** A malicious MCP server can ask the agent for its model name or system prompt through a
    tool parameter. IntentShield removes such parameters from the schema. On the 159 distinct tool schemas the four MSB agents saw, it
    stripped 36 parameters, all on attack-role servers, and none of the 194 parameters on the clean tools
-   ([results/self-disclosure.md](../results/self-disclosure.md)). *Limits:* one benchmark's catalogs, and a renamed parameter with a
-   neutral description would pass the rule.
+   ([results/self-disclosure.md](../results/self-disclosure.md)). *Limits:* this is an in-sample check, not a detection rate. The rule
+   was written for the channel that MSB's attack servers use (a parameter such as `llm_model_name`), and it was added on 2026-10-09,
+   after the MSB runner existed and in a commit that also changed the runner, so the 36 and the 0 show that the rule fires on MSB's template and not on its 86 clean
+   tools. All 36 stripped parameters are of that kind. One benchmark's catalogs, and a renamed parameter with a neutral description
+   would pass the rule.
 3. **A trivial structural baseline that matches detector-based guards on MSB's executed harm.** A guard with no detection (withhold
    descriptions, strip self-disclosure fields, hold every mutation for review) also executes 0% harm, so that metric cannot rank guards;
    what detectors add is what reaches the reviewer. Tables: [benchmarks.md](benchmarks.md). *Limits:* an MSB property; it did not
@@ -44,7 +48,7 @@ are off by default or evidence-only ([detectors.md](detectors.md)).
   six categories the rules were written from, it lets through fewer calls than safety-net and knox but trails safety-net on denies
   alone, and nothing was tested outside those categories (the report's section 5). The surveyed MCP guards publish no detection numbers
   to compare against, and on AgentDojo, the one benchmark where defences do publish, IntentShield's row (a 7B agent, 15.6% residual
-  attack success) is far behind LlamaFirewall's published 1.75% with GPT-4o. So the claim is not "best performing".
+  attack success, 5 of 32, from a local run whose rows are not committed) is far behind LlamaFirewall's published 1.75% with GPT-4o. So the claim is not "best performing".
 - That any tool lets an attacker bypass a guard, or what a real model or a person at a terminal does at scale.
 - That the hook study's expectations were fixed before the runs, beyond the author's statement: the commits that would show the order
   are not in `main`'s history, and the timestamps do not settle it (the report's Limits).
@@ -62,7 +66,7 @@ An artifact or tool paper, plus the hook-fidelity measurement note. A research-t
 - a Linux or second-OS run of a real harness, and Cursor measured on a plan that allows it;
 - a completed vendor disclosure (drafts exist; nothing has been sent).
 
-[hook-fidelity-study.md](hook-fidelity-study.md), section 15, lists these with their costs.
+[hook-fidelity-study.md](research-notes/hook-fidelity/hook-fidelity-study.md), section 15, lists these with their costs.
 
 ## Where it stands among open-source MCP guards
 
@@ -78,7 +82,7 @@ architecture review are in the [history](research-notes/contribution-history.md#
 ## Pointers
 
 - The hook study, in order of length: [hook-fidelity-report.md](hook-fidelity-report.md) (read this), then
-  [hook-fidelity-study.md](hook-fidelity-study.md) (the full working record), and the data in
+  [hook-fidelity-study.md](research-notes/hook-fidelity/hook-fidelity-study.md) (the full working record), and the data in
   [results/hook-fidelity/](../results/hook-fidelity/README.md).
 - Numbers and limits of every other benchmark: [benchmarks.md](benchmarks.md).
 - Literature and prior art: [related-work.md](related-work.md).

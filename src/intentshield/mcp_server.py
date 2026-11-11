@@ -32,6 +32,7 @@ from typing import Any, Literal, Protocol
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
+from . import translation
 from .envfile import load_environment, require_tokens
 from .logs import configure_logging
 from .mcp_upstream import MCPUpstreamError
@@ -393,7 +394,7 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
 
     def write_catalog(tools: list[Any]) -> None:
         directory = Path(config.tool_catalog_dir).expanduser()
-        directory.mkdir(parents=True, exist_ok=True)
+        translation.private_dir(directory)
         path = directory / f"{'-'.join(sorted(u.server_id for u in config.upstream_configs))}.json"
         temporary = path.with_suffix(".tmp")
         # ``server`` lets the hook key read-only decisions on (server, tool): a bare name alone once lent one
@@ -763,10 +764,13 @@ def main(argv: list[str] | None = None) -> None:
     pre = argparse.ArgumentParser(add_help=False)  # the token variable's name is chosen by the user, so it is read first
     pre.add_argument("--control-token-env", default="INTENTSHIELD_CONTROL_TOKEN")
     pre.add_argument("--config")
+    pre.add_argument("--transport", default="stdio")
     known = pre.parse_known_args(argv)[0]
     token_env = known.control_token_env
     refused = load_environment(load_dotenv, extra=frozenset({token_env}))
-    if known.config:  # the guarded proxy reads the tokens: one that only a repository's .env held leaves it open
+    # Only the HTTP endpoint reads the tokens: a stdio proxy has no listener for them to guard, so a token that only a
+    # repository's .env held (and was ignored) must not stop the proxy a harness starts over stdio.
+    if known.config and known.transport == "streamable-http":  # an ignored token would leave the endpoint open
         try:
             require_tokens(refused, (token_env, "INTENTSHIELD_AGENT_TOKEN"))
         except ValueError as exc:
