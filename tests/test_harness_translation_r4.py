@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield import translation
 from intentshield.harness import HarnessGuard, Verdict, handle
@@ -142,7 +143,7 @@ def test_the_ancestor_lookup_stops_at_its_total_budget(monkeypatch):
     monkeypatch.setenv(translation.ANCESTRY_ENV, "ps")     # the budget is the ps reader's: the others spawn nothing
     started = time.monotonic()
     chain = translation._ancestors(depth=8, budget=0.4)
-    assert time.monotonic() - started < 1.0
+    assert time.monotonic() - started < limit(1.0)
     assert 1 <= len(chain) < 8 and all(t <= 1.0 for t in calls)
 
 

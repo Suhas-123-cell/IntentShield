@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield import dangerous
 from intentshield.dangerous import assess_file, assess_shell
@@ -165,7 +166,7 @@ def test_every_rule_stays_linear_on_hostile_input():
     for text in texts:
         assess_shell(text)
         assess_file("/Users/x/.zshrc", text, write=True)
-    assert time.perf_counter() - start < 5
+    assert time.perf_counter() - start < limit(5)
 
 
 def test_the_module_has_no_nested_quantifier_regex():

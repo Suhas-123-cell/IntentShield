@@ -161,7 +161,8 @@ class Guard:
 
     @property
     def harnesses(self) -> set[str]:
-        return {e.harness for e in self.entries}
+        # a guard whose clone is absent has no entries (see `specs`); its claims name the same harnesses
+        return {e.harness for e in self.entries} or set(self.claims)
 
 
 _HOOK_SKIP = re.compile(r"--no-verify|(?<![\w-])-n(?![\w-])|hooksPath|HUSKY=0|SKIP=")
@@ -176,13 +177,26 @@ def _force_push(cmd: str) -> bool:
     return bool(_FORCE_PUSH.search(cmd))
 
 
-def specs() -> list[Guard]:
+def specs(strict: bool = False) -> list[Guard]:
+    """The scored guards: claims, claim notes and, where the guard's clone is present, the entry points to run.
+
+    Reporting needs only the claims, so with ``strict=False`` a guard whose registration file lives in a clone that is absent gets no
+    entries (``report`` and ``breakdown`` work from ``decisions.jsonl`` alone). Running a guard needs the clone: ``strict=True``
+    raises, naming the fetch script.
+    """
     shell = {"shell"}
     out: list[Guard] = []
 
     # cc-safe-setup: the six PreToolUse entries of hooks/hooks.json, run as `sh -c` with CLAUDE_PLUGIN_ROOT set, as the plugin does
     repo = CLONES / "cc-safe-setup" / "repo"
-    hooks = json.loads((repo / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"]
+    hooks_file = repo / "hooks" / "hooks.json"
+    if hooks_file.exists():
+        hooks = json.loads(hooks_file.read_text())["hooks"]["PreToolUse"]
+    elif strict:
+        raise FileNotFoundError(f"{hooks_file} is missing: the guard corpus clones are needed to run a guard "
+                                "(benchmarks/hook_fidelity/fetch_corpus.py clones the pinned commits into HF_SCRATCH)")
+    else:
+        hooks = []
     entries = [Entry(f"hooks.json[{i}]", "claude", ["/bin/sh", "-c", h["command"]], matcher=group["matcher"],
                      env={"CLAUDE_PLUGIN_ROOT": str(repo)}, readable=[repo])
                for i, group in enumerate(hooks) for h in group["hooks"]]
@@ -886,7 +900,7 @@ def cmd_decide(args) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     wanted = set(args.guard)
-    all_guards = specs()
+    all_guards = specs(strict=True)
     results: list[dict] = []
     for g in all_guards:
         if wanted and g.id not in wanted:

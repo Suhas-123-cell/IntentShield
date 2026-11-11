@@ -4,7 +4,9 @@
 
 For each harness it checks that the settings file holds every IntentShield hook, that the hook command names an
 executable that exists, that a hosted judge has its API key, and that the harness has run a hook since the hooks
-were installed (Codex skips hooks nobody has trusted, without a word). It also lists stdio MCP servers that are
+were installed (Codex skips hooks nobody has trusted, without a word). An event a person pipes into the hook by hand is
+told from a run by the harness (the harness's own process is not among the hook's ancestors) and does not count; for Cursor
+that cannot be told. It also lists stdio MCP servers that are
 not behind the transparent proxy, whose tool descriptions the hooks never see. For each harness it records the
 version it finds on PATH (``~/.intentshield/harness-versions.json``, which the hooks read to choose their replies) and
 prints what the hook-fidelity study measured for that version. Exit 1 on any problem. Apart from that record it reads
@@ -71,7 +73,8 @@ def _hooks(harness: str, path: Path) -> dict[str, list[dict[str, Any]]]:
     found: dict[str, list[dict[str, Any]]] = {}
     for event, groups in (hooks.items() if isinstance(hooks, dict) else ()):
         for group in groups if isinstance(groups, list) else ():
-            handlers = group.get("hooks") if isinstance(group, dict) and isinstance(group.get("hooks"), list) else [group]
+            inner = group.get("hooks") if isinstance(group, dict) else None
+            handlers = inner if isinstance(inner, list) else [group]
             for handler in handlers:
                 if install._ours(handler):
                     found.setdefault(event, []).append({"command": handler["command"],
@@ -91,8 +94,11 @@ class Runs:
     """When the hooks ran, from their own database: per harness, and per working directory (a project's settings
     file is only run for sessions inside that project)."""
 
-    def __init__(self, events: dict[str, float], dirs: list[tuple[str, str, float]]) -> None:
+    def __init__(self, events: dict[str, float], dirs: list[tuple[str, str, float]],
+                 piped: dict[str, float] | None = None) -> None:
         self.events, self.dirs = events, dirs
+        # Events that reached a hook from a process that is not the harness (hand-piped): not runs by the harness.
+        self.piped = piped or {}
 
     def last(self, harness: str, project: Path | None = None) -> float | None:
         """The latest hook run of the harness, inside ``project`` for a project's settings file. A database that
@@ -114,7 +120,11 @@ def _last_runs(db: Path) -> Runs | None:
                 dirs = conn.execute("SELECT harness, cwd, last FROM harness_dirs").fetchall()
             except sqlite3.Error:  # written by hooks of an earlier version
                 dirs = []
-            return Runs(events, dirs)
+            try:
+                piped = dict(conn.execute("SELECT harness, last FROM harness_piped").fetchall())
+            except sqlite3.Error:  # hooks of an earlier version kept no such record
+                piped = {}
+            return Runs(events, dirs, piped)
     except sqlite3.Error:  # a database from before the hooks recorded runs
         return None
 
@@ -312,7 +322,7 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
         report.line(level, subject, message)
     for event, what in ((_CALL_EVENT.get(harness), "call is checked"),
                         (_RESULT_EVENT.get(harness), "result is scanned or tainted")):
-        for handler in hooks.get(event, []):
+        for handler in hooks.get(event or "", []):
             matcher = handler.get("matcher")
             if matcher is not None and not _covers_mcp(harness, matcher):
                 report.line("FAIL", subject, f"the {event} matcher {matcher!r} does not match MCP tools, so no MCP "
@@ -323,12 +333,25 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
     if runs is None:
         report.line("warn", subject, "the hook database predates run records; cannot tell whether the hooks run")
     elif last is None or last < installed:
-        hint = (" Codex skips hooks nobody has trusted: start `codex` and approve the IntentShield hooks."
-                if harness == "codex" else f" Start {harness} once; if this stays, the harness is not running them.")
-        report.line("FAIL", subject, "installed, but no hook has run since "
-                    f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(installed))}.{hint}")
+        piped = runs.piped.get(harness)
+        if piped is not None and piped >= installed:
+            # Something fed an event to the hook, but not the harness's own process (the process tree holds none): a person
+            # piping an event in looks like this, and so does a harness an IDE starts under another name. Not a run, and
+            # not called a failure either.
+            report.line("warn", subject, "installed; the only events since "
+                        f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(installed))} reached the hook from a process that is "
+                        f"not {harness} (last at {time.strftime('%Y-%m-%d %H:%M', time.localtime(piped))}), which is what a "
+                        f"hand-piped test event looks like, so it is not counted as a run. Start {harness} once and make a "
+                        "tool call; if this stays, the harness is not running the hooks.")
+        else:
+            hint = (" Codex skips hooks nobody has trusted: start `codex` and approve the IntentShield hooks."
+                    if harness == "codex" else f" Start {harness} once; if this stays, the harness is not running them.")
+            report.line("FAIL", subject, "installed, but no hook has run since "
+                        f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(installed))}.{hint}")
     elif report.problems == problems_before:
-        report.line("ok", subject, f"hooks installed; last ran {time.strftime('%Y-%m-%d %H:%M', time.localtime(last))}")
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last))
+        note = " (Cursor's hooks cannot be told from an event piped in by hand)" if harness == "cursor" else ""
+        report.line("ok", subject, f"hooks installed; last ran {when}{note}")
     return True
 
 

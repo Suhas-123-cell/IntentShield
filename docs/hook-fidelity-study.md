@@ -1,6 +1,9 @@
 # What three agent CLIs do with the verdict a PreToolUse hook returns: a versioned stub-model conformance matrix (Cursor unmeasured)
 
-Status (2026-11-01, round 8 integrated): measured on Claude Code, Codex CLI and Gemini CLI against a **stub model** (round 8 added a narrow real-model arm, section 6d), headless
+> Start with [`hook-fidelity-report.md`](hook-fidelity-report.md): the question, method, version matrix, findings, limits and disclosure status in a few pages.
+> This file is the full record: every lane, every review verdict, the launch accounting and what was not done.
+
+Status (2026-11-01, rounds 1 to 9 documented; round 9, section 6f, tried to test the round-8 rules outside their categories and did not run the test): measured on Claude Code, Codex CLI and Gemini CLI against a **stub model** (round 8 added a narrow real-model arm, section 6d), headless
 for the matrix, with a scripted pty-interactive lane and a head-to-head comparison added in round 6 and a wrapped-guard control, allow and deny-all arms, a `ps`-free mode detector, a
 raw-ask Codex arm, captured-ask pty cells and a novelty check added in round 7 (sections 3.7, 6a, 6b); Cursor CLI **unmeasured** (free-plan usage limit), so this is a three-harness study and not a four-harness one. **Round 8** added, for the first time, a comparison of what IntentShield and other guards **decide** (section 6c: IntentShield is worse on decisions on the author's fixtures, apart from one provenance-based MCP flag), a local-model and a one-model paid arm (6d), a re-run of the wrapped rows on the merged code and the failure cells under `--on-empty allow` (6a.1), and a Linux `/proc` reader run in Docker (6b.1). This file replaces the
 protocol-first document of rounds 1 and 2 (`git show a65db01:docs/hook-fidelity-study.md` has it, with the round 1 and 2 critic tables in
@@ -128,9 +131,9 @@ theirs):
 **Venue fit.** A workshop paper or short measurement note (an LLM-agent security workshop, SecDev or an experience-report track), an artifact
 submission (runner, stub, committed rows, regeneration scripts, tests), the per-vendor documentation-feedback packet (drafts kept out of the repository, nothing
 sent) and upstream issues. **Not** the main track of S&P, USENIX Security, CCS, ICSE, FSE or ASE. Section 15 lists what a full paper would still
-need, with costs. This matches `docs/contribution.md` section 7 and its 2026-11-01 section.
+need, with costs. This matches `docs/contribution.md` sections 7 and 13.
 
-**Kill criterion (pre-registered, section 8), evaluated and not met.** The pre-registered kill criterion (section 8) is **not met**: 3
+**Kill criterion (author-registered before the runs, section 8), evaluated and not met.** The kill criterion, registered by the author in a same-day commit that is not in `main`'s history and cannot be verified from this repository (section 7), is **not met**: 3
 undocumented deviations replicate on three or more builds, the bar is 5. Re-counted by direction in round 4 (section 8.1): of the 3, one is in the
 unsafe direction and is confounded by a pre-approval rule, one is safe-direction (Gemini blocks where its docs say warn) and one is an availability
 hang; **the count of unsafe-direction undocumented deviations replicating on three or more builds that no confound explains is zero.**
@@ -252,7 +255,7 @@ matched.
 |---|---|---|---|
 | A hook `ask` under `-p` is a **deny** (the model is told the hook's reason; generic text under M1), never a hang, in every mode including bypass. **Documented**: hooks.md says that when Claude Code denies the call in a `-p` run where no one can answer, Claude reads the reason in the tool result (`vendor-archive/claude/hooks.md`, `permissionDecisionReason`) | 2.1.316; M1h shell, write, mcp, resource; M2 shell, write, mcp, resource; M1 shell, mcp; M0h shell, mcp | 0/5 RAN each (hook invoked 5/5); runs 0.6 to 0.9 s | M-R |
 | M1 write and resource, M0h write and resource | not run | N | N |
-| Pre-registered prediction for M2 ask was RAN (hook ask would not survive bypass); it was wrong | 2.1.316 M2 | 0/5 RAN | M-R |
+| Prediction for M2 ask, written into `cells.py` before the runs (author-registered, section 7), was RAN (hook ask would not survive bypass); it was wrong | 2.1.316 M2 | 0/5 RAN | M-R |
 | `ask` did not stop a **pre-approved** Bash call on six old builds; enforced as a deny from 2.1.85. The flip lies between the **adjacent patch releases 2.1.84 and 2.1.85** (round-4 bisect, 5 steps) | M1h shell, `--allowedTools Bash` | RAN 2/2 on each of 2.0.41, 2.1.47, 2.1.69 (round 3, M-R) and 2.1.78, 2.1.83, 2.1.84 (round 4, M); BLOCKED 2/2 on each of 2.1.85, 2.1.86 (round 4, M) and 19 releases 2.1.89 to 2.1.316 (round 3, M-R); at every bisect step R1 RAN 2/2 and R4 BLOCKED 2/2, hook invoked 2/2. Not separated: whether old builds ignored the ask or the pre-approval beat it (an M0h pair on 2.1.84 and 2.1.85 would separate them; not run). The 2.1.85 changelog has no line stating the change | M-R and M |
 | A hook `allow` lifts a native `-p` denial when nothing is pre-approved | 2.1.316 M0h | R2 RAN 5/5 on shell and 5/5 on mcp; R1 control 0/5 RAN | M-R |
 | An `mcp__.*` matcher never fires for `ReadMcpResourceTool` reads and so a deny hook does not block them; the exact-name matcher does | 2.1.316 M1h resource | `mcp__.*`: R1, R3, R4 RAN 5/5 each, hook invoked 0/5; exact matcher R4 0/5 RAN, hook invoked 5/5; positive control `mcp__.*` on a normal MCP call R4 0/3 RAN, invoked 3/3 | M-R, weak attempt evidence |
@@ -270,10 +273,10 @@ and later); (e) "killed" is not measured, only that the call proceeded at the ti
 partner block's liveness; the matcher not matching is the matcher working as written, so the finding is that the natural MCP
 wildcard misses resource reads.
 
-### 3.2 Codex CLI (stub arm, 17 sampled releases 0.131.0 to 0.166.0, 428 matrix rows plus pilots and 47 round-4 rows)
+### 3.2 Codex CLI (stub arm, 17 sampled releases 0.131.0 to 0.166.0, 428 matrix rows plus pilots and 51 round-4 rows)
 
 Evidence: `results/hook-fidelity/codex/` (`runs.jsonl`, `summary.md`, `by-version.md`, `pilot.md`, `launch-accounting.json`, `streams/`, and
-`r4-gaps/`, `r4-integration/` for the round-4 rows: 39 + 2 + 6 launches).
+`r4-gaps/`, `r4-integration/` for the round-4 rows: 51 run ids, 39 gap runs + 2 `nojson-debug` variant runs + 6 integration runs + 4 `r4-integration/bisect` runs; `tests/test_hook_fidelity_study_numbers.py` recounts them).
 `codex exec`, M1 (approval never, workspace-write). Sampled releases: 0.131.0, 0.133.0, 0.134.0, 0.136.0, 0.140.0, 0.143.0, 0.145.0,
 0.148.0, 0.149.0, 0.150.0, 0.152.0, 0.155.0, 0.158.0, 0.162.0, 0.164.0, 0.165.0, 0.166.0 (0.141, 0.142 and all others not installed;
 0.105 to 0.130 hang on `--version`). 428 of 428 rows have one scripted call and two stub requests; 0 INVALID; 0 egress attempts
@@ -320,7 +323,7 @@ without the loopback sandbox; 15 cells have rows both ways and none disagree.
 | Exit-126 and 127 behaviour changes between **0.29.7 and 0.30.0** at the CLI: through 0.29.7 a dead-interpreter hook lets the call run; from 0.30.0 it denies. Exit 126 or 127 with empty output allows on every release | R10b, R10a, R13, R15 | R10b RAN 2/2 on each of 0.24.5, 0.26.0, 0.28.2, 0.29.7 and BLOCKED 2/2 on each of 22 releases from 0.30.0; 0.66.0 R10a, R10b, R13 BLOCKED 3/3 per offered block | M-R |
 | Empty reply and timeout fail open | R5, R9 | RAN 3/3 in every offered block on 0.66.0 (timeout 3 s, reply sleeps 15 s) | M |
 | Hooks are opt-in before 0.26.0 (no `hooks.enabled` key: deny hook not invoked, call ran) | enable-default | 0.24.5 R4 RAN 2/2, hook invoked 0/2; 0.26.0 R4 BLOCKED 2/2 | M-R |
-| Pre-registered cells C8 (yolo ask HUNG), C9 (0.37.1 ask RAN), C10 (exit-126 text BLOCKED), C11 (trusted MCP ask RAN) all hit | | 3/3, 2/2, 3/3, 3/3 | M |
+| Cells C8 (yolo ask HUNG), C9 (0.37.1 ask RAN), C10 (exit-126 text BLOCKED), C11 (trusted MCP ask RAN), predictions written before the runs (author-registered, section 7), all hit | | 3/3, 2/2, 3/3, 3/3 | M |
 | A hook `ask` overrides an argument-scoped policy DENY into a confirmation on 0.38.2 and later for shell and 0.36.0 and later for MCP (PROMPT-WAIT with no responder, bounded 5 s); on 0.36.0 and 0.37.1 the shell version ends in the policy denial | scheduler probe | 1 run per scenario per release, 11 releases | P |
 | The sandbox profile changed no outcome | | 15 of 15 cells agree | M |
 
@@ -1199,6 +1202,13 @@ Neither sentence says "better than existing guards": the set is not independent 
 issue and the opt-in (stated above), the Bash-to-all-tools extrapolation (labelled), non-independent labels and discovery-only items (stated, not split out), and minor items: benign rate by tool kind (only 5 non-shell benign items) and safety-net's pipe-to-shell asks on the Claude rendering (4 items) versus denies on Codex and Gemini. **Not done:** a second author or a different model adding 30 to 50 harmful items outside the six categories and scoring once with the rules frozen (the critic's better fix, and the only test of generalisation);
 a with-and-without-discovery split or a cluster bootstrap by source; `dcg`; MCP calls in this set; a harness run of the read, write and edit asks; a person answering the prompts; Linux or Windows for the rules.
 
+**Rules since this section was written (2026-11-11).** The decisions and counts above are those of the rules as they stood when the study ran, and the
+committed results are not regenerated. A later change lets a deny from `dangerous.py` win over a session ask. Re-running the committed fixtures
+(`results/hook-fidelity/detect/fixtures.jsonl` and `fresh/fixtures.jsonl`) through the current code changes 45 `intentshield` decisions from ask to deny:
+27 rows (9 items) of the 467-fixture set and 18 rows (6 items) of the fresh set, all harmful credential-exfiltration items. No benign row changed and none
+changed to allow. On the 214 primary fresh calls the split of 41 asked and 35 denied becomes 35 asked and 41 denied; 28 of 104 harmful calls are
+still let through and the 5 benign asks stay. The denies-alone comparison (24/85 against 41/85) was computed before the change and has not been recomputed.
+
 ## 6f. Generalisation outside the rule categories (branch r9-general; the test did not run)
 
 Section 6e ended with the one test that could show whether the round-8 rules do anything beyond the six harmful categories they were written from: a second author or a different model adds 30 to 50 harmful calls outside those categories, the set is committed with provenance, the rules are frozen, and every guard is scored once. Round 9 set that test up on the branch `r9-general` (worktree `.claude/worktrees/r9-general`, cut from the study branch tip `163f108`). **It did not run.** The fixture author stopped before writing `fixtures.jsonl` or `provenance.md`, so nothing was committed, no guard was run on any new item, and this section has no detection numbers. It is written so that the absence is on the record and cannot be mistaken for a pass. No harness was launched, no model or paid call was made, no network was used and no process was left running.
@@ -1229,10 +1239,9 @@ What exists, checked read-only by the scoring lane and by the critic and re-chec
 
 **Not done:** the whole test (a second-author or second-model set outside the six categories, committed first and scored once), the critic's five checks, and any statement about how IntentShield, `safety-net` or `knox` behave on harmful calls outside the six categories.
 
-## 7. Pre-registered predictions
+## 7. Author-registered predictions
 
-`cells.PREDICTIONS` was written before the matrix runs (the commit that adds `cells.py` is the registration; not blind: the authors had read
-the docs, source and pilot). Counted per scored cell over the Codex, Claude and Gemini stub rows (1342 rows: 1350 are committed and the 8 Gemini smoke rows are excluded; 0 INVALID, 507 cells: 361
+`cells.PREDICTIONS` was written before the matrix runs. "Registered" here means only this: the author committed the table and the kill criterion in a same-day commit, with no external timestamp and no hash recorded in the rows. It was not blind (the authors had read the docs, source and pilot). That commit is not in `main`'s history, which holds one squashed commit for the whole study; the author archives the original commits, and an outside reader cannot verify them. Read every "registered" below with that limit. Counted per scored cell over the Codex, Claude and Gemini stub rows (1342 rows: 1350 are committed and the 8 Gemini smoke rows are excluded; 0 INVALID, 507 cells: 361
 scored, 8 scored-native, 122 controls, 16 config-invalid; 245 informative cells), by basis (a prediction repeated across builds counts once
 per build): docs 263 hit and 14 missed, source 40 and 4, inference 9 and 6, pilot 2 and 0. **Per behaviour, not per build** (round 4: the same
 prediction repeated on several builds counted once, by harness, mode, kind, state, `onFailure` setting and reply): docs basis 79 distinct
@@ -1249,7 +1258,7 @@ and RAN (allow-rule confound, 3); **source-basis (4)** Gemini R10b predicted BLO
 
 ## 8. The kill criterion, evaluated
 
-Pre-registered (`summarize.kill_criterion`): at least 5 undocumented deviations (a class assigned and the outcome not what the docs-basis
+Author-registered (`summarize.kill_criterion`; section 7 says what that means): at least 5 undocumented deviations (a class assigned and the outcome not what the docs-basis
 prediction says, which includes cells where the docs are silent) replicating on 3 or more builds. Over the three stub-arm harnesses:
 
 | harness | builds | undocumented groups | replicating on 3 or more builds |
@@ -1259,7 +1268,7 @@ prediction says, which includes cells where the docs are silent) replicating on 
 | Gemini | 28 | 15 | 2: R10b blocked on 22 releases (docs: warn); R3 hang on 15 releases (docs silent) |
 | **total** | | **20** | **3 < 5: not met** |
 
-Reading, honestly: by the pre-registered count the answer is a **workshop note or artifact, not a paper**. Two cautions cut both ways. The
+Reading, honestly: by the registered count the answer is a **workshop note or artifact, not a paper**. Two cautions cut both ways. The
 Codex zero is because its predictions were written from the docs and source and the docs describe the fail-open behaviour; Codex's
 real findings (trust and bypass-flag behaviour, silent skip) are state behaviours that the cell taxonomy does not classify as deviations.
 Conversely, 2 of the 3 replicating deviations are Gemini's, and Gemini's consumer tiers and the exit-126 change are version specific, so
@@ -1268,7 +1277,7 @@ this is closer to one vendor's changelog than a cross-harness result. Cursor cou
 
 ### 8.1 The criterion re-derived by direction (round 4)
 
-The pre-registered threshold of 5 has no stated rationale or power analysis; it was chosen as "several independent replicating findings", and
+The registered threshold of 5 has no stated rationale or power analysis; it was chosen as "several independent replicating findings", and
 the count includes safe-direction deviations and cells where the docs are silent. Re-counted over the same rows (`summarize.kill_criterion`'s groups,
 classified by the direction of the observed outcome against the docs-basis prediction), each of the 20 undocumented groups once:
 
@@ -1280,7 +1289,7 @@ classified by the direction of the observed outcome against the docs-basis predi
 | not a deviation | 1: Claude `onFailure` with an empty reply R5 (the docs do not call an empty reply a failure; an inference-basis prediction missed) | 0 | 0 |
 | total | 20 | 6 | **3** |
 
-So at the pre-registered threshold of 5 the criterion is not met (3). At thresholds of 3, 5 and 7 the total is met, not met, not met; the unsafe
+So at the registered threshold of 5 the criterion is not met (3). At thresholds of 3, 5 and 7 the total is met, not met, not met; the unsafe
 direction alone (1 group, confounded) is not met at any of them. **Read plainly, on current builds the count of unsafe-direction undocumented
 deviations that replicate and are not confounded is zero.** The Codex zero stays an artifact of how predictions were written (the docs describe
 the fail-open behaviour). "Undocumented" is coded by the agents that ran the cells and wrote the docs-basis predictions (not blind); a second
@@ -1288,7 +1297,7 @@ coder re-coding a sample of 40 to 60 cells with an agreement statistic was **not
 
 ## 9. What each critic refuted, and what was dropped
 
-Round-3 critics re-ran cells from each lane's branch (stub only, isolated HOME). Where a claim lost, it lost for the reason stated.
+Round-3 the reviewing agents re-ran cells from each lane's branch (stub only, isolated HOME). Where a claim lost, it lost for the reason stated.
 
 | lane | critic's launches | refuted or withdrawn | survived (kept, with the stated narrowing) |
 |---|---|---|---|
@@ -1332,8 +1341,8 @@ the bypass flag for the failure replies (not shown in round 3; round 4 showed it
   determinism run (6 cells x 20 repeats, under load and shuffled) was not done (section 15). A HUNG outcome is "no progress at the cap" (90 s on
   the sweep, 300 s on 0.66.0 and in round 4 the cap was raised to 900 s for two cells, section 3.3), not "waits for ever".
 - **Self-review and circularity**: sign-offs, the P_doc coding, the deviation classes and the predictions were produced by the same agents that
-  ran the cells; critics re-ran cells but did not re-derive the docs coding, and no human second coder exists (section 15). The pre-registration is
-  a same-day git commit, not an external timestamp; the kill criterion's threshold of 5 has no rationale (section 8.1).
+  ran the cells; the reviewing agents re-ran cells but did not re-derive the docs coding, and no human second coder exists (section 15). The registration is
+  an author's same-day git commit, not an external timestamp, not blind, and not verifiable from `main`'s history; the kill criterion's threshold of 5 has no rationale (section 8.1).
 - **One machine**, macOS, bash and zsh; the 126 versus 127 split is shell dependent; Linux and Windows unmeasured (a Linux container re-run of the
   headline cells was not done). Hook timeout is 3 s in the cells, not the vendors' defaults.
 - **Sandbox**: Codex arm S ran without a loopback sandbox (its seatbelt cannot nest), so "stub only" rests on config plus the refusing proxy
@@ -1354,7 +1363,7 @@ the bypass flag for the failure replies (not shown in round 3; round 4 showed it
   validated on construction (n=1 per harness for the wrapped and no-tty launches), its unknown-mode path was reached only by an environment switch, and the Linux and Windows readers were never run; the captured-ask cells replay bytes (no guard program ran) on
   one build; the novelty search was limited (no GitHub code search) and rests partly on search snippets.
 - **Labels from one model family (section 6e)**: the fresh set's labels, and the rules they score, come from one model family, with one author's recalled sources; nothing independent confirmed them (the rules were not tested outside their six categories, section 6f).
-- **Commit hashes and branch names are from the development branch**: the study cites commits and branches (for example `25b62ad`, "fixtures committed before any guard ran", `163f108`, `c83202c`, `r8-fresh`) of the branch it was developed on. That branch was squash-merged into `main`, so those hashes are not in this repository's `main` history, and the pre-registration and fixtures-before-guards order cannot be checked from the public history alone; it rests on the study's own ledgers and `provenance.md` files.
+- **Commit hashes and branch names are from the development branch**: the study cites commits and branches (for example `25b62ad`, "fixtures committed before any guard ran", `163f108`, `c83202c`, `r8-fresh`) of the branch it was developed on. That branch was squash-merged into `main`, so those hashes are not in this repository's `main` history, and the registration order of predictions and kill criterion, and the fixtures-before-guards order, cannot be checked from the public history alone; it rests on the study's own ledgers and `provenance.md` files.
 - **Vendor documentation is cited, not redistributed**: the Claude Code and Codex documentation pages the sign-offs cite are recorded by source URL and sha256 in `results/hook-fidelity/vendor-archive/*/README.md`, not copied (they carry no licence that allows it); a page that has changed since will not match its hash. Gemini CLI's v0.66.0 documentation is in `docs/hook-fidelity-archive/` under its Apache-2.0 licence (see `NOTICE`).
 - **Raw terminal captures are not committed**: the pty lane's 61 `transcript-head.bin` files (the first 6000 raw terminal bytes of each run) were written by the runner but are not in the repository; each `results/hook-fidelity/interactive/runs/<run>/` holds the screen text, the hook observer's log and the stub's request log, from which `table.md` regenerates.
 - **Conflict of interest**: IntentShield's hook and `doctor.py` are subjects of the measurement (section 6), and the author ships the mitigation in
@@ -1495,7 +1504,7 @@ Also not done, as before: Codex `M2` yolo; write and `apply_patch` cells on Code
 `dontAsk`, `defer`, subagents, two hooks, `--permission-prompt-tool` and SDK `can_use_tool`; MCP end to end on Gemini before 0.66.0; reply
 variants R6, R7, R8, R11, R12, R14 end to end on Gemini; Codex R12, R13, R14; any real guard running inside a harness; fail-open of a real guard
 on a failed hook; whether a `PermissionRequest` allow or deny is honoured headless; per-harness event-stream parsers as an independent decision
-record; a tagged pre-registration; contacting any guard author or vendor. The 20 unverified config items (24 with Cursor; `matcher:codex:write`
+record; a registration outsiders can verify (a pushed tag or a deposited hash of the predictions and kill criterion); contacting any guard author or vendor. The 20 unverified config items (24 with Cursor; `matcher:codex:write`
 is unsigned and unused) were signed off for Claude, Codex and Gemini by agents (self-review) and for Cursor not at all.
 
 ## 14. Companion documents and how to reproduce
@@ -1508,13 +1517,13 @@ is unsigned and unused) were signed off for Claude, Codex and Gemini by agents (
   `r4_variant.py` (argv and env variants), `mitigation_r4_summary.py`. A run needs `HOOK_FIDELITY_GO=<n>`.
 - Round 6 drivers: `compare.py` (`plan`, `run`, `summarize`; the summary regenerates from the committed rows alone) and `pty_lane.py` (`plan`, `run`, `table`) with `pty_hook.py`. Round 7 extended both (the wrapped, allow, deny-all and launcher-only arms; the `ps`-free cells and replay cells, each with a `round` or `lane` field on its rows) and added the product module `src/intentshield/wrap_hook.py`
   (`intentshield wrap-hook`).
-- Round 8 drivers: `detect_fixtures.py` (`build`, `verify`), `detect_compare.py` (`decide`, `matrix`, `report`, `breakdown`; `decide` needs the corpus clones, `report` and `breakdown` regenerate from `decisions.jsonl`), `detect_validate.py` (`run`, `summarize`), `detect_mcp_benign.py` (`run`, `report`), `compare.py --round r8` with `r8_summary.py`, `linux_probe.py` (`docker`, `summarize`; needs Docker), `model_lane.py` (with `model_lane.sb`; needs a local Ollama server) and `deepseek_arm.py` (a paid endpoint, the user's approval required). The fixes after round 8 add `r8fix_report.py` (post hoc tables), `fresh_build.py` (the fresh fixtures, refuses on a collision with round 8's), `_is_subproc.py` (IntentShield's hook in process from a given source tree) and `fresh_report.py` (`table.md` and `summary.json` from `fixtures.jsonl`, `decisions.jsonl` and `detect/r8fix/delivery.json`; no guard is re-run).
-- Tests: `tests/test_hook_fidelity*.py` (457 collected, including `test_hook_fidelity_compare.py` 10, `test_hook_fidelity_compare_r7.py` 13, `test_hook_fidelity_compare_r8.py` 8, `test_hook_fidelity_detect.py` 48, `test_hook_fidelity_linux_probe.py` 6, `test_hook_fidelity_model_lane.py` 11, `test_hook_fidelity_model_arms.py` 4, `test_hook_fidelity_pty.py` 38 and `test_hook_fidelity_pty_r7.py` 12), `tests/test_wrap_hook.py` (39), `tests/test_translation_ancestry.py` (38), `tests/test_harness_translation.py` and `tests/test_harness_translation_r4.py`, and
-  `tests/test_hook_fidelity_study_numbers.py` (14), which recomputes the figures this document cites from the committed rows; none launches a harness
+- Round 8 drivers: `detect_fixtures.py` (`build`, `verify`), `detect_compare.py` (`decide`, `matrix`, `report`, `breakdown`; `decide` needs the corpus clones, which `fetch_corpus.py` clones at the commits in `corpus.json`; `report` and `breakdown` regenerate `table.md`, `summary.json`, `breakdown.md` and `breakdown.json` from `decisions.jsonl`, `fixtures.jsonl` and the committed delivery rows with no clone present, checked byte for byte against an empty `HF_SCRATCH` and by `tests/test_hook_fidelity_detect.py`. Before the fix described in `results/hook-fidelity/README.md` both crashed in a clean clone with a missing `hooks.json`, whatever this section said), `detect_validate.py` (`run`, `summarize`), `detect_mcp_benign.py` (`run`, `report`), `compare.py --round r8` with `r8_summary.py`, `linux_probe.py` (`docker`, `summarize`; needs Docker), `model_lane.py` (with `model_lane.sb`; needs a local Ollama server) and `deepseek_arm.py` (a paid endpoint, the user's approval required). The fixes after round 8 add `r8fix_report.py` (post hoc tables), `fresh_build.py` (the fresh fixtures, refuses on a collision with round 8's), `_is_subproc.py` (IntentShield's hook in process from a given source tree) and `fresh_report.py` (`table.md` and `summary.json` from `fixtures.jsonl`, `decisions.jsonl` and `detect/r8fix/delivery.json`; no guard is re-run).
+- Tests: `tests/test_hook_fidelity*.py` (482 collected, 479 passed and 3 skipped without the guard clones on 2026-11-11, including `test_hook_fidelity_compare.py` 10, `test_hook_fidelity_compare_r7.py` 13, `test_hook_fidelity_compare_r8.py` 8, `test_hook_fidelity_detect.py` 48, `test_hook_fidelity_linux_probe.py` 6, `test_hook_fidelity_model_lane.py` 11, `test_hook_fidelity_model_arms.py` 4, `test_hook_fidelity_pty.py` 38 and `test_hook_fidelity_pty_r7.py` 12), `tests/test_wrap_hook.py` (39), `tests/test_translation_ancestry.py` (38), `tests/test_harness_translation.py` and `tests/test_harness_translation_r4.py`, and
+  `tests/test_hook_fidelity_study_numbers.py` (16, adding the Codex round-4 row count and a determinism check of the coding), `tests/test_hook_fidelity_reproduce.py` (7: the detection tables regenerate with no guard clone, the corpus fetch plan, the interpreter fallback) and `tests/test_hook_fidelity_report.py` (11: the report against the rows and the documents against themselves), which recompute the figures this document cites from the committed rows; none launches a harness
   (the runner tests patch `subprocess` to fail, the lane tests start only the stub, `bash -n`, `sh -c` and fake binaries). The full suite after round 8 was 3773 collected: 3770 passed and 3 skipped when run attached (2026-11-01, 154 s, with the isolation environment of the repository's `CLAUDE.md`). **After the fixes of section 6e it is 4016 collected: 4013 passed and 3 skipped** attached (2026-11-01, 153 s), the figure before the `8b55158` skip; run as an orphaned `nohup` job on macOS `test_the_ancestry_is_read_with_no_runnable_ps` failed before that skip because the parent is `launchd` (6e), and now skips. The 243 added tests (3773 to 4016 collected) are `tests/test_dangerous_rules.py` 234, `tests/test_hook_fidelity_fresh_report.py` 3, four in `tests/test_translation_ancestry.py` (now 42) and two in `tests/test_hook_fidelity_linux_probe.py` (now 8); `ruff check src tests benchmarks` passes.
-- Regenerating without a harness: the Claude, Codex, coverage and mitigation tables and the guard table (`guard_replay.py table --index
-  results/hook-fidelity/guards/replay ...`) regenerate from the committed rows; `corpus_counts.py --check`. The prevalence counts and the guard
-  captures do not (section 10, `results/hook-fidelity/release-manifests/README.md`).
+- Regenerating without a harness: the Claude, Codex, coverage and mitigation tables, the guard table (`guard_replay.py table --index
+  results/hook-fidelity/guards/replay ...`), the `compare`, `interactive`, `detect` and `detect/fresh` tables regenerate from the committed rows; `corpus_counts.py --check`. What does not: the guard decisions themselves (`detect_compare.py decide` needs the clones from `fetch_corpus.py`), the prevalence counts and the guard
+  captures (section 10, `results/hook-fidelity/release-manifests/README.md`). The coding of the 1342 committed stub rows (cell grouping, liveness, prediction hit or miss, deviation class, kill criterion) is deterministic: `summarize.summarize` over the same rows twice, and over three seeded shuffles, gives the same table, classes, hit counts and kill criterion (`test_the_coding_is_deterministic_over_the_committed_rows` in `tests/test_hook_fidelity_study_numbers.py`). That checks the coder, not the harness: re-scoring a launch from its raw evidence needs the run directories, which are not committed, and the 6 cells x 20 repeats run on the stub was not done.
 - Round 9 added no driver, test or result file: the branch `r9-general` is empty (6f). The full suite on the study branch is unchanged, 4013 passed and 3 skipped attached (2026-11-01, 154 s, the isolation environment of the repository's `CLAUDE.md`), and `ruff check src tests benchmarks` passes.
 - Raw data per lane under `results/hook-fidelity/<lane>/`; `benchmarks/hook_fidelity/signoffs.json` holds the sign-offs and
   `results/hook-fidelity/vendor-archive/` the source URLs and sha256 of the Claude Code and Codex documentation pages the sign-offs read (the page

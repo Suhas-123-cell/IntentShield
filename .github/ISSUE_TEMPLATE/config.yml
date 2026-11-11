@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem (private)
+    url: https://github.com/Suhas-123-cell/IntentShield/security/advisories/new
+    about: A guard that fails open, a bypass, or a secret that leaks. Use this form, not a public issue. See SECURITY.md for what is in scope.

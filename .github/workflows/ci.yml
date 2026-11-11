@@ -1,30 +1,48 @@
 name: ci
 
+# Runs on every branch push and pull request, and is called by publish.yml for a version tag, so a
+# release only uploads after this workflow passes for the tagged commit.
 on:
   push:
+    branches: ["**"]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python: ["3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python: "3.12"
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - run: uv sync --extra dev --frozen --python ${{ matrix.python }}
       - run: uv run ruff check src tests benchmarks
+      - run: uv run mypy  # config in pyproject.toml
+      - name: No bare wall-clock bounds in tests (use limit() from tests/timelimits.py)
+        run: "! grep -rnE '(perf_counter|monotonic|time\\.time)\\(\\) *- *[A-Za-z_0-9]+ *< *[0-9]|(took|elapsed) *< *[0-9]' tests"
       - run: uv run pytest -q
       - run: INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -q tests/test_mcp_http_e2e.py
       - run: uv run python benchmarks/review_gate.py  # benign reviews per task vs results/improve/baseline
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: docker build -t intentshield .
       - run: docker run --rm intentshield

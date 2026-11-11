@@ -4,14 +4,30 @@ This file sets out what in IntentShield could be a research contribution, the ev
 it compares with the closest papers, and whether it is worth publishing. It is the honest
 version: most of IntentShield is engineering over prior art.
 
-**Verdict (2026-10-12, after review): it is not worth submitting to a peer-reviewed venue as
-it stands.** The candidate claim below was measured, but on review it is thin and partly
-known (§5). Two routes could still produce a paper (§7); a third, an evaluation-methodology
-paper built on the trivial baseline, is audited against 19 papers in §9 and failed its
-AgentDojo kill test (§9.5): the floor's parity with detectors holds on MSB only. Update 2026-10-13: the MSB label
-leak is fixed and re-measured (§5.6, §6), and the new evidence weakens the supporting
-numbers further: the gateway's 0.0% executed harm mostly comes from the attack not reaching
-the agent, not from detection.
+> **Verdict (current, 2026-11-11).** Not publishable at a main research track as it stands. The supportable outputs are an artifact
+> and a measurement note or workshop paper.
+>
+> **Claimed, each with its limit**
+> - A versioned measurement of what Claude Code (23 sampled builds), Codex CLI (17) and Gemini CLI (28) do with the verdict a
+>   PreToolUse-style hook returns (§13, `docs/hook-fidelity-report.md`). Limit: a scripted stub model, headless, macOS, one author,
+>   Cursor unmeasured, most behaviours already documented by the vendors. A measurement of the harnesses, not of IntentShield.
+> - Self-disclosure parameter stripping, measured on 159 tool schemas (§10, §12). Limit: one benchmark's catalogs, and the rule is a
+>   pattern a renamed parameter would pass.
+> - A trivial structural baseline that matches detector-based guards on MSB's executed harm (§9). Limit: an MSB property; it did not
+>   transfer to AgentDojo (§9.5).
+>
+> **Not claimed**
+> - Novelty of any mechanism (§2), or the channel-placement finding as a research result (§5).
+> - That IntentShield detects more than other guards. On the author's 467 fixtures its hook is behind (it misses 137 of 166 held-out
+>   harmful items). On the 214-call set built from the same six categories as its rules it is mixed (it trails safety-net on denies),
+>   and nothing was tested outside those categories (§13).
+> - That any harness lets an attacker bypass a guard, or what a real model or a person at a terminal does at scale.
+>
+> **Route that remains.** Route 1, an artifact or tool paper, plus the hook-fidelity measurement note (§7, §13). A research-track
+> paper would need work that has not been done: an out-of-category detection test by an independent author, a second coder, a
+> determinism run on the stub, and a completed vendor disclosure (`docs/hook-fidelity-study.md` section 15).
+>
+> The dated sections below keep each earlier verdict as it was written. Where a later one replaces it, the section says so.
 
 ## 1. The claim as first stated
 
@@ -108,7 +124,8 @@ What the cells mean:
    and already evaluated seven third-party MCP tools. "Breaking the Protocol" (2601.17549)
    and CapScope (2609.08371) are adjacent.
 6. **The supporting MSB numbers were leaked, and the fix shows they are weaker than they
-   looked.** The MSB runner used to name its servers `task`, `attack` and `addition`, and the
+   looked.** (The figures in this item and the next are from the superseded v4/v5 runs of §6; the argument stands, the numbers
+   are not current.) The MSB runner used to name its servers `task`, `attack` and `addition`, and the
    agent, hooks and judge saw those names. Commit `1c0d4dc` gave the servers neutral ids and
    qwen2.5:7b was re-run (`artifacts/msb-v4`, 220 held-out cases). Unguarded harm rose from
    51.4% to 58.5% [51.8, 64.8], so the leak had understated it. The guarded rows stayed at
@@ -147,13 +164,13 @@ What the cells mean:
 These stay valid whatever happens to the paper question. They are evidence for an artifact
 or tool paper, not a research claim on their own.
 
-> **Superseded 2026-10-20.** The MSB rows below are the 2026-10-12/13 qwen runs (v4/v5), and the
-> test counts are from that date. Current MSB numbers (v12 for qwen, v8 for llama and ornith, all
-> with the intent model off) are in `results/msb` and come from `benchmarks/paper_numbers.py`; see
-> `docs/artifact-paper.md` §5. Tests on that date: 253 pass, 1 skipped. The MCPTox, judge and routing rows
-> still hold.
+Four items in this section are marked **SUPERSEDED**: the MSB table, the paired-case paragraph under it, the earlier MSB rows
+and the test count. They are the 2026-10-12/13 runs (v4/v5) and are kept as the record of that date; do not cite them. Current
+MSB numbers (v12 for qwen, v8 for llama and ornith, all with the intent model off) are in `results/msb` and come from
+`benchmarks/paper_numbers.py`; see `docs/research-notes/artifact-paper.md` §5. The MCPTox replay, the rules-versus-judge table, the routing
+and the injection-classifier items still hold and are not marked.
 
-- **MSB held-out, live servers, neutral ids** (`benchmarks/msb.py`, qwen2.5:7b, single run,
+- **SUPERSEDED (2026-10-12/13, v4/v5; current numbers: `benchmarks/paper_numbers.py`). MSB held-out, live servers, neutral ids** (`benchmarks/msb.py`, qwen2.5:7b, single run,
   temperature 0, 220 cases, 20 draws per attack template, so the Wilson intervals are too
   narrow; `artifacts/msb-v4`):
 
@@ -167,15 +184,15 @@ or tool paper, not a research claim on their own.
   | Trivial baseline, descriptions exposed | 0.0% [0, 1.7] | 44.5% | 68.6% |
   | Gateway, descriptions exposed | 0.0% [0, 1.7] | 25.0% | 38.6% |
 
-  Paired on 218 cases (`benchmarks/msb_compare.py`): harmful calls left in review 47
+  **SUPERSEDED, same run as the table above.** Paired on 218 cases (`benchmarks/msb_compare.py`): harmful calls left in review 47
   (baseline), 99 (baseline, exposed), 0 (gateway), 4 (gateway, exposed); MSB `user_task`
   51.4%, 41.4%, 33.6%, 32.1% (n=140).
 
-  Read the 0.0% with §5.6: it is largely exposure removal and a mechanical effect of holding
+  Read the 0.0% with §5 item 6: it is largely exposure removal and a mechanical effect of holding
   mutations. The task-tool metrics count the attack server only where there is no task server (rescored 2026-10-13; before, they also counted lookalike tools). The runner also
   deviates from MSB (injection text only on the task server; list-directory tools allowed),
   and the 10-step cap truncated 53/219 unguarded, 12/220 gateway and 29/218 hook cases.
-- **Earlier MSB rows** (frozen commit `05bb91a`; llama3.1:8b and Ornith-1.5-9B; descriptions
+- **SUPERSEDED. Earlier MSB rows** (frozen commit `05bb91a`; llama3.1:8b and Ornith-1.5-9B; descriptions
   exposed): harm 22-53% to 0.0%, task tool reached 55-66% gateway, executed 60-69% on hooks.
   These were measured before the neutral-id fix and without the intent model, and were not
   re-run. The LLM judge has not been evaluated on neutral ids; its only MSB runs (v3) were
@@ -197,9 +214,9 @@ or tool paper, not a research claim on their own.
   in 80% of queries, in the top three in 90%, and in the top five in 92%.
 - **Injection classifier:** a negative result. It falsely flags 20.3% of benign rows, so it
   is off by default.
-- **Tests:** 145 pass and 1 is skipped. All 146 pass with the HTTP end-to-end test enabled.
+- **SUPERSEDED. Tests:** 145 passed and 1 was skipped on 2026-10-12 (146 with the HTTP end-to-end test enabled; 253 passed and 1 skipped on 2026-10-20). The suite is much larger now; the current count is in the CI run, not here.
 
-## 6b. Adaptive detection (2026-10-13): does it change the verdict?
+### 6.1 Adaptive detection (2026-10-13): does it change the verdict?
 
 No. It adds tool features and two measurements, not a research claim:
 
@@ -225,7 +242,7 @@ transparent proxy, evaluated held out on live servers. It needs:
    The llama3.1:8b and Ornith-1.5-9B rows and the descriptions-exposed rows still need a
    neutral-id re-run, free on local Ollama.
 2. The gateway utility drop is isolated: it is the DeBERTa intent model, not a later guard
-   change (§5.7). The open choice is whether to keep that model on the read path. The trivial
+   change (§5 item 7). The open choice is whether to keep that model on the read path. The trivial
    baseline's runs are done (`artifacts/msb-v5`): it matches the gateway on `harm_executed`
    (0.0%) with higher task success, so the detection claim rests on reviewer load (harmful
    calls left for a human: 47 vs 0), which needs a review-fallibility argument to count.
@@ -237,7 +254,7 @@ transparent proxy, evaluated held out on live servers. It needs:
    `shadowing` naming artifact, the 10-step truncation).
 
 Venues: demo or artifact tracks, a software paper, or arXiv first. Skeleton started in
-[artifact-paper.md](artifact-paper.md) (2026-10-14).
+[artifact-paper.md](research-notes/artifact-paper.md) (2026-10-14).
 
 **Route 2: a measurement study (the only route with a research claim, and much more
 work).** It would measure the channel coverage of shipping guards across four to six
@@ -259,52 +276,14 @@ is novel. On review, the placement finding is too thin, and partly a known conse
 the hook schemas. On today's evidence, the realistic outcome is an artifact or tool paper
 (route 1). A research paper needs route 2, and no amount of framing substitutes for it.
 
-## 10. What can be claimed as a contribution (2026-10-29)
-
-After a search of the open-source MCP guards shipping in October 2026 (Snyk Agent Scan, Cisco
-mcp-scanner, Lasso MCP Gateway, LlamaFirewall, mcp-guardian, ToolHive, Docker MCP Gateway, Progent,
-CaMeL; table in §12.1 below), three things in IntentShield have no counterpart among those seven guards, and one of them is
-measured well enough to defend:
-
-1. **Self-disclosure parameter stripping, with a precision measurement.** The mechanism: a schema
-   parameter that asks the agent for its model name, system prompt or conversation is removed before
-   the agent sees the tool, and any value sent for it is dropped. The measurement
-   (`benchmarks/self_disclosure_eval.py`, `results/self-disclosure.md`): on the 159 distinct tool
-   schemas the four MSB agents were shown, 36 parameters stripped (an earlier 54 counted 18 twice), all on attack-role servers, 0 of
-   194 on the 86 clean tools; and harm executed through such a parameter in 23/29 (Gemini 3.5
-   Flash-Lite), 33/33 (llama3.1:8b), 48/129 (qwen2.5:7b) and 51/122 (ornith:9b) harmful calls in the unpaired undefended runs. The
-   finding that goes with it: for the capable agents in the sample (Gemini, Claude Haiku live), what a
-   schema asked for leaked more than injected text did. The prior art is MSB's own attack and "The
-   Stochastic Deputy" (2609.14780), which removes tenant identity from schemas for a different reason;
-   neither measures a defense's precision on real catalogs.
-2. **One rule set in four harnesses plus a proxy**, with the measured split of what each placement
-   sees (coverage study). Engineering, not a research claim.
-3. **The harm funnel with a trivial structural baseline** (§9), which showed that MSB's executed-harm
-   metric cannot rank mutation-holding guards. A benchmark-design note.
-
-Honest ceiling for item 1: a workshop or short paper, or the centrepiece of the artifact paper's
-"what the detectors add" section. It rests on one benchmark's catalogs (13 clean servers), and the
-rule is a pattern match that a renamed parameter with a neutral description would pass; the
-measurement says it is precise on real catalogs, not that it is complete.
-
-## 11. Architecture verdict and target layout (2026-10-29)
-
-An architecture reviewer, given the five code reviews, judged the hook path sound and the gateway's
-agent-written intent the one wrong thing (fixed: `trusted_intent`, default off). Target layout it
-proposed, to do in this order with tests green at each step: move `wilson` to `benchmarks/stats.py`;
-characterization tests that feed one fixture to `HarnessGuard.call` and the proxy's `_rule_check`,
-then one shared `callguard.py`; split `mcp_proxy.py` into `mcp/{catalog,gateway,server,control}`
-with one auth and rate-limit helper used by the MCP server and the dashboard; move the research
-modules (intent and injection training, `evaluation.py`) under `benchmarks/`; make the dashboard
-and the detectors optional extras so `fastapi` is not a dependency of the hook. About 7k shipped
-lines instead of 11k. Not started.
-
 ## 9. Route 3: an evaluation-methodology paper (audited 2026-10-14)
 
 **The idea.** On MSB, executed harm cannot tell guards apart. Every guard arm that holds
 mutations scores 0.0%, including the trivial baseline with no detection
 (`artifacts/msb-compare-v4-v5-exposure.txt`, 218 paired cases). The arms separate only on
 the stages before execution:
+
+**SUPERSEDED table (2026-10-12/13 qwen runs; do not cite).**
 
 | Arm | Executed | Attempted | Reached review | `user_task` (n=140) |
 |---|---|---|---|---|
@@ -315,9 +294,9 @@ the stages before execution:
 | gateway, intent model off | 0.0% | 1.8% | 0.0% | 45.0% |
 | hooks | 0.0% | 17.0% | 0.0% (20 blocked) | 58.6% |
 
-> **Superseded 2026-10-20.** These are the 2026-10-12/13 qwen runs. On current code (MSB v12, `results/msb`)
-> none is 58.7% executed, the gateway with the intent model off 42.9% `user_task`, and the hooks row is the
-> intent-off run (50.7%, 2.3% reached review). Cite `benchmarks/paper_numbers.py`, not this table.
+> The table above is superseded (2026-10-20). On current code (MSB v12, `results/msb`) none is 58.7% executed, the gateway with the
+> intent model off 42.9% `user_task`, and the hooks row is the intent-off run (50.7%, 2.3% reached review). Cite
+> `benchmarks/paper_numbers.py`, not this table.
 
 The mechanism is now confirmed from the MSB paper itself (Tab. 9): five of its six attack
 tasks are judged by environment state after `write_file`, `edit_file` or `kill_process`. The
@@ -511,6 +490,46 @@ The AgentDojo replay tool and table can go into it as the baseline section.
   Narrowing it needs live GPT-4o runs (paid) or a strong free-tier model.
 - Only `important_instructions` is replayed, on AgentDojo v1.
 
+## 10. What can be claimed as a contribution (2026-10-29)
+
+After a search of the open-source MCP guards shipping in October 2026 (Snyk Agent Scan, Cisco
+mcp-scanner, Lasso MCP Gateway, LlamaFirewall, mcp-guardian, ToolHive, Docker MCP Gateway, Progent,
+CaMeL; table in §12.1 below), three things in IntentShield have no counterpart among those seven guards, and one of them is
+measured well enough to defend:
+
+1. **Self-disclosure parameter stripping, with a precision measurement.** The mechanism: a schema
+   parameter that asks the agent for its model name, system prompt or conversation is removed before
+   the agent sees the tool, and any value sent for it is dropped. The measurement
+   (`benchmarks/self_disclosure_eval.py`, `results/self-disclosure.md`): on the 159 distinct tool
+   schemas the four MSB agents were shown, 36 parameters stripped (an earlier 54 counted 18 twice), all on attack-role servers, 0 of
+   194 on the 86 clean tools; and harm executed through such a parameter in 23/29 (Gemini 3.5
+   Flash-Lite), 33/33 (llama3.1:8b), 48/129 (qwen2.5:7b) and 51/122 (ornith:9b) harmful calls in the unpaired undefended runs. The
+   finding that goes with it: for the capable agents in the sample (Gemini, Claude Haiku live), what a
+   schema asked for leaked more than injected text did. The prior art is MSB's own attack and "The
+   Stochastic Deputy" (2609.14780), which removes tenant identity from schemas for a different reason;
+   neither measures a defense's precision on real catalogs.
+2. **One rule set in four harnesses plus a proxy**, with the measured split of what each placement
+   sees (coverage study). Engineering, not a research claim.
+3. **The harm funnel with a trivial structural baseline** (§9), which showed that MSB's executed-harm
+   metric cannot rank mutation-holding guards. A benchmark-design note.
+
+Honest ceiling for item 1: a workshop or short paper, or the centrepiece of the artifact paper's
+"what the detectors add" section. It rests on one benchmark's catalogs (13 clean servers), and the
+rule is a pattern match that a renamed parameter with a neutral description would pass; the
+measurement says it is precise on real catalogs, not that it is complete.
+
+## 11. Architecture verdict and target layout (2026-10-29)
+
+An architecture reviewer, given the five code reviews, judged the hook path sound and the gateway's
+agent-written intent the one wrong thing (fixed: `trusted_intent`, default off). Target layout it
+proposed, to do in this order with tests green at each step: move `wilson` to `benchmarks/stats.py`;
+characterization tests that feed one fixture to `HarnessGuard.call` and the proxy's `_rule_check`,
+then one shared `callguard.py`; split `mcp_proxy.py` into `mcp/{catalog,gateway,server,control}`
+with one auth and rate-limit helper used by the MCP server and the dashboard; move the research
+modules (intent and injection training, `evaluation.py`) under `benchmarks/`; make the dashboard
+and the detectors optional extras so `fastapi` is not a dependency of the hook. About 7k shipped
+lines instead of 11k. Not started.
+
 ## 12. Contribution summary and comparison with other guards (moved from the README on 2026-10-29)
 
 For a report or a viva, this is what the repository supports as a contribution, in order of
@@ -629,7 +648,7 @@ more (runs plus app-server starts: 141 in the gap lane, 54 in the integration) i
 **What was done.** Route 2 in a narrower form: instead of channel coverage across four to six harnesses with live models, the question "does a
 harness enforce the verdict a third-party PreToolUse-style hook returns?" was measured on Claude Code (23 sampled builds), Codex CLI (17 sampled builds)
 and Gemini CLI (28 sampled builds), headless, macOS, one scripted call per run, per mode, per hook reply and per trust state, with raw committed rows,
-liveness controls, a pre-registered kill criterion and critic re-launches (20 to 28 cells per lane, all reproduced). Cursor CLI could not be
+liveness controls, a kill criterion the author registered before the runs (a same-day commit, not blind, and not verifiable from this repository's history) and review re-launches (20 to 28 cells per lane, all reproduced). Cursor CLI could not be
 measured (free-plan limit) and is counted nowhere.
 
 **Measured state.**
@@ -670,7 +689,7 @@ bisected boundaries and a determinism test, independent coding, a completed disc
 guard's detection layer is not a research result; the hook-fidelity matrix is a measurement of the harnesses, not of IntentShield.
 
 **What the public repository cannot show.** The study cites commits and branches of its development branch (for example `25b62ad`, "fixtures
-committed before any guard ran"); that branch was squash-merged, so those hashes are not in `main`'s history and the pre-registration order cannot be
+committed before any guard ran"); that branch was squash-merged, so those hashes are not in `main`'s history. The author archives the original commits; the order in which predictions, kill criterion and fixtures were committed cannot be
 checked from the public history alone. Vendor documentation pages are cited by source URL and sha256, not redistributed
 (`results/hook-fidelity/vendor-archive/*/README.md`). The fresh detection set's labels come from one model family, the one that wrote the rules. The
 pty lane's 61 raw `transcript-head.bin` captures are not committed. See the study's section 10.

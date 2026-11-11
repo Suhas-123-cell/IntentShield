@@ -1,7 +1,7 @@
 # Complete Mediation for MCP: Why Hook-Scoped Guards Miss the Description, Resource, and Prompt Channels  (working title; the claim in it is not supported, see the status note)
 
 > **Numbers superseded (2026-10-20):** the MSB figures below predate the reruns. Every current MSB
-> number comes from `benchmarks/paper_numbers.py` over `results/msb`; see `docs/artifact-paper.md`.
+> number comes from `benchmarks/paper_numbers.py` over `results/msb`; see `docs/research-notes/artifact-paper.md`.
 
 > **Status (2026-10-13, after review): not submittable as framed.** The claim as first
 > framed (a hook-scoped guard misses three channels; a proxy restores complete mediation)
@@ -13,7 +13,7 @@
 >
 > The abstract and §3.3 below were rewritten to what the data supports. MSB numbers had a
 > server-naming label leak, now fixed for qwen2.5:7b only (see §5 and
-> [contribution.md](contribution.md) §5, §7). The stored coverage data came from instrumentation
+> [contribution.md](../contribution.md) §5, §7). The stored coverage data came from instrumentation
 > that is being fixed, so §3 is provisional. This file is kept as the skeleton for route 2,
 > the measurement study.
 

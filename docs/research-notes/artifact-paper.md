@@ -1,7 +1,7 @@
 # IntentShield: One MCP Guard Across Four Agent Harnesses and a Transparent Proxy (working title)
 
 **Route 1 skeleton, started 2026-10-14.** This is the artifact or tool paper from
-[contribution.md](contribution.md) §7. It makes no novelty claim for any mechanism (§2 there): the
+[contribution.md](../contribution.md) §7. It makes no novelty claim for any mechanism (§2 there): the
 contribution is a working, tested, cross-harness system and an honest held-out evaluation of it,
 including where it does not help.
 

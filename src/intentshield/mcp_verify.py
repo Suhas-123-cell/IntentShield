@@ -14,7 +14,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dotenv import load_dotenv
 from mcp import Client, StdioServerParameters
@@ -320,7 +320,7 @@ def _schema_value(schema: dict[str, Any]) -> Any:
         minimum = int(schema.get("minItems", 0))
         if minimum and not isinstance(items, dict):
             raise ValueError("array items are not synthesizable")
-        return [_schema_value(items) for _ in range(minimum)] if minimum else []
+        return [_schema_value(cast(dict[str, Any], items)) for _ in range(minimum)] if minimum else []
     if value_type == "string":
         if "pattern" in schema or "format" in schema:
             raise ValueError("patterned or formatted string")

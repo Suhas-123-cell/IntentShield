@@ -27,11 +27,24 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from re import _constants as _C
-from re import _parser
 from typing import Any, Callable, Iterator
 
 from .mcp_inspect import readable
+
+# The backtracking gate reads the parsed pattern through the interpreter's private regex parser; the
+# standard library has no public one. If a future Python moves or renames it, the gate cannot judge a
+# pattern, so it refuses every proposal (``PARSER_AVAILABLE`` is False) instead of failing at import.
+try:
+    from re import _constants as _C  # type: ignore[attr-defined]
+    from re import _parser  # type: ignore[attr-defined]
+
+    _REPEATS = {_C.MAX_REPEAT, _C.MIN_REPEAT, _C.POSSESSIVE_REPEAT}
+    _NARROW = {_C.CATEGORY_SPACE, _C.CATEGORY_DIGIT}  # cannot run into the letters of the words around them
+    PARSER_AVAILABLE = True
+except (ImportError, AttributeError):  # pragma: no cover - only on a Python without the private parser
+    _C = _parser = None  # type: ignore[assignment]
+    _REPEATS, _NARROW = set(), set()
+    PARSER_AVAILABLE = False
 
 MAX_PATTERN, MIN_LITERAL, MAX_PROPOSALS = 200, 12, 3
 # Nested quantifier: a group that contains a quantifier and is itself repeated without bound (an
@@ -62,8 +75,6 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-_REPEATS = {_C.MAX_REPEAT, _C.MIN_REPEAT, _C.POSSESSIVE_REPEAT}
-_NARROW = {_C.CATEGORY_SPACE, _C.CATEGORY_DIGIT}  # cannot run into the letters of the words around them
 MAX_SCAN = 20_000  # characters of a text that rules read
 _WINDOW = 200  # a repeat bounded above this backtracks like an unbounded one on MAX_SCAN characters
 
@@ -279,6 +290,8 @@ def backtracking_problem(pattern: str) -> str | None:
     One unbounded wildcard after a literal stays allowed: it is quadratic in the starts of that
     literal times ``MAX_SCAN``, about 0.3 s for ``\\bignore\\b.*`` on 20k characters of ``ignore`` and
     3 s at worst for a one-letter literal (``e.*`` on 20k ``e``)."""
+    if not PARSER_AVAILABLE:
+        return "the regex parser is unavailable on this Python"
     tree = list(_parser.parse(pattern, re.IGNORECASE))
     wide = [0, 1]
     if problem := _backtracking(tree, False, wide):

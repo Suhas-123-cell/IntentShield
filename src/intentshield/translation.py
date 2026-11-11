@@ -32,6 +32,7 @@ import struct
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -73,6 +74,25 @@ RANGES: dict[str, dict[str, list[list[str]]]] = {
 UNSAFE = ("unmeasured", "uncertain")
 
 CALL_EVENTS = ("PreToolUse", "BeforeTool", "beforeMCPExecution", "beforeShellExecution", "beforeReadFile")
+# Events the harnesses document that carry a tool's name but do not ask whether to run it: a result, a permission dialog or a
+# lifecycle event. Any other event name with a tool in it is a call whose name this module does not know (a changed schema).
+NON_CALL_EVENTS = frozenset({
+    "PostToolUse", "PostToolUseFailure", "PostToolBatch", "PermissionRequest", "PermissionDenied", "UserPromptSubmit",
+    "SessionStart", "SessionEnd", "Stop", "StopFailure", "SubagentStart", "SubagentStop", "Notification", "PreCompact",
+    "PostCompact", "TaskCreated", "TaskCompleted", "TeammateIdle", "InstructionsLoaded", "ConfigChange", "CwdChanged",
+    "FileChanged", "WorktreeCreate", "WorktreeRemove", "Elicitation", "ElicitationResult",
+    "AfterTool", "BeforeAgent", "AfterAgent", "BeforeModel", "AfterModel", "BeforeToolSelection", "PreCompress",
+    "beforeSubmitPrompt", "afterMCPExecution", "afterShellExecution", "afterFileEdit", "afterAgentResponse", "afterAgentThought",
+    "stop", "beforeTabFileRead", "afterTabFileEdit"})
+
+
+def looks_like_call(event: dict[str, Any]) -> bool:
+    """True for an event that names a tool but whose event name is not a call event nor a known other one (missing, in another
+    case, or new): it may be the question whether to run a call, so it is held to the deadline and the fail-closed rules."""
+    name = event.get("hook_event_name")
+    return name not in CALL_EVENTS and name not in NON_CALL_EVENTS and bool(event.get("tool_name"))
+
+
 # Harnesses whose hook command is measured to run through a shell that honours ``||`` (the evaluation's launcher cells). Cursor is
 # not measured: its hooks keep ``failClosed`` instead.
 LAUNCHER_HARNESSES = ("claude", "codex", "gemini")
@@ -302,7 +322,7 @@ def _libproc_agrees() -> bool:
     """The layout check, once per process: libproc's answer for this very process must name the parent the OS API names."""
     if "agrees" not in _libproc_state:
         own = _read_libproc(os.getpid())
-        _libproc_state["agrees"] = bool(own) and own[0] == os.getppid()
+        _libproc_state["agrees"] = own is not None and own[0] == os.getppid()
     return _libproc_state["agrees"]
 
 
@@ -453,8 +473,8 @@ def detect_mode(harness: str, event: dict[str, Any], env: dict[str, str] | None 
     direction: an IDE or desktop embedding with no controlling terminal is read as headless (``CLAUDE_CODE_SESSION_ATTENDED=1`` is
     not taken as evidence of a person, because no run with it set and no terminal was measured), and so is any wrapper that
     renames the process."""
-    env = os.environ if env is None else env
-    forced = env.get("INTENTSHIELD_HARNESS_MODE", "").strip().lower()
+    env_map: Mapping[str, str] = os.environ if env is None else env
+    forced = env_map.get("INTENTSHIELD_HARNESS_MODE", "").strip().lower()
     if forced in MODES:
         return forced, "INTENTSHIELD_HARNESS_MODE"
     if harness == "claude" and event.get("permission_mode") == "bypassPermissions":
@@ -474,11 +494,26 @@ def detect_mode(harness: str, event: dict[str, Any], env: dict[str, str] | None 
         return "yolo", f"harness command line has its yolo flag{via}"
     if _is_headless(harness, cmd, words):
         return "headless", f"harness command line has its headless flag{via}"
-    if harness == "claude" and env.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
+    if harness == "claude" and env_map.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
         return "headless", f"CLAUDE_CODE_SESSION_ATTENDED=0{via}"
     if tty in ("", "?", "??"):
         return "headless", f"the harness has no terminal{via}"
     return "interactive", f"harness process with a terminal and no headless flag{via}"
+
+
+def harness_running(harness: str, ancestors: list[tuple[str, str]] | None = None) -> bool | None:
+    """Whether the harness's own process is among this process's ancestors: True when it is, False when the process tree was
+    read whole and holds none (the hook was started by hand, e.g. ``echo '{...}' | intentshield-hook claude``), None when that
+    cannot be said (the tree could not be read, the harness is Cursor, whose hooks the IDE starts under names the study did not
+    measure, or ``INTENTSHIELD_HARNESS_MODE`` replaces the detection). ``intentshield doctor`` uses it to tell a hook the
+    harness ran from one a person fed an event."""
+    if harness == "cursor" or os.environ.get("INTENTSHIELD_HARNESS_MODE", "").strip():
+        return None
+    chain = _ancestors() if ancestors is None else ancestors
+    named = re.compile(rf"(?:^|/){re.escape(_PROCESS.get(harness, harness))}(?:\.js)?$")
+    if any(any(named.search(w) for w in cmd.split()[:2]) for _tty, cmd in chain):
+        return True
+    return False if isinstance(chain, Ancestry) and chain.complete else None
 
 
 @dataclass

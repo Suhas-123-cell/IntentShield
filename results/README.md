@@ -1,6 +1,6 @@
 # Results behind the papers
 
-Raw outputs of every experiment `docs/icse27-demo/main.tex` and `docs/artifact-paper.md` cite,
+Raw outputs of every experiment `docs/research-notes/icse27-demo/main.tex` and `docs/research-notes/artifact-paper.md` cite,
 verified on 2026-10-20. Write numbers from these files, not from older notes.
 
 ## Regenerate
@@ -47,7 +47,7 @@ full proxy reached human 12/1579 = 0.8% [0.4, 1.3] (was 13). Every other count i
 | `improve/baseline/latency.json` (code at `4dac01f`, threat memory on) | the source of the README's former "about 42 ms per MCP call", which was one event (a call fires Pre and Post): hook p50 41 to 47 ms per event as a process, 0.02 to 2 ms in process; transparent proxy +1.9 ms per call (2.55 vs 0.65 ms) | `benchmarks/latency.py` (see `improve/README.md`) |
 | `latency-2026-10-31/run{1,2,3}.json` | current code (`80c9e34`), Apple M5, Python 3.14.8, scratch `HOME` and hook database, intent model off, demo MCP server; three runs back to back while other jobs ran on the machine (load average 2 to 6; bare Python 16.1, 18.4 and 16.6 ms against 14.8 ms in the 2026-10-16 file). Hook as a process p50: read 60.3, 63.4, 63.4 ms; small result 60.3, 63.5, 63.9; 4 KB result 67.6, 71.0, 71.1; injected 68.8, 72.5, 72.0; in process 0.12 to 0.34 ms and 6.7 to 7.2 ms for the 4 KB result (canonical value extraction); transparent proxy 2.96, 3.37, 3.01 ms against 0.57, 0.64, 0.58 direct (+2.4 to 2.7 ms), start-up 567 to 603 ms against 266 to 286 ms. The README figures come from these files | `benchmarks/latency.py --calls 50 --hooks 30` |
 | `adaptive-attacker.json` | adaptive attacker vs static and learning detectors | `benchmarks/adaptive_attacker.py` |
-| `hook-fidelity/` | the hook verdict fidelity study: what Claude Code, Codex CLI and Gemini CLI do with a hook's verdict, and a decision comparison of IntentShield's hook with other guards (macOS, stub model, sampled builds; Cursor not measured). Its tables regenerate offline from the committed rows; guard decisions and launches need the corpus clones and release installs, which are not committed. `hook-fidelity/README.md` is the map | see `hook-fidelity/README.md` |
+| `hook-fidelity/` | the hook verdict fidelity study: what Claude Code, Codex CLI and Gemini CLI do with a hook's verdict, and a decision comparison of IntentShield's hook with other guards (macOS, stub model, sampled builds; Cursor not measured). Its tables regenerate offline from the committed rows (`docs/hook-fidelity-report.md` is the short account); guard decisions need the corpus clones, which `benchmarks/hook_fidelity/fetch_corpus.py` fetches at their pinned commits, and launches need release installs, which are not committed. `hook-fidelity/README.md` is the map | see `hook-fidelity/README.md` |
 
 ## MSB arms
 
@@ -80,7 +80,7 @@ apart from the intent model, but that is not verified, because they carry no pro
 reruns of 2026-10-19; the originals (2026-10-12/13) predated gateway and hook fixes. Runs from v12
 on carry their commit, intent model hash, Ollama model digest and container image in
 `MANIFEST.json`; older runs have `"provenance": null`, and their dates and commits are in
-`docs/artifact-paper.md` §4. Only those three qwen files have provenance; the other 19 of the 22
+`docs/research-notes/artifact-paper.md` §4. Only those three qwen files have provenance; the other 19 of the 22
 trace files are earlier runs on older code: every `hooks` arm, `gateway-prompt-guard` and all the
 llama3.1:8b and ornith:9b main arms are MSB v8, the Gemini arms v9, `gateway-intent-veto` v10 and
 `gateway-intent-advisory` v11 (`source` in `MANIFEST.json`).

@@ -8,6 +8,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from timelimits import limit
 
 from intentshield import harness, install
 from intentshield import threat_memory as tm
@@ -288,7 +289,7 @@ def test_create_run_is_not_blocked_by_a_slow_output_detector(tmp_path: Path):
             await asyncio.to_thread(entered.wait, 5)  # the worker is inside the detector now
             started = time.monotonic()
             await shield.create_run("Read the page again")
-            assert time.monotonic() - started < 1
+            assert time.monotonic() - started < limit(1)
             release.set()
             assert (await pending).executed
 
@@ -315,4 +316,4 @@ def test_judge_back_off_never_outlives_its_budget(monkeypatch):
     started = time.monotonic()
     content, error = judge_module.post_chat("https://judge.invalid/v1/chat/completions", "k", {}, timeout=1, retries=1)
     assert content is None and error.startswith("HTTP 429")
-    assert time.monotonic() - started < 3
+    assert time.monotonic() - started < limit(3)

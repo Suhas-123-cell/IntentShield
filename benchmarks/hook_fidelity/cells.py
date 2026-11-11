@@ -329,7 +329,8 @@ PREDICTIONS = [
     Prediction(dict(harness="cursor", failcfg="closed"), "BLOCKED", "docs", "BLOCKED", "failClosed documents these as failures"),
     Prediction(dict(harness="cursor", reply="R6"), "BLOCKED", "docs", "BLOCKED", "invalid JSON on permission hooks blocks"),
     Prediction(dict(harness="cursor", reply="R7"), "BLOCKED", "docs", "BLOCKED", "exit 2 denies"),
-    # Pre-registered for the r3-claude lane before any matrix run (the pilot's 10 runs were seen first: R3 under M1 was denied).
+    # Registered by the author (a same-day commit, not blind; docs/hook-fidelity-study.md section 7) before any matrix run of the
+    # Claude Code sweep (the pilot's 10 runs were seen first: R3 under M1 was denied).
     # Docs fetched 2026-11-01 (results/hook-fidelity/vendor-archive/claude/headless.md): "In a -p run with no host, these
     # requests are denied either way".
     Prediction(dict(harness="claude", mode="M1h", reply="R3"), "BLOCKED", "docs", "BLOCKED",

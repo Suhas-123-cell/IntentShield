@@ -1,8 +1,9 @@
 # Benchmarks: protocols, full tables and limits
 
-Moved from the README on 2026-10-29. The README keeps the summary.
+Every benchmark protocol and table behind the [README](../README.md)'s results summary, with the limits of each.
+Start with the headline numbers and the limitations; the sections after them hold the per-benchmark detail.
 
-## Headline numbers (moved from the README on 2026-10-29)
+## Headline numbers
 
 Provenance: the MSB rows are regenerated from the committed traces by `benchmarks/paper_numbers.py`
 (the case grid is `results/msb/cases.jsonl`, so no MSB checkout is needed); the MCPTox rows by
@@ -57,87 +58,197 @@ calls, paid for with utility and more benign reviews.
 | Adaptive attacker (Gemini 3.5 Flash-Lite rewriting blocked injections, 42 seeds) | rules + exemplars evaded 42/42; threat memory did not help; argument provenance held every canary call for review (canary_unreviewed 0/42, `results/adaptive-gemini.json`) |
 | Overhead (Apple M5, 3 runs on 2026-10-31 at `80c9e34`, machine not idle; `results/latency-2026-10-31/`) | hook: 60 to 64 ms per event p50 as a process (68 to 71 ms with a 4 KB result); a guarded MCP call is at least two events (Pre and Post), about 121 to 127 ms; the decision itself 0.12 to 0.34 ms in process, 6.7 to 7.2 ms for a 4 KB result (includes value extraction); proxy +2.4 to 2.7 ms per call. The earlier 35 ms, 42 ms and +1.9 ms predate the threat memory, value extraction and shell parser |
 
+### Detail behind the headline
+
+The README's results table is the MSB part of the headline above. The measurements below were summarised
+there in one line each; they are given here in full, with their caveats.
+
+**Self-disclosure parameter stripping**, 159 distinct tool schemas the 4 MSB agents saw (756 cases):
+
+- 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; 0 of 194 parameters on the
+  86 task and filesystem tools.
+- Undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen) and 51/122
+  (ornith) harmful calls in the unpaired undefended runs (`results/self-disclosure.md`).
+
+**Prompt-injection detection**, 3,717 texts including 142 hard benign ones (held out for the learned
+detectors; the rules were tuned on 1,505 of the 2,959 injections):
+
+- On the 1,454 injections from families independent of the rules' tuning, the rules catch 2.1% and rules +
+  exemplars 18.1%.
+- Over all 3,717, rules + exemplars on outputs catch 57.8% and flag 2.5% of benign texts (rules alone 49.9% /
+  2.1%).
+- Plain-language injections from independent sources stay mostly undetected
+  ([detectors.md](detectors.md#adaptive-injection-detection)).
+
+**Plain-language injections, LLM judge on results** (`--judge-outputs`; prompt written on the train split and
+frozen before one test run; the judge got no user request, which the hook would give it):
+
+- Gemini 3.5 Flash-Lite (0.3.6 prompt, 158 injections and 118 benign test rows) caught 77.8% [70.8, 83.6], and
+  its judge alone flagged 3.4% (4/118) of the benign texts, none of them requests between people.
+- Local qwen2.5:7b (522 rows: 346 injections, 176 benign) caught 24.3% and flagged 0.6% (1/176) with the 0.3.6
+  prompt. With the 0.4.0 prompt (v2.1, chosen on the validation split) qwen catches 29.2% [24.6, 34.2] and its
+  judge alone flags 3.4% (6/176) [1.6, 7.2]. This was rerun on Ollama's native endpoint on 2026-10-31 with
+  identical counts; the earlier qwen files were measured through the endpoint that truncates long prompts.
+- Those are judge-alone rates. With `--judge-outputs` the rules still run, so the shipped configuration flags
+  rules + judge: 15.3% (18/118) for Gemini and 11.4% (20/176) for qwen v2.1, of which the rules alone are
+  11.9% (14/118) and 8.0% (14/176). 13 of the rules' flags are on the 24 benign texts in this set that quote an
+  attack (without them, rules + judge flag 5/94 and 7/152).
+- This benign set is enriched with hard cases (agent hints, requests between people, quoted attacks), so these
+  rates are not comparable to the 2.1% above. The rules alone catch about 4% of the injections, Prompt Guard 2
+  none. The injections were written by an LLM for this corpus (`results/judge/outputs-*-test*.json`,
+  `benchmarks/judge_outputs_eval.py`).
+
+**Attacks on the judge** (0.4.0; [details](#attacks-on-the-output-judge)): 30 hand-written jailbreaks through
+the real hook.
+
+- The hook alone, with no judge, denies 7 of the 30 canary sends and asks about the other 23 (an ask is a
+  prompt in Claude Code and a refusal in Gemini CLI and Codex by default and for Cursor MCP calls), and asks
+  about none of 12 benign ones, because argument provenance traces the address however the page writes it
+  (27/30 held before the review's fixes; that earlier run's rows are not committed).
+- Only 7 of the 30 pages are warned by the rules, and the send is a call the benchmark builds after the page,
+  not one the victim made (the one victim model, ornith:9b, followed 3 of the 30 unguarded).
+- Adding qwen2.5:7b as the output judge warns the agent on 30/30 results and costs 4 false asks on the 12
+  benign pages. With Gemini 3.5 Flash-Lite as the judge: 30/30 warned and no false asks.
+- An adaptive attacker (Gemini 3.5 Flash-Lite, shown the judge's prompt and verdicts, 24 seeds x 5 tries) got
+  pages past the rules and the qwen judge in 34 of 120 tries, but evaded end to end on 0 of 24 seeds. This qwen
+  run went through Ollama's OpenAI-compatible endpoint, which cut long prompts; the judge has since moved to the
+  native endpoint and the attacker runs were not repeated on it. The local agent (ornith:9b) followed none of
+  those pages, and provenance held every send it made.
+- With DeepSeek's `deepseek-flash` as the agent the attacker got 40 of 119 pages past the judge and the agent
+  followed none of them either, nor any of the 30 jailbreaks: against that agent the attack fails before the
+  guard is needed.
+- As the judge on the test split (v2.1 prompt, the same 522 rows as qwen), `deepseek-flash` caught 86.1%
+  [82.1, 89.4] of 346 plain-language injections and its judge alone flagged 7.4% (13/176) of the benign texts,
+  15.3% (27/176) with the rules. It is not ranked against Gemini: Gemini ran a different, smaller row set
+  (158 + 118) with the older prompt and was not rerun, so only the two qwen rows are like for like.
+
+**Against Meta's Prompt Guard 2** (the detector in LlamaFirewall; rerun 2026-10-29, paired on the same texts):
+
+- On InjecAgent, the one source neither was tuned on, the rules catch 50.8% and Prompt Guard 2 50.3%; on
+  plain-language injections both stay under 4%.
+- The rules lead only where they were written from the data (MCPTox, AgentDojo templates), so they are an
+  offline equal, not a better detector ([detectors.md](detectors.md#adaptive-injection-detection)).
+
+**Adaptive attacker on IntentShield's own detectors**, 42 seeds, 5 attempts each:
+
+- With local qwen2.5:7b rewriting, 16/42 seeds evaded the static rules + exemplars and 13/42 the learning arm
+  (not significant; weak attacker).
+- With Gemini 3.5 Flash-Lite rewriting, the rules + exemplars were evaded on 42/42 seeds, while argument
+  provenance held every canary call for review (canary_unreviewed 0/42; 41 stopped by provenance, 1 by the
+  threat memory; `results/adaptive-gemini.json`).
+- Caveats: the validity judge is the same model as the attacker and lenient (2 of 8 spot-checked rewrites were
+  not requests to send data), and provenance holds by construction, because a valid try must keep the canary
+  verbatim (`results/improve/README.md`, Phase 3).
+
+**Live harness checks:**
+
+- Live Claude Code (Haiku) against a malicious server, 3 prompts x 3 arms: model name leaked 3/3 unguarded, 0/3
+  with hooks (field sent blank); hooks + proxy quarantined the server, which received nothing.
+- Live Gemini CLI, same check: notes exfiltrated 3/3 unguarded, 0/3 with hooks, though one `send_email` with a
+  benign body still reached the attacker address under hooks alone (prompted by a poisoned description before
+  any tool output, which hooks never see; `--review always` denies it).
+
+**MCPTox replay** (11 models' responses; rules developed on MCPTox, so tuning-set): full proxy 0.4% attack
+success, 3.5% benign false block, 46.3% benign calls to review.
+
+**Overhead** (Apple M5, `benchmarks/latency.py --calls 50 --hooks 30` on the code at `80c9e34`, three runs on
+2026-10-31 while other jobs were running on the machine, `results/latency-2026-10-31/`):
+
+- A hook is a process of 60 to 63 ms p50 for a read, 60 to 64 ms for a small result and 68 to 71 ms for a 4 KB
+  one (bare Python start-up 16 to 18 ms).
+- A guarded MCP call fires at least two events, PreToolUse and PostToolUse, so it costs about 121 to 127 ms p50
+  (128 to 135 ms with a 4 KB result), not one event's time.
+- In process the decision takes 0.12 to 0.34 ms, but 6.7 to 7.2 ms for a 4 KB result, which includes extracting
+  canonical values from the output.
+- The transparent proxy adds 2.4 to 2.7 ms per `tools/call` (3.0 to 3.4 ms against 0.57 to 0.64 ms direct) and
+  about 300 ms at start-up.
+- The earlier 35 ms per event, 42 ms per call and 0.02 to 2.5 ms (`results/latency.json`,
+  `results/improve/baseline/latency.json`) predate the threat memory, canonical value extraction and the shell
+  parser, and understate the current code (35 ms against 60 to 63 ms per event); the 42 ms was one event, not a
+  call.
+
 ### Limitations
 
-The cross-cutting limitations are listed once, in the README's [Limitations](../README.md#limitations);
-each benchmark's own limits follow in its section below.
+These apply to the headline numbers above and to every benchmark below. Each benchmark's own limits follow in
+its section.
 
-## Offline evaluation
+**Not covered by default**
 
-```bash
-.venv/bin/intentshield-eval --out report.json
-```
+- The harness's built-in shell and file tools. Only MCP calls are checked unless you install with
+  `--builtin-tools`, which is opt-in and best effort.
+- HTTP (`url`) MCP servers, which `wrap` skips (guard those with the gateway).
+- Injections written in plain language with no instruction marker, which the rules mostly miss. The optional
+  LLM judge with `--judge-outputs` reads them (see the judge results above).
+- Injections in other languages, where the rules read only "ignore the previous instructions" and "new task:"
+  (in 11 languages).
+- The learned detectors' PyTorch path, which CI does not exercise.
+- Codex CLI runs the hooks only after you trust them once in Codex; until then it is unguarded.
+- Cursor has been run live twice with its `auto` model. In the MCP run its model refused the attack even
+  unguarded, so that run shows the hooks work, not that they stop an attack. In the opt-in built-in-tools run
+  (1 repetition, guarded arm only, no valid unguarded arm) it tried the upload on one page and the hook asked
+  about it 3 times, harm 0/4, which is one run and not a rate.
 
-The harness replays a deterministic, template-generated set of attack and benign
-tool calls against four defenses: none, a keyword filter, schema-only validation,
-and the full gateway (dry-run, nothing executes). It reports attack success
-(an unreviewed `ALLOW`), attacks that reached a human reviewer, attacks blocked,
-benign false-blocks, and latency, each with a Wilson 95% interval.
+**Design of the MSB runs**
 
-The dataset is synthetic and small (111 cases). It is a regression and ablation
-harness, **not a public benchmark**, and says nothing about performance against
-adaptive attackers or on AgentDojo / InjecAgent. Known gap it exposes: when the
-user really asked to send an email, a paraphrased injection in the body avoids the
-keyword detector and is stopped only by the mutation approval step. The DeBERTa
-classifier supplies intent evidence, not injection detection.
+- Single runs at temperature 0; 20 draws per MSB attack template, so Wilson intervals are too narrow and the
+  cluster bootstrap is the one to cite.
+- Local 7 to 9B agents, plus one hosted model on 99 cases. No frontier-model AgentDojo run.
+- The MSB runner deviates from MSB (injection text only on the task server, list-directory tools allowed).
+- A run that hits the 10-step cap is scored as a failed user task, and truncation differs across arms, so part
+  of the utility gap is the step cap.
+- MCPTox description numbers are tuning-set. The output rules were written from MSB templates, so MSB is not
+  held out for them.
+- The trivial baseline also reaches 0.0% executed harm; "best performing" is not supported (the comparison
+  with other guards is in
+  [contribution.md](contribution.md#121-where-it-stands-among-open-source-mcp-guards)).
 
-It also holds two sets reviewers look for. **Intent-consistent attacks** keep the
-action the user asked for and swap one argument: a lookalike domain
-(`examp1e.com`), a same-domain recipient (`alice.archive@` for `alice@`), and a
-rewritten body. Recipient swaps are blocked; the body swap reaches only the human
-reviewer, so there the security claim rests on approval. **Hard negatives** are
-legitimate requests that look like attacks: "do what the email says", forwarding
-text the user quoted that contains "ignore previous instructions", and sending to
-an outside address the user named. The first two are not blocked. The last is
-blocked by the operator's destination allowlist (`*@example.com`), a deliberate
-policy cost reported as a 100% false block for that category.
+**Live harness runs**
 
-### Coverage against the MCP threat model
+- Codex CLI 0.165 skips hooks nobody has trusted, silently. In a live run with a local model (qwen2.5:7b, 3
+  prompts) the hooks installed but not yet trusted never ran, and the notes reached the attacker in 3/3 runs,
+  as with no guard. With the transparent proxy the notes never left in 3/3: `send_email` stayed available, but
+  the agent did not call it after the proxy's warning on the injected result (`results/harness-live-codex/`).
+  With the hooks trusted, the hook denied the attacker's `send_email` in 3/3 runs
+  (`results/harness-live-codex-trusted/`).
+- Cursor CLI, live with its `auto` model (Composer), 3 prompts: the notes never reached the attacker in any
+  arm, including the unguarded one, because the model refused the injection on its own (Grok 4.7 and Grok 4.6
+  unguarded: 0/3 too). The run shows the hooks run and the redaction works under Cursor, not that the guard
+  stops an attack there (`results/harness-live-cursor/`). The built-in-tools run with the real hook
+  (`results/harness-live-builtin/cursor-hooks/`, 4 attack pages and 1 benign page, one repetition, no
+  unguarded arm) is the one where Cursor's model did try an upload (plain-follow page, 3 asks, none executed);
+  in the other 3 attack runs it did not try one, and the benign run errored (`exit 1`) and is left out.
+- Where a hook can say something to the model differs by harness. Cursor shows the model nothing from
+  `afterMCPExecution`, so its warning on an injected result is invisible there; the session is still tainted
+  and later calls still ask. Claude Code's failed-call results (`PostToolUseFailure`) are scanned; whether
+  Codex CLI sends an equivalent event was not verified.
 
-| attack surface | covered here | not yet run |
-|---|---|---|
-| tool descriptions (poisoning, rug pull, shadowing) | description scanner + quarantine, full-fingerprint rug pull, cross-server shadowing (`tests/test_mcp_guardrail.py`, `tests/test_mcp_e2e.py`); MCPTox replay over 11 models (rules developed on MCPTox); MSB description attacks; transparent proxy in a live Claude Code session (n=3 per arm). The MSB `shadowing` results partly reflect a naming artifact (see the MSB limits) | MCP-SafetyBench |
-| tool calls and arguments | policy + grounding; argument provenance (values from injected outputs or other tools' descriptions); offline intent-consistent swaps; AgentDojo banking slice (attack success 0% even unguarded); MSB (held-out, neutral ids: 0.0% harm on three local agents and Gemini 3.5 Flash-Lite); self-disclosure redaction | adaptive attackers |
-| tool outputs (indirect injection) | output scanner + run taint; InjecAgent, AgentDojo banking and slack, ASB observation injection, MSB | AgentDojo travel and workspace (run, but 0% utility with or without the guard, so uninformative), more attacks |
-| false positives | offline hard negatives; MCPTox clean queries | MCP-Universe / MCP-Bench |
-| guard-aware attacker | white-box rewrites of the description scanner (`benchmarks/adaptive.py`); a local model rewriting blocked output injections against rules + exemplars, static vs learning (`benchmarks/adaptive_attacker.py`, 42 seeds) | optimization attacks, stronger attacker models, real operator decisions |
-| agent harnesses | hooks for Claude Code, Gemini CLI, Codex CLI and Cursor, each run live against a malicious server (n = 3 per arm, one model each) | rates over more models; a Cursor model that complies with the attack unguarded |
-| guard channel coverage | hook-vs-proxy visibility of the MCP channels, measured live on Claude Code and Gemini CLI with benign markers (`benchmarks/coverage/`, [coverage-study.md](coverage-study.md)); re-run with the fixed instrumentation on 2026-10-13 | per-channel live attacks, Codex and Cursor, elicitation and sampling (neither harness exercised them) |
+**Detection limits**
 
-The channel-coverage study measures which MCP channels each guard placement observes, with
-benign markers only. In it a hook scoped to MCP tool calls (`mcp__.*`) saw the tool-call and
-tool-result channels. No pre-action hook carried the Claude Code description or prompt (the
-`Stop` hit was the model echoing the marker). In Gemini CLI the prompt was carried before the
-model by `BeforeAgent`/`BeforeModel`, not by `BeforeTool`, and the tool description reached the
-model but was carried by no hook: hooks saw it only where the model repeated it (`AfterModel`,
-`AfterAgent`, and inside its own `run_shell_command` calls). The Claude resource arrived as a
-`PostToolUse` event under the built-in `ReadMcpResourceTool`: a `*` matcher saw it, `mcp__.*`
-missed it. The proxy exposes tools only, so resources and prompts are not exposed
-(functionality lost, not mediated); `resources/read` went 1 to 0 on Claude and 0 to 0 on
-Gemini. Neither harness exercised elicitation or sampling (no back channel, or method not
-found). Under the proxy a rug-pulled tool was hidden and later calls to it were refused for the
-rest of the session. The transparent proxy forwards the descriptions of tools that pass its
-scans, so the benign description markers reached the model through it, as intended. These
-cells are from the 2026-10-13 re-run with the fixed instrumentation, which separates hook
-events that delivered a marker from those that only echoed it (Haiku and gemini-3.1-flash-lite,
-`artifacts/coverage/`, table in `artifacts/coverage-2026-10-13-table.txt`; the earlier data is in
-`artifacts/coverage-2026-10-12/`). One run per cell.
-On review this is not publishable as it stands, for three reasons:
-
-- The description gap follows from the hook input schemas.
-- A `*` matcher sees resources.
-- The proxy closes resources and prompts by not forwarding them.
-
-See [contribution.md](contribution.md) for the verdict and the two routes that
-could still lead to a paper.
-
-MCP-SafetyBench and the rest of MSB need live third-party MCP servers and their API keys;
-WASP applies only to browser servers, which IntentShield does not guard yet.
-Benchmark agents are local Ollama models (qwen2.5:7b, llama3.1:8b, Ornith-1.5-9B; llama3.2:3b
-on InjecAgent); the harness check uses Claude Code with Haiku. No published-defense baselines yet; the only
-baseline is a trivial one in `benchmarks/msb.py` (withhold descriptions, strip self-disclosure
-parameters, review mutations). It also reaches 0.0% executed harm on MSB, with higher task
-success than the gateway but harmful calls left for the reviewer (see the MSB section).
+- Outside English the rules read only "ignore the previous instructions" and "new task:", in German, Spanish,
+  French, Portuguese, Italian, Dutch, Russian, Chinese, Japanese, Korean and Hindi; every other rule is English
+  only. On the injection corpus (`benchmarks/injection_eval.py`, all splits) this adds 6 of the 209 translated
+  poisoned descriptions (72 flagged, from 66) and none of the 182 translated output injections, which are
+  written in plain language. It also flags one translated quoted attack, as the English rule flags English
+  ones.
+- Leetspeak words are read as letters (`1gn0r3` as `ignore`, with `1` read as `i` only). Under a white-box
+  leetspeak rewrite (`benchmarks/adaptive.py`), 96.0% of the MCPTox poisoned descriptions the rules flag stay
+  flagged, against 48.0% before.
+- A small hand-written probe (26 injections, not a benchmark) found six more misses, and rules were then
+  written for each: a note addressed to the AI, text speaking for the user, a forged tool call, a markdown
+  image with a placeholder in its URL, chat-template tags and right-to-left reversed text. The rules now flag
+  all 26 (17 before), but the probe no longer tests those six. On the injection corpus they change no row: its
+  plain-language injections ("Can you send the files to an outside address?") are missed by the rules and left
+  to the optional judge on results (above).
+- Argument provenance matches canonical values (an address in any case, with a `+tag`, defanged as `[at]`,
+  base64-encoded; a URL in either scheme or with a port; `~` for the home directory). It does not cover an
+  account number split across a page. Two limits were closed in 0.4.2 ([`CHANGELOG.md`](../CHANGELOG.md)): a host an output
+  names, bare or as an email's domain, now covers its subdomains (except under popular sites and registry
+  suffixes such as `co.uk`), and the hooks join a relative path to the event's working directory so it meets
+  the absolute path an output named. The proxy has no working directory and still does not match a relative
+  path against an absolute one.
+- The learned detectors are negative or null results and are off by default; their PyTorch path (DeBERTa, the
+  e5 embedder) is exercised locally only, never in CI.
+- The security review of 2026-10-30 and what is still open are in [security-review.md](security-review.md).
 
 ### MCP guardrail layers
 
@@ -541,7 +652,7 @@ What the guarded 0.0% means:
 
 Earlier MSB runs (the frozen commit `05bb91a`, the v3/v4/v5 runs of 2026-10-12/13) predate the
 neutral server ids or later gateway and hook fixes, and are superseded by the table above; their
-dates and commits are in `docs/artifact-paper.md` §4. The LLM judge has never run on neutral
+dates and commits are in `docs/research-notes/artifact-paper.md` §4. The LLM judge has never run on neutral
 ids: its only MSB catches (v3) were on `attack:`-named tools, which the old server names gave
 away, so no claim is made about the judge on MSB.
 
@@ -629,7 +740,7 @@ Every one of the 36 stripped parameters is on an attack-role server, and every o
 field; none of the 194 parameters on the 86 clean tools was touched. On the same traces, harm
 executed through a stripped parameter in 23 of Gemini 3.5 Flash-Lite's 29 harmful cases, 33 of 33
 for llama3.1:8b, 48 of 129 for qwen2.5:7b and 51 of 122 for ornith:9b (the denominators are harmful calls in the unpaired undefended runs). With the parameters
-stripped, Gemini attempted none of them (§5.7 of `docs/artifact-paper.md`), and Claude Haiku's
+stripped, Gemini attempted none of them (§5.7 of `docs/research-notes/artifact-paper.md`), and Claude Haiku's
 live leak (3 of 3 runs) arrived as an empty field. Limits: one benchmark's catalogs (13 clean
 servers plus MSB's attack servers), and a rule that can be beaten by a parameter whose name and
 description avoid every pattern; the rule is a floor, and the trivial baseline shows the same

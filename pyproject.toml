@@ -8,7 +8,8 @@ version = "0.4.3"
 description = "IntentShield for MCP: an offline-first security guardrail against prompt injection in MCP tool calls, with hooks for Claude Code, Codex CLI, Cursor and Gemini CLI and a transparent MCP proxy"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Maddali Suhas Choudary" }]
 requires-python = ">=3.12"
 keywords = [
   "intentshield", "mcp", "model-context-protocol", "mcp-security", "mcp-proxy", "prompt-injection", "tool-poisoning",
@@ -24,6 +25,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Security",
   "Topic :: Software Development :: Libraries",
@@ -40,6 +42,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
+  "mypy>=1.13,<3",
   "numpy>=1.26,<3",
   "pytest>=8,<10",
   "ruff>=0.14,<1",
@@ -72,10 +75,11 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.sdist]
-# Source, tests, configs and the paper's numbers; not the raw benchmark traces (results/) or the lock.
-include = ["src/intentshield", "tests", "configs", "benchmarks/*.py", "benchmarks/coverage", "README.md", "LICENSE", "CHANGELOG.md",
-           "pyproject.toml", "requirements-ml.txt"]
-exclude = ["results", "artifacts", "docs"]
+# The package and what it builds from. Not tests/ or benchmarks/: the tests read the study's docs and
+# committed traces (results/, docs/), which are too large to ship, so a test run needs a clone of the repository.
+# A leading slash anchors a name at the project root; a bare README.md would also match every README.md in docs/ and results/.
+include = ["/src/intentshield", "/configs", "/README.md", "/LICENSE", "/NOTICE", "/CHANGELOG.md", "/pyproject.toml",
+           "/requirements-ml.txt"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/intentshield"]
@@ -83,6 +87,15 @@ packages = ["src/intentshield"]
 [tool.hatch.build.targets.wheel.force-include]
 "configs/policy.json" = "intentshield/configs/policy.json"
 "configs/mcp-proxy.uvx.json" = "intentshield/configs/mcp-proxy.demo.json"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/intentshield"]
+
+# Optional or untyped third-party packages: the ML extras are not installed in CI, jsonschema ships no stubs.
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*", "transformers", "huggingface_hub", "jsonschema", "jsonschema.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 130

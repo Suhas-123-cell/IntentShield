@@ -1,6 +1,6 @@
 # Learned detectors: training, evaluation and negative results
 
-Moved from the README on 2026-10-29. All of these are optional and evidence-only; the README keeps the summary.
+All of these are optional and evidence-only; the README keeps the summary.
 
 ## Train the local intent classifier
 

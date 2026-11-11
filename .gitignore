@@ -1,11 +1,16 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 dist/
 artifacts/
 *.egg-info/
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.sqlite3
 .env
 .env.*
@@ -14,6 +19,7 @@ artifacts/
 benchmarks/harness_live/calls.jsonl
 CLAUDE.md
 AGENTS.md
-session.md
+session*.md
+.claude/
 docs/mcp-guardrail-plan.md
-docs/icse27-demo/*.pdf
+docs/research-notes/icse27-demo/*.pdf
