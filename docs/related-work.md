@@ -3,6 +3,10 @@
 Search done 2026-10-11 over arXiv (semantic search, papers from 2024-06 onward). Abstracts
 only; claims about other systems below come from their abstracts, not from reruns.
 
+**A project with a similar name.** `intentshield` on PyPI is a different project; this repository's package is
+`intentshield-mcp`. Its PyPI summary reads "Pre-execution intent verification for AI agents". It is not affiliated with
+this repository, and nothing is claimed here about how it works.
+
 ## Verdict
 
 The *combination* IntentShield ships is uncommon: one deterministic guard that covers
@@ -21,11 +25,23 @@ angles listed below as "new or uncommon" have since been covered or crowded:
 
 | Angle | Close work found |
 |---|---|
-| Security of coding-agent harnesses | HarnessSecurity-Bench (2610.07639): ten built-in mechanisms, six harnesses incl. Claude Code, Codex CLI, Gemini CLI, 2,500 trials; notes attacks reaching protected operations through alternative execution paths. Approval Laundering (2609.38983): approval-execution binding failures in Claude Code, Codex CLI, Cursor. CapScope (2609.08371): capability-scoped authorization through harness extension hooks. Hook-update supply chain (2609.03884). Red-teaming six coding agents (2509.05755); MCP clients under tool poisoning (2603.21642) |
-| Rules versus LLM judges | "Evaluate the Stack, Not the Layer" (2610.07359): one deterministic layer plus four LLM judges on 1,119 labelled actions, measures whether their errors are independent. AgentTrust (2606.08539): rules cannot decide semantic threats by construction |
+| Security of coding-agent harnesses | HarnessSecurity-Bench (2610.07639), Approval Laundering (2609.38983), CapScope (2609.08371) and three more; details below the table |
+| Rules versus LLM judges | "Evaluate the Stack, Not the Layer" (2610.07359) and AgentTrust (2606.08539); details below the table |
 | Reviewer load | "Oversight Has a Capacity" (2606.08919), "Habituation at the Gate" (2606.22721), agent security as agent-human interaction (2605.24309), MiniScope (2512.11147) |
 | Schema-level parameter removal | The Stochastic Deputy (2609.14780) removes tenant identity from MCP schemas; the self-disclosure attack itself is MSB's out-of-scope-parameter attack |
 | Tool routing | RAG-MCP and AgentDojo's tool filter; not a contribution |
+
+Details of the first two rows:
+
+- HarnessSecurity-Bench (2610.07639): ten built-in mechanisms, six harnesses including Claude Code, Codex CLI and Gemini
+  CLI, 2,500 trials; it notes attacks reaching protected operations through alternative execution paths.
+- Approval Laundering (2609.38983): approval-execution binding failures in Claude Code, Codex CLI and Cursor.
+- CapScope (2609.08371): capability-scoped authorization through harness extension hooks.
+- "Evaluate the Stack, Not the Layer" (2610.07359): one deterministic layer plus four LLM judges on 1,119 labelled
+  actions, measuring whether their errors are independent.
+- AgentTrust (2606.08539): rules cannot decide semantic threats by construction.
+- Also in the first row: hook-update supply chain (2609.03884), red-teaming six coding agents (2509.05755) and MCP clients
+  under tool poisoning (2603.21642).
 
 Verdict: as a defense paper IntentShield is not publishable at a strong venue today.
 Every mechanism has prior art, and a reviewer would also cite: no adaptive attacker; only
@@ -39,7 +55,7 @@ that holds mutations for review and strips self-disclosure fields gets 0% mechan
 Candidate contributions that survive the search, strongest first:
 
 1. **What third-party hooks cannot see (chosen and measured 2026-10-12; on review not
-   publishable as it stands; see [contribution.md](contribution.md) §5 and §7).** A
+   publishable as it stands; see [contribution-history.md](research-notes/contribution-history.md) §5 and §7).** A
    measurement and attack study of hook-based MCP guards across harnesses: which MCP channels
    bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts, sampling
    and elicitation), the transparent proxy as the fix, with utility cost. The coverage matrix
@@ -48,7 +64,7 @@ Candidate contributions that survive the search, strongest first:
    MCP tool calls saw the tool-call and tool-result channels; no pre-action hook carried
    descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks
    carried the prompt; the proxy mediates descriptions and does not expose resources or
-   prompts (functionality lost, not mediated). See [coverage-study.md](coverage-study.md), [contribution.md](contribution.md)
+   prompts (functionality lost, not mediated). See [coverage-study.md](coverage-study.md), [contribution-history.md](research-notes/contribution-history.md)
    and [paper-draft.md](research-notes/paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in
    mechanisms, not third-party guards) and CapScope (hooks for coding-agent authority, not MCP
    channels). Still a hypothesis until confirmed with live per-channel attacks (§3.5 of the

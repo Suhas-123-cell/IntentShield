@@ -45,7 +45,7 @@ from .mcp_upstream import MCPCallResult, MCPTool, MCPUpstream, MCPUpstreamConfig
 from .models import GatewayResult, ReasonCode, ToolCall
 from .policy import PolicyConfig
 from .service import IntentShieldService
-from .storage import Storage
+from .storage import Storage, default_database
 from .tools import MCPArguments, ToolSpec, catch_all_destination, stable_hash
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class MCPProxyConfig(BaseModel):
     # ``upstream`` remains accepted for existing single-server configs.
     upstream: MCPUpstreamConfig | None = None
     upstreams: list[MCPUpstreamConfig] = Field(default_factory=list)
-    database_path: str = "intentshield-mcp.db"
+    database_path: str = Field(default_factory=lambda: default_database("intentshield-mcp.db"))
     allowed_tools: list[str] = Field(default_factory=list)
     prohibited_tools: list[str] = Field(default_factory=list)
     read_only_tools: list[str] = Field(default_factory=list)

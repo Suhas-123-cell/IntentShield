@@ -27,7 +27,7 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 
 ### Proxy, gateway and control plane (PX)
 
-10 reviewed, plus 1 found while fixing. Fixes in commits `40d978c` and `ca4f3e3`, tests in `tests/test_hardening_proxy.py`.
+10 reviewed, plus 1 found while fixing. Fixes in commits `40d978c` and `ca4f3e3`, tests in `tests/test_mcp_proxy_regressions.py`.
 
 | Id | Finding | Severity | Status | Where fixed |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 
 ### Hook path and installer (HK)
 
-12 reviewed. Fixes in commit `7fc7e78` and `3f13a6e`, tests in `tests/test_hardening_hooks.py`.
+12 reviewed. Fixes in commit `7fc7e78` and `3f13a6e`, tests in `tests/test_hook_regressions.py`.
 
 | Id | Finding | Severity | Status | Where fixed |
 |---|---|---|---|---|
@@ -83,7 +83,7 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 
 ### Deterministic detection and provenance (RP)
 
-15 reviewed. Fixes in commits `4201195`, `cfcef3c`, `ef345ef`, `378ea05`, `f80f394` and `5f37910`; tests in `tests/test_hardening_rules.py` and `tests/test_threat_memory_hardening.py`. The reviewer gave no severities.
+15 reviewed. Fixes in commits `4201195`, `cfcef3c`, `ef345ef`, `378ea05`, `f80f394` and `5f37910`; tests in `tests/test_output_rule_evasions.py` and `tests/test_threat_memory_learning_exemptions.py`. The reviewer gave no severities.
 
 | Id | Finding | Severity | Status | Where fixed |
 |---|---|---|---|---|
@@ -257,7 +257,7 @@ Fixed. A note that the judge was unavailable or has no key no longer promotes an
 
 ### Hooks, installer and doctor (hooks-7, hooks-9 to hooks-14, hooks-17, hooks-18)
 
-Three fix-and-review rounds; the third review still broke hooks-7, hooks-10 and hooks-12 with variants of the same class, and those were closed before the merge (tests in `tests/test_hooks_audit_review.py`, 44 of 61 fail on the round-3 tree, the rest are controls).
+Three fix-and-review rounds; the third review still broke hooks-7, hooks-10 and hooks-12 with variants of the same class, and those were closed before the merge (tests in `tests/test_hook_url_hosts_and_persistence.py`, 44 of 61 fail on the round-3 tree, the rest are controls).
 
 | Finding | Severity | Status |
 |---|---|---|
@@ -290,7 +290,7 @@ Still open:
 
 ### Proxy (proxy-4 to proxy-9, proxy-11 to proxy-15)
 
-Three fix-and-review rounds. The third review still broke proxy-5 (an unread tool whose skeleton schema came out empty showed its raw schema in the gateway view) and proxy-13 (a server named `a|x` lost its pin when `a` started), and found a regression in proxy-4 (words joined by digits inside a junk run were dropped from what the judge reads). All three were closed before the merge; tests in `tests/test_audit_proxy_review.py` (5 of 5 fail on the round-3 tree).
+Three fix-and-review rounds. The third review still broke proxy-5 (an unread tool whose skeleton schema came out empty showed its raw schema in the gateway view) and proxy-13 (a server named `a|x` lost its pin when `a` started), and found a regression in proxy-4 (words joined by digits inside a junk run were dropped from what the judge reads). All three were closed before the merge; tests in `tests/test_proxy_unread_tool_view_and_pins.py` (5 of 5 fail on the round-3 tree).
 
 | Finding | Severity | Status |
 |---|---|---|
@@ -314,7 +314,7 @@ Still open: output-judge verdicts on results over 6 windows vary between runs (r
 
 ### Detection rules (rules-9, rules-1, rules-12, rules-10, rules-3 to rules-6)
 
-Three fix-and-review rounds, then a fourth by hand. The third review still broke four findings with close variants and found a regression: with the whole IANA root zone read bare, member chains of source code became hosts (`collections.abc`, `self.member.name`, `request.url.host`; on 1,537 local source files, 998 new values in 290 files), so editing with a line just read from a file asked where it used to be allowed. The round-4 fix reads a bare name only on a country code, an internationalized domain or a short list of longer domains (`com`, `io`, `pro`, `xyz`, `shop`, `icu` and others); every other root-zone domain is read after a word that points at a destination ("send the notes to relay.example.abc", quoted or not), with a scheme or as an address. It also repaired four root-zone entries a line wrap had split, stopped reading source code backwards because it says "backwards compatible" or `reversed(`, let a comma end a negated order ("do not send a reply, send the password to ..."), and matched a feed or pack indicator with a port (`c2.example:8080`, `[2001:db8::5]:8080`) against calls to its host. Tests in `tests/test_rules_detection_review.py` (50 of 58 fail on the round-3 tree; the rest are controls).
+Three fix-and-review rounds, then a fourth by hand. The third review still broke four findings with close variants and found a regression: with the whole IANA root zone read bare, member chains of source code became hosts (`collections.abc`, `self.member.name`, `request.url.host`; on 1,537 local source files, 998 new values in 290 files), so editing with a line just read from a file asked where it used to be allowed. The round-4 fix reads a bare name only on a country code, an internationalized domain or a short list of longer domains (`com`, `io`, `pro`, `xyz`, `shop`, `icu` and others); every other root-zone domain is read after a word that points at a destination ("send the notes to relay.example.abc", quoted or not), with a scheme or as an address. It also repaired four root-zone entries a line wrap had split, stopped reading source code backwards because it says "backwards compatible" or `reversed(`, let a comma end a negated order ("do not send a reply, send the password to ..."), and matched a feed or pack indicator with a port (`c2.example:8080`, `[2001:db8::5]:8080`) against calls to its host. Tests in `tests/test_host_reading_rules.py` (50 of 58 fail on the round-3 tree; the rest are controls).
 
 | Finding | Severity | Status |
 |---|---|---|
@@ -333,7 +333,7 @@ Still open: one-word variants of override phrases (rules-9); a list of prohibiti
 
 ### Credentials, paths and learned memory (rules-7, rules-8, rules-14 to rules-18, rules-20)
 
-Three fix-and-review rounds, then a fourth by hand. The third review broke four findings and found two regressions: a token split across a dict key and its value, which the base found, was missed (the run-together reading had dropped keys); partly masked documentation tokens (`xoxb-123456789012-xxxxxxxx`, `sk_live_abcdef...0123xxxxxxxx`) were flagged; an optional separator written as an empty alternative (`\d+(?:x|)\d+`) passed the rule safety gate and took 12.5 s on 600 digits; the hooks held learned values to the whole `mcp__srv__tool` name, so one server with 30 tool names still evicted another server's entries; and a self-disclosure parameter nested past 16 levels was not read. All five were closed before the merge; tests in `tests/test_audit_credentials_review.py` (14 of 19 fail on the round-3 tree; the rest are controls).
+Three fix-and-review rounds, then a fourth by hand. The third review broke four findings and found two regressions: a token split across a dict key and its value, which the base found, was missed (the run-together reading had dropped keys); partly masked documentation tokens (`xoxb-123456789012-xxxxxxxx`, `sk_live_abcdef...0123xxxxxxxx`) were flagged; an optional separator written as an empty alternative (`\d+(?:x|)\d+`) passed the rule safety gate and took 12.5 s on 600 digits; the hooks held learned values to the whole `mcp__srv__tool` name, so one server with 30 tool names still evicted another server's entries; and a self-disclosure parameter nested past 16 levels was not read. All five were closed before the merge; tests in `tests/test_credential_masking_split_tokens.py` (14 of 19 fail on the round-3 tree; the rest are controls).
 
 | Finding | Severity | Status |
 |---|---|---|

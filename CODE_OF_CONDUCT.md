@@ -11,8 +11,6 @@ changes without being treated badly.
 - Do not post other people's private information, credentials or working attacks against a third-party product.
   `SECURITY.md` says how to report a security problem.
 
-The maintainer may edit or remove comments, close threads and block accounts that break these rules.
-
 ## Reporting a problem
 
 - **In public:** open an issue on the repository. Describe what happened and link it; do not name anyone you do not need to.
@@ -21,6 +19,6 @@ The maintainer may edit or remove comments, close threads and block accounts tha
   report" at the start of the title; the report is visible to the repository's maintainers and not to other users. There is
   no separate conduct email address.
 
-The maintainer decides what to do and may edit or remove comments, close threads and block accounts, as above. The project has one maintainer, so a report about the maintainer has no independent reviewer; GitHub's own abuse reporting is the route for that case.
+The maintainer decides what to do and may edit or remove comments, close threads and block accounts that break these rules. The project has one maintainer, so a report about the maintainer has no independent reviewer; GitHub's own abuse reporting is the route for that case.
 
 This applies to everyone who takes part in the project, the maintainer included.

@@ -6,233 +6,161 @@ User-visible changes go under `## Unreleased` (see [CONTRIBUTING.md](CONTRIBUTIN
 
 ## 0.4.3 - 2026-11-11
 
-Verdict translation in the hook, a `wrap-hook` command, deterministic rules for dangerous built-in tool calls (opt-in
-with `--builtin-tools`), a review of that code and fixes to input handling in the hook, `scan`, `wrap` and `unwrap`.
-These came out of the hook verdict fidelity study, which is written up in `docs/hook-fidelity-study.md`.
+Verdict translation in the hook, a `wrap-hook` command, opt-in rules for dangerous built-in tool calls
+(`--builtin-tools`), and fixes to input handling in the hook, `scan`, `wrap` and `unwrap`. These came out of the hook
+verdict fidelity study ([short report](docs/hook-fidelity-report.md)). What the new rules deny and ask is listed in
+[docs/guide.md](docs/guide.md#built-in-tools-and-the-dangerous-command-rules), not here.
 
-### For users
+### Added
 
-#### Added
-
-- **`intentshield wrap-hook`** (also `intentshield-wrap-hook`) runs any third-party hook command under the fail-closed
-  launcher, a deadline and the version-keyed verdict translation: `intentshield wrap-hook --harness claude -- <guard command>`.
-- **What the shim sends:** a deny with a reason for exit 2 with an empty stderr, any other non-zero exit, a guard that
-  cannot start, a malformed reply and a guard still running at the deadline.
-- **Asks through the shim:** an ask is kept only where the build and mode are measured to enforce one.
-- **Silent guards:** exit 0 with nothing on stdout is refused by default and allowed with `--on-empty allow`.
-- **Limits of `wrap-hook`:** the default blocks every guard that signals allow by printing nothing, and `--on-empty allow`
-  lets a guard's silent fail-open through.
-- **More limits:** the deadline beats a shorter shipped hook timeout only with `--hook-timeout`, and there is no
-  installer for third-party entries yet.
+- **`intentshield wrap-hook`** (also `intentshield-wrap-hook`) runs any third-party hook under the fail-closed launcher, a
+  deadline and the verdict translation ([guide](docs/guide.md#wrapping-a-third-party-hook)). A silent guard (exit 0, no
+  output) is refused unless `--on-empty allow`. `--print-entry` prints the entry to paste in, with the absolute path of the
+  program. There is no installer for third-party entries yet.
 - **Dangerous-command rules** (`src/intentshield/dangerous.py`) run with `--builtin-tools` on every shell command, file
-  read and file write that the session rules allow.
-- **How they read:** the text alone, with safe parsing (shlex stages, wrappers, `bash -c`, `$(...)`, here-documents) and
-  linear-time regexes; nothing is run.
-- **Deny:** recursive deletes of root, home and system directories, writes to block devices, `mkfs` and `wipefs`, fork
-  bombs, force-push or deletion of a shared branch, and reads of SSH private keys, cloud credential files, netrc and keychains.
-- **Deny, continued:** a sensitive file sent to a network destination, reverse shells, and writes to `authorized_keys` and sudoers.
-- **Ask:** hook bypass (`--no-verify`, `commit -n`, `core.hooksPath`), other force-pushes, `reset --hard`, `curl | sh`,
-  `.env` and cloud-token reads, file uploads, `chmod 777`, and chown on system paths.
-- **Ask, continued:** writes to shell startup files, cron, launchd and systemd units, git hooks and CI workflows.
-- **User-typed commands:** an exact path or host the user typed softens a deny to an ask (see Changed).
-- **Mode reading in replies:** every reply that came from an ask ends with
-  `[IntentShield read this session as <mode>: <how> [ancestry: <source>]]`, so a run's evidence shows which source decided.
-- **`INTENTSHIELD_ANCESTRY_SOURCES`** (`proc`, `libproc`, `ps`, `none`) restricts the sources the mode detector reads, for
-  diagnostics, and is reported on stderr like the other overrides.
+  read and file write that the session rules allow. They read the text only, nothing is run, and parsing is linear-time.
+- **A call that would switch the guard off asks,** even in a clean session (`uninstall`, `unwrap`, writes to `hooks.db` or
+  a harness's settings and hooks). It is a speed bump, not protection.
+- **`PowerShell` and `Monitor` are guarded like `Bash`,** and `apply_patch` run through a shell tool is read as the patch
+  it is, with `--builtin-tools`. `Monitor` is read as a shell command because its input has a `command`; that comes from the
+  tool's schema, not from the vendor pages archived here.
+- **`Grep` is covered, and unreadable events are refused,** with `--builtin-tools`. `Glob`, `LS`, `list_directory` and
+  `glob` return names, not content, and are not covered. An unknown event name, or a missing or non-text command, path or
+  URL, is denied.
+- **A mode note ends every reply that came from an ask:** `[IntentShield read this session as <mode>: <how> [ancestry: <source>]]`.
+  `INTENTSHIELD_ANCESTRY_SOURCES` (`proc`, `libproc`, `ps`, `none`) restricts the sources the detector reads.
 - **`doctor`** prints the measured fail-open conditions for the detected version, flags hooks installed without the
-  launcher, and says when it found the recorded version stale.
-- **`doctor`, Gemini exit 126:** worded by the measured boundary (the call runs through 0.29.7 and is blocked from 0.30.0).
-- **Docs:** the guide covers what to do when the guard blocks something legitimate, troubleshooting, the built-in tool
-  rules and `wrap-hook`.
-- **Own-files rule:** with `--builtin-tools`, a call that would switch the guard off asks even in a clean session
-  (`uninstall`, `unwrap`, writes to `hooks.db` or a harness's settings and hooks). A speed bump, not protection.
-- **`Grep` is covered** with `--builtin-tools` (Claude Code `Grep`, Gemini `search_file_content` and `grep_search`, read by
-  their `path`). `Glob`, `LS`, `list_directory` and `glob` return names, not content, and are not covered.
-- **Unreadable built-in events are refused** with `--builtin-tools`: a tool call under an unknown event name, or with a
-  missing or non-text command, path or URL, is denied on Claude Code, Codex, Gemini and Cursor.
-- **`--deadline`** takes 0 to 3600 seconds and exits 2 on anything else; a set but invalid `INTENTSHIELD_HOOK_DEADLINE`
-  means the 30 s default with a note on stderr. `wrap-hook` rejects `nan`, `inf` and values over 3600.
-- **`doctor` tells a hand-piped event from a harness's:** the hook records whether the harness is among its ancestors;
-  an event that came from elsewhere is not counted as a run and `doctor` prints a warning (Cursor cannot be told apart).
-- **`install` and `wrap` refuse an ephemeral path** (a `uvx`, `pipx run` or `npx` cache) for the hook or proxy and name
-  `uv tool install intentshield-mcp`; `--allow-ephemeral` overrides it. `install` ends with a "Next:" line.
-- **The bare `intentshield` command** prints the dashboard address before it serves.
-- **Packaging and CI:** the wheel is marked typed (`py.typed`) and CI runs `mypy` and a macOS job; the PyPI upload waits
-  for the full CI run on the tagged commit; the source distribution holds the package and its configs, not tests.
-- **Repository:** `CITATION.cff`, `NOTICE`, a code of conduct and a pull-request template are added. The Anthropic and
-  OpenAI documentation pages the study read are cited by source and sha256, not copied.
+  launcher, says when the recorded version is stale, fails a wrapped server whose command does not exist, and says plainly
+  when nothing is installed (exit 0). Its exit status is in `doctor --help`.
+- **`doctor` does not count a hand-piped event as a run** and warns instead (Cursor cannot be told apart). Its Gemini exit
+  126 warning follows the measured boundary: the call runs through 0.29.7 and is blocked from 0.30.0.
+- **`install` and `wrap` refuse an ephemeral path** (a `uvx`, `pipx run` or `npx` cache) and name
+  `uv tool install intentshield-mcp`; `--allow-ephemeral` overrides it. `install` ends with a "Next:" line ("start the
+  harness and send any prompt"), warns that a `--scope project` file holds absolute paths and must not be committed (`wrap`
+  does the same inside a git working tree), and the bare `intentshield` command prints the dashboard address before it serves.
+- **A command that needs a package that is not installed** (after `pip install --no-deps`) prints one line naming it and exits
+  2, not a traceback. Only the hooks, `install`, `uninstall`, `doctor`, `wrap-hook` and `scan --no-connect` run without them.
+- **Docs and packaging:** the guide covers blocked calls, troubleshooting, the built-in tool rules and `wrap-hook`, and the
+  repository has `CITATION.cff`, `NOTICE`, a code of conduct and a pull-request template. The wheel is marked typed (`py.typed`) and its classifiers say macOS and Linux. `anyio`, `starlette` and
+  `httpx2`, which the code imports, are now declared, and `cryptography` is the `signing` extra (Ed25519 threat packs). CI runs
+  `mypy` (near-strict, with per-module exceptions), a macOS job, a coverage floor of 85% (91% measured) and a dependency audit
+  (weekly; it fails only for an advisory that has a fix). The PyPI upload waits for the full CI run on the tagged commit. The
+  source distribution holds the package and its configs, not tests.
 
-#### Changed
+### Changed
 
-- **`install`** runs `<harness> --version` and writes a hook deadline (`--deadline`, default 30 s) and a fail-closed
-  launcher by default. `--no-translate` or `INTENTSHIELD_HOOK_TRANSLATE=off` restores the old hook.
-- **Asks:** an `ask` that is not positively known to reach a person becomes a deny with a reason on Claude Code (it was
-  an ask), Codex (already a deny) and Gemini.
-- **Asks on Gemini:** an ask on MCP is always refused; shell asks are kept only with `--gemini-ask` from 0.38.0.
-- **Mode detector sources:** it reads ancestry from `/proc` on Linux and from `libproc` (`proc_pidinfo`) plus
-  `sysctl kern.procargs2` on macOS (ctypes, no new dependency, no process spawned), then `ps`.
-- **Unknown mode:** when no source can read the ancestry, or the walk is cut short before the harness is found, the mode
-  is unknown, not headless. An ask is then decided by what the build does with it.
-- **Unknown mode, by harness:** passed on unchanged on Claude Code 2.1.85 and later (the harness refuses an ask nobody
-  answers); refused on older or unmeasured Claude Code, on Codex, on Gemini and on Cursor.
-- **Unknown mode, limits:** a complete chain without the harness is still headless; `INTENTSHIELD_HARNESS_MODE=interactive`
-  restores a Gemini prompt.
-- **Windows:** only the `ps` source exists, so a missing `ps` there reads unknown instead of headless (a Claude Code ask
-  passes on, a Gemini ask is refused); that was not measured.
-- **Headless flag:** read only from the harness's own arguments, not from a prompt that says `-p`.
-- **Version record:** an update that repoints the launcher symlink is noticed, and a missing or stale record is refreshed
-  from the running binary before an interactive ask (otherwise the ask is refused and says why).
-- **Bounds:** `ps` lookups are bounded to 2 s in all, a version is read only from the first line of `--version` with
-  oversized components ignored, and the record is written atomically.
-- **Overrides:** stderr says when `INTENTSHIELD_HARNESS_MODE` or `INTENTSHIELD_HARNESS_VERSION` replaces what would be
-  detected.
-- **A deny beats an ask:** when the session rules ask and the dangerous-command rules deny, the call is denied (the
-  session ask used to win). A secrets file sent out (`.env`, npmrc) now asks; a key or cloud credential still denies.
-- **Softening needs an exact target:** a deny is softened to an ask only when the prompt names the whole path or host
-  (not a parent directory, not `notevil.com` for `evil.com`) and does not negate it, and every deny of the command is named.
-- **Shell reading:** one-line control structures (`if ...; then rm -rf /; fi`, `while`, `{ ...; }`), `cd` and variables
-  set earlier in the line, `$'...'` strings and brace lists are read as bash reads them; earlier calls are not seen.
-- **Certificates are not secrets:** `cert.pem`, `fullchain.pem`, CA bundles and `*.asc` signatures no longer ask; private
-  keys still do. `.azure/credentials` asks; `chown -R $USER` of a `/usr/local` directory asks instead of denying.
-- **`wrap` checks every entry first** and reports `skipped <name>: command must be a string` (or args, env), writes the
-  files only when all entries pass and removes them if the client file cannot be written. `unwrap` warns when an entry changed.
-- **`install --judge custom:m --dry-run`** fails as the real install does and stores nothing; `--judge-url` without
-  `--judge` is an error. A malformed `hooks` value names its file.
-- **`scan` output:** exit codes are in `scan --help`; the client label no longer says "(no IntentShield hooks)"; one
-  hint replaces a line per server that did not start, and the server's own stderr line is added to "not scanned".
-- **Stored prompts hold a hash in place of a credential** the guard recognises (`[credential:<hex>]`), and
-  `~/.intentshield` is created with mode 0700 (an existing one you own is tightened). Retention is unchanged.
-- **A clean session asks on `cat .env`,** which it used to allow.
-- **Cursor:** `beforeReadFile` allows a read the text rules only ask about, with the note. With `--gemini-ask`, asks on
-  Gemini's file tools are asks again, not MCP refusals.
+- **`install`** runs `<harness> --version` and writes a hook deadline (`--deadline`, 0 to 3600 s, default 30 s) and a
+  fail-closed launcher by default. `--no-translate` or `INTENTSHIELD_HOOK_TRANSLATE=off` restores the old hook. A set but
+  invalid `INTENTSHIELD_HOOK_DEADLINE` means the 30 s default with a note on stderr.
+- **An ask that is not known to reach a person becomes a deny with a reason** on Claude Code (it was an ask), Codex
+  (already a deny) and Gemini. On Gemini an ask on MCP is always refused, and shell asks are kept only with
+  `--gemini-ask` from 0.38.0.
+- **The mode detector** reads ancestry from `/proc` on Linux and from `libproc` plus `sysctl kern.procargs2` on macOS (no new
+  dependency, no process spawned), then `ps`. It reads the headless flag from the harness's own arguments, not from a
+  prompt that says `-p`. A missing or stale version record is refreshed from the running binary, and stderr says when
+  `INTENTSHIELD_HARNESS_MODE` or `INTENTSHIELD_HARNESS_VERSION` overrides what would be detected.
+- **When no source can read the ancestry the mode is unknown, not headless.** An ask is then passed on unchanged on Claude
+  Code 2.1.85 and later and refused on older or unmeasured Claude Code, Codex, Gemini and Cursor. On Windows only the `ps`
+  source exists (not measured there). `INTENTSHIELD_HARNESS_MODE=interactive` restores a Gemini prompt.
+- **A deny beats an ask:** when the session rules ask and the dangerous-command rules deny, the call is denied. A secrets
+  file sent out (`.env`, npmrc) asks; a key or cloud credential still denies.
+- **A deny is softened to an ask only on an exact target:** the prompt must name the whole path or host (not a parent
+  directory, not `notevil.com` for `evil.com`), must not negate it, and every deny of the command must be named.
+- **Shell reading:** one-line control structures, `cd` and variables set earlier in the line, `$'...'` strings and brace
+  lists are read as bash reads them. Certificates (`cert.pem`, `fullchain.pem`, CA bundles, `*.asc`) are not secrets;
+  `.azure/credentials` and `cat .env` in a clean session ask.
+- **Default databases are in `~/.intentshield`,** not the working directory, for `Storage()`, `IntentShieldService.default()`,
+  `create_mcp_server()` and a proxy config with no `database_path`. `INTENTSHIELD_DB`, an explicit path and a database
+  already in the working directory still win. This applies to everyone, not only `--builtin-tools`.
+- **"Could not connect to MCP server" gives the cause** where it can be told (command not found or not executable, ended
+  before answering, no answer in time), in `scan`, the proxy and `doctor`. A guard that fails closed on an agent error logs
+  the exception class at warning level, never its message.
+- **Dangerous-command verdicts, `--builtin-tools`:** reading a harness's credential file asks (the list is in the guide);
+  `find` with a name test is allowed under home and asked elsewhere; `rm -rf` of `/$X`, `~/$X` and `$HOME/$X` asks; making a key
+  with `openssl` or `ssh-keygen` is not a read; `git clean -n` is allowed; `sudo curl ... | sh` and a script from `localhost`
+  ask, and `curl | sudo sh` denies.
+- **`wrap` checks every entry first,** reports `skipped <name>: command must be a string` (or args, env), and writes the
+  files only when all pass. `unwrap` warns when an entry changed. `install --judge custom:m --dry-run` fails as the real
+  install does, and `--judge-url` without `--judge` is an error.
+- **`scan` output:** exit codes are in `scan --help`, and one hint replaces a line per server that did not start, with the
+  server's own stderr line added to "not scanned".
+- **Stored prompts hold a hash in place of a credential** the guard recognises (`[credential:<hex>]`), and `~/.intentshield`
+  is created with mode 0700 (an existing one you own is tightened). Retention is unchanged. On Cursor, `beforeReadFile`
+  allows a read the text rules only ask about, with a note.
 
-#### Fixed
+### Fixed
 
-- **Interactive asks read as headless:** the hook read its ancestors with `ps` only. With no runnable `ps` it read
-  "harness process not found: assumed headless", so an interactive ask became a refusal with no prompt.
-- **Where `ps` cannot run:** the setuid binary cannot run under `sandbox-exec`; a container may lack procps; Windows.
-- **A harness that is PID 1** was never read: the ancestry walk stopped when the process it had read had a parent pid of
-  1 or less.
-- **PID 1, effect:** in a container where the harness is PID 1 (`docker run -it image claude`) an interactive session was
-  read as headless (2 of 8 constructed pid1 cases), so an ask became a refusal with no prompt.
-- **PID 1, fix:** on Linux the walk now stops at parent pid 0 and reads PID 1; on macOS it still stops at `launchd`. Found
-  by the Linux `/proc` run, `results/hook-fidelity/linux/README.md`.
-- **Threat memory:** approving a call the hook asked about no longer clears that server's hostile record. The hook asks
-  for reasons unrelated to the server (a redacted field, a credential), so one routine approval cleared it across sessions.
-- **Threat memory, proxy:** the proxy already required an explicit `trust_source` (PX10); the hook now never clears a source.
-- **Hook input:** a prompt or argument holding a lone surrogate (half of a cut emoji) no longer loses the prompt or fails
-  the hook.
-- **Judge replies:** a reply that is valid JSON of the wrong shape is no opinion, not a crash that blocked the call.
-- **`.env`:** `~/.intentshield/.env` may hold `export KEY=value` lines and bytes that are not UTF-8.
-- **Built-in tools:** `.env.example`, `.env.sample`, `.env.template` and `.env.dist` are templates, not secrets, so
-  committing and pushing one no longer asks.
-- **`wrap`:** a wrapped server whose entry sets an empty `env` value starts again (the proxy refused the empty variable).
-- **`unwrap`:** a hand-written proxy entry with several upstreams is left alone and an entry with no `--config` is named,
-  where it used to replace the first with its first upstream and fail on the second.
-- **`scan`:** a malformed entry (`env` as a list, `args` as a number) is reported as not scanned instead of stopping with
-  a traceback, and configs with comments are read.
-- **`scan`, exit code:** a named file that does not exist or a config it could not read exits 2, where it used to exit 0.
-- **Dangerous-command rules, found in review:** `wget -O - URL | sh` and `curl -o - URL | sh` are read as a fetch piped
-  into a shell (the `-O -` was taken for a file write and they got no verdict).
-- **Dangerous-command rules, more cases:** a command over 50,000 characters asks, where the unread rest used to pass;
-  `echo` or `printf` piped into a shell and `bash <<< '...'` are read as commands; `rm -rf "${HOME:?}"/*` denies.
-- **False refusals removed:** the key named by `scp -i` or `rsync -e "ssh -i ..."` is no longer a file being sent;
-  `git branch -d` and `git restore --staged` get no verdict.
-- **Quoted text:** text in single quotes and quoted here-documents (a commit message or PR body that quotes `rm -rf /`)
-  is data unless a shell or interpreter runs it.
-- **Protected branches:** `git branch -D` of a protected name asks.
-- **`wrap-hook` and Cursor:** `wrap-hook` reads Cursor's shell events as shell.
-- **Crashes:** a malformed `harness-versions.json` or `INTENTSHIELD_HOOK_DEADLINE` no longer crashes `doctor`, `install`
-  or the hook.
-- **`uninstall` warning:** it no longer says the file was edited after install when the only difference is an empty
-  top-level `hooks` object; a commented Gemini settings file comes back byte for byte.
-- **Learned-rule gate:** a Python without the private regex parser (`re._parser`) makes the gate refuse every proposed
-  rule instead of failing at import.
-- **Guard crash on an unnamed tool event** in `wrap-hook` is refused, not passed through with exit 1.
+- **Interactive asks read as headless** when `ps` cannot run (under `sandbox-exec`, in a container without procps, on
+  Windows) or the harness is PID 1 (`docker run -it image claude`): the ask became a refusal with no prompt. On Linux the
+  walk now reads PID 1; on macOS it still stops at `launchd`.
+- **Threat memory:** approving a call the hook asked about no longer clears that server's hostile record across sessions.
+  The hook now never clears a source; the proxy already required an explicit `trust_source`.
+- **Hook input:** a prompt or argument holding a lone surrogate (half of a cut emoji) no longer loses the prompt or fails the
+  hook. A judge reply that is valid JSON of the wrong shape is no opinion, not a crash. `~/.intentshield/.env` may hold
+  `export KEY=value` lines and bytes that are not UTF-8.
+- **`wrap` and `unwrap`:** a wrapped server whose entry sets an empty `env` value starts again. A hand-written proxy entry
+  with several upstreams is left alone and an entry with no `--config` is named, where `unwrap` used to fail on the second.
+- **The transparent proxy answers what it cannot parse:** a request whose `params` is not an object gets error -32602 and one that
+  is not JSON gets -32700, and it keeps serving; the protocol library dropped both and the client waited. Other transports were
+  not checked.
+- **Gemini `settings.json` with comments and trailing commas** is read as Gemini reads it; the original text is restored byte for
+  byte on `uninstall`. Another harness's file that does not parse stops with a message that says what to do. `unwrap` of a
+  missing file says so.
+- **`scan`:** a malformed entry (`env` as a list, `args` as a number) is reported as not scanned instead of a traceback,
+  configs with comments are read, and a named file that does not exist or cannot be read exits 2, where it used to exit 0.
+- **Spellings of one command:** a line continuation, tabs, form feed, `${IFS}`, empty quotes, a backslash inside a word, a
+  comment after the command and a brace list in the command word read as the plain command. A command over 400 stages, 20,000
+  words or 3 nesting levels asks, as the 50,000-character cap does, and `echo "$(rm -rf / $(date))"` is no longer allowed.
+- **Dangerous-command rules:** `wget -O - URL | sh` and `curl -o - URL | sh` are read as a fetch piped into a shell, a command
+  over 50,000 characters asks (the unread rest used to pass), `echo` or `printf` piped into a shell and `bash <<< '...'`
+  are read as commands, `rm -rf "${HOME:?}"/*` denies, and `git branch -D` of a protected name asks.
+- **False refusals removed:** the key named by `scp -i` or `rsync -e "ssh -i ..."` is not a file being sent, `git branch -d`
+  and `git restore --staged` get no verdict, `.env.example` and its `.sample`, `.template` and `.dist` forms are templates,
+  and text in single quotes or quoted here-documents (a commit message that quotes `rm -rf /`) is data.
+- **Smaller fixes:** `wrap-hook` reads Cursor's shell events as shell and refuses a tool event with no name. A malformed
+  `harness-versions.json` or `INTENTSHIELD_HOOK_DEADLINE` no longer crashes `doctor`, `install` or the hook. `uninstall`
+  no longer warns of an edit when the only difference is an empty top-level `hooks` object.
 - **Still open:** a payload written to a plain file with `echo '...' > x.sh` and run later, and `echo $'...' | sh`.
 
 ### Study and benchmarks
 
-Measurements on a stub model, in `benchmarks/hook_fidelity/`, `results/hook-fidelity/` and `docs/hook-fidelity-study.md`.
-The kill criterion and the 467 fixtures of the decision comparison were written before the runs, in commits that are not
-in main's history. The runs are small; read each entry with the limits it states.
+Measurements on a stub model, in `benchmarks/hook_fidelity/`, `results/hook-fidelity/` and
+[the study](docs/hook-fidelity-study.md). The runs are small; read each entry with the limits it states.
 
-- **Verdict fidelity study:** Claude Code, Codex CLI and Gemini CLI were run against a local stub model with a stub hook
-  and with replayed real-guard bytes (headless, macOS); Cursor could not be measured (free-plan limit).
-- **Study result:** a hook `ask` with no human is denied on Claude Code 2.1.85 and later (the flip lies between 2.1.84
-  and 2.1.85, bisected), fails open on Codex (documented behaviour), and on Gemini runs silently before 0.38.0 and hangs from
-  0.38.0 under yolo or with the shell allow-listed. `deny` was enforced everywhere it was tested.
-- **Study verdict:** the kill criterion, written before the runs, is not met, so the output is a measurement note and an
-  artifact, not a paper. Per-vendor disclosure drafts are written, kept out of the repository, and nothing was sent.
-- **Study runner:** one arm S path for the three harnesses (in-process stub, loopback sandbox or egress proxy), sign-offs
-  per harness, and an empty selection is refused.
-- **Translation regression check** (`docs/hook-fidelity-mitigation.md`): the real hook entry point with a fixed decision,
-  12 harness builds. 24 distinct (build, scenario) cells where the old hook let a call run or hang ended blocked with the
-  translation on (48 paired runs, n=2 on a deterministic stub). It is a regression check, not an effectiveness result.
-- **Translation controls:** an allow control (the call ran with the translation on in 11 of 11 evaluable builds), a
-  deny-everything hook (blocked where it ran, 6 of 6), the shipped 30 s deadline (3 of 3 blocked at about 30 s) and an
-  ask with no version recorded (3 of 3 blocked). Stub model, shell call, headless only.
-- **`wrap-hook` measurement** (`results/hook-fidelity/compare/README.md`, `docs/hook-fidelity-study.md` section 6a.1):
-  the six captured guards' bytes behind the shim survived on every pair where they did not unwrapped, as IntentShield's
-  hook does, and mostly because of the launcher. Headless, macOS, n=1 to 2. A deny-everything hook scores the same on every
-  survival cell, so this shows verdict delivery, not guard quality.
-- **Head-to-head against six guards** (`benchmarks/hook_fidelity/compare.py`, `results/hook-fidelity/compare/`, sections
-  6a and 6b): on the 18 pairs where a shipped guard's verdict did not survive, translation on delivered a refusal in 18
-  of 18 and translation off in 5 of 18. That is mostly the fail-closed launcher, a configuration a guard author can add,
-  so no "better than existing guards" claim is made.
-- **Interactive terminal cells** (`benchmarks/hook_fidelity/pty_lane.py`, `results/hook-fidelity/interactive/`): on Claude
-  Code 2.1.316 and Gemini CLI 0.66.0 the translation kept an ask as a prompt, as the old hook did (2/2 each). They found
-  that the mode detector read an interactive session as headless when `ps` cannot run (fixed above). Stub model, macOS,
-  one build per harness.
-- **Mode detector without `ps`:** measured on a stub, macOS, one build per harness: `results/hook-fidelity/interactive/README.md`,
-  `docs/hook-fidelity-study.md` section 6b.1. The reading note is appended to every ask reason and is visible in the prompt
-  a user sees. The defect it repairs was produced by the study's own `sandbox-exec` profile: no real user is shown to lack
-  `ps`, and the Linux reader had not run on Linux at that point.
-- **Decision comparison** of IntentShield and 10 other guards on 467 fixtures declared before the runs
-  (`benchmarks/hook_fidelity/detect_*.py`, `results/hook-fidelity/detect/`, `docs/hook-fidelity-study.md` section 6c):
-  on the held-out set IntentShield's hook (built-in tools, session state replayed) misses 137/166 harmful calls and flags
-  none of the destructive, git, credential-read, pipe-to-shell or rc/CI-write items, where `safety-net` misses 31/130 on
-  its scope.
-- **Decision comparison, continued:** IntentShield's one distinctive flag is an MCP call whose destination came from an
-  earlier tool result, which it also flags on 20 of 24 benign calls (provenance, not injection detection). With the
-  shipped translation its effective protection is 13 to 17% per build.
-- **Also measured:** the wrapped rows re-run on the merged code (no outcome changed); the failure cells under
-  `wrap-hook --on-empty allow` (only a silent exit 0 runs; the default `--on-empty deny` refuses 12 of 17 benign allow
-  captures); a local-model arm (qwen2.5:7b, 61/61 valid runs equal to the stub outcome) and one paid-model arm
-  (deepseek-flash, 10/10); and the `/proc` mode reader run in Docker (27/27 constructed trees).
-- **Known defects of that comparison:** a node-launched Claude Code hides its `-p` flag from `libproc` (macOS), so it is read
-  by the no-terminal branch. New tests are in `tests/test_hook_fidelity_*.py`.
-- **Dangerous-command rules, first scoring:** before the rules the hook allowed 137 of 178 held-out harmful shell, write
-  and read calls. A post hoc re-score on the same fixtures (not a clean held-out test) gives false-allow 6/178, no new
-  benign denials and 5 new benign asks of 234; details in `results/hook-fidelity/detect/r8fix/`.
-- **Dangerous-command rules, fresh set** (`results/hook-fidelity/detect/fresh/`, `docs/hook-fidelity-study.md` section 6e):
-  on 214 calls IntentShield with `--builtin-tools` and the rules lets through 28/104 harmful calls (41 asked, 35 denied;
-  5/110 benign asks), against 44/85 for `safety-net` on its shell scope and 44/73 for `knox` on its scope, where it lets
-  through 25/85 and 18/73. On denies alone it trails `safety-net` (24/85 against 41/85) and ties `knox`.
-- **Fresh set, limits:** one author, sources recalled, the same six categories as the rules, so it shows the rules work on
-  their own categories, not that IntentShield detects more in general. `fresh_report.py` now excludes rows a guard never ran
-  (`knox` was scored on 31 Gemini items it has no support for: 75/104 became 44/73 on its scope) and prints scopes,
-  same-item comparisons and extrapolated effective protection.
-- **Generalisation test did not run:** the planned test of the built-in-tool rules outside the categories they were written
-  from has no result (`results/hook-fidelity/detect/general/` does not exist), so nothing was scored and a reviewer's verdict
-  on it is refuted for lack of evidence (`docs/hook-fidelity-study.md` section 6f). The study's comparative sentence stands
-  as written, with no new evidence either way; its section 0 says the comparison was not tested outside the six categories
-  the rules were written from and is not evidence that IntentShield detects more than `safety-net` or `knox` in general. No
-  harness launches, no model or paid calls; no product code, test or result file changed for this entry.
-- **Rules review check:** the study's 7,639 recorded IntentShield decisions on its fixtures recomputed unchanged after the
-  fixes made in review. The later change that lets a deny beat a session ask does change some (next entry).
-- **Rules since the study:** the committed results are the rules as they stood when the study ran, and are not regenerated.
-  Re-running the committed fixtures through today's code changes 45 `intentshield` decisions from ask to deny (27 of the 467
-  set, 9 items; 18 of the fresh set, 6 items): all harmful credential exfiltration, none benign, none to allow.
-- **Rules since the study, fresh set:** of the 214 calls, 41 asked and 35 denied become 35 asked and 41 denied; 28 of 104
-  harmful calls still get through and 5 benign asks stay. The denies-alone figure (24/85 against 41/85) was not recomputed.
-- **Report and scripts:** `docs/hook-fidelity-report.md` is the short entry point; `report_numbers.py` recomputes its figures
-  from the committed rows. `fetch_corpus.py` fetches the 26 pinned guard clones; `detect_compare.py report` needs no clones.
-- **Docs:** the README is shorter, with the layer detail in `docs/layers.md` and the results detail and limits in
-  `docs/benchmarks.md`; superseded drafts moved to `docs/research-notes/`.
-- **Guard replay corpus:** the star median in the corpus is 13 (it was 17: the upper-middle element was taken).
-- **Tests:** `test_the_ancestry_is_read_with_no_runnable_ps` skips itself when pytest is an orphaned job on macOS (parent
-  `launchd`).
+- **Verdict fidelity study:** Claude Code, Codex CLI and Gemini CLI were run against a local stub model, with a stub hook
+  and with replayed bytes of real guards (headless, macOS). Cursor could not be measured (free-plan limit).
+- **Result:** `deny` was enforced everywhere it was tested. An `ask` with no human is denied on Claude Code 2.1.85 and
+  later (the change lies between 2.1.84 and 2.1.85), fails open on Codex, and on Gemini runs silently before 0.38.0 and hangs
+  from 0.38.0 under yolo or with the shell allow-listed. The kill criterion is not met (the author says it was written before
+  the runs; the repository cannot show the order), so this is a measurement note and an artifact, not a paper. Disclosure drafts exist and nothing was sent to a vendor.
+- **Translation regression check** ([mitigation](docs/hook-fidelity-mitigation.md)): across 12 harness builds, 24 distinct
+  (build, scenario) cells where the old hook let a call run or hang ended blocked with the translation on (48 paired runs,
+  n=2, deterministic stub). It is a regression check, not an effectiveness result. Controls:
+  the call ran with the translation on in 11 of 11 evaluable builds, a deny-everything hook was blocked where it ran (6 of 6),
+  the 30 s deadline blocked 3 of 3 at about 30 s, and an ask with no version recorded was blocked 3 of 3.
+- **`wrap-hook` against six guards** (`results/hook-fidelity/compare/`): on the 18 pairs where a shipped guard's verdict did
+  not survive, translation on delivered a refusal in 18 of 18 and translation off in 5 of 18. That is mostly the fail-closed
+  launcher, which a guard author can add, so it shows verdict delivery, not guard quality. Headless, macOS, n=1 to 2.
+- **Interactive terminal cells** (`results/hook-fidelity/interactive/`): on Claude Code 2.1.316 and Gemini CLI 0.66.0 the
+  translation kept an ask as a prompt (2/2 each). They exposed the mode-detector defect fixed above, which the study's own
+  `sandbox-exec` profile produced; no real user is shown to lack `ps`.
+- **Decision comparison with 10 other guards** on 467 fixtures the author says were declared before the runs: on the held-out set IntentShield's
+  hook misses 137/166 harmful calls and flags none of the destructive, git, credential-read, pipe-to-shell or rc/CI-write
+  items, where `safety-net` misses 31/130 on its scope. Its one distinctive flag is an MCP call whose destination came from
+  an earlier tool result (provenance, not injection detection), also raised on 20 of 24 benign calls.
+- **Dangerous-command rules, scored:** a post hoc re-score on the 166 held-out items (12 reclassified after the fact) gives false-allow 6/166
+  (137/166 before the rules), which is not a clean held-out test; on the 178 declared items it is 6/178 against 137/178. On a fresh set of 214 calls
+  (`results/hook-fidelity/detect/fresh/`), IntentShield with `--builtin-tools` lets through 28/104 harmful calls, against
+  44/85 for `safety-net` on its shell scope and 44/73 for `knox` on its scope, where it lets through 25/85 and 18/73. On
+  denies alone it trails `safety-net` (24/85 against 41/85). Nine of the 214 are discovery-only items by the author's own reading;
+  without them it lets through 19/95. One author and the same six categories as the rules: this shows
+  the rules work on their own categories, not that IntentShield detects more in general.
+- **Not run, and changed since:** the planned test outside those categories has no result
+  (`results/hook-fidelity/detect/general/` does not exist). The committed results are the rules as they stood when the study
+  ran. Re-running the committed fixtures through the code of this release changes 45 `intentshield` decisions from ask to deny
+  (27 of the 467 set, 9 items; 18 of the fresh set, 6 items): all harmful exfiltration, none benign, none to allow.
+- **Also measured:** a local-model arm (qwen2.5:7b, 61/61 valid runs equal to the stub outcome), one paid-model arm
+  (deepseek-flash, 10/10), and the `/proc` mode reader run in Docker (27/27 constructed trees).
 
 ## 0.4.2 - 2026-10-31
 
@@ -583,7 +511,7 @@ first-run experience, benchmark rigor); every behaviour change has a regression 
 - PyPI distribution name is `intentshield-mcp`; the plain name belongs to an unrelated project.
 
 Fixes from a five-reviewer pass (security, silent failures, Python quality, over-engineering,
-competitor gap analysis), each with a regression test in `tests/test_review_fixes.py`:
+competitor gap analysis), each with a regression test in `tests/test_harness_fail_closed_and_installer_ownership.py`:
 
 - Hooks: an unknown `--review`/`--outputs` value from the environment now fails closed (exit 2)
   instead of silently disabling every review branch; a read-verb tool name with a destructive

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -12,6 +13,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from .mcp_inspect import argument_surface, normalized_intent
 from .models import ToolCall
 from .tools import ToolSpec, destination_allowed
+
+_log = logging.getLogger(__name__)
+
+
+def _failed(what: str, exc: Exception) -> None:
+    """Fail-closed handlers keep the failure but say what failed: the class only, never the message (it may hold arguments)."""
+    _log.warning("%s failed closed: %s", what, type(exc).__name__)
 
 
 class EvidenceReason(StrEnum):
@@ -410,9 +418,10 @@ class DeterministicGroundingAgent:
                 prediction = IntentClassifierResult.model_validate(
                     self.classifier.predict(user_intent, call, metadata)
                 )
-            except Exception:
+            except Exception as exc:
                 # Classifier code is a plug-in boundary. Invalid output and
                 # runtime errors are security failures, not soft fallbacks.
+                _failed("the local classifier", exc)
                 return GroundingEvidence(
                     status=EvidenceStatus.FAILED,
                     intent_alignment=0.0,
@@ -529,13 +538,15 @@ class SecurityAnalysisSupervisor:
     def _inline_detection(self, user_intent: str, call: ToolCall, metadata: TrustedToolMetadata) -> DetectionEvidence:
         try:
             return DetectionEvidence.model_validate(self.detection_agent.analyze(user_intent, call, metadata))
-        except Exception:
+        except Exception as exc:
+            _failed("the detection agent", exc)
             return _no_detection(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     def _inline_grounding(self, user_intent: str, call: ToolCall, metadata: TrustedToolMetadata) -> GroundingEvidence:
         try:
             return GroundingEvidence.model_validate(self.grounding_agent.analyze(user_intent, call, metadata))
-        except Exception:
+        except Exception as exc:
+            _failed("the grounding agent", exc)
             return _no_grounding(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     @staticmethod
@@ -547,7 +558,8 @@ class SecurityAnalysisSupervisor:
             return _no_detection(EvidenceStatus.TIMED_OUT, EvidenceReason.AGENT_TIMEOUT)
         try:
             return DetectionEvidence.model_validate(future.result())
-        except Exception:
+        except Exception as exc:
+            _failed("the detection agent", exc)
             return _no_detection(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     @staticmethod
@@ -559,7 +571,8 @@ class SecurityAnalysisSupervisor:
             return _no_grounding(EvidenceStatus.TIMED_OUT, EvidenceReason.AGENT_TIMEOUT)
         try:
             return GroundingEvidence.model_validate(future.result())
-        except Exception:
+        except Exception as exc:
+            _failed("the grounding agent", exc)
             return _no_grounding(EvidenceStatus.FAILED, EvidenceReason.AGENT_FAILURE)
 
     def _combine(

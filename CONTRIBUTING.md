@@ -40,8 +40,8 @@ Where a rule goes:
 
 | What it reads | File | Tests to extend |
 |---|---|---|
-| tool descriptions, tool outputs, arguments (injected instructions, poisoning) | `src/intentshield/mcp_inspect.py` (`scan_description`, `scan_output`) | `tests/test_rules_detection.py`, `tests/test_hardening_rules.py` |
-| credential formats | `src/intentshield/credentials.py` | `tests/test_audit_credentials.py` |
+| tool descriptions, tool outputs, arguments (injected instructions, poisoning) | `src/intentshield/mcp_inspect.py` (`scan_description`, `scan_output`) | `tests/test_rules_detection.py`, `tests/test_output_rule_evasions.py` |
+| credential formats | `src/intentshield/credentials.py` | `tests/test_credential_masking.py` |
 | a built-in tool call: a shell command, a file read or write (`--builtin-tools`) | `src/intentshield/dangerous.py`, with `shell.py` for parsing | `tests/test_dangerous_rules.py` |
 
 A rule that should ship as data, without a release, is a threat pack instead (`src/intentshield/rule_packs.py`, [guide](docs/guide.md#adaptive-threat-memory-and-threat-packs)).
@@ -69,7 +69,7 @@ The steps, none of which needs a local LLM or a download:
 4. Run the same command again into `/tmp/after.txt` and `diff /tmp/before.txt /tmp/after.txt`. A rule is accepted when the
    attack recall rises or holds, no benign family line gets a new flag, and `ALL data (benign flagged)` does not rise.
    Paste the two lines and the diff into the pull request.
-5. Run the full tests and lint (below). The suite takes a few minutes.
+5. Run the gates under [Tests and lint](#tests-and-lint), including the review-load gate.
 
 `benchmarks/real_incidents.py` (documented incidents, `uv run python benchmarks/real_incidents.py`) and
 `benchmarks/adaptive_learning.py` also run offline if you want to check a rule against them. The MCPTox checkout and the
@@ -78,22 +78,41 @@ listed in [docs/architecture-and-testing.md](docs/architecture-and-testing.md#15
 
 ## Tests and lint
 
-```sh
-uv run ruff check src tests benchmarks && uv run mypy && uv run pytest -q
-```
-
-All three must pass before a pull request. The tests read provider keys, the proxy configuration and the intent model from
-the environment, so run them with those unset (CI has none of them):
+CI runs the gates below, and a pull request has to pass all of them. Run them from a clone (the PyPI source distribution
+has no tests). The tests read provider keys, the proxy configuration and the intent model from the environment, so run
+them with those unset, as CI has them:
 
 ```sh
+uv run ruff check src tests benchmarks
+uv run mypy
 INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_KEY= INTENTSHIELD_INTENT_MODEL_DIR=/tmp/none uv run pytest -q
 ```
 
-A test that asserts on wall-clock time uses `limit(seconds)` from `tests/timelimits.py`, which allows more time on CI,
-never a bare number such as `< 1.5`: shared runners are slow and a hard-coded bound flakes (a CI step fails on one).
-CI runs ruff, mypy and the tests on Linux with Python 3.12 to 3.14 and on macOS with 3.12. The source distribution on
-PyPI has no tests, so run them from a clone. The module map, the test
-inventory by area and how to diagnose a failure are in [docs/architecture-and-testing.md](docs/architecture-and-testing.md). `INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -q tests/test_mcp_http_e2e.py` runs the opt-in real HTTP process test that CI also runs.
+1. **ruff** and 2. **mypy**, as above. The mypy configuration is in `pyproject.toml`: it is near-strict, and the strict flags that
+   some older modules still fail are switched off per module in its `[[tool.mypy.overrides]]` lists. A new module has to pass
+   the full set, and a module leaves its list when it does.
+3. **The tests**, with the command above. It takes a few minutes. To run one file while you work, add its path:
+   `uv run pytest -q tests/test_dangerous_rules.py`. One CI job also measures coverage (`uv run pytest -q --cov`, with `--cov` last because
+   it takes an optional argument that would be read as the source path); the floor is `fail_under` in `pyproject.toml`. A third-party
+   import in `src/intentshield` has to be declared in `pyproject.toml`: `tests/test_import_declarations.py` fails when it is not.
+4. **No bare wall-clock bounds in tests.** A test that asserts on wall-clock time uses `limit(seconds)` from
+   `tests/timelimits.py` (`limit()`, or `within()` which wraps it), which allows more time on CI, never a bare number such as
+   `< 1.5`: shared runners are slow and a hard-coded bound flakes. To compare one run with another use `fastest()`, the best
+   of several runs, and a named ratio, not a single sample times a literal. CI fails the build on a match of this grep (the pattern is in `.github/workflows/ci.yml`):
+
+   ```sh
+   ! grep -rnE '(perf_counter|monotonic|time\.time)\(\) *- *[A-Za-z_0-9]+ *< *[0-9]|(took|elapsed) *< *[0-9]|< *[0-9.]+ *\* *[A-Za-z_]+\(' tests
+   ```
+5. **The real HTTP process test**, which is skipped unless asked for:
+   `INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -q tests/test_mcp_http_e2e.py`.
+6. **The review-load gate:** `uv run python benchmarks/review_gate.py`. It takes about 4.5 minutes on a laptop (259 s when timed here). It fails if
+   the benign reviews per task rise more than 0.05 above `results/improve/baseline` on any of the 25 pairs. Run it after
+   a change to a detection rule or to what the hook asks about; a rule that passes its own tests can still fail it.
+
+Two more checks run outside the test job: a Docker job builds the image and runs the demo proxy check in it, and an
+`audit` workflow checks the locked dependencies against the PyPI advisory database on each push and weekly.
+CI runs the test job on Linux with Python 3.12 to 3.14 and on macOS with 3.12. The module map, the test inventory by
+area and how to diagnose a failure are in [docs/architecture-and-testing.md](docs/architecture-and-testing.md).
 
 ## Changelog
 

@@ -4,6 +4,8 @@ The reference behind the [README](../README.md): what each placement of the guar
 `install`, `wrap`, `scan` and the judge options do in full, the architecture, and the upstream config.
 Running the dashboard, the gateway, threat memory and the REST API is in [guide.md](guide.md).
 
+## Terms
+
 Terms used below:
 
 - **ALLOW, REVIEW, BLOCK:** the three answers to a proposed tool call. REVIEW holds the call for a human.
@@ -44,15 +46,18 @@ per-session SQLite file at `~/.intentshield/hooks.db`.
 - Scans every result and taints the session.
 - Asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before
   state-changing calls once tainted (`--review always|tainted|never`).
-- A crashing or missing hook denies the call where the harness has a flag for it (Claude Code
-  `onFailure: block`, Cursor `failClosed`). Codex CLI and Gemini CLI have none, so there a crash is a missing
-  opinion.
+- A hook that cannot start or crashes is refused on every harness. Since 0.4.3, `install` puts a launcher in front
+  of the hook on Claude Code, Codex CLI and Gemini CLI that turns a start failure or a crash into a refusal, and
+  gives the hook its own 30 s deadline so a slow judge answers before the harness's timeout. Claude Code also gets
+  `onFailure: block` and Cursor `failClosed`. The launcher is for POSIX shells: it is left out on Windows and by
+  `install --no-translate`. A hook that runs and prints nothing is still an allow
+  ([Troubleshooting](guide.md#troubleshooting) lists what each harness does with that).
 - Built-in tools (shell, file and web tools) are left to the harness unless installed with `--builtin-tools`.
 
 ### Built-in tools (opt-in)
 
-`intentshield install <harness> --builtin-tools` covers Claude Code `Bash`, `WebFetch`, `WebSearch`, `Read`,
-`Grep`, `Write` and `Edit`; Codex CLI's shell tool; Gemini CLI `run_shell_command`, `web_fetch`, `google_web_search`,
+`intentshield install <harness> --builtin-tools` covers Claude Code `Bash`, `PowerShell`, `Monitor`, `WebFetch`, `WebSearch`, `Read`,
+`Grep`, `Write` and `Edit` (`Monitor` is read as a shell command because its input has a `command`: that rests on the tool's own schema, not on the vendor pages archived in this repository); Codex CLI's shell tool; Gemini CLI `run_shell_command`, `web_fetch`, `google_web_search`,
 `read_file`, `search_file_content`, `grep_search`, `write_file` and `replace`; and Cursor `beforeShellExecution`,
 `beforeReadFile` and `afterShellExecution`. The guard sees shell commands (parsed: pipes, `&&`, redirections,
 `sh -c`, `$(...)`, here-documents), fetched pages, search results, file reads, searches and writes. `Grep` is read by
@@ -114,9 +119,12 @@ never contact the upstream.
 |---|---|---|---|
 | Claude Code | `.claude/settings.json`: `UserPromptSubmit`, `PreToolUse`/`PostToolUse` on `mcp__.*` and the MCP resource tools | yes | yes |
 | Codex CLI | `~/.codex/config.toml`: same events; Codex runs them only after you trust them once | yes | no: asks become denials with a reason that tells the agent not to retry |
-| Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution`; with `--builtin-tools` also `beforeShellExecution` (fail closed), `beforeReadFile`, `afterShellExecution` | no: the agent is told to resend | shell commands yes; MCP calls no: Cursor CLI ran an allowlisted MCP call the hook asked about, so those asks are refusals |
+| Cursor | `~/.cursor/hooks.json`: `beforeSubmitPrompt`, `beforeMCPExecution` (fail closed), `afterMCPExecution` | no: the agent is told to resend | shell commands yes; MCP calls no (see below) |
 | Gemini CLI | `~/.gemini/settings.json`: `BeforeAgent`, `BeforeTool`, `AfterTool` (MCP calls only) | yes | no by default (see below) |
 | any other MCP client | no hooks; the transparent proxy still guards descriptions, schemas and outputs | - | - |
+
+With `--builtin-tools`, Cursor also gets `beforeShellExecution` (fail closed), `beforeReadFile` and `afterShellExecution`.
+An MCP call is a refusal on Cursor because Cursor CLI ran an allowlisted MCP call that the hook had asked about.
 
 Gemini CLI by default gets denials with a reason that tells the agent not to retry, and the third refusal
 since the prompt ends the turn. `install gemini --gemini-ask` sends real asks, which Gemini CLI 0.66 shows as a
@@ -126,7 +134,8 @@ prompt in an interactive session; a headless run (`gemini -p`) then waits for an
 `intentshield doctor` checks the install: every harness's settings hold all IntentShield hooks, the hook
 command names an executable that exists, a hosted judge has its key, the harness has run a hook since the
 install (Codex skips hooks nobody has trusted, silently), and which stdio MCP servers are not behind the
-proxy. It exits 1 on a problem.
+proxy, and whether the command of a wrapped server exists. It exits 1 on a problem; when nothing is installed it says
+so and exits 0.
 
 Claude Code, Gemini CLI, Codex CLI and Cursor have been run live against a malicious server
 ([benchmarks.md](benchmarks.md#live-harness-checks-claude-code-gemini-cli-codex-cli-and-cursor)). Every option,
@@ -219,9 +228,12 @@ Exit codes, as run:
 
 | code | meaning |
 |---|---|
-| 0 | no error-level finding. Also 0 when no MCP config is found, and when `--no-connect` read the configs without a problem. |
+| 0 | no error-level finding (also when no MCP config is found, or `--no-connect` read the configs without a problem) |
 | 1 | at least one error-level finding remains |
-| 2 | nothing could be checked: a named file does not exist, a config could not be read, or no server was started or read (all failed to start, or all were skipped as project configs, as in a bare `scan` in a directory that has a `.mcp.json`) |
+| 2 | nothing could be checked (see below) |
+
+Code 2 means a named file does not exist, a config could not be read, or no server was started or read: all failed to
+start, or all were skipped as project configs, as in a bare `scan` in a directory that has a `.mcp.json`.
 
 A warning does not change the exit code. If one server of several fails to start, the others are still
 checked and the exit code is 0 or 1.
@@ -257,7 +269,7 @@ evidence; no model output can authorize a call. The full diagram and component t
 - **Who approves:** a human, through the bearer-protected control endpoint, approves a held call exactly as it was
   shown. If the tool's schema or description changed since, the approval is refused. Operator labels only teach
   the exemplar detector, behind a regression gate.
-- **Fails closed:** a crashing hook denies the call where the harness supports it (see the hooks section above); an output
+- **Fails closed:** a hook that cannot start or crashes is refused by the launcher `install` writes (see the hooks section above); an output
   scan that never finishes leaves the session flagged; catalog drift blocks the tool until restart; a dead upstream
   is an error result, never a silent allow. Arguments are validated against the schema bound at connect.
 

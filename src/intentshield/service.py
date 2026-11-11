@@ -85,7 +85,7 @@ class IntentShieldService:
         )
 
     @classmethod
-    def default(cls, database_path: str | Path = "intentshield.db") -> "IntentShieldService":
+    def default(cls, database_path: str | Path | None = None) -> "IntentShieldService":
         config_path = default_policy_path()
         return cls(Storage(database_path), PolicyConfig.from_file(config_path))
 

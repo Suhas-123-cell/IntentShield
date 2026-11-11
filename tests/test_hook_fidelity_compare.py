@@ -143,7 +143,7 @@ def test_committed_rows_regenerate_the_summary():
     all_rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
     summary = json.loads((RESULTS / "summary.json").read_text())
     assert summary["runs"] == len(all_rows)
-    rows = [r for r in all_rows if r.get("lane", "r6") == "r6"]   # lane r7-wrap rows: test_hook_fidelity_compare_r7
+    rows = [r for r in all_rows if r.get("lane", "r6") == "r6"]   # lane r7-wrap rows: test_hook_fidelity_compare_arms
     assert len(rows) == 195
     head = compare.headline(compare.cell_matrix(all_rows))
     assert head["is_on"] == summary["headline"]["is_on"] and head["guards"] == summary["headline"]["guards"]

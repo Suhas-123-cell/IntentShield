@@ -172,7 +172,7 @@ def format_plan(selection: list[cells.Cell], sweep: int = 0) -> str:
                      "above; the release list comes from `npm view`, not from this plan)")
     lines.append("scripted interactive experiment (M3, separate from the matrix, not generated here): R3 and R4 x MCP and shell "
                  "x responder no/yes x n=5 = 40 runs per harness, with a deterministic pty responder and a fixed delay")
-    lines += ["", "confirmatory cells (written down before any run) and their predictions:"]
+    lines += ["", "confirmatory cells (written down before the runs, according to the author) and their predictions:"]
     for cid in cells.CONFIRMATORY:
         match = [c for c in selection if c.confirmatory == cid]
         if not match:

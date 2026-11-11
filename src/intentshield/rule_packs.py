@@ -48,6 +48,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import math
 import os
 import re
@@ -456,7 +457,8 @@ def installed(directory: Path, name: str, trust: Trust) -> LoadedPack | None:
     for path in (directory / f"{name}.json", directory / ".good" / f"{name}.json"):
         try:
             pack = load(read_pack(path), trust)
-        except Exception:
+        except Exception as exc:
+            logging.getLogger(__name__).debug("rule pack %s not loaded: %s", path, type(exc).__name__)
             continue
         if best is None or pack.version > best.version:
             best = pack

@@ -1,6 +1,6 @@
 # Archived Codex CLI documents (retrieved 2026-10-31)
 
-The page texts the r3-codex lane read are not redistributed here: they are OpenAI's documentation, with no licence
+The page texts the Codex worker agent read (date recorded without a time of day or time zone; the earliest committed Codex run started at 2026-10-31T22:17:05Z) are not redistributed here: they are OpenAI's documentation, with no licence
 that allows a copy. Each was fetched with curl and converted to text with a stdlib html.parser script. To check a
 quotation, fetch the page and compare; the hashes are of the converted text files the study read.
 

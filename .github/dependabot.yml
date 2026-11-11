@@ -1,7 +1,11 @@
-# Keeps the SHA-pinned actions in .github/workflows current; each update PR shows the new tag.
+# Keeps the SHA-pinned actions in .github/workflows current; the update PR shows the new tag.
+# All action updates arrive together in one pull request a month, not one pull request per action.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]

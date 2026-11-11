@@ -48,7 +48,7 @@ from typing import Any
 from . import translation
 
 MAX_OUTPUT = 1_000_000
-SHELL_TOOLS = {"Bash", "shell", "local_shell", "exec_command", "run_shell_command"}
+SHELL_TOOLS = {"Bash", "PowerShell", "Monitor", "shell", "local_shell", "exec_command", "run_shell_command"}
 _ALLOW = {"allow", "approve", "approved", "proceed"}
 _DENY = {"deny", "block", "blocked", "reject", "refuse"}
 _ASK = {"ask"}
@@ -248,12 +248,15 @@ def wrap(harness: str, guard: list[str], raw: str, *, version: str | None = None
     return 0
 
 
-def wrapped_command(harness: str, guard_command: str, *, wrapper: str = "intentshield wrap-hook", version: str | None = None,
-                    deadline: float | None = None, hook_timeout: float | None = None, on_empty: str | None = None,
-                    mode: str | None = None, gemini_ask: bool = False) -> str:
+def wrapped_command(harness: str, guard_command: str | list[str], *, wrapper: str = "intentshield wrap-hook",
+                    version: str | None = None, deadline: float | None = None, hook_timeout: float | None = None,
+                    on_empty: str | None = None, mode: str | None = None, gemini_ask: bool = False) -> str:
     """The hook command to put in the harness's configuration in place of ``guard_command`` (a shell string, as the harness
     would have run it): the shim, then the guard, then the fail-closed launcher, so a shim that cannot start (a dead interpreter,
-    exit 126 or 127) is refused too. ``wrapper`` is the shim's own command (a path that is already quoted, or the default)."""
+    exit 126 or 127) is refused too. ``guard_command`` may also be an argv list. ``wrapper`` is the shim's own command (a path
+    that is already quoted, or the default)."""
+    if not isinstance(guard_command, str):
+        guard_command = shlex.join(str(a) for a in guard_command)
     parts = [wrapper, "--harness", harness]
     for flag, value in (("--version", version), ("--mode", mode), ("--deadline", deadline), ("--hook-timeout", hook_timeout),
                         ("--on-empty", on_empty)):
@@ -278,6 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--on-empty", choices=("deny", "allow"), default="deny",
                         help="exit 0 with nothing on stdout: deny (default, fail closed) or allow (what silent guards mean)")
     parser.add_argument("--gemini-ask", action="store_true", help="Gemini CLI 0.66 or later, interactive only: keep an ask")
+    parser.add_argument("--print-entry", action="store_true",
+                        help="print the hook command to put in the harness's settings in place of the guard (with the absolute "
+                             "path of this program, as `install` writes it, since a harness started from the Dock or an IDE may "
+                             "not have it on PATH) and exit")
     parser.add_argument("guard", nargs=argparse.REMAINDER, help="-- then the guard's command (one shell string, or argv)")
     return parser
 
@@ -288,6 +295,15 @@ def main(argv: list[str] | None = None) -> None:
     if not guard:
         print("intentshield wrap-hook: no guard command after `--`", file=sys.stderr)
         sys.exit(2)
+    if args.print_entry:
+        from . import install  # not imported when the harness runs the shim: it waits for this process
+
+        wrapper = f"{shlex.quote(install.executable('intentshield'))} wrap-hook"
+        print(wrapped_command(args.harness, guard if len(guard) > 1 else guard[0], wrapper=wrapper,
+                              deadline=args.deadline if args.deadline != translation.DEFAULT_DEADLINE_S else None,
+                              hook_timeout=args.hook_timeout or None, on_empty=args.on_empty if args.on_empty != "deny" else None,
+                              mode=args.mode, version=args.version, gemini_ask=args.gemini_ask))
+        return
     if not 0 < args.deadline <= 3600:  # also false for nan; inf cannot be waited for
         print("intentshield wrap-hook: --deadline must be a number of seconds from 0 (exclusive) to 3600", file=sys.stderr)
         sys.exit(2)

@@ -878,6 +878,8 @@ STOP_AFTER = 3  # refusals since the user's last prompt after which the Gemini h
 _BUILTIN = {
     "Bash": ("shell", "command"), "shell": ("shell", "command"), "local_shell": ("shell", "command"),
     "exec_command": ("shell", "cmd"), "run_shell_command": ("shell", "command"),
+    # Claude Code's other tools that run a shell command: PowerShell, and Monitor (a script whose output lines are events)
+    "PowerShell": ("shell", "command"), "Monitor": ("shell", "command"),
     "WebFetch": ("fetch", "url"), "web_fetch": ("fetch", "prompt"),
     "WebSearch": ("search", "query"), "google_web_search": ("search", "query"),
     "Read": ("read", "file_path"), "read_file": ("read", "file_path"), "read_many_files": ("read", "include"),
@@ -1015,6 +1017,18 @@ def _builtin_local(kind: str, target: str) -> bool:
     return kind == "read" or (kind == "shell" and not shell.parse(target).remote)
 
 
+def _patch_verdict(guard: HarnessGuard, session: str, label: str, patch: str) -> Verdict:
+    """The verdict on a patch: every file it names is a write of what the patch adds."""
+    added = "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
+    paths = [(a or b).strip() for a, b in _PATCH_FILE.findall(patch)] or [""]
+    # One database read per file would make a huge patch slow: the path rules are plain patterns, so only the
+    # files they fire on, and one of the rest (for what the patch adds), go to the guard.
+    special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)
+               or dangerous.path_risk(p)]
+    verdicts = [guard.file(session, label, path, added, write=True) for path in special[:8] + paths[:1]]
+    return next((v for v in verdicts if v.decision != "allow"), verdicts[0])
+
+
 def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[str, Any]) -> Verdict | None:
     """The verdict on a built-in tool call, or None when it is not one the guard reads before it runs."""
     kind, field_name = _BUILTIN[tool]
@@ -1026,7 +1040,13 @@ def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[
     target = _builtin_target(kind, field_name, arguments)
     label = f"builtin:{tool}"
     if kind == "shell":
-        return guard.shell(session, label, target)
+        verdict = guard.shell(session, label, target)
+        if verdict.decision != "deny" and "apply_patch" in target and _PATCH_FILE.search(target):
+            # apply_patch run from the shell tool (a here-document, or the patch as its argument): the files it names are writes
+            patched = _patch_verdict(guard, session, label, target)
+            if patched.decision == "deny" or patched.decision == "ask" and verdict.decision == "allow":
+                return patched
+        return verdict
     if kind == "fetch":
         return guard.fetch(session, label, target)
     if kind in ("read", "write"):
@@ -1034,15 +1054,8 @@ def _builtin_call(guard: HarnessGuard, session: str, tool: str, arguments: dict[
     if kind == "patch":  # every file it names is a write, of what the patch adds
         values = [arguments.get(k) for k in (field_name, "command", "patch", "diff")]
         # Codex may pass the command as a list: ["apply_patch", "*** Begin Patch ..."]
-        patch = "\n".join(str(x) for v in values for x in (v if isinstance(v, list) else [v]) if isinstance(x, str))
-        added = "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
-        paths = [(a or b).strip() for a, b in _PATCH_FILE.findall(patch)] or [""]
-        # One database read per file would make a huge patch slow: the path rules are plain patterns, so only the
-        # files they fire on, and one of the rest (for what the patch adds), go to the guard.
-        special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)
-                   or dangerous.path_risk(p)]
-        verdicts = [guard.file(session, label, path, added, write=True) for path in special[:8] + paths[:1]]
-        return next((v for v in verdicts if v.decision != "allow"), verdicts[0])
+        pieces = [x for v in values for x in (v if isinstance(v, list) else [v]) if isinstance(x, str)]
+        return _patch_verdict(guard, session, label, "\n".join(str(x) for x in pieces))
     return None
 
 

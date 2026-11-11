@@ -13,7 +13,7 @@
 >
 > The abstract and §3.3 below were rewritten to what the data supports. MSB numbers had a
 > server-naming label leak, now fixed for qwen2.5:7b only (see §5 and
-> [contribution.md](../contribution.md) §5, §7). The stored coverage data came from instrumentation
+> [contribution-history.md](contribution-history.md) §5, §7). The stored coverage data came from instrumentation
 > that is being fixed, so §3 is provisional. This file is kept as the skeleton for route 2,
 > the measurement study.
 

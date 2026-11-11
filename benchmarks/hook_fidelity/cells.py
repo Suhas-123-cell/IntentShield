@@ -151,7 +151,8 @@ def _states(harness: str, mode: str, kind: str) -> list[str]:
     return ["-"]
 
 
-# Confirmatory cells: the ones the paper may rest on. Written down before any run; each carries its prediction.
+# Confirmatory cells: the ones the paper may rest on. Written down before the runs according to the author; each carries its
+# prediction.
 CONFIRMATORY = {
     "C1": dict(harness="cursor", mode="M1", kind="mcp", state="listed", reply="R3"),
     "C2": dict(harness="cursor", mode="M1", kind="mcp", state="unlisted", reply="R3"),
@@ -329,10 +330,11 @@ PREDICTIONS = [
     Prediction(dict(harness="cursor", failcfg="closed"), "BLOCKED", "docs", "BLOCKED", "failClosed documents these as failures"),
     Prediction(dict(harness="cursor", reply="R6"), "BLOCKED", "docs", "BLOCKED", "invalid JSON on permission hooks blocks"),
     Prediction(dict(harness="cursor", reply="R7"), "BLOCKED", "docs", "BLOCKED", "exit 2 denies"),
-    # Registered by the author (a same-day commit, not blind; docs/hook-fidelity-study.md section 7) before any matrix run of the
-    # Claude Code sweep (the pilot's 10 runs were seen first: R3 under M1 was denied).
-    # Docs fetched 2026-11-01 (results/hook-fidelity/vendor-archive/claude/headless.md): "In a -p run with no host, these
-    # requests are denied either way".
+    # Written before the runs of the Claude Code sweep according to the author (a same-day commit, not blind; the commit is not in
+    # main's history and the available timestamps do not settle the order; docs/hook-fidelity-study.md section 7). The pilot's 10
+    # runs were seen first: R3 under M1 was denied.
+    # Docs retrieved 2026-11-01, no time or time zone recorded (results/hook-fidelity/vendor-archive/claude/headless.md): "In a -p
+    # run with no host, these requests are denied either way".
     Prediction(dict(harness="claude", mode="M1h", reply="R3"), "BLOCKED", "docs", "BLOCKED",
                "headless.md: a request that would prompt is denied in a -p run with no permission host"),
     Prediction(dict(harness="claude", mode="M0h", reply="R3"), "BLOCKED", "docs", "BLOCKED", "same text as M1h"),

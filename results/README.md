@@ -8,7 +8,7 @@ verified on 2026-10-20. Write numbers from these files, not from older notes.
 ```sh
 # MSB: every table, paired bootstrap difference, review load and the Gemini breakdown.
 # Needs nothing outside results/ (the case grid is msb/cases.jsonl; an MSB checkout at artifacts/data/MSB is used if present), no Docker or model.
-.venv/bin/python benchmarks/paper_numbers.py            # checks MANIFEST.json hashes first
+uv run python benchmarks/paper_numbers.py                # checks MANIFEST.json hashes first
 ```
 
 The other directories are the outputs of the commands below, rerun on current code on 2026-10-19

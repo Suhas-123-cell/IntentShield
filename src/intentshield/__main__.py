@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, doctor, install, scan
+from . import __version__, _launch, doctor, install, scan
 
 
 def serve(port: int = 8000) -> None:
@@ -35,6 +35,10 @@ def serve(port: int = 8000) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    _launch.guarded(lambda: _main(argv))
+
+
+def _main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["wrap-hook"]:  # the harness waits for it: its own parser, none of the others' imports
         from . import wrap_hook
