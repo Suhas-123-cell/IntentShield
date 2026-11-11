@@ -2,6 +2,14 @@
 
 Start with the [README](../README.md) in the repository root. The files here are the reference behind it.
 
+Where to go next, by what you want:
+
+- **To use the tool:** [guide.md](guide.md) for running it and [layers.md](layers.md) for what each part sees and stops.
+- **To judge the research:** [contribution.md](contribution.md) says what the work supports and does not, and
+  [hook-fidelity-report.md](hook-fidelity-report.md) is the short report of the one study. The other `hook-fidelity-*`
+  files and `research-notes/` are the full record and history behind those two; read them only to audit a number.
+- **To change the code:** [CONTRIBUTING.md](../CONTRIBUTING.md), then [architecture-and-testing.md](architecture-and-testing.md).
+
 ## Using IntentShield
 
 - [layers.md](layers.md): what each placement of the guard (hooks, transparent proxy, gateway) sees and stops, what `install`, `wrap`, `scan` and the judge options do in full, and the upstream configuration.
@@ -18,6 +26,8 @@ Project files in the repository root: [CHANGELOG.md](../CHANGELOG.md), [CONTRIBU
 
 ## The hook verdict fidelity study
 
+The report is the entry point; the other files are the appendix with the full record.
+
 - [hook-fidelity-report.md](hook-fidelity-report.md): the entry point. What Claude Code, Codex CLI and Gemini CLI do with the verdict a hook returns, what was measured, and the limits of the result.
 - [hook-fidelity-study.md](hook-fidelity-study.md): the full study: method, every measurement, the comparison of what IntentShield and ten other guards decide, threats to validity and the disclosure plan. The built-in tool rules scored on a fresh set of 214 calls give a mixed result: fewer calls let through, but behind `safety-net` on denies alone, on a same-author set of the categories the rules were written from, so not evidence of general detection.
 - [hook-fidelity-mitigation.md](hook-fidelity-mitigation.md): the verdict-translation layer in IntentShield's hook, its regression check, the `intentshield wrap-hook` shim, the process-ancestry mode detector and what the hook decides.
@@ -29,7 +39,7 @@ Project files in the repository root: [CHANGELOG.md](../CHANGELOG.md), [CONTRIBU
 ## Research notes, not user docs
 
 - [research-notes/](research-notes/README.md): historical drafts, not current claims: the artifact-paper skeleton, the earlier complete-mediation draft (its claim is not supported) and the demo-track paper source.
-- [contribution.md](contribution.md): what the repository does and does not support as a contribution, the routes to a paper, the comparison with other guards and the architecture verdict.
+- [contribution.md](contribution.md): the verdict, what is claimed and not claimed, and the route that remains (two pages). The long earlier version is [research-notes/contribution-history.md](research-notes/contribution-history.md).
 - [related-work.md](related-work.md): literature survey and the adaptivity plan.
 - [coverage-study.md](coverage-study.md): which MCP channels a hook-scoped guard sees versus a proxy, measured with benign markers.
 

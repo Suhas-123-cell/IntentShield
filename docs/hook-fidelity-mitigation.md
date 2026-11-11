@@ -1,7 +1,7 @@
 # Verdict translation: IntentShield's hook, per harness build and mode
 
 Lane `r3-mitigation` of the hook-fidelity study, reviewed by a critic and extended in round 4. Code: `src/intentshield/translation.py`, with changes to `harness.py`,
-`install.py` and `doctor.py`. Tests: `tests/test_harness_translation.py` and `tests/test_harness_translation_r4.py`. Evaluation: `benchmarks/hook_fidelity/mitigation_*.py`,
+`install.py` and `doctor.py`. Tests: `tests/test_harness_translation.py` and `tests/test_harness_translation_mode_detection.py`. Evaluation: `benchmarks/hook_fidelity/mitigation_*.py`,
 rows and tables in `results/hook-fidelity/mitigation/`. This page says what was built, what was measured, and what was not.
 
 **What the evidence is, after the round 4 critic.** The held-out evaluation below is a *regression check of a mechanism*, not evidence that a
@@ -157,7 +157,7 @@ deadline works on one build per harness. What is still missing, and is a prerequ
 cells (a scripted answerer for Claude Code 2.1.316 and Gemini 0.66.0), a benign attended ask, the mode detector's accuracy against launches of
 known mode, a retrying or real model after the refusal, a prospective run on a release published after the table was frozen, and Windows.
 
-**Code fixes from the critic's findings** (`tests/test_harness_translation_r4.py`): headless flags read from the harness's own arguments only;
+**Code fixes from the critic's findings** (`tests/test_harness_translation_mode_detection.py`): headless flags read from the harness's own arguments only;
 a version record that notices a repointed symlink and is refreshed or refused before an interactive ask; the process lookup bounded to 2 s in all
 (it was 2 s per ancestor, up to 16 s after a judge call that can spend 20 s, against a 30 s deadline); an oversized version component can no
 longer raise (a denial of service for anyone controlling the hook's environment: `int()` of 4,300 or more digits); the version regex reads the
@@ -223,7 +223,7 @@ What was measured (headless, local stub, macOS, n=1 or 2, captured bytes replaye
 captured silent allow through the shim with `--on-empty allow` ran; the Codex row of that arm is a guard fail-open, not an allow. **Read it as a thin generic wrapper delivering verdicts, mostly through the launcher, not as a better guard**; the shim shares `translation.py`
 with the hook, whose table was fitted to these builds, so the agreement is by construction.
 
-**Mode detector sources and fallback** (`translation.py`, `harness.py`; 38 tests in `tests/test_translation_ancestry.py`, 12 in `tests/test_hook_fidelity_pty_r7.py`; round 7 detector lane):
+**Mode detector sources and fallback** (`translation.py`, `harness.py`; 38 tests in `tests/test_translation_ancestry.py`, 12 in `tests/test_hook_fidelity_pty_plan_and_observer.py`; round 7 detector lane):
 
 1. **Sources, first that reads the whole walk wins**: `proc` (`/proc` on Linux), `libproc` (macOS: `proc_pidinfo` for the parent and the controlling terminal, `sysctl kern.procargs2` for the command line, through ctypes, no new dependency, no process spawned; a
    layout check runs once per process: libproc's answer for the hook's own pid must name the parent the OS names), then `ps`. `INTENTSHIELD_ANCESTRY_SOURCES` (`proc`, `libproc`, `ps`, `none`) restricts them for diagnostics and is reported on stderr like the other overrides.

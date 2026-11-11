@@ -145,8 +145,8 @@ flagged ones. One run per cell; this is visibility, not attack success.
 Two harnesses, one model each, one run per cell, benign markers, no Codex or Cursor. Whether a
 hook could act on a marker before the model sees it was not tested; this study only records which
 event carried it. Real injections on each channel, an adaptive attacker and the review cost of a
-proxy are not covered here. See [contribution.md](contribution.md) §5 and §7 for what this does
-and does not support as a research claim, and for the two routes forward.
+proxy are not covered here. See [contribution.md](contribution.md) for what this does and does not support as a research claim, and
+[contribution-history.md](research-notes/contribution-history.md) §5 and §7 for the reasoning and the two routes forward.
 
 ## Re-run on installed releases without a model (2026-11-01)
 

@@ -23,3 +23,4 @@ session*.md
 .claude/
 docs/mcp-guardrail-plan.md
 docs/research-notes/icse27-demo/*.pdf
+.coverage

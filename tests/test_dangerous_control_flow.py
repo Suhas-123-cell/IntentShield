@@ -66,6 +66,38 @@ def test_ordinary_developer_commands_with_control_words_stay_allowed(command):
     assert decision_of(command) == "allow"
 
 
+WORKFLOWS = [
+    # Python
+    "python3 -m venv .venv && source .venv/bin/activate && pip install -e .", "uv run pytest -q -x tests/", "pip install -r requirements.txt --quiet",
+    "ruff check src tests && ruff format --check .", "python -m http.server 8000 --bind 127.0.0.1", 'export PYTHONPATH=$PWD/src && python -m pytest tests -k "not slow"',
+    "python - <<'EOF'\nimport os\nprint(os.getcwd())\nEOF", "pytest tests/ -q \\\n  --maxfail=1 \\\n  -k 'not slow'",
+    # Node
+    "npm ci && npm run build -- --mode production", 'npx prettier --write "src/**/*.{ts,tsx}"', "pnpm install --frozen-lockfile",
+    "node scripts/seed.js --env=development", "rm -rf node_modules .next dist", "cd frontend && npm install && cd ..",
+    # Go and Rust
+    "go build ./... && go test -race ./...", "go mod tidy", "cargo build --release", "cargo test -- --nocapture", "cargo fmt --all -- --check",
+    "rm -rf target/debug/incremental",
+    # macOS and everyday shell
+    "defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder", "brew update && brew upgrade && brew cleanup",
+    "mdfind -name notes.md | head -5", "launchctl list | grep -i docker", "open -a \"Visual Studio Code\" .", "find ~ -name .DS_Store -delete",
+    "find . -name \"*.pyc\" -delete", "find . -type d -name __pycache__ -prune -exec rm -rf {} +", "sed -i '' 's/foo/bar/g' src/*.py",
+    "cat package.json | jq '.scripts'", "chmod +x scripts/run.sh && ./scripts/run.sh", "tar czf backup.tgz src/ docs/",
+    "openssl rand -hex 32", 'openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 30 -subj "/CN=localhost"',
+    'ssh-keygen -t ed25519 -C "me@example.com" -f ./deploy_key -N ""', "curl -s http://localhost:8000/health | python -m json.tool",
+    # git and containers
+    "git stash && git pull --rebase && git stash pop", "git log --oneline -20 | head", "git clean -n", "git clean -nfd", "git diff HEAD~1 -- src/ | wc -l",
+    "docker compose up -d --build && docker compose logs -f web", 'docker run --rm -v "$PWD":/app -w /app node:20 npm test',
+    "docker build \\\n  -t app:latest \\\n  --build-arg VERSION=1.2 .", 'git commit -m "fix: handle trailing comma\n\nbody line"',
+    'rm -rf "$TMPDIR/build-$$"', "rm -rf ./dist/$PKG", "make test 2>&1 | tail -20",
+]
+
+
+@pytest.mark.parametrize("command", WORKFLOWS)
+def test_ordinary_python_node_go_rust_and_macos_commands_stay_allowed_in_an_unflagged_session(tmp_path, command):
+    assert decision_of(command) == "allow"
+    assert hook(tmp_path, command) == "allow"
+
+
 def test_a_loop_variable_bound_in_the_same_line_is_read_as_its_values():
     assert decision_of("for d in / b; do rm -rf \"$d\"; done") == "deny"
     assert decision_of("D=/; rm -rf $D") == "deny"

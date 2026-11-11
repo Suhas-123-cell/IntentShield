@@ -65,9 +65,9 @@ Every module in `src/intentshield/` is listed once, grouped by the layer it belo
 |---|---|---|
 | Browser console | `static/` | Request entry, scenarios, live model status, scores, audit runs, approval queue. No separate frontend server. |
 | FastAPI application | `api.py` | REST routes, static files, local host checks, bearer protection for approvals, model concurrency, startup and shutdown of real MCP connections. |
-| Command line | `__main__.py` | The `intentshield` command: `serve` (default), `install`, `uninstall`, `wrap`, `unwrap`, `scan`, `doctor`, `wrap-hook`. `__init__.py` holds the package version; the empty `py.typed` beside it marks the package as typed, and CI runs `mypy` over it. |
+| Command line | `__main__.py` | The `intentshield` command: `serve` (default), `install`, `uninstall`, `wrap`, `unwrap`, `scan`, `doctor`, `wrap-hook`. |
 | Request and result models | `models.py` | Typed tool calls, decisions and stable reason codes. `ToolCall` forbids extra fields, so a client cannot inject trusted scores. |
-| Main service | `service.py` | Persists runs, obtains evidence, evaluates policy, manages approval and idempotency, invokes executors. Persisted run intent is authoritative when resuming a call. Also computes the fail-closed fallback signals for a call that names an unregistered tool (`_security_assessment`). |
+| Main service | `service.py` | Persists runs, obtains evidence, evaluates policy, manages approval and idempotency, invokes executors. |
 | Security workers | `security_agents.py` | Concurrent deterministic detection and grounding. Their validated evidence cannot authorize execution. |
 | Policy | `policy.py` | Pure authorization logic; performs no tool execution. |
 | Storage | `storage.py` | SQLite runs, ordered events, approvals and atomic mutation reservations. |
@@ -78,31 +78,49 @@ Every module in `src/intentshield/` is listed once, grouped by the layer it belo
 | Offline evaluation | `evaluation.py` | `intentshield-eval`: 111 synthetic cases against four defenses with Wilson intervals. |
 | Local intent classifier | `intent_classifier.py`, `intent_training.py` | Optional DeBERTa action-family prediction with abstention, local artifact verification and lazy loading; the fine-tuning CLI that records metadata, file hashes and qualification. |
 
+Notes on the table above:
+
+- `__init__.py` holds the package version. The empty `py.typed` beside it marks the package as typed, and CI runs `mypy` over it.
+- `service.py` treats the persisted run intent as authoritative when a call resumes. It also computes the fail-closed
+  fallback signals for a call that names an unregistered tool (`_security_assessment`).
+
 **MCP gateway, proxy and text rules**
 
 | Component | Source | Responsibility |
 |---|---|---|
-| MCP server | `mcp_server.py` | Exposes five gateway tools, plus a separate optional HTTP approval control endpoint, an optional agent bearer token and a rate limit; `--transparent` serves the upstream's own tools over stdio instead. |
-| MCP runtime and client | `mcp_proxy.py`, `mcp_upstream.py` | Discovers and binds upstream schemas, namespaces tools, validates JSON Schema, quarantines poisoned tools, detects catalog drift (rug pull), redacts self-disclosure parameters, checks argument provenance, scans and taints on outputs, invokes allowed upstream calls, bounds and redacts results. |
+| MCP server | `mcp_server.py` | Exposes the five gateway tools and an optional HTTP approval endpoint; `--transparent` serves the upstream's own tools instead. |
+| MCP runtime and client | `mcp_proxy.py`, `mcp_upstream.py` | Binds and validates upstream schemas, quarantines poisoned tools, detects rug pulls, checks argument provenance, scans outputs, invokes allowed upstream calls (details below). |
 | MCP fixture and verifier | `demo_mcp_server.py`, `mcp_verify.py` | A real local protocol fixture; a non-executing deployment and wiring preflight. |
 | MCP text rules | `mcp_inspect.py` | Description poisoning and output injection rules, Unicode normalization, self-disclosure parameter detection, distinctive-value extraction for provenance, keyword tool ranking. Evidence only. |
 | Credential rules | `credentials.py` | Provider token formats, private keys and signed tokens in MCP traffic and configs; a match is only ever shown masked. |
 | Host lists | `hostlists.py` | The top-level domains, first-party names and name-renting platforms that host extraction in the rules shares. |
 
+Notes on the table above:
+
+- `mcp_server.py` also serves an optional agent bearer token and a rate limit.
+- `mcp_proxy.py` and `mcp_upstream.py` discover and bind upstream schemas, namespace tools, validate JSON Schema,
+  quarantine poisoned tools, detect catalog drift (rug pull), redact self-disclosure parameters, check argument provenance,
+  scan outputs and taint the session on an injected one, invoke allowed upstream calls, and bound and redact results.
+
 **Hooks, installer and built-in tool rules**
 
 | Component | Source | Responsibility |
 |---|---|---|
-| Harness guard | `harness.py` | `intentshield-hook` for Claude Code, Codex CLI, Cursor and Gemini CLI; per-session intent, taint and observed values in SQLite; applies the `mcp_inspect` rules. Imports only the standard library and the package's own rule modules (`mcp_inspect`, `credentials`, `shell`, `dangerous`, `translation`) so each hook starts fast; threat memory, packs, the judge and the classifier load only when switched on. |
+| Harness guard | `harness.py` | `intentshield-hook` for Claude Code, Codex CLI, Cursor and Gemini CLI; per-session intent, taint and observed values in SQLite; applies the `mcp_inspect` rules (details below). |
 | Verdict translation | `translation.py` | Turns the guard's allow, ask or deny into the reply the harness build, in its version and mode, is measured to honour; reads the harness version and the process ancestry that decides the mode. |
 | Hook wrapper | `wrap_hook.py` | `intentshield wrap-hook`: runs any third-party hook under the fail-closed launcher, a deadline and the translation. |
 | Installer | `install.py` | `install`, `uninstall`, `wrap`, `unwrap`: writes and removes the hook entries and the transparent-proxy entries, with backups of the files it edits. |
+| Missing-package message | `_launch.py` | Lets the entry points print one line, not a traceback, when a package the command needs is missing (as on a `pip install --no-deps` install). |
 | Doctor | `doctor.py` | `intentshield doctor`: checks that the hooks and proxies are installed, name an executable that exists, and have actually run. |
 | Scanner | `scan.py` | `intentshield scan`: finds the MCP servers installed in agent harnesses, starts them as the client would and checks their tools offline. |
 | Shell parser | `shell.py` | What a shell command reaches over the network, carries there, reads and whether it only reads; best effort, linear time. |
 | Dangerous-command rules | `dangerous.py` | Text rules for `--builtin-tools`: deny, ask or no verdict for a shell command, file read or file write. |
 | Threat memory | `threat_memory.py` | What rule-confirmed attacks used, kept across runs and processes in one SQLite file; `intentshield-threats` manages it. Evidence only. |
 | Threat packs | `rule_packs.py` | Versioned JSON packs of rules, indicators and fingerprints that load only if verified and are hot-reloaded. |
+
+`harness.py` imports only the standard library and the package's own rule modules (`mcp_inspect`, `credentials`, `shell`,
+`dangerous`, `translation`) so each hook starts fast. Threat memory, packs, the judge and the classifier load only when
+switched on.
 
 **Optional learned detectors (evidence only, off or opt-in)**
 
@@ -236,23 +254,17 @@ Use Python 3.12 or later. Start with the normal runtime and development dependen
 cd /path/to/IntentShield
 git log -1 --oneline
 uv sync --locked --extra dev
-.venv/bin/python --version
-INTENTSHIELD_PROXY_CONFIG= \
-INTENTSHIELD_CONTROL_TOKEN= \
-GEMINI_API_KEY= \
-INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
-  .venv/bin/pytest -q
+uv run python --version
+INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_KEY= INTENTSHIELD_INTENT_MODEL_DIR=/tmp/none uv run pytest -q
 ```
 
-Expect every test to pass. At 0.4.3 a clean run on macOS ends with 4472 passed and 5 skipped (measured on 2026-11-11, after the last change). The Linux CI runner skips more of the platform-specific tests; its last measured total, 4123 passed and 12 skipped, predates the tests added since. The totals move with every release, so treat them as a reference and run `pytest -rs` to see why each test skipped. The skips are tests that need the guard-corpus clones or the MSB checkout under `artifacts/`, tests for the other operating system's process reader or sandbox, and, on a machine where the variable below is unset, the opt-in real HTTP process test. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. Run the HTTP test, or run the whole suite with HTTP enabled:
+The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
+give; CI uses `uv sync --extra dev --frozen` and has none of those variables set.
+
+Expect every test to pass. The test totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The last total measured by hand was 4731 passed and 5 skipped on macOS on 2026-11-11, on the tree after commit `1909c35` and before the 0.4.3 tag (the same with `CI=true`); the Linux runners skip more of the platform-specific tests. Run `pytest -rs` to see why each test skipped. The skips are tests that need the guard-corpus clones or the MSB checkout under `artifacts/`, tests for the other operating system's process reader or sandbox, and, on a machine where the variable below is unset, the opt-in real HTTP process test. `tests/conftest.py` points `INTENTSHIELD_INTENT_MODEL_DIR` at a missing directory, so a locally trained classifier never changes test decisions. Run the HTTP test, or run the whole suite with HTTP enabled:
 
 ```bash
-INTENTSHIELD_PROXY_CONFIG= \
-INTENTSHIELD_CONTROL_TOKEN= \
-GEMINI_API_KEY= \
-INTENTSHIELD_INTENT_MODEL_DIR=/tmp/intentshield-baseline-no-model \
-INTENTSHIELD_RUN_HTTP_E2E=1 \
-  .venv/bin/pytest -vv --durations=10
+INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_KEY= INTENTSHIELD_INTENT_MODEL_DIR=/tmp/none INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -vv --durations=10
 ```
 
 All collected tests should pass when real localhost socket binding is allowed (a macOS-only pass is not enough: two study tests once failed only on Linux, so check a change to tests or hooks in a Linux container too); the three verifier configs in step 10 return `PASS`, and the manual MCP walkthrough passes against a fresh local demo gateway. Live Gemini and real DeBERTa inference are not part of the test suite.
@@ -261,7 +273,7 @@ The `uv sync` above needs network access. It recreates `.venv` when the interpre
 
 The per-command environment settings isolate this baseline from your existing `.env` and optional checkpoint. They do not edit `.env` or persist into later terminal commands.
 
-For focused investigation, use the relevant file rather than repeating everything. The inventory below lists every file in `tests/`, grouped by the area it tests; `ls tests/` is the authoritative list. A test that asserts on wall-clock time uses `limit(seconds)` from `tests/timelimits.py` (see [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint)).
+For focused investigation, use the relevant file rather than repeating everything. The inventory below lists every file in `tests/`, grouped by the area it tests; `ls tests/` is the authoritative list. A test that asserts on wall-clock time uses `limit(seconds)` (or `within(seconds, fn, *args)`, which wraps it, or `fastest(fn, *args)`, the best of several runs, when one run is compared with another) from `tests/timelimits.py` (see [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint)).
 
 **Gateway, policy and web API**
 
@@ -282,11 +294,14 @@ For focused investigation, use the relevant file rather than repeating everythin
 |---|---|
 | `test_mcp_server.py`, `test_mcp_upstream.py` | the gateway tool surface, upstream configuration, client normalization, policy bridge, transports |
 | `test_mcp_e2e.py`, `test_mcp_verify.py` | real stdio upstreams and a downstream subprocess, several upstreams, schema drift on the gateway path (the transparent proxy's rug pull is tested in `test_harness.py`), the verifier |
+| `test_proxy_wire_errors.py` | the transparent proxy over real stdio answers a request with non-object `params` with -32602 and a line that is not JSON with -32700, and keeps serving |
+| `test_mcp_upstream_connection_failure.py` | "Could not connect" names the cause: command not found, not executable, ended before answering, no answer in time |
+| `test_default_database_location.py` | a database nobody named goes to `~/.intentshield`, not the working directory |
 | `test_mcp_http_e2e.py` | a real Streamable HTTP process with stdio and HTTP upstreams, 401 rejection, shutdown (opt-in: `INTENTSHIELD_RUN_HTTP_E2E=1`) |
 | `test_mcp_guardrail.py`, `test_lenient_reads.py` | description and output scanners, quarantine, rug pull, output taint, argument provenance, self-disclosure redaction, lenient reads |
-| `test_mcp_hardening.py`, `test_hardening_proxy.py` | proxy gaps found in review: washed values, unscanned schema text, taint that matched only exact strings, error and transparent-mode results, cache TTL, limits |
+| `test_mcp_proxy_schema_quarantine.py`, `test_mcp_proxy_regressions.py` | proxy regressions: washed values, unscanned schema text, taint that matched only exact strings, error and transparent-mode results, cache TTL, limits |
 | `test_provenance.py` | a recipient, URL, account or path the user never gave needs review on any side-effecting call, flagged output or not |
-| `test_audit_proxy_env.py`, `test_audit_proxy_runtime.py`, `test_audit_proxy_review.py` | which `.env` files may configure the app; the runtime and control plane; pins and unread tools |
+| `test_api_env_file_loading.py`, `test_proxy_runtime_control_plane.py`, `test_proxy_unread_tool_view_and_pins.py` | which `.env` files may configure the app; the runtime and control plane; pins and unread tools |
 | `test_dos_limits.py` | inputs a hostile server or page controls that made a rule or a parser slow, and the caps that bound a session's state |
 
 **Hooks and harness adapters**
@@ -295,18 +310,18 @@ For focused investigation, use the relevant file rather than repeating everythin
 |---|---|
 | `test_harness.py` | hook adapters for Claude Code, Codex CLI, Cursor and Gemini CLI on their event shapes, fail-closed crashes, transparent forwarding, tool ranking, search-first listing, the per-prompt hint |
 | `test_hook_input_edges.py` | inputs a harness or a judge endpoint can send that once failed the hook (lone surrogates, odd judge replies, `.env` syntax) |
-| `test_hooks_audit.py`, `test_hooks_audit_flagged.py`, `test_hooks_audit_review.py` | what a flagged session may still do (build, test, commit) and which writes set up code that later sessions run |
-| `test_hardening_hooks.py` | hook, scan and installer defects a review confirmed: failed-call results, session expiry, credentials, installer files |
+| `test_hook_loopback_and_internal_hosts.py`, `test_hook_after_flagged_result.py`, `test_hook_url_hosts_and_persistence.py` | what a flagged session may still do (build, test, commit) and which writes set up code that later sessions run |
+| `test_hook_regressions.py` | hook, scan and installer regressions: failed-call results, session expiry, credentials, installer files |
 | `test_harness_event_handling.py` | the hook: built-in events it cannot read are refused with `--builtin-tools`, `Grep` is covered, the `--deadline` range, and the record of whether the harness or a person fed the hook an event |
 | `test_builtin_tools.py`, `test_builtin_live_score.py` | `--builtin-tools` for the four harnesses and `doctor`; scoring of the live built-in-tool runs on synthetic rows |
-| `test_review_fixes.py`, `test_review_gate.py` | fail-closed modes, installer ownership, provenance of bare hosts; the CI gate on benign review load |
+| `test_harness_fail_closed_and_installer_ownership.py`, `test_review_gate.py` | fail-closed modes, installer ownership, provenance of bare hosts; the CI gate on benign review load |
 | `test_zz_no_key_leak.py` | runs last: no earlier test may leave a judge key in the environment |
 
 **Verdict translation, mode detection and `wrap-hook`**
 
 | Files | Covered behavior |
 |---|---|
-| `test_harness_translation.py`, `test_harness_translation_r4.py` | the guard's ask, deny and failure become the reply each harness build and mode honours; mode detection, version record, bounded process lookup, version parsing |
+| `test_harness_translation.py`, `test_harness_translation_mode_detection.py` | the guard's ask, deny and failure become the reply each harness build and mode honours; mode detection, version record, bounded process lookup, version parsing |
 | `test_translation_ancestry.py` | the process-ancestry readers (`/proc` on Linux, `libproc` on macOS, `ps`) and the unknown-mode fallback |
 | `test_wrap_hook.py` | any third-party hook command under the fail-closed launcher, the deadline and the translation |
 
@@ -316,26 +331,32 @@ For focused investigation, use the relevant file rather than repeating everythin
 |---|---|
 | `test_install.py` | `install`, `uninstall`, `wrap` and `unwrap` for the hook and proxy installers |
 | `test_install_validation.py` | installer and `scan` input checks: ephemeral paths, `wrap` validating every entry first, `--judge` dry runs, the "Next:" line, the address the bare command prints |
-| `test_hooks_audit_installer.py` | what `doctor`, `install`, `wrap` and `unwrap` say and do |
-| `test_scan.py`, `test_scan_surface.py`, `test_audit_proxy_scan.py` | credential egress and `intentshield scan`; rules reading line breaks, tabs and Unicode tricks in structured values; scan edge cases |
+| `test_doctor_install_and_wrap.py` | what `doctor`, `install`, `wrap` and `unwrap` say and do |
+| `test_scan.py`, `test_scan_surface.py`, `test_mcp_scan_command.py` | credential egress and `intentshield scan`; rules reading line breaks, tabs and Unicode tricks in structured values; scan edge cases |
+| `test_cli_first_run_messages.py` | what a person sees on a first run: the "Next:" line, a settings file that does not parse, `unwrap` of a missing file, `doctor` with nothing installed, a wrapped server whose command is gone, `wrap-hook --print-entry` |
+| `test_missing_dependency_message.py` | with the proxy's packages unimportable (a `--no-deps` install) the commands that need them print one line and exit 2 |
 | `test_cli_input_edges.py` | config shapes that once broke `wrap`, `unwrap` or `scan` |
 
 **Detection rules, credentials and evasions**
 
 | Files | Covered behavior |
 |---|---|
-| `test_rules_detection.py`, `test_rules_detection_review.py` | phrases, hosts and indicators that an output rule, host extraction or a threat feed read one way while the text meant another |
-| `test_hardening_rules.py`, `test_detection_hardening.py` | canonical values for provenance, hidden Unicode, split or spelled-out phrases, URL taint, the backtracking gate, judge budget |
-| `test_audit_credentials.py`, `test_audit_credentials_review.py`, `test_audit_paths_memory.py` | credentials cut into pieces or encoded, masking, relative paths with `..`, account numbers in other scripts' digits |
-| `test_audit_self_disclosure.py` | self-disclosure parameters read by words, by description and through nested schemas |
-| `test_audit_rule_safety.py` | the pack and learned-rule safety gate refuses adjacent repeats of the same characters |
+| `test_rules_detection.py`, `test_host_reading_rules.py` | phrases, hosts and indicators that an output rule, host extraction or a threat feed read one way while the text meant another |
+| `test_output_rule_evasions.py`, `test_taint_and_invisible_characters.py` | canonical values for provenance, hidden Unicode, split or spelled-out phrases, URL taint, the backtracking gate, judge budget |
+| `test_credential_masking.py`, `test_credential_masking_split_tokens.py`, `test_relative_path_provenance.py` | credentials cut into pieces or encoded, masking, relative paths with `..`, account numbers in other scripts' digits |
+| `test_self_disclosure_parameters.py` | self-disclosure parameters read by words, by description and through nested schemas |
+| `test_rule_pattern_safety_gate.py` | the pack and learned-rule safety gate refuses adjacent repeats of the same characters |
 | `test_real_incidents.py` | documented real-world incidents stay caught |
 
 **Built-in tool rules and the shell parser**
 
 | Files | Covered behavior |
 |---|---|
-| `test_dangerous_rules.py`, `test_dangerous_review.py` | `dangerous.py`: denies, asks and benign near-misses for shell, write, edit and read calls, and cases found in review |
+| `test_dangerous_rules.py`, `test_dangerous_rules_regressions.py` | `dangerous.py`: denies, asks and benign near-misses for shell, write, edit and read calls, and cases once refused or passed wrongly |
+| `test_dangerous_spelling_variants.py` | every command of the deny and ask lists of `test_dangerous_rules.py` rewritten in 22 spellings the shell reads the same (line continuation, tabs, `${IFS}`, empty quotes, comments, brace words): the verdict must not weaken |
+| `test_dangerous_size_limits.py` | a command over the character, command, word or nesting limit asks, and a deny placed after the cut is not lost; hostile input stays linear |
+| `test_dangerous_verdict_accuracy.py` | ordinary commands that must be allowed and risky ones that must not be, in both directions (`find` with a name test, `git clean -n`, key generation, empty variables, `curl \| sh` variants, harness credential files) |
+| `test_builtin_shell_tools.py` | `PowerShell`, `Monitor` and `apply_patch` run through the shell tool get the same rules as `Bash` with `--builtin-tools` |
 | `test_dangerous_control_flow.py` | `dangerous.py` and the hook: one-line control keywords, a deny that wins over a session ask, softening only for an exact target, `cd` and variables inside one command line, the guard's own files |
 | `test_shell_parser.py`, `test_shell_linear.py`, `test_shell_shifts.py` | `shell.py`: newlines, here-documents, variables, wrappers, indirection, send detection, linear cost on long input |
 
@@ -343,7 +364,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 
 | Files | Covered behavior |
 |---|---|
-| `test_threat_memory.py`, `test_threat_memory_hardening.py`, `test_audit_threat_memory.py` | evidence-only learning from rule-confirmed attacks, user exemptions, eviction, shared across runs and processes |
+| `test_threat_memory.py`, `test_threat_memory_learning_exemptions.py`, `test_threat_memory_source_quota.py` | evidence-only learning from rule-confirmed attacks, user exemptions, eviction, shared across runs and processes |
 | `test_rule_packs.py` | gated entries, integrity, hot reload without restart, no way to relax protection |
 | `test_adaptive_integration.py` | threat memory wired into the proxy and the hooks |
 
@@ -355,7 +376,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_prompt_guard.py` | Prompt Guard 2 client: windowing, length retries, errors as no opinion, the score cache (no network) |
 | `test_exemplars.py` | exemplar detector with a bag-of-words embedder: chunking, kNN vote, threshold tuning, save and load |
 | `test_learning.py`, `test_signatures.py` | learning from operator labels behind the regression gate; induced rules: safety and corpus gates, operator approval |
-| `test_judge.py`, `test_judge_offline.py`, `test_judge_providers.py`, `test_audit_proxy_judge.py` | the judge: parsing, cache, fail-to-no-opinion, offline pause, OpenAI-compatible providers, proxy and hook wiring (stubbed) |
+| `test_judge.py`, `test_judge_offline.py`, `test_judge_providers.py`, `test_judge_retry_after_and_blob_stripping.py` | the judge: parsing, cache, fail-to-no-opinion, offline pause, OpenAI-compatible providers, proxy and hook wiring (stubbed) |
 | `test_judge_result_metadata.py`, `test_judge_jailbreaks_summary.py` | benchmark result files name the endpoint and context; an ask is reported apart from a deny |
 
 **Benchmarks and study numbers**
@@ -365,6 +386,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_msb_scoring.py`, `test_paper_numbers.py` | MSB scoring on synthetic traces; the headline cells replayed from the committed traces in `results/msb` |
 | `test_injection_eval.py`, `test_adaptive_attacker.py`, `test_self_disclosure_eval.py` | injection evaluation corpus and per-family scoring; the adaptive-attacker protocol; self-disclosure stripping over recorded catalogs |
 | `test_docs_inventory.py`, `test_docs_links.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository |
+| `test_import_declarations.py` | every third-party package that `src/intentshield` imports is declared in `pyproject.toml` |
 | `test_coverage_study.py`, `test_security_review_counts.py` | coverage-study instrumentation; `docs/security-review.md` table counts equal its finding rows |
 
 **Hook-fidelity study tooling (offline: no harness or model is launched)**
@@ -373,12 +395,12 @@ For focused investigation, use the relevant file rather than repeating everythin
 |---|---|
 | `test_hook_fidelity.py` | the matrix: stub hook replies, config generation, row scoring, taxonomy, plan and summarizer |
 | `test_hook_fidelity_stub.py`, `test_hook_fidelity_model_lane.py`, `test_hook_fidelity_model_arms.py` | the model-free stub endpoint for three wire formats; the local-model lane; the real-model arms' counts from committed rows |
-| `test_hook_fidelity_claude_lane.py`, `test_hook_fidelity_gemini_lane.py`, `test_hook_fidelity_cursor.py`, `test_hook_fidelity_r4.py` | per-harness cell lists, run modes, budgets and sign-off files; the Codex matrices and report |
-| `test_hook_fidelity_pty.py`, `test_hook_fidelity_pty_r7.py` | the interactive terminal lane: terminal-text cleaner, plan, outcome classifier, driver against a fake terminal |
-| `test_hook_fidelity_compare.py`, `test_hook_fidelity_compare_r7.py`, `test_hook_fidelity_compare_r8.py`, `test_hook_fidelity_guards.py` | the head-to-head runner, the wrapped, allow and deny-all arms, `--on-empty allow` cells, guard byte capture and replay |
+| `test_hook_fidelity_claude_lane.py`, `test_hook_fidelity_gemini_lane.py`, `test_hook_fidelity_cursor.py`, `test_hook_fidelity_codex_matrices.py` | per-harness cell lists, run modes, budgets and sign-off files; the Codex matrices and report |
+| `test_hook_fidelity_pty.py`, `test_hook_fidelity_pty_plan_and_observer.py` | the interactive terminal lane: terminal-text cleaner, plan, outcome classifier, driver against a fake terminal |
+| `test_hook_fidelity_compare.py`, `test_hook_fidelity_compare_arms.py`, `test_hook_fidelity_compare_rerun_and_shim.py`, `test_hook_fidelity_guards.py` | the head-to-head runner, the wrapped, allow and deny-all arms, `--on-empty allow` cells, guard byte capture and replay |
 | `test_hook_fidelity_detect.py`, `test_hook_fidelity_fresh_report.py` | the decision comparison: fixtures, reply classification, metrics; a guard never run on a row is excluded, not scored |
 | `test_hook_fidelity_coverage.py`, `test_hook_fidelity_linux_probe.py` | the coverage re-run tooling; the Linux `/proc` probe's case matrix and committed rows |
-| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` embeds exactly the output of `benchmarks/hook_fidelity/report_numbers.py`, and carries its limits and no process wording |
+| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` embeds exactly the output of `benchmarks/hook_fidelity/report_numbers.py`, carries its limits and no process wording, every percentage next to its k/n is the rounding of that k/n, and the old "registered in advance" wording does not return |
 | `test_hook_fidelity_study_numbers.py`, `test_hook_fidelity_reproduce.py` | every figure the study cites, recomputed from committed rows; a clean clone regenerates the detection tables without the guard clones |
 
 Example:
@@ -708,13 +730,21 @@ Some runners in `benchmarks/` need nothing but this repository. These run offlin
 
 | Runner | Data | What it reports |
 |---|---|---|
-| `injection_eval.py --dataset results/injection/dataset.jsonl --hard results/injection/hard_negatives.jsonl --agentdojo results/injection/agentdojo-strings.jsonl --injecagent /nonexistent --out /tmp/injection-eval.json` | `results/injection/` | Recall per attack family and benign false flags of the rules (set `INTENTSHIELD_INTENT_MODEL_DIR=/nonexistent`); a clean clone prints 16 of 741 benign texts flagged, 13 of them texts that quote an attack |
+| `injection_eval.py` (command below the table) | `results/injection/` | Recall per attack family and benign false flags of the rules; a clean clone prints 16 of 741 benign texts flagged, 13 of them quoting an attack |
 | `shell_replay.py` | a fixture of ordinary developer sessions inside the script | How often the built-in-tools hook asks or denies on benign work, per tool kind |
 | `real_incidents.py` | reconstructions in `benchmarks/real_incidents/` | Which documented incidents the guard's own code catches |
 | `adaptive_learning.py` | generated in the script | Catch rate of the threat memory against reworded attacks |
-| `review_gate.py` | `results/improve/baseline` and the committed traces | Fails if benign reviews per task rose more than 0.05 |
+| `review_gate.py` | `results/improve/baseline` and the committed traces | Fails if benign reviews per task rose more than 0.05 (about 4.5 minutes; a CI gate) |
 | `paper_numbers.py` | `results/msb` | Every MSB number the papers cite |
-| `hook_fidelity/report_numbers.py` | `results/hook-fidelity` | The figures of `docs/hook-fidelity-report.md` with Wilson intervals, recomputed from the committed rows |
+| `hook_fidelity/report_numbers.py` | `results/hook-fidelity` | The figures of `docs/hook-fidelity-report.md` with Wilson intervals, recomputed from the committed rows, including the before-and-after rule counts on one denominator and the fresh-set split without the nine discovery-only items |
+
+The `injection_eval.py` command, which needs no model and no network:
+
+```sh
+INTENTSHIELD_INTENT_MODEL_DIR=/nonexistent uv run python benchmarks/injection_eval.py \
+  --dataset results/injection/dataset.jsonl --hard results/injection/hard_negatives.jsonl \
+  --agentdojo results/injection/agentdojo-strings.jsonl --injecagent /nonexistent --out /tmp/injection-eval.json
+```
 
 The rest need external datasets under `artifacts/data/` (ignored by Git), or the network:
 
@@ -753,7 +783,7 @@ Rules can miss paraphrased/encoded injections and plain-language requests, and c
 | `BLOCK_EXECUTION_IN_DOUBT` | Reconcile the original mutation outcome with the upstream; do not blindly retry. |
 | `BLOCK_TOOL_QUARANTINED` | Inspect `poisoning_findings` in the catalog and the `MCP_TOOLS_QUARANTINED` event; trust the server only after reviewing its descriptions. |
 | `BLOCK_UNTRUSTED_ARGUMENT_SOURCE` | An argument value came from an injected output in the run or another tool's description; check the run's `MCP_OUTPUT_INJECTION` events. |
-| `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` | A recipient, URL, account or path came only from a tool output, not the user. Approve it if the user meant that value, name it in the request, or, for reads, set `review_output_sourced_arguments: false`. |
+| `REVIEW_UNTRUSTED_ARGUMENT_SOURCE` | A recipient, URL, account or path came only from a tool output, not the user. Approve it if the user meant it, name it in the request, or for reads set `review_output_sourced_arguments: false`. |
 | `intentshield-hook: command not found` | Run `uv sync --locked --extra dev`, then put `.venv/bin` on the harness's `PATH` or use the absolute path. |
 | Every MCP call denied by a hook | A crashing hook fails closed; read its stderr message in the harness log. |
 | Classifier unavailable | Check dependencies, directory, qualification flag, hashes and actual first prediction. |

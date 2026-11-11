@@ -204,7 +204,7 @@ def test_the_command_line_says_which_file_for_a_bad_hooks_value(tmp_path, monkey
 def test_install_ends_with_the_next_step(tmp_path, capsys):
     install.install("claude", "user", hook="/opt/is/bin/intentshield-hook", home=tmp_path)
     out = capsys.readouterr().out
-    assert "Next: start claude" in out and "intentshield doctor" in out and "no hook has run" in out
+    assert "Next: Start claude and send any prompt" in out and "intentshield doctor" in out and "no hook has run" in out
     install.install("claude", "user", hook="/opt/is/bin/intentshield-hook", home=tmp_path / "other", dry_run=True)
     assert "Next:" not in capsys.readouterr().out
 

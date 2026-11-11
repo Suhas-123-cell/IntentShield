@@ -22,9 +22,18 @@ def add_column(db: sqlite3.Connection, table: str, column: str, kind: str) -> No
             raise
 
 
+def default_database(name: str = "intentshield.db") -> str:
+    """Where a database goes when nothing names one: ``~/.intentshield/<name>``, as the command line does, and not the working
+    directory, where it would end up inside whatever project the caller runs in. A database an older version left in the
+    working directory keeps being used, so an upgrade does not silently start from an empty one."""
+    if Path(name).is_file():
+        return name
+    return str(Path.home() / ".intentshield" / name)
+
+
 class Storage:
-    def __init__(self, path: str | Path = "intentshield.db") -> None:
-        self.path = str(path)
+    def __init__(self, path: str | Path | None = None) -> None:
+        self.path = str(path) if path is not None else default_database()
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         if not Path(self.path).exists():  # holds executed results and approval arguments: the user's only
             Path(self.path).touch(mode=0o600)

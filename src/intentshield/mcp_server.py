@@ -38,6 +38,7 @@ from .mcp_upstream import MCPUpstreamError
 from .models import GatewayResult, ToolCall
 from .ratelimit import RateLimiter
 from .service import IntentShieldService
+from .storage import default_database
 
 try:  # Keep the core gateway importable when the optional MCP SDK is absent.
     from mcp.server import MCPServer
@@ -204,7 +205,7 @@ def create_mcp_server(
 
     mcp_server = _require_mcp()
     gateway = service or IntentShieldService.default(
-        database_path or str(os.getenv("INTENTSHIELD_DB", "intentshield.db"))
+        database_path or str(os.getenv("INTENTSHIELD_DB") or default_database())
     )
     facade = IntentShieldMCPFacade(gateway)
     server = mcp_server(
@@ -616,6 +617,64 @@ def _add_control_routes(app: Any, runtime: Any, control_token: str) -> list[str]
     return paths
 
 
+def _refused_line(line: str) -> tuple[Any, int, str] | None:
+    """(id, error code, message) when a line of the wire cannot be answered by the protocol layer, else None: a request whose
+    ``params`` is not an object (the SDK drops it and the client waits for a reply that never comes) or text that is not JSON."""
+    try:
+        message = json.loads(line)
+    except ValueError:
+        return None, -32700, "Parse error: the line is not JSON"
+    if not isinstance(message, dict) or "method" not in message or "params" not in message:
+        return None
+    request_id = message.get("id")
+    if request_id is None or isinstance(request_id, bool) or not isinstance(request_id, (int, str)):
+        return None  # a notification (no reply is allowed) or an id that cannot be echoed
+    params = message["params"]
+    if params is None or isinstance(params, dict):
+        return None
+    return request_id, -32602, "Invalid params: params must be an object"
+
+
+class _FilteredStdin:
+    """The standard input of the stdio transport, line by line, with the requests of ``_refused_line`` answered here, so that
+    a client that sent one gets an error and not silence. Fd 0 is pointed at the null device, as the SDK does, so that
+    nothing else in the process reads the wire."""
+
+    def __init__(self, refuse: Any) -> None:
+        self._fd = os.dup(0)
+        null = os.open(os.devnull, os.O_RDONLY)
+        os.dup2(null, 0)
+        os.close(null)
+        self._file = os.fdopen(self._fd, "r", encoding="utf-8", errors="replace", closefd=False)
+        self._refuse = refuse
+
+    def __aiter__(self) -> "_FilteredStdin":
+        return self
+
+    async def __anext__(self) -> str:
+        import anyio
+
+        while True:
+            line = await anyio.to_thread.run_sync(self._file.readline)
+            if not line:
+                raise StopAsyncIteration
+            if not line.strip():
+                continue
+            refused = _refused_line(line)
+            if refused is None:
+                return line
+            await self._refuse(*refused)
+
+    async def aclose(self) -> None:
+        return None
+
+    def close(self) -> None:
+        try:
+            os.dup2(self._fd, 0)
+        except OSError:
+            pass
+
+
 def run_mcp_server(
     *,
     transport: Literal["stdio", "streamable-http"] = "stdio",
@@ -645,11 +704,28 @@ def run_mcp_server(
         server = create_transparent_mcp_server(MCPProxyConfig.from_file(proxy_config))
 
         async def serve() -> None:
-            async with stdio_server() as (read, write):
-                from mcp.server.lowlevel import NotificationOptions
+            from mcp.server.lowlevel import NotificationOptions
+            from mcp.shared.message import SessionMessage
 
-                options = NotificationOptions(tools_changed=True)
-                await server.run(read, write, server.create_initialization_options(options))
+            ready = anyio.Event()
+            sink: list[Any] = []
+
+            async def refuse(request_id: Any, code: int, message: str) -> None:
+                await ready.wait()
+                reply = types.JSONRPCError(jsonrpc="2.0", id=request_id, error=types.ErrorData(code=code, message=message))
+                await sink[0].send(SessionMessage(reply))
+
+            stdin = _FilteredStdin(refuse)
+            try:
+                async with stdio_server(stdin=stdin) as (read, write):  # type: ignore[arg-type]  # a line iterator is all it reads
+                    sink.append(write)
+                    ready.set()
+                    options = NotificationOptions(tools_changed=True)
+                    await server.run(read, write, server.create_initialization_options(options))
+            finally:
+                stdin.close()
+
+        from mcp import types
 
         anyio.run(serve)
         return

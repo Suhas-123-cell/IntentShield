@@ -37,8 +37,8 @@ _HOOK = "intentshield-hook"
 _PROXY = "intentshield-mcp"
 _MCP_MATCHER = "mcp__.*|ReadMcpResource(Dir)?(Tool)?|ListMcpResources(Tool)?"
 # Claude Code's built-in tools the hook reads with --builtin-tools: calls it checks, results it scans.
-_BUILTIN_CALLS = "Bash|WebFetch|Read|Grep|Write|Edit|MultiEdit|NotebookEdit"
-_BUILTIN_RESULTS = "Bash|WebFetch|WebSearch|Read"
+_BUILTIN_CALLS = "Bash|PowerShell|Monitor|WebFetch|Read|Grep|Write|Edit|MultiEdit|NotebookEdit"
+_BUILTIN_RESULTS = "Bash|PowerShell|WebFetch|WebSearch|Read"
 _SERVER_ID = re.compile(r"[^A-Za-z0-9_.-]")
 
 
@@ -404,7 +404,7 @@ class ChangedMeanwhile(OSError):
 
 
 def strip_json_comments(text: str) -> str:
-    """``text`` without ``//`` and ``/* */`` comments (outside strings), as Gemini CLI reads its settings; a
+    """``text`` without ``//`` and ``/* */`` comments and trailing commas (outside strings), as Gemini CLI reads its settings; a
     comment becomes blanks, so the positions in an error message still point at the right place."""
     out, i, n = [], 0, len(text)
     while i < n:
@@ -428,6 +428,28 @@ def strip_json_comments(text: str) -> str:
         else:
             out.append(c)
             i += 1
+    return _drop_trailing_commas("".join(out))
+
+
+def _drop_trailing_commas(text: str) -> str:
+    """``text`` with the comma before a closing ``}`` or ``]`` (outside strings) blanked: ``{"a": 1,}`` as JSONC allows it."""
+    out, i, n = list(text), 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+        elif c == ",":
+            j = i + 1
+            while j < n and text[j] in " \t\r\n":
+                j += 1
+            if j < n and text[j] in "}]":
+                out[i] = " "
+            i += 1
+        else:
+            i += 1
     return "".join(out)
 
 
@@ -443,6 +465,17 @@ def _parse(text: str, path: Path) -> Any:
 _COMMENTED: set[Path] = set()  # files read with comments in them: writing them back drops the comments
 
 
+class _NotJSON(json.JSONDecodeError):
+    """A settings file that does not parse, with a message that says what to do."""
+
+    def __init__(self, text: str, exc: json.JSONDecodeError) -> None:
+        super().__init__(exc.msg, exc.doc, exc.pos)
+        self.text = text
+
+    def __str__(self) -> str:
+        return self.text
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     _SEEN[path.resolve()] = text
@@ -451,7 +484,10 @@ def _read_json(path: Path) -> dict[str, Any]:
     try:
         data = _parse(text, path)
     except json.JSONDecodeError as exc:
-        raise json.JSONDecodeError(f"{path} is not valid JSON: {exc.msg}", exc.doc, exc.pos) from None
+        how = ("fix that line" if _has_comments(path) else
+               "remove its comments and trailing commas (this file is read as strict JSON)")
+        raise _NotJSON(f"{path} is not valid JSON ({exc.msg}, line {exc.lineno} column {exc.colno}); {how}, or add the entries "
+                       "by hand from the output of `intentshield install <harness> --dry-run`", exc) from None
     if _has_comments(path) and strip_json_comments(text) != text:
         _COMMENTED.add(path.resolve())
     if not isinstance(data, dict):
@@ -468,8 +504,8 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
         path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.resolve() in _COMMENTED and strip_json_comments(text) == text:  # JSON has nowhere to keep them
-        print(f"warning: {path} has comments, which are not kept when it is rewritten; its original text is saved "
-              "and `intentshield uninstall` (or `unwrap`) puts it back.", file=sys.stderr)
+        print(f"warning: {path} has comments or trailing commas, which are not kept when it is rewritten; its original "
+              "text is saved and `intentshield uninstall` (or `unwrap`) puts it back, comments included.", file=sys.stderr)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -630,9 +666,12 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         # session runs unguarded with no warning from Codex.
         print("Codex runs a new hook only after you trust it: start `codex` once and approve the IntentShield "
               "hooks when it asks. Until then Codex is NOT guarded by them.")
+    if scope == "project" and not dry_run:
+        print(f"note: {path} now holds absolute paths of this machine (the hook command): do not commit it, and do not share it "
+              "with a team that has the tools elsewhere.")
     if not dry_run:
-        print(f"Next: start {harness} and make one tool call, then run `intentshield doctor`. It reports FAIL "
-              "\"no hook has run\" until the harness has run a hook, which is expected right after an install.")
+        print(f"Next: {NEXT_STEP.format(harness=harness)} It reports FAIL \"no hook has run\" until the harness has run a "
+              "hook, which is expected right after an install.")
     return path
 
 
@@ -747,14 +786,26 @@ def _entry_problem(server: Any) -> str:
     return ""
 
 
+def _require_file(path: Path) -> None:
+    if not path.exists():
+        raise FileNotFoundError(f"{path} was not found: the file does not exist")
+
+
+def _in_repository(path: Path) -> bool:
+    """The file lies inside a git working tree, where it may be committed."""
+    return any((d / ".git").exists() for d in (path.resolve().parent, *path.resolve().parents))
+
+
+NEXT_STEP = "Start {harness} and send any prompt, then run `intentshield doctor`."
+
+
 def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
          dry_run: bool = False, allow_ephemeral: bool = False) -> list[str]:
     """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file, the project-scoped
     ones of ``~/.claude.json`` included. Every entry is checked first and one the proxy cannot take is skipped with its reason;
     the proxy configs are written only then, and removed again when the client file cannot be written."""
     out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
-    if not path.exists():
-        raise FileNotFoundError(f"{path} does not exist")
+    _require_file(path)
     data = _read_json(path)
     groups = _server_groups(data)
     if not groups:
@@ -828,6 +879,9 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
         raise
     if wrapped:
         print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
+        if not dry_run and _in_repository(path):
+            print(f"note: {path} now holds absolute paths of this machine (the proxy and its config): do not commit it, or "
+                  "run `intentshield unwrap` on it first.")
     elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
         print(f"already wrapped: {path}")
     elif not skipped:
@@ -852,6 +906,7 @@ def _backed_up_server(path: Path, scope: str, name: str) -> dict[str, Any] | Non
 
 def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) -> list[str]:
     """Restore the servers a previous ``wrap`` rewrote, from their generated proxy configs."""
+    _require_file(path)
     data = _read_json(path)
     groups = _server_groups(data)
     if not groups:
@@ -940,8 +995,8 @@ def add_subcommands(sub: Any) -> None:
             p.add_argument("--judge-url", default=None, metavar="URL",
                            help="with --judge custom:<model>: your OpenAI-compatible chat completions endpoint")
             p.add_argument("--builtin-tools", action="store_true",
-                           help="also guard the harness's own shell, file and web tools (Bash, WebFetch, Read, "
-                                "Write...); off by default until its review load is measured")
+                           help="also guard the harness's own shell, file and web tools (Bash, PowerShell, Monitor, "
+                                "WebFetch, Read, Write...); off by default until its review load is measured")
             p.add_argument("--gemini-ask", action="store_true",
                            help="Gemini CLI 0.66 or later, interactive sessions only: ask instead of refusing. "
                                 "Headless runs (gemini -p) then hang on an ask; check with `intentshield doctor`")

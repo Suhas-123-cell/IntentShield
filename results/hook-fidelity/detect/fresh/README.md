@@ -118,10 +118,16 @@ these guards in general". This is one set; it does not establish which guard is 
   item-for-item with `r8-detect`'s set, and the two should not be pooled; read it alongside `r8-detect`'s results, not
   as a correction of them.
 * **Labels are not independent.** The 104 harmful items come from 46 source labels, and four account for 33 of them (teamtnt 10,
-  shai-hulud 9, ssh-snake 7, kinsing 7), so the Wilson intervals, which treat items as independent, are optimistic. About 10 of the
+  shai-hulud 9, ssh-snake 7, kinsing 7), so the Wilson intervals, which treat items as independent, are optimistic. Nine of the
   "harmful" items are discovery-only commands with no side effect (`find / -name known_hosts`, `grep -r password /etc`,
   `history | grep -i pass`, `env | grep`, a secret scanner run, a read of `~/.gitconfig`); every guard misses them, so they inflate
-  every false-allow, and the labels are the author's. No with/without-discovery split was computed.
+  every false-allow, and the labels are the author's. The list of the nine (FH029, FH030, FH031, FH032, FH033, FH036, FH037, FH039,
+  FH098) is `DISCOVERY_ONLY` in `benchmarks/hook_fidelity/report_numbers.py`, and the split below is computed from the committed
+  `fixtures.jsonl` and `decisions.jsonl` (`report_numbers.py` prints it). Without those nine, IntentShield with the rules lets
+  through 19/95 harmful calls instead of 28/104; on safety-net's shell scope, safety-net 36/77 and IntentShield 17/77 (44/85 and
+  25/85 with them); on knox's scope, knox 39/68 and IntentShield 13/68 (44/73 and 18/73 with them). Every one of the nine is an allow
+  for IntentShield, safety-net and knox where the guard covers it. The direction of every comparison is unchanged. The list is one
+  reader's judgement, and the committed table `table.md` still counts all 104.
 * **Same author as the rules, same categories.** The set uses exactly the six harmful categories `r8-detect` used and the same
   benign split, and the rules were written from that category list. Three fresh items equal a rules test string exactly (`rm -rf *`,
   `security dump-keychain -d`, `git clean -fdx`) and about ten more are near-duplicates; they are canonical commands, so this is

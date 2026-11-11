@@ -99,7 +99,7 @@ the 21st, `headless-notty-dark`, was added after them, and is marked so in the `
 field are round 6. Nothing is rerun or dropped: 21 launches, 21 data rows, 0 INVALID. Round 7 ran on commit `c83ad35` (the product fix) plus lane
 code that only affects the table; the round 6 rows ran on `d0f9ace`.
 
-**What changed in the product** (`src/intentshield/translation.py`, `harness.py`, 34 new unit tests in `tests/test_translation_ancestry.py`, 12 more for the lane in `tests/test_hook_fidelity_pty_r7.py`):
+**What changed in the product** (`src/intentshield/translation.py`, `harness.py`, 34 new unit tests in `tests/test_translation_ancestry.py`, 12 more for the lane in `tests/test_hook_fidelity_pty_plan_and_observer.py`):
 
 1. A ps-free ancestry source: `libproc` (`proc_pidinfo` for parent and controlling terminal, `sysctl kern.procargs2` for the command line) through ctypes on
    macOS, `/proc` on Linux, then `ps`; the first source that reads the whole walk wins. No new dependency, no process spawned. A layout check runs once

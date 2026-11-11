@@ -1,10 +1,11 @@
 name: ci
 
-# Runs on every branch push and pull request, and is called by publish.yml for a version tag, so a
-# release only uploads after this workflow passes for the tagged commit.
+# Runs on every push to main and every pull request (a pull request covers its own branch, so a
+# branch is not tested twice), and is called by publish.yml for a version tag, so a release only
+# uploads after this workflow passes for the tagged commit.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_call:
 
@@ -34,8 +35,13 @@ jobs:
       - run: uv run ruff check src tests benchmarks
       - run: uv run mypy  # config in pyproject.toml
       - name: No bare wall-clock bounds in tests (use limit() from tests/timelimits.py)
-        run: "! grep -rnE '(perf_counter|monotonic|time\\.time)\\(\\) *- *[A-Za-z_0-9]+ *< *[0-9]|(took|elapsed) *< *[0-9]' tests"
-      - run: uv run pytest -q
+        run: "! grep -rnE '(perf_counter|monotonic|time\\.time)\\(\\) *- *[A-Za-z_0-9]+ *< *[0-9]|(took|elapsed) *< *[0-9]|< *[0-9.]+ *\\* *[A-Za-z_]+\\(' tests"
+      - name: Tests
+        if: ${{ !(matrix.os == 'ubuntu-latest' && matrix.python == '3.12') }}
+        run: uv run pytest -q
+      - name: Tests with a coverage report (the floor is fail_under in pyproject.toml)
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.12' }}
+        run: uv run pytest -q --cov
       - run: INTENTSHIELD_RUN_HTTP_E2E=1 uv run pytest -q tests/test_mcp_http_e2e.py
       - run: uv run python benchmarks/review_gate.py  # benign reviews per task vs results/improve/baseline
 

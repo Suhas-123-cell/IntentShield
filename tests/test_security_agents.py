@@ -292,6 +292,22 @@ def test_agent_cannot_spoof_another_stage_evidence():
     assert EvidenceReason.AGENT_FAILURE in result.reason_codes
 
 
+class BrokenAgent:
+    def analyze(self, *_args: Any) -> Any:
+        raise RuntimeError("secret-token-123 was in the arguments")
+
+
+def test_an_agent_that_fails_is_logged_by_class_and_still_blocks(caplog):
+    with caplog.at_level("WARNING", logger="intentshield.security_agents"):
+        result = SecurityAnalysisSupervisor(detection_agent=BrokenAgent(), grounding_agent=BrokenAgent()).analyze(
+            "Read my inbox", call(resource="inbox"), metadata()
+        )
+    assert result.disposition is SecurityDisposition.BLOCK and result.fail_closed is True
+    text = caplog.text
+    assert "the detection agent failed closed: RuntimeError" in text and "the grounding agent failed closed: RuntimeError" in text
+    assert "secret-token-123" not in text, "the message may hold arguments: only the class is logged"
+
+
 def test_models_reject_unknown_authorization_fields():
     with pytest.raises(ValidationError):
         TrustedToolMetadata.model_validate(

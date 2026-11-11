@@ -223,6 +223,36 @@ def _load_sdk() -> _SDKBindings:
     return _SDKBindings(Client, StdioServerParameters, streamable_http_client, AsyncClient, Timeout)
 
 
+def _leaves(exc: BaseException) -> list[BaseException]:
+    """The exceptions at the bottom of an exception group (a task group wraps the real error, sometimes twice)."""
+    inner = getattr(exc, "exceptions", None)
+    if not inner:
+        return [exc]
+    return [leaf for part in inner for leaf in _leaves(part)]
+
+
+def _connection_failure(exc: BaseException, config: MCPUpstreamConfig) -> str:
+    """Why a server could not be reached, in a few plain words: the command is not on the PATH, it is not executable, it ended
+    before it answered, it did not answer in time, or the class and first line of the error."""
+    leaf = _leaves(exc)[0]
+    name = type(leaf).__name__
+    text = re.sub(r"\w+://\S+", "<url>", str(leaf).strip().splitlines()[0][:160]) if str(leaf).strip() else ""
+    if config.transport == "stdio":
+        command = config.command or ""
+        if isinstance(leaf, FileNotFoundError):
+            return (f"the command {command!r} does not exist" if os.path.sep in command
+                    else f"the command {command!r} was not found on PATH")
+        if isinstance(leaf, PermissionError):
+            return f"the command {command!r} cannot be run (permission denied)"
+        if isinstance(leaf, OSError):
+            return f"the command {command!r} could not be started ({text or name})"
+    if "timed out" in text.lower() or isinstance(leaf, TimeoutError):
+        return "the server did not answer the start-up message in time"
+    if "connection closed" in text.lower():
+        return "the server ended before it answered the start-up message (its own error output, if any, is on stderr)"
+    return f"{name}: {text}" if text else name
+
+
 def _attribute(value: Any, *names: str, default: Any = None) -> Any:
     for name in names:
         if hasattr(value, name):
@@ -415,11 +445,13 @@ class MCPUpstream:
             self._credential_values = ()
             raise
         except Exception as exc:
+            credentials = self._credential_values
             await stack.aclose()
             self._credential_values = ()
+            why = _redact(_connection_failure(exc, self.config), credentials)
             raise MCPUpstreamError(
                 "MCP_CONNECTION_FAILED",
-                f"Could not connect to MCP server {self.config.server_id!r}",
+                f"Could not connect to MCP server {self.config.server_id!r}" + (f": {why}" if why else ""),
                 details={"server_id": self.config.server_id, "exception_type": type(exc).__name__},
             ) from exc
 

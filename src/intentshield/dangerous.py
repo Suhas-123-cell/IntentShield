@@ -30,7 +30,9 @@ from . import shell
 
 _MAX = 50_000        # characters of one command or file read here
 _MAX_STAGES = 400    # simple commands examined
+_MAX_TOKENS = 20_000  # words examined
 _MAX_DEPTH = 3      # nested bash -c / eval / $(...)
+_TOO_DEEP = "nested more than three levels deep (bash -c, eval, $(...)), too deep to read in full."
 
 DENY, ASK = "deny", "ask"
 
@@ -59,7 +61,6 @@ _PUNCT = frozenset("|&;()<>")
 _SPLIT_OPS = re.compile(r"<\(|>\(|&&|\|\||\|&|;;|<<<|<<|>>|>&|&>>|&>|<&|<>|>\||[<>|&;()]")
 _HEREDOC = re.compile(r"<<-?[ \t]*['\"]?([A-Za-z_][\w-]{0,40})['\"]?")
 _SHELL_WORD = re.compile(r"\b(?:ba|z|da|k)?sh\b")
-_SUBST = re.compile(r"\$\(([^()]{0,2000})\)|`([^`]{0,2000})`")
 _ASSIGN = re.compile(r"^[A-Za-z_]\w{0,60}=")
 _FD = re.compile(r"^\d{1,2}$")
 _OPS = frozenset({"|", "&&", "||", ";", "&", "|&", ";;", "(", ")", "<(", ">("})
@@ -73,6 +74,32 @@ _SUDO_VALUED = frozenset({"-u", "-g", "-h", "-p", "-C", "-r", "-t", "-D", "-U", 
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish", "ash", "csh", "tcsh"})
 _INTERPRETERS = frozenset({"python", "python3", "python2", "perl", "ruby", "node", "php", "deno", "bun", "lua", "pwsh"})
 _FETCHERS = frozenset({"curl", "wget", "fetch", "aria2c", "lwp-download", "http", "https", "xh"})
+
+
+def _substitutions(data: str) -> list[tuple[int, int]]:
+    """The spans of the command substitutions ``$(...)`` (with the parentheses inside them matched) and backticks in ``data``.
+    An unclosed one runs to the end of the text."""
+    spans: list[tuple[int, int]] = []
+    n, i = len(data), 0
+    while len(spans) < 200 and i < n:
+        a, b = data.find("$(", i), data.find("`", i)
+        if a < 0 and b < 0:
+            break
+        if b < 0 or 0 <= a < b:
+            if data.startswith("$((", a):  # arithmetic: what is inside is read when it holds a substitution of its own
+                i = a + 3
+                continue
+            depth, j = 1, a + 2
+            while j < n and depth:
+                depth += (data[j] == "(") - (data[j] == ")")
+                j += 1
+            spans.append((a + 2, j - 1 if depth == 0 else j))
+            i = j
+        else:
+            j = data.find("`", b + 1)
+            spans.append((b + 1, n if j < 0 else j))
+            i = n if j < 0 else j + 1
+    return spans
 
 
 def _strip_keywords(argv: list[str]) -> list[str]:
@@ -264,9 +291,69 @@ def _decode_ansi_c(match: re.Match[str]) -> str:
     return "'" + "".join(out).replace("'", "'\\''") + "'"
 
 
-def _stages(text: str) -> list[_Stage] | None:
-    """The simple commands of ``text``, or None when it cannot be tokenized (unbalanced quotes)."""
-    text = _strip_heredocs(text[:_MAX]).replace("\r", " ").replace("\n", " ; ")
+_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n")
+_IFS = re.compile(r"\$\{IFS\}(?:\$\d)?|\$IFS(?![A-Za-z0-9_])(?:\$\d)?")
+_WORD_CHAR = re.compile(r"[\w./~$@%+=:,-]")
+
+
+def _lexical(text: str, comments: bool) -> str:
+    """``text`` with the spellings that the shell reads as nothing removed: empty quotes inside a word (``r''m`` is ``rm``), a
+    backslash before a letter (``\\rm``) and, with ``comments``, a comment after a command. Left as it is when a quote is never closed, so the parser sees what it saw."""
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            if text[i + 1:i + 2].isalpha() and text[i + 1:i + 2].isascii():  # \rm is rm, r\m is rm
+                out.append(text[i + 1])
+            else:
+                out.append(text[i:i + 2])
+            i += 2
+        elif c in "'\"" or c == "$" and text[i + 1:i + 2] == "'":
+            start = i + 1 if c != "$" else i + 2
+            quote = text[start - 1]
+            j = start
+            while j < n and text[j] != quote:
+                j += 2 if text[j] == "\\" and (quote == '"' or c == "$") else 1
+            if j >= n:
+                return text
+            empty = j == start and c != "$"
+            before = out[-1][-1:] if out else ""
+            if empty and (_WORD_CHAR.match(before) or _WORD_CHAR.match(text[j + 1:j + 2])):
+                i = j + 1
+                continue
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif comments and c == "#" and (i == 0 or text[i - 1] in " \t\n;&|(<>"):
+            while i < n and text[i] not in "\n;&|":
+                i += 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _normalise(text: str) -> str:
+    """The text as the shell reads it: line continuations joined (``rm \\<newline> -rf /``), form feed and vertical tab read as
+    blanks, ``$IFS`` read as a blank and empty quotes inside words dropped."""
+    text = _CONTINUATION.sub(r"\1", text)
+    if "\x0b" in text or "\x0c" in text:
+        text = text.replace("\x0b", " ").replace("\x0c", " ")
+    if "IFS" in text:
+        text = _IFS.sub(" ", text)
+    if "''" in text or '""' in text or "\\" in text:
+        text = _lexical(text, comments=False)
+    return text
+
+
+def _stages(text: str, notes: list[str] | None = None) -> list[_Stage] | None:
+    """The simple commands of ``text``, or None when it cannot be tokenized (unbalanced quotes). A reason is added to ``notes``
+    when a size limit stopped the reading before the end."""
+    notes = [] if notes is None else notes
+    text = _strip_heredocs(text[:_MAX])
+    if "#" in text:
+        text = _lexical(text, comments=True)
+    text = text.replace("\r", " ").replace("\n", " ; ")
     if "$'" in text:
         text = _ANSI_C.sub(_decode_ansi_c, text)
     lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
@@ -282,8 +369,10 @@ def _stages(text: str) -> list[_Stage] | None:
             raw = list(lexer)
         except ValueError:
             return None
+    if len(raw) > _MAX_TOKENS:
+        notes.append(f"more than {_MAX_TOKENS} words")
     pieces: list[str] = []
-    for token in raw[:20_000]:
+    for token in raw[:_MAX_TOKENS]:
         if len(token) > 1 and set(token) <= _PUNCT:
             pieces.extend(_SPLIT_OPS.findall(token))
         else:
@@ -326,6 +415,8 @@ def _stages(text: str) -> list[_Stage] | None:
             continue
         argv.append(token)
     flush()
+    if i < len(pieces) and any(p not in _OPS for p in pieces[i:]):
+        notes.append(f"more than {_MAX_STAGES} commands")
     # a stage "piped" only when a pipe, not another operator, came right before it
     return stages
 
@@ -435,10 +526,21 @@ def _device(path: str) -> bool:
     return bool(_DEVICE.match(path)) and path not in _SAFE_DEVICE
 
 
+# A variable that alone (or after ``/``, ``~/`` or ``$HOME/``) is the target: when it is empty the target is the root or home directory.
+_EMPTY_VAR = re.compile(r"\"?(?:/|~/|\$\{?(?:HOME|USERPROFILE)\}?/)?\$\{?[A-Za-z_]\w{0,40}\}?\"?(?:/\*?)?")
+_DEFAULTED = re.compile(r"\$\{[A-Za-z_]\w{0,40}:?-([^}]{0,60})\}(/?\*?)")
+
+
 def _is_empty_var_target(arg: str) -> bool:
     """``$DIR``, ``$DIR/``, ``${DIR}/*``: whatever the variable holds, the target is that, and an empty one is root."""
-    m = re.fullmatch(r"\"?\$\{?[A-Za-z_]\w{0,40}\}?\"?(?:/\*?)?", arg)
-    return bool(m) and not re.match(r"\"?\$\{?(?:HOME|USERPROFILE)\b", arg)
+    m = _EMPTY_VAR.fullmatch(arg)
+    return bool(m) and not re.match(r"\"?\$\{?(?:HOME|USERPROFILE)\}?\"?(?:/\*?)?$", arg)
+
+
+def _default_target(arg: str) -> str | None:
+    """``${DIR:-/}``: the text the variable stands for when it is unset, with what follows it, or None."""
+    m = _DEFAULTED.fullmatch(arg.strip("\"'"))
+    return m[1] + m[2] if m else None
 
 
 # --- credential stores -----------------------------------------------------------------------------------------
@@ -453,7 +555,9 @@ _SOFT_FILES = re.compile(r"(?:^|/)(?:\.kube/config|\.docker/config\.json|\.npmrc
                          r"\.config/doppler/|\.doppler\.ya?ml|"
                          r"\.config/gcloud|\.config/gh/hosts\.yml|\.config/hub|\.terraform\.d/credentials|\.heroku/|"
                          r"\.config/doctl|\.config/op/|\.pgpass|\.my\.cnf|\.s3cfg|\.boto|\.gnupg|\.password-store/|\.cargo/credentials|"
-                         r"\.config/rclone/rclone\.conf|\.oci/config|\.git-credentials)")
+                         r"\.config/rclone/rclone\.conf|\.oci/config|\.git-credentials|"
+                         r"\.codex/auth\.json|\.gemini/(?:oauth_creds|mcp-oauth-tokens)\.json|\.claude/\.credentials\.json|"
+                         r"\.claude\.json$)")
 _ETC_SECRET = re.compile(r"^/(?:private/)?etc/(?:shadow|gshadow|master\.passwd|sudoers(?:\.d/[\w.-]+)?|ssh/ssh_host_[\w_]+_key)$")
 _PROC_SECRET = re.compile(r"^/proc/(?:self|\d{1,8})/(?:environ|mem|maps)$")
 _BROWSER = re.compile(r"(?:chrome|chromium|firefox|mozilla|brave|safari|microsoft edge|vivaldi)")
@@ -562,6 +666,8 @@ def _cred_args(argv: list[str]) -> tuple[str, str, str] | None:
                 continue
             trimmed.append(a)
         args = trimmed
+    if name == "openssl":  # -out and -keyout name files it writes
+        args = [a for k, a in enumerate(args) if not (k and args[k - 1] in ("-out", "-keyout", "-outform", "-passout", "-new", "-newkey"))]
     best = None
     for a in args:
         if a.startswith("-") and "=" not in a and "@" not in a:
@@ -696,7 +802,8 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
         return Hit(ASK, "git reset --hard discards uncommitted work and moves the branch.")
     if sub == "clean" and any(a.startswith("-") and not a.startswith("--") and "f" in a for a in args) or (
             sub == "clean" and "--force" in args):
-        return Hit(ASK, "git clean -f deletes untracked files for good.")
+        dry = "--dry-run" in args or any(a.startswith("-") and not a.startswith("--") and "n" in a for a in args)
+        return None if dry else Hit(ASK, "git clean -f deletes untracked files for good.")
     if sub == "reflog" and "expire" in args or sub == "gc" and any(a.startswith("--prune=now") for a in args):
         return Hit(ASK, "this removes the reflog or unreachable commits, the way back from a bad rewrite.")
     if sub == "update-ref" and "-d" in args:
@@ -730,7 +837,7 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
     if not recursive and not (force and len(targets) > 0 and any(_norm(t) in ("/", "~") for t in targets)):
         return None
     for t in targets:
-        if _protected(t):
+        if _protected(t) or (default := _default_target(t)) and _protected(default):
             return Hit(DENY, f"recursive delete of {t}, a root, home or system directory.", t)
         if sudo and _system(t) and _norm(t).count("/") <= 2:
             return Hit(DENY, f"sudo recursive delete inside the system directory {t}.", t)
@@ -742,18 +849,33 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
     return None
 
 
+_FIND_NAMED = frozenset({"-name", "-iname", "-regex", "-iregex", "-path", "-ipath", "-wholename", "-iwholename", "-lname", "-ilname"})
+
+
 def _find_hit(argv: list[str]) -> Hit | None:
+    """``find START ... -delete`` (or ``-exec rm``) at a root, home or system directory. With no test on the name it removes
+    everything under START (``-type f``, an age or a size do not narrow that enough): denied. With a test on the name
+    (``-name .DS_Store``, ``-name '*.pyc'``) it removes only what matches, like ``rm`` of those files: allowed under the home
+    directory, asked at a system directory, and asked when an ``-o`` or ``-prune`` lets other files through."""
     args = argv[1:]
     starts = []
     for a in args:
         if a.startswith("-") or a in ("(", "!", ")"):
             break
         starts.append(a)
-    if "-delete" in args or ("-exec" in args and any(_bin(a) in ("rm", "shred", "unlink") for a in args)):
-        for s in starts:
-            if _protected(s):
-                return Hit(DENY, f"find {s} deletes everything under a root, home or system directory.", s)
-    return None
+    if not ("-delete" in args or ("-exec" in args and any(_bin(a) in ("rm", "shred", "unlink") for a in args))):
+        return None
+    protected = [s for s in starts if _protected(s)]
+    if not protected:
+        return None
+    start = protected[0]
+    named = any(a in _FIND_NAMED and k + 1 < len(args) and re.search(r"[A-Za-z0-9_]", args[k + 1]) for k, a in enumerate(args))
+    widened = any(a in ("-o", "-or", "!", "-not") for a in args)
+    if not named or (widened and "-prune" not in args):
+        return Hit(DENY, f"find {start} deletes everything under a root, home or system directory.", start)
+    if not widened and _norm(start) == "~":
+        return None
+    return Hit(ASK, f"find {start} deletes the files it matches under a root, home or system directory; check the test.", start)
 
 
 def _disk_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
@@ -1293,6 +1415,8 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
                 elif (p := persistence_path(target) or guard_surface(target)):
                     out.append(Hit(p[0], f"writes {target}, {p[1]}.", target))
         return out
+    if "{" in argv[0] and "," in argv[0]:  # {rm,-rf,/} is the words rm -rf /
+        argv = [*_braces(argv[0]), *argv[1:]]
     name = _bin(argv[0])
     sudo = bare.sudo
     if name in _EXPANDED and any("{" in a for a in argv[1:]):
@@ -1309,12 +1433,16 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
                     break
         if code and depth < _MAX_DEPTH:
             out.extend(_analyse(code, intent, depth + 1, state, sudo))
+        elif code:
+            out.append(Hit(ASK, _TOO_DEEP))
     for op, target in bare.redirects:
         if op.startswith(">"):
             if _device(target):
                 out.append(Hit(DENY, f"redirect into the block device {target}.", target))
         elif op == "<<<" and name in _SHELLS and depth < _MAX_DEPTH and not any(not a.startswith("-") or "c" in a[1:] for a in argv[1:]):
             out.extend(_analyse(target, intent, depth + 1, state, sudo))  # bash <<< 'rm -rf /': the string is the program
+        elif op == "<<<" and name in _SHELLS and not any(not a.startswith("-") or "c" in a[1:] for a in argv[1:]):
+            out.append(Hit(ASK, _TOO_DEEP))
         elif op == "<" and name in _READERS | _NET_SINKS and (level := _cred_level(target)) and level[0] == DENY:
             out.append(Hit(DENY, f"{name} reads {target}, {level[1]}.", target))
     # destruction
@@ -1426,7 +1554,7 @@ def _pipe_hits(stages: list[_Stage], intent: str) -> list[Hit]:
                                    escalate=secret != DENY))
             if bare.piped and fetched and (name in _SHELLS or (name in _INTERPRETERS and not [a for a in bare.argv[1:] if not a.startswith("-")]) or name in ("xargs",)):
                 plain = _tls_less(chain)
-                sudo = st.sudo or bare.sudo or any(_bin(x.argv[0]) in ("sudo", "doas") for x in chain if x.argv)
+                sudo = st.sudo or bare.sudo  # root only when sudo is on the shell: ``sudo curl | sh`` runs the script as the user
                 out.append(Hit(DENY if (sudo or plain) else ASK,
                                f"{fetched} output is piped into {name}: code downloaded and run unread"
                                f"{' as root' if sudo else ''}.", ""))
@@ -1437,15 +1565,25 @@ def _pipe_hits(stages: list[_Stage], intent: str) -> list[Hit]:
     return out
 
 
+def _local(value: str) -> bool:
+    """A URL or host on this machine, with or without a port (``http://localhost:8000/x``)."""
+    return shell.is_loopback(re.sub(r"(?<=[\w\]]):\d{1,5}(?=/|$)", "", value, count=1))
+
+
+def _plain_download(data: str) -> bool:
+    """The text has an http URL or a bare IP address that is not on this machine."""
+    return any(not _local(m[0]) for m in re.finditer(r"http://[^\s'\"<>)]{1,300}|\b\d{1,3}(?:\.\d{1,3}){3}\b", data))
+
+
 def _tls_less(chain: list[_Stage]) -> bool:
-    """A download over plain http, or from a bare IP address, that is then run."""
+    """A download over plain http, or from a bare IP address, that is then run. Not one from this machine."""
     for st in chain:
         bare, _ = _unwrap(st)
         if bare.argv and _bin(bare.argv[0]) in _FETCHERS:
             for a in bare.argv[1:]:
-                if a.lower().startswith("http://") and not shell.is_loopback(a):
+                if a.lower().startswith("http://") and not _local(a):
                     return True
-                if re.match(r"^(?:https?://)?\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:/|$)", a):
+                if re.match(r"^(?:https?://)?\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:/|$)", a) and not _local(a):
                     return True
     return False
 
@@ -1499,7 +1637,7 @@ def _piped_text(prev: _Stage, st: _Stage, intent: str, depth: int, sudo: bool) -
 
 def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo: bool = False) -> list[Hit]:
     hits: list[Hit] = []
-    text = command[:_MAX]
+    text = _normalise(command[:_MAX + 4096])[:_MAX]
     data = _mask_data(text)  # what the raw patterns read: single-quoted data is not code
     if _FORK_BOMB.search(data) and re.search(r"\|\s{0,3}[\w:.-]{1,40}\s{0,3}&", data) or _FORK_LOOP.search(data):
         hits.append(Hit(DENY, "a fork bomb: a function or loop that starts copies of itself until the machine stops."))
@@ -1507,7 +1645,7 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
         if re.search(r"while[^;\n]{0,40}fork|fork\s+while|:\(\)\s*\{", data, re.I):
             hits.append(Hit(DENY, "a fork bomb: code that forks without end."))
     if _PIPE_SHELL_SUBST.search(data):
-        plain = bool(re.search(r"http://|\b\d{1,3}(?:\.\d{1,3}){3}\b", data))
+        plain = _plain_download(data)
         hits.append(Hit(DENY if sudo or plain else ASK, "code downloaded and run unread (a shell or eval given a download's output)."))
     if _REVERSE_STRICT.search(data):
         hits.append(Hit(DENY, "a reverse shell: a shell handed to a network socket."))
@@ -1522,7 +1660,10 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     own = _guard_text(data, text) if depth == 0 else None
     if own:
         hits.append(own)
-    stages = _stages(text)
+    notes: list[str] = []
+    stages = _stages(text, notes)
+    for note in notes:
+        hits.append(Hit(ASK, f"the command has {note}, too long to read in full; check the part after that."))
     if stages is None:
         return hits
     state_pipe_secret = False
@@ -1531,6 +1672,8 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     for k, st in enumerate(stages):
         if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
             hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
+        elif st.piped and k and _piped_text(stages[k - 1], st, intent, 0, sudo):
+            hits.append(Hit(ASK, _TOO_DEEP))
         local = dict(state)
         local["prev_secret"] = state_pipe_secret
         st.sudo = st.sudo or sudo
@@ -1557,10 +1700,12 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     run = _download_run(stages)
     if run:
         hits.append(run)
-    for inner in _SUBST.finditer(data):
-        body = text[slice(*inner.span(1 if inner[1] is not None else 2))]  # from the unmasked text: the code inside may quote
-        if body and depth < _MAX_DEPTH and len(hits) < 50:
+    for a, b in _substitutions(data):
+        body = text[a:b]  # from the unmasked text: the code inside may quote
+        if body.strip() and depth < _MAX_DEPTH and len(hits) < 50:
             hits.extend(_analyse(body, intent, depth + 1, {}, sudo))
+        elif body.strip() and depth >= _MAX_DEPTH:
+            hits.append(Hit(ASK, _TOO_DEEP))
     return hits
 
 

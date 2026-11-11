@@ -6,7 +6,7 @@ labels: bug
 ---
 
 **Version and placement**
-`intentshield-mcp` version, Python version, and which layer: hooks (`intentshield-hook <harness>`), transparent proxy (`intentshield-mcp --transparent`) or gateway.
+`intentshield-mcp` version, Python version, the harness and its version (for example `claude --version`), and which layer: hooks (`intentshield-hook <harness>`), transparent proxy (`intentshield-mcp --transparent`) or gateway.
 
 **What happened**
 The decision (ALLOW / REVIEW / BLOCK, or allow / ask / deny) and what you expected. Paste the reason code if there is one.

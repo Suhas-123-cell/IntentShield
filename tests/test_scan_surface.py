@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from test_mcp_guardrail import Fixture, call, runtime
-from timelimits import limit
+from timelimits import fastest, limit
 
 from intentshield.mcp_inspect import (
     distinctive_values,
@@ -142,15 +142,14 @@ def test_keys_equal_after_normalization_do_not_hide_a_value():
 
 
 def test_nested_escapes_cannot_multiply_the_decoding_work():
-    def seconds(text: str) -> float:
-        call_ = ToolCall(tool_name="notes:read", arguments={"q": text})
-        started = time.monotonic()
-        DeterministicDetectionAgent().analyze("Read my notes", call_, None)
-        return time.monotonic() - started
+    def analyse(text: str) -> None:
+        DeterministicDetectionAgent().analyze("Read my notes", ToolCall(tool_name="notes:read", arguments={"q": text}), None)
 
     hostile = "%252525&amp;amp;amp; " * 12_000
     plain = ("The quarterly report covers revenue. " * 7_000)[:len(hostile)]
-    assert seconds(hostile) < 5 * seconds(plain)
+    # The fastest of several runs each: one slow run of either (a busy runner) does not decide the ratio.
+    ratio = fastest(analyse, hostile, repeats=5) / fastest(analyse, plain, repeats=5)
+    assert ratio < 5
 
 
 def test_value_from_a_line_split_injection_needs_review(tmp_path: Path):

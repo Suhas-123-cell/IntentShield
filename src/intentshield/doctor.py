@@ -9,12 +9,14 @@ told from a run by the harness (the harness's own process is not among the hook'
 that cannot be told. It also lists stdio MCP servers that are
 not behind the transparent proxy, whose tool descriptions the hooks never see. For each harness it records the
 version it finds on PATH (``~/.intentshield/harness-versions.json``, which the hooks read to choose their replies) and
-prints what the hook-fidelity study measured for that version. Exit 1 on any problem. Apart from that record it reads
-only. Only the standard library is imported.
+prints what the hook-fidelity study measured for that version. Exit status: 1 on any problem (a line that starts with
+FAIL), else 0; when no hook and no wrapped server is found it says that nothing is installed and still exits 0. Apart from
+that record it reads only. Only the standard library is imported.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -341,11 +343,12 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
             report.line("warn", subject, "installed; the only events since "
                         f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(installed))} reached the hook from a process that is "
                         f"not {harness} (last at {time.strftime('%Y-%m-%d %H:%M', time.localtime(piped))}), which is what a "
-                        f"hand-piped test event looks like, so it is not counted as a run. Start {harness} once and make a "
-                        "tool call; if this stays, the harness is not running the hooks.")
+                        f"hand-piped test event looks like, so it is not counted as a run. Start {harness} and send any "
+                        "prompt; if this stays, the harness is not running the hooks.")
         else:
             hint = (" Codex skips hooks nobody has trusted: start `codex` and approve the IntentShield hooks."
-                    if harness == "codex" else f" Start {harness} once; if this stays, the harness is not running them.")
+                    if harness == "codex" else
+                    f" Start {harness} and send any prompt; if this stays, the harness is not running them.")
             report.line("FAIL", subject, "installed, but no hook has run since "
                         f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(installed))}.{hint}")
     elif report.problems == problems_before:
@@ -378,19 +381,31 @@ def _check_gemini_ask(report: Report, subject: str, version: tuple[int, ...] | N
                                      "(gemini -p) waits for an answer that never comes (yolo, measured on 0.38.0 to 0.66.0)")
 
 
-def _check_servers(report: Report, path: Path) -> None:
+def _upstream_command(config: str) -> str:
+    """The command of the server a proxy config runs, or "" when the config cannot be read or names none."""
+    try:
+        upstream = json.loads(Path(config).read_text(encoding="utf-8"))["upstreams"][0]
+        return str(upstream.get("command") or "") if upstream.get("transport", "stdio") == "stdio" else ""
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return ""
+
+
+def _check_servers(report: Report, path: Path) -> int:
+    """Checks the MCP servers of one client file; returns how many are behind the transparent proxy."""
     try:
         groups = install._server_groups(install._read_json(path))
     except (OSError, ValueError) as exc:
         report.line("warn", str(path), f"cannot read MCP servers: {exc}")
-        return
+        return 0
     bare = []
+    wrapped = 0
     for scope, entries in groups:
         for name, server in entries.items():
             if not isinstance(server, dict) or not server.get("command") or server.get("url"):
                 continue
             label = install._label(name, scope)
             if install._is_wrapped(server):
+                wrapped += 1
                 args = server.get("args") or []
                 config = args[args.index("--config") + 1] if "--config" in args[:-1] else ""
                 if not config or not Path(config).exists():
@@ -400,12 +415,22 @@ def _check_servers(report: Report, path: Path) -> None:
                            f"no copy of the original entry is kept, so edit {path} by hand (put the server's own "
                            "command and args back) or delete the entry")
                     report.line("FAIL", f"{path}", f"{label} runs the proxy with a missing config {config!r}; {how}")
+                elif command := _upstream_command(config):
+                    if os.path.isabs(command):
+                        found = os.path.isfile(command) and os.access(command, os.X_OK)
+                    else:
+                        found = shutil.which(command) is not None
+                    if not found:
+                        report.line("FAIL", f"{path}", f"{label}: the server's command {command!r} "
+                                    + ("does not exist" if os.path.isabs(command) else "is not on PATH")
+                                    + ", so the proxy cannot start it; the harness will show the server as failed")
             else:
                 bare.append(label)
     if bare:
         report.line("warn", str(path), f"{len(bare)} stdio server(s) not behind the transparent proxy, so their tool "
                                        f"descriptions go unchecked: {', '.join(sorted(bare))}. "
                                        f"Run `intentshield wrap {path}`")
+    return wrapped
 
 
 def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = None) -> int:
@@ -426,16 +451,25 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
     for harness in install.HARNESSES:
         if harness not in guarded:
             report.line("--", harness, f"no IntentShield hooks (run `intentshield install {harness}` if you use it)")
+    proxied = 0
     for path in (home / ".claude.json", cwd / ".mcp.json", home / ".cursor" / "mcp.json", cwd / ".cursor" / "mcp.json",
                  home / ".gemini" / "settings.json", cwd / ".gemini" / "settings.json"):
         if path.exists():
-            _check_servers(report, path)
-    print(f"\n{report.problems} problem(s)" if report.problems else "\nno problems found")
+            proxied += _check_servers(report, path)
+    if report.problems:
+        print(f"\n{report.problems} problem(s)")
+    elif not guarded and not proxied:
+        print("\nnothing is installed: no IntentShield hooks and no wrapped MCP server were found, so nothing is guarded. "
+              "Install the hooks with `intentshield install <harness>` (claude, codex, cursor or gemini).")
+    else:
+        print("\nno problems found")
     return 1 if report.problems else 0
 
 
 def add_subcommand(sub: Any) -> None:
-    p = sub.add_parser("doctor", help="check that the IntentShield hooks and proxies are installed and running")
+    p = sub.add_parser("doctor", help="check that the IntentShield hooks and proxies are installed and running",
+                       epilog="Exit status: 0 when nothing failed (it says so plainly when nothing is installed, which is not a "
+                              "failure), 1 when any check printed FAIL.")
     p.add_argument("--db", type=Path, default=None, help="the hooks' database (default ~/.intentshield/hooks.db)")
 
 

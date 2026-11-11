@@ -7,7 +7,9 @@ ask, deny, a crash, a timeout, an empty reply), and what does IntentShield's own
 mostly headless against a scripted stub model, a pseudo-terminal lane for interactive sessions, a narrow real-model arm, a
 Linux probe on dummy processes, and sampled builds of each harness (23 Claude Code, 17 Codex CLI and 28 Gemini CLI releases
 the lanes could install, not every release). Cursor was not measured: its free plan ran out. The study's own verdict is a
-measurement note and an artifact, not a paper (`docs/contribution.md`, section 13).
+measurement note and an artifact, not a paper (`docs/contribution.md`; the account of how that verdict was reached is section 13 of `docs/research-notes/contribution-history.md`).
+
+A rate printed beside a count is the count's share to the digits shown. The generated `table*.md` files format with Python's `:.0f`, which rounds a tie to the even digit (5/8 is printed 62%, 132/160 is printed 82%); a hand-written figure in the documents is checked by `tests/test_hook_fidelity_report.py`, which accepts either direction at a tie.
 
 Each lane directory has its own README where one exists; this file is the map. The vendors' documentation pages are not
 here: `vendor-archive/*/README.md` give their source URLs and sha256 (the page texts have no licence that allows a copy).
@@ -42,7 +44,7 @@ Tables regenerate from the committed rows with no harness, no network and no mod
 | `interactive/table.md` | `.venv/bin/python benchmarks/hook_fidelity/pty_lane.py table results/hook-fidelity/interactive` | the committed rows and screen text |
 | `detect/fresh/table.md`, `summary.json` | `.venv/bin/python benchmarks/hook_fidelity/fresh_report.py` | `fixtures.jsonl`, `decisions.jsonl`, `detect/r8fix/delivery.json` |
 | `detect/table.md`, `summary.json`, `breakdown.md`, `breakdown.json`, `delivery.json` | `detect_compare.py report --decisions results/hook-fidelity/detect/decisions.jsonl --out <copy of detect/>`, then the same with `breakdown`; `detect_compare.py matrix` for `delivery.json` alone | `detect/decisions.jsonl` and `fixtures.jsonl`. **No guard clone is needed**: both commands run in a clean clone with `HF_SCRATCH` pointing at an empty directory |
-| every figure in `docs/hook-fidelity-report.md` | `.venv/bin/python benchmarks/hook_fidelity/report_numbers.py` (the report embeds its output; a test compares them) | the committed rows and the `detect` summaries |
+| every figure in `docs/hook-fidelity-report.md` | `.venv/bin/python benchmarks/hook_fidelity/report_numbers.py` (the report embeds its output; a test compares them) | the committed rows, the `detect` summaries, `detect/fixtures.jsonl` and `detect/r8fix/decisions.jsonl` (the rules before and after on one denominator), and `detect/fresh/` (the split without discovery-only items) |
 | `detect/r8fix/` tables | `r8fix_report.py` | the committed decisions |
 | `claude/`, `codex/` tables | `run.py summarize <runs.jsonl>`, `codex_report.py`, `summarize.py` | the committed rows |
 | `coverage/summary.md` | `coverage_summarize.py results/hook-fidelity/coverage` | `coverage/rows.jsonl` |
@@ -110,6 +112,8 @@ change. The denies-alone comparison with `safety-net` (24/85 against 41/85) was 
 The study cites commit hashes and branch names (for example `25b62ad`, "fixtures committed before any guard ran") from its
 development branch, which was squash-merged into `main`. They do not appear in this repository's history, so the order in
 which fixtures and guards were run cannot be checked from the public history alone; it rests on the ledgers and the
-`provenance.md` files in these directories. The same holds for the predictions and the kill criterion: the author committed them
-before the runs (a same-day commit, not blind, no external timestamp, no hash in the rows), the author archives those commits, and
-an outside reader cannot verify them. Read "registered in advance" as the author's statement.
+`provenance.md` files in these directories. The same holds for the predictions and the kill criterion: according to the author they
+were written and committed before the runs (a same-day commit, not blind, no external timestamp, no hash in the rows), the author
+archives those commits, and an outside reader cannot verify them. The available timestamps do not settle the order: the earliest
+committed Claude Code row has `started_at` 2026-10-31T22:03:05Z (UTC), and the Claude Code documentation pages are recorded as
+retrieved on 2026-11-01 with no time of day and no time zone. Read "written before the runs" as the author's statement.
