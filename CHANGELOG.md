@@ -1,6 +1,8 @@
 # Changelog
 
-User-visible changes go under `## Unreleased
+User-visible changes go under `## Unreleased` (see [CONTRIBUTING.md](CONTRIBUTING.md#changelog)). Release dates are the dates of the release tags; 0.1.0 was never tagged and has none.
+
+## Unreleased
 
 ### Added
 

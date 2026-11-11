@@ -153,3 +153,11 @@ def test_the_paragraph_checker_counts_a_wrapped_paragraph_and_a_list_item_separa
     found = _long_paragraphs("doc.md", 500, tmp_path)
     assert len(found) == 1 and found[0].startswith("doc.md:3:")
     assert not _long_paragraphs("doc.md", 700, tmp_path)
+
+
+def test_the_changelog_opens_with_an_unreleased_heading_and_closed_code_spans():
+    lines = (ROOT / "CHANGELOG.md").read_text().splitlines()
+    headings = [line for line in lines if line.startswith("## ")]
+    assert headings[0] == "## Unreleased"
+    for number, line in enumerate(lines[:12], 1):
+        assert line.count("`") % 2 == 0, f"CHANGELOG.md:{number} has an unclosed code span"
