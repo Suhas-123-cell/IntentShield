@@ -2,7 +2,11 @@
 
 User-visible changes go under `## Unreleased` (see [CONTRIBUTING.md](CONTRIBUTING.md#changelog)). Release dates are the dates of the release tags; 0.1.0 was never tagged and has none.
 
+Terms such as taint, provenance, verdict translation and the fail-closed launcher are defined in the [glossary](docs/layers.md#terms).
+
 ## Unreleased
+
+## 0.4.4 - 2026-11-12
 
 ### Upgrading from 0.4.3
 
@@ -314,14 +318,14 @@ retry, and a dropped judge connection no longer blocks a call.
 
 ## 0.4.0 - 2026-10-30
 
-A security review of the guard itself: four reviewers, three rounds of fixes, every finding and what is
+A security review of the guard itself: four areas, three passes of fixes, every finding and what is
 still open in `docs/security-review.md`. Behaviour changes, so read the list before upgrading.
 
 - **Argument provenance reads canonical values.** An address is the same value in any case, with a
   `+tag`, as an IDN or punycode domain, defanged (`[at]`, `(at)`, ` at ... dot `, `[.]`, `hxxp`), base64 or
   hex encoded, or line-wrapped; a URL in either scheme, with a port, userinfo or a trailing dot, with a
   decimal or hex IP; a path with `~`, `$HOME`, `/Users/me` or `C:\Users\me`; an IBAN with any separator.
-  A bare host in an output covers addresses and URLs on exactly that host. On the reviewer's probe, a
+  A bare host in an output covers addresses and URLs on exactly that host. On the review's probe, a
   quiet output's value now reaches a state-changing call unasked in 9 of 85 cases, down from 71.
 - **Output rules** read tag characters (a run of four or more is a finding in itself), accents and
   combining marks, markup, letters spaced out, `\xNN`/`\uNNNN` escapes, values without their JSON keys,
@@ -407,7 +411,7 @@ Releases before 0.4.0, each in at most three lines. The full text is in the repo
 
 ### 0.2.1 - 2026-10-29
 
-- The PyPI name is `intentshield-mcp`. Fixes from a five-reviewer pass: an unknown `--review` or `--outputs` value fails closed; an
+- The PyPI name is `intentshield-mcp`. Fixes from a five-part review: an unknown `--review` or `--outputs` value fails closed; an
   `ollama` judge; hook ownership by executable name in the installer; scanner, proxy and threat-memory fixes; the judge measured on held-out
   descriptions (`results/judge/`).
 

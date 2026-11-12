@@ -13,7 +13,7 @@ By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). To report
 
 ## Development setup
 
-Python 3.11+ and [uv](https://docs.astral.sh/uv/):
+Python 3.11 or later and [uv](https://docs.astral.sh/uv/):
 
 ```sh
 git clone https://github.com/Suhas-123-cell/IntentShield.git && cd IntentShield
@@ -131,6 +131,8 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 1. **ruff** and 2. **mypy**, as above. The mypy configuration is in `pyproject.toml`: it is near-strict, and the strict flags that
    some older modules still fail are switched off per module in its `[[tool.mypy.overrides]]` lists. A new module has to pass
    the full set, and a module leaves its list when it does.
+   There is no formatter: lines are at most 130 columns and the layout is kept by hand, so do not reformat a file you are not
+   changing for another reason (`ruff format` would rewrite 48 of the 51 files in `src`, measured 2026-11-12).
 3. **The tests**, with the command above. It takes a few minutes. To run one file while you work, add its path:
    `uv run pytest -q tests/test_dangerous_rules.py`. One CI job also measures coverage (`uv run pytest -q --cov`, with `--cov` last because
    it takes an optional argument that would be read as the source path); the floor is `fail_under` in `pyproject.toml`. A third-party
@@ -164,7 +166,7 @@ For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the
 
 1. Set the version in `pyproject.toml` and in `CITATION.cff` (`version` and `date-released`), then run `uv lock` and commit `uv.lock`: the lock records the package's own version, and a later non-frozen `uv sync` would otherwise rewrite it and leave the tree dirty.
 2. In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z - YYYY-MM-DD` and start a new empty `## Unreleased` above it.
-3. Check that no document still calls a released feature unreleased: delete the note under Install in `README.md` that says PyPI has an older version, and make sure `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
+3. Check that no document still calls a released feature unreleased: delete the note under Install in `README.md` that says PyPI has an older version (if there is one), and make sure `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
 4. Run the tests, `ruff` and `mypy` as above, and check the wheel's rendered description on TestPyPI: PyPI does not rewrite the README's relative links.
 
 ## Benchmark numbers

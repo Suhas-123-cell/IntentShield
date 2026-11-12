@@ -1,6 +1,6 @@
-# The `ps`-free detector's Linux `/proc` reader, run once in a container (lane r8-close, round 8; PID 1 fixed and re-run in round `r8fix`, see the end)
+# The `ps`-free detector's Linux `/proc` reader, run once in a container (PID 1 fixed and re-run as `r8fix`, see the end)
 
-Question: the round 7 critic said the Linux `/proc` reader of `translation._ancestors()` was never run on Linux. This directory is that run: a local Docker container (`python:3.12-slim`, digest in `docker-meta.json`, kernel `6.12.76-linuxkit aarch64`, Docker 29.5.2), **`--network none`**, root filesystem read-only
+Question: the Linux `/proc` reader of `translation._ancestors()` had never been run on Linux. This directory is that run: a local Docker container (`python:3.12-slim`, digest in `docker-meta.json`, kernel `6.12.76-linuxkit aarch64`, Docker 29.5.2), **`--network none`**, root filesystem read-only
 (`--read-only --tmpfs /tmp:exec`), worktree mounted read-only. **No harness was launched.** The image has no `ps`, so the reader is the only source that can work (`ps_in_image: absent`). Code: `benchmarks/hook_fidelity/linux_probe.py`, tests `tests/test_hook_fidelity_linux_probe.py`. Code under test: `5bd06eb`.
 
 Files: `matrix.jsonl`, `hidepid.jsonl`, `pid1.jsonl` (37 rows, field `round: r8`, `group`), `rows.jsonl` (all), `table.md`, `summary.json`, `docker-meta.json` (image digest, versions, the container commands and exit codes), `pytest-linux.txt` and `pytest-linux-pid1.txt` (the unit tests inside the container).

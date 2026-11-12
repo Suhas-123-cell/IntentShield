@@ -2,7 +2,7 @@
 
 The cell list is generated from the axes below and nothing is chosen by hand afterwards, so the count the plan
 prints is the count that would run. Pruning rules are the ones in
-docs/research-notes/hook-fidelity/hook-fidelity-study.md section 4; a cell
+hook-fidelity-study.md (research-notes branch) section 4; a cell
 whose neutral control R1 is blocked natively is scored against that baseline (summarize.py, classify_vs_native),
 and a block whose hook is not proven live is CONFIG-INVALID; both are decided at run time, never silently dropped
 from the plan.
@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 
 HARNESSES = ("claude", "codex", "gemini", "cursor")
 # First version of each list is the "current" one. Claude's two are patch releases of one minor version, so they
-# cannot answer a cross-version question (docs/research-notes/hook-fidelity/hook-fidelity-study.md section 9).
+# cannot answer a cross-version question (hook-fidelity-study.md (research-notes branch) section 9).
 VERSIONS = {"claude": ["2.1.316", "2.1.311"], "codex": ["0.165.0", "0.155.1"], "gemini": ["0.66.0", "0.37.1"],
             "cursor": ["2026.10.22"]}
 KINDS = {"claude": ["mcp", "shell", "write", "resource"], "codex": ["mcp", "shell", "write"],
@@ -256,7 +256,7 @@ def generate() -> list[Cell]:
     return final
 
 
-# The 10-run pilot per stub-capable harness (docs/research-notes/hook-fidelity/hook-fidelity-study.md, "Pilot plan").
+# The 10-run pilot per stub-capable harness (hook-fidelity-study.md (research-notes branch), "Pilot plan").
 # Gemini runs in M2 (yolo) so that the
 # neutral control can run the tool; Claude and Codex in M1. (reply, kind) in launch order; R1 shell is repeated once as the
 # repeat check.
@@ -334,7 +334,7 @@ PREDICTIONS = [
     Prediction(dict(harness="cursor", reply="R7"), "BLOCKED", "docs", "BLOCKED", "exit 2 denies"),
     # Written before the runs of the Claude Code sweep according to the author (a same-day commit, not blind; the commit is not in
     # main's history and the available timestamps do not settle the order; see section 7 of
-    # docs/research-notes/hook-fidelity/hook-fidelity-study.md). The pilot's 10
+    # hook-fidelity-study.md (research-notes branch)). The pilot's 10
     # runs were seen first: R3 under M1 was denied.
     # Docs retrieved 2026-11-01, no time or time zone recorded (results/hook-fidelity/vendor-archive/claude/headless.md): "In a -p
     # run with no host, these requests are denied either way".

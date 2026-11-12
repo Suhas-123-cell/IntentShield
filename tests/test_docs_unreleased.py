@@ -1,43 +1,53 @@
-"""What the README and the guide say about behaviour that is on main but not in the 0.4.3 package on PyPI.
+"""What the documents say about behaviour that is in the repository but not in the latest package on PyPI.
 
-A reader who installs from PyPI gets 0.4.3. The README describes main and carries one note under the install block that says
-so and links the changelog; it has no inline qualifier. In the guide, where the detail is, a statement about a feature listed
-under "Unreleased" in CHANGELOG.md must say "on main, after 0.4.3" in the same paragraph, list item, table row or code line,
-until that version is released.
+While the "Unreleased" section of CHANGELOG.md is empty, the repository and the latest release are the same product, so no
+document carries a qualifier such as "on main, after 0.4.3" and the README has no note that PyPI has an older version. While the
+section is not empty, the README carries one note under the install block that says PyPI has the latest release and links the
+changelog, and a statement in the guide about a feature listed under "Unreleased" says "on main, after <latest release>" in the
+same paragraph, list item, table row or code line, until that version is released.
 """
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MARK = "on main, after 0.4.3"
 FILES = ("docs/guide.md",)
-
-NOTE = "PyPI has 0.4.3"
-NOTE_LINKS = ("CHANGELOG.md#unreleased", "CHANGELOG.md#upgrading-from-043")
+# Every Markdown file that describes the product; none may carry a qualifier while Unreleased is empty.
+QUALIFIER_FILES = (
+    "README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/guide.md", "docs/layers.md", "docs/gateway.md", "docs/detectors.md",
+    "docs/benchmarks.md", "docs/security-review.md", "docs/architecture-and-testing.md", "docs/hook-fidelity-report.md",
+    "docs/hook-fidelity-report-appendix.md", "docs/contribution.md", "results/hook-fidelity/README.md",
+)
+QUALIFIER = re.compile(r"\bon main,? after \d+\.\d+\.\d+", re.I)
+PYPI_NOTE = re.compile(r"PyPI has \d+\.\d+\.\d+")
 
 # Each "Added" bullet of the Unreleased section of CHANGELOG.md, by its first words, with the patterns by which the guide names
 # that feature. An empty tuple says the two documents do not name it. A new bullet fails the first test until it is
-# listed here, so that whoever adds a feature decides whether a document needs the mark.
-UNRELEASED_ADDED: dict[str, tuple[str, ...]] = {
-    "`wrap` and `unwrap` read Codex CLI's": (r"mcp_servers", r"VS Code"),
-    "`doctor` prints an `ok` line": (r"--connect(?![-\w])",),
-    "`doctor --verbose` lists": (r"--verbose",),
-    "`intentshield-mcp-verify --summary`": (r"--summary",),
-    "`intentshield demo` also sends one MCP call": (r"one MCP call", r"second deny"),
-    "`wrap` ends with a `Next:` line": (r"--print-entry --harness cursor",),
-    "`scan` prints what each matched": (),
-    "Only with `--builtin-tools`: the hook also reads the arguments of an MCP tool": (r"arguments of an MCP tool",),
-    "The proxy config takes `trusted_tools`": (r"trusted_tools",),
-}
+# listed here, so that whoever adds a feature decides whether a document needs the mark. Empty while Unreleased is empty.
+UNRELEASED_ADDED: dict[str, tuple[str, ...]] = {}
 # Features of the "Changed" and "Fixed" lists that the guide also names.
-UNRELEASED_OTHER = (r"3\.11", r"<server>-<hash>")
+UNRELEASED_OTHER: tuple[str, ...] = ()
+
+
+def _changelog() -> str:
+    return (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+
+def _latest_release() -> str:
+    """The version of the first ``## X.Y.Z - date`` heading of the changelog: the release the repository was last tagged at."""
+    match = re.search(r"^## (\d+\.\d+\.\d+) - ", _changelog(), re.M)
+    assert match, "CHANGELOG.md has no release heading"
+    return match.group(1)
+
+
+def _mark() -> str:
+    return f"on main, after {_latest_release()}"
 
 
 def _unreleased() -> str:
-    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(r"^## Unreleased\n(.*?)(?=^## )", text, re.M | re.S)
+    match = re.search(r"^## Unreleased\n(.*?)(?=^## )", _changelog(), re.M | re.S)
     return match.group(1) if match else ""
 
 
@@ -92,11 +102,17 @@ def _blocks(name: str) -> list[tuple[int, str]]:
 
 def _unmarked(patterns: tuple[str, ...]) -> list[str]:
     found: list[str] = []
+    mark = _mark()
     for name in FILES:
         for number, text in _blocks(name):
-            if any(re.search(pattern, text) for pattern in patterns) and MARK not in text:
+            if any(re.search(pattern, text) for pattern in patterns) and mark not in text:
                 found.append(f"{name}:{number}: {text[:90]}")
     return found
+
+
+def _qualifiers(text: str) -> list[str]:
+    """The lines of ``text`` that carry a qualifier such as "on main, after 0.4.3"."""
+    return [line.strip()[:100] for line in text.splitlines() if QUALIFIER.search(line)]
 
 
 def test_every_unreleased_added_feature_is_listed_here():
@@ -110,57 +126,90 @@ def test_a_statement_about_an_unreleased_feature_carries_the_mark():
         for key, patterns in UNRELEASED_ADDED.items():
             if bullet.startswith(key):
                 problems += _unmarked(patterns)
-    problems += _unmarked(UNRELEASED_OTHER)
+    problems += _unmarked(UNRELEASED_OTHER) if _unreleased().strip() else []
     assert not problems, "\n".join(problems)
 
 
-def test_the_marks_are_there_and_the_guide_explains_them():
-    for name in FILES:
-        assert MARK in (ROOT / name).read_text(encoding="utf-8"), name
+def test_the_guide_explains_the_mark_only_while_something_is_unreleased():
     guide = (ROOT / "docs" / "guide.md").read_text(encoding="utf-8")
-    assert f'A statement marked "({MARK})"' in guide
+    explanation = f'A statement marked "({_mark()})"'
+    if _unreleased().strip():
+        assert explanation in guide
+    else:
+        assert "A statement marked" not in guide
+
+
+def test_no_document_carries_a_qualifier_while_unreleased_is_empty():
+    if _unreleased().strip():
+        return
+    found = {name: _qualifiers((ROOT / name).read_text(encoding="utf-8")) for name in QUALIFIER_FILES}
+    assert not {name: lines for name, lines in found.items() if lines}
 
 
 def test_the_checker_finds_a_statement_without_the_mark(tmp_path, monkeypatch):
-    import sys
-
     (tmp_path / "doc.md").write_text(
         "# T\n\nOne feature (--connect) here.\n\n- item (--connect, on main, after 0.4.3)\n\n```sh\nx --connect\n```\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
     monkeypatch.setattr(sys.modules[__name__], "FILES", ("doc.md",))
+    monkeypatch.setattr(sys.modules[__name__], "_mark", lambda: "on main, after 0.4.3")
     assert [line.split(":")[1] for line in _unmarked((r"--connect(?![-\w])",))] == ["3", "8"]
 
 
-def _readme_problems(text: str, unreleased: str) -> list[str]:
-    """What is wrong with ``text`` as the README, given the body of the changelog's Unreleased section."""
+def test_the_qualifier_pattern_matches_the_forms_the_documents_used():
+    for text in ("(on main, after 0.4.3)", "On main, after 0.4.3, it", "the code on main after 0.4.3 is", "ON MAIN, AFTER 0.4.4"):
+        assert _qualifiers(text), text
+    for text in ("since 0.4.4", "on main, before the tag", "a clone of main, 0.4.3 denied it", "after 0.4.3 the hook sends"):
+        assert not _qualifiers(text), text
+
+
+def _readme_problems(text: str, unreleased: str, latest: str = "0.4.3") -> list[str]:
+    """What is wrong with ``text`` as the README, given the body of the changelog's Unreleased section and the latest release."""
     problems: list[str] = []
-    if MARK in text:
-        problems.append(f'the README has an inline "{MARK}"; the one note under the install block carries that')
+    if f"on main, after {latest}" in text:
+        problems.append(f'the README has an inline "on main, after {latest}"; the one note under the install block carries that')
+    note = f"PyPI has {latest}"
     if not unreleased.strip():
+        if PYPI_NOTE.search(text):
+            problems.append("the README says PyPI has an older version, but Unreleased is empty")
         return problems
-    paragraphs = [block for block in re.split(r"\n\s*\n", text) if NOTE in block]
+    paragraphs = [block for block in re.split(r"\n\s*\n", text) if note in block]
     if len(paragraphs) != 1:
-        wrong = f'the README must have one note that says "{NOTE}" while Unreleased is not empty; it has {len(paragraphs)}'
+        wrong = f'the README must have one note that says "{note}" while Unreleased is not empty; it has {len(paragraphs)}'
         return problems + [wrong]
     flat = re.sub(r"\s+", " ", paragraphs[0])
-    return problems + [f"the note does not link {link}" for link in NOTE_LINKS if link not in flat]
+    links = ["CHANGELOG.md#unreleased"]
+    if "### Upgrading from" in unreleased:
+        links.append("CHANGELOG.md#upgrading-from-")
+    return problems + [f"the note does not link {link}" for link in links if link not in flat]
 
 
-def test_the_readme_describes_main_and_has_one_note_about_the_package_on_pypi():
-    assert not _readme_problems((ROOT / "README.md").read_text(encoding="utf-8"), _unreleased())
+def test_the_readme_describes_one_product_and_has_the_pypi_note_only_while_unreleased_is_not_empty():
+    assert not _readme_problems((ROOT / "README.md").read_text(encoding="utf-8"), _unreleased(), _latest_release())
+
+
+def test_the_latest_release_is_the_first_release_heading():
+    assert re.fullmatch(r"\d+\.\d+\.\d+", _latest_release())
 
 
 def test_the_note_is_required_while_unreleased_is_not_empty_and_only_once():
     note = (
-        f"> **{NOTE}**, which predates some of this. See [Unreleased](x/CHANGELOG.md#unreleased) and"
+        "> **PyPI has 0.4.3**, which predates some of this. See [Unreleased](x/CHANGELOG.md#unreleased) and"
         " [Upgrading](x/CHANGELOG.md#upgrading-from-043).\n"
     )
     full = "# T\n\nText.\n\n" + note + "\nMore.\n"
-    assert _readme_problems(full, "### Added\n\n- x\n") == []
-    assert len(_readme_problems("# T\n\nText.\n", "### Added\n\n- x\n")) == 1
-    assert len(_readme_problems(full + "\n" + note, "### Added\n\n- x\n")) == 1
-    assert len(_readme_problems(full.replace("#upgrading-from-043", "#upgrading"), "### Added\n\n- x\n")) == 1
+    unreleased = "### Upgrading from 0.4.3\n\n### Added\n\n- x\n"
+    assert _readme_problems(full, unreleased) == []
+    assert len(_readme_problems("# T\n\nText.\n", unreleased)) == 1
+    assert len(_readme_problems(full + "\n" + note, unreleased)) == 1
+    assert len(_readme_problems(full.replace("#upgrading-from-043", "#upgrading"), unreleased)) == 1
+    assert _readme_problems(full.replace("#upgrading-from-043", "#upgrading"), "### Added\n\n- x\n") == []
+    assert len(_readme_problems(full + "\nA feature (on main, after 0.4.3).\n", unreleased)) == 1
+
+
+def test_with_unreleased_empty_the_note_and_every_inline_mark_are_errors():
+    note = "> **PyPI has 0.4.3**, which predates some of this.\n"
     assert _readme_problems("# T\n\nText.\n", "\n") == []
-    assert len(_readme_problems(full + f"\nA feature ({MARK}).\n", "### Added\n\n- x\n")) == 1
+    assert len(_readme_problems("# T\n\n" + note, "\n")) == 1
+    assert len(_readme_problems("# T\n\nA feature (on main, after 0.4.3).\n", "\n")) == 1

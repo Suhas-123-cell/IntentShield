@@ -1,6 +1,8 @@
-"""Builds docs/research-notes/hook-fidelity/hook-fidelity-corpus.md and results/hook-fidelity/corpus.json from guards.py and rules.py.
+"""Builds results/hook-fidelity/corpus.json, and with --out the Markdown inventory (hook-fidelity-corpus.md), from guards.py and rules.py.
+The Markdown is a working note kept on the research-notes branch (docs/research-notes/hook-fidelity/), not in this tree.
 
-    python3 benchmarks/hook_fidelity/corpus_build/build.py
+    python3 benchmarks/hook_fidelity/corpus_build/build.py                  # corpus.json only
+    python3 benchmarks/hook_fidelity/corpus_build/build.py --out PATH       # also writes the Markdown to PATH
 
 guards.py holds the reading of each cloned guard (hook code and docs read, never executed); rules.py the prediction rules.
 Round-2 adjustments (critic objections) are applied in ``adjust`` below and are visible there: corrections of the dcg Cursor
@@ -9,6 +11,7 @@ the Gemini rows that the no-model hook-runner sweep has since measured at the ru
 """
 from __future__ import annotations
 
+import argparse
 import datetime
 import json
 import sys
@@ -21,7 +24,6 @@ from guards import GUARDS  # noqa: E402
 from rules import RULES  # noqa: E402
 
 ROOT = HERE.parents[2]
-OUT_MD = ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-corpus.md"
 OUT_JSON = ROOT / "results" / "hook-fidelity" / "corpus.json"
 GENERATED = "2026-11-01"
 GITHUB_META = HERE / "github_meta.json"
@@ -302,7 +304,10 @@ def esc(s: str) -> str:
     return s.replace("|", "\\|").replace("\n", " ")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", type=Path, help="write the Markdown inventory here (the working note on the research-notes branch)")
+    args = parser.parse_args(argv)
     rules = adjust(GUARDS, RULES)
     summary = derive({"guards": GUARDS, "rules": rules})
     measured = derive_measured(REPLAY, CAPTURES, GITHUB) if REPLAY else {}
@@ -330,7 +335,10 @@ def main() -> int:
     )
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    OUT_MD.write_text(markdown(data) + "\n")
+    if args.out is not None:
+        args.out.write_text(markdown(data) + "\n")
+    else:
+        print("corpus.json written; the Markdown inventory was not (pass --out PATH; it lives on the research-notes branch)", file=sys.stderr)
     print(json.dumps(summary, indent=1))
     return 0
 

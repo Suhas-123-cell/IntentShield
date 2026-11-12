@@ -1562,13 +1562,6 @@ def test_claude_arm_m_is_a_paid_arm_and_refused_without_explicit_approval(monkey
     assert "claude" in err and "paid" in err and "--allow-paid" in err
 
 
-def test_the_study_document_names_the_go_variable_the_signoff_file_and_the_pilot():
-    study = Path(__file__).resolve().parents[1] / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md"
-    doc = study.read_text()
-    for needle in ("HOOK_FIDELITY_GO=<n>", "signoffs.json", "KEY-UNCONFIRMED", "native_gate_declared", "Pilot plan"):
-        assert needle in doc, needle
-
-
 # ---------------------------------------------------------------- corpus (an exposure inventory, derived counts)
 CORPUS_DIR = Path(__file__).resolve().parents[1]
 
@@ -1577,23 +1570,14 @@ def _corpus():
     return json.loads((CORPUS_DIR / "results" / "hook-fidelity" / "corpus.json").read_text())
 
 
-def test_corpus_summary_is_derived_from_the_records_and_the_document_quotes_it():
+def test_corpus_summary_is_derived_from_the_records():
     sys.path.insert(0, str(BENCH / "hook_fidelity" / "corpus_build"))
     import counts
     data = _corpus()
     derived = counts.derive(data)
     assert derived == data["summary"]
-    doc = (CORPUS_DIR / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-corpus.md").read_text()
-    s = derived
-    st = s["rows_by_status"]
-    for needle in (f"{s['emit_ask_to_a_harness']} of {s['guards_total']} guards can emit",
-                   f"{st['CONTRADICTS-GUARD-CLAIM']} CONTRADICTS-GUARD-CLAIM",
-                   f"{s['rules_defined']} rules are defined and {s['rules_used_by_a_row']} are used",
-                   "inventory of exposure surface",
-                   f"{len(s['security_guards_with_a_contradicting_row'])} of {s['guards_security']} security guards"):
-        assert needle in doc, needle
     used = {r["rule"] for g in data["guards"] for r in g["gaps"]}
-    assert s["rules_defined"] == len(data["rules"]) and used <= set(data["rules"])
+    assert derived["rules_defined"] == len(data["rules"]) and used <= set(data["rules"])
 
 
 def test_every_corpus_row_has_a_status_and_only_contradicting_rows_count_as_exposure():

@@ -1,7 +1,26 @@
 # Benchmarks: protocols, full tables and limits
 
-Every benchmark protocol and table behind the [README](../README.md)'s results summary, with the limits of each.
-Start with the headline numbers and the limitations; the sections after them hold the per-benchmark detail.
+Every benchmark protocol and table behind the [README](../README.md)'s results summary, with the limits of each, and the
+commands that regenerate them. Start with the headline numbers and the limitations; the sections after them hold the
+per-benchmark detail.
+
+## Reproduce
+
+From a clone, after `uv sync --group dev` (the PyPI source distribution has no tests or benchmarks):
+
+| command | what it regenerates | external data needed | time |
+|---|---|---|---|
+| `uv run python benchmarks/paper_numbers.py` | every MSB table below, with paired bootstrap intervals | none: committed traces | about 3 s |
+| `uv run python benchmarks/hook_fidelity/report_numbers.py` | every figure in the hook-study report | none: committed rows | under 1 s |
+| `uv run python benchmarks/hook_fidelity/fresh_report.py --out <empty directory> --current-rules` | the denies-alone comparison with the rules in your checkout, beside the study's | none: committed fixtures | about 3 s |
+| `uv run python benchmarks/latency.py --calls 50 --hooks 30 --out <file>` | hook and proxy overhead on your machine | none | about 15 s |
+| `uv run python benchmarks/mcptox.py --data <MCPTox-Benchmark checkout> --replay` (flags in `results/README.md`) | MCPTox replay rows | MCPTox-Benchmark checkout | not timed |
+| `uv run python benchmarks/injection_eval.py --dataset results/injection/dataset.jsonl --hard results/injection/hard_negatives.jsonl --agentdojo results/injection/agentdojo-strings.jsonl --injecagent <InjecAgent checkout>/data --out <file>` | the injection table's rules column | InjecAgent checkout | about 2 s |
+| the same, with `--exemplars <index> --embedder <embedder> --combine rules+exemplars` | the exemplar columns | the exemplar index and e5 embedder, which are not committed, and the ML extras (`requirements-ml.txt`) | about 45 s |
+
+New MSB runs, live harness checks and the study's guard decisions need Docker, Ollama or a paid API, harness builds, or clones of
+the other guards; some figures come from runs whose rows are not committed. See [results/README.md](../results/README.md)
+and [results/hook-fidelity/README.md](../results/hook-fidelity/README.md).
 
 ## Headline numbers
 
@@ -9,8 +28,9 @@ Provenance: the MSB rows are regenerated from the committed traces by `benchmark
 (the case grid is `results/msb/cases.jsonl`, so no MSB checkout is needed); the MCPTox rows by
 `benchmarks/mcptox.py --replay`, which needs the MCPTox-Benchmark checkout; the judge, adaptive and
 injection rows are committed reports under `results/`, of which only the injection table's rules column
-replays offline, from `results/injection/` plus the InjecAgent checkout (`results/README.md`). Rerun
-2026-10-29. Protocols, every per-type table and the limits of each benchmark are in
+replays offline, from `results/injection/` plus the InjecAgent checkout (`results/README.md`). The injection
+figures below were rerun on 2026-11-12 with the 0.4.4 rules (the output is not committed; the committed table is the older
+run). The other rows were rerun 2026-10-29. Protocols, every per-type table and the limits of each benchmark are in
 the sections below; the learned detectors' training and negative results in
 [detectors.md](detectors.md). Read the limitations at the end of this section before quoting.
 
@@ -38,21 +58,69 @@ v8/v9/v10/v11 runs on older code and carry `provenance: null` in `results/msb/MA
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off (unconfirmed, note 1 below) |
 | Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`; an in-sample check, see the limits below) |
-| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,454 injections independent of the rules' tuning: rules 2.1%, rules + exemplars 18.1% (the rules as before 0.3.5, see the prompt-injection section below). Over all 3,717 texts, rules + exemplars on outputs: **57.8%** caught, **2.5%** benign flagged (note 2 below) |
+| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,427 injections no rule was written from: rules 2.0%, rules + exemplars 17.7%, mostly on generated outputs in the exemplar index's own styles (table in the prompt-injection section below). Over all 2,959 injections, rules + exemplars on outputs: **58.4%** caught, **2.4%** of 758 benign texts flagged (note 2 below) |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
+
+*Harmful executed* counts a call held for a human as not executed. Held for review, the trivial baseline leaves a harmful call
+waiting in 12.4% / 0 / 19.0% of cases (qwen2.5:7b / llama3.1:8b / ornith:9b), the gateway in none and the hooks in 5 / 2 / 3 cases.
 
 Notes on the table:
 
 1. The v11 traces record no intent evidence and no provenance, so it is not confirmed that the intent model was
    active in that arm; treat the advisory result as unconfirmed.
-2. The rules were tuned on 1,505 of the 2,959 injections. Rules alone catch 49.9% (before 0.3.5; 50.8% now) with 2.1% of benign texts flagged, and
-   Prompt Guard 2 adds 0.7 points. Plain-language injections from independent sources stay mostly undetected.
+2. The rules were tuned on 1,505 of the 2,959 injections. Rules alone catch 50.8% with 2.1% of benign texts flagged. Prompt Guard 2 was
+   not rerun on the current rules; with the rules of 2026-10-21 it raised 49.9% to 51.1%. Plain-language injections from independent
+   sources stay mostly undetected.
 
 Paired cluster bootstrap of `user_task`, gateway minus baseline: −8.6 [−16.1, −3.8] (qwen), −14.3
 [−26.0, −5.1] (llama), −8.6 [−16.7, −2.5] (ornith), −7.9 [−19.6, 0.0] (Gemini). Every mutation-holding
 guard scores 0% executed harm by construction (MSB's harms are file writes or a leaked model name), so
 the metric cannot rank guards; the gateway's measurable contribution is an empty review queue of harmful
 calls, paid for with utility and more benign reviews.
+
+### MSB at a glance
+
+MSB (MCP Security Bench) runs real MCP servers in Docker with an agent on the host. The tables are from `benchmarks/paper_numbers.py`.
+
+- **What was run.** 220 cases, one run each at temperature 0, with three local agents and Gemini 3.5 Flash-Lite on 99 of them, on new
+  draws of the attack templates the rules were tuned on. An arm is one setup: no guard, a trivial baseline, the gateway (IntentShield as
+  an MCP server the agent calls its tools through) or the hooks (IntentShield as harness hooks). The baseline has no detection: it
+  withholds descriptions, blanks self-disclosure parameters and holds every state-changing call for a human.
+- **What the columns are.** A harmful action is a harmful call that ran (lower is better); task completion is MSB's `user_task` (higher
+  is better). A 0.0% is 0 of 216 to 220 cases (95% upper bound 1.7%) or 0 of 99 (3.7%).
+
+Harmful action executed:
+
+| agent (paired cases) | no guard | gateway | hooks | baseline |
+|---|---|---|---|---|
+| qwen2.5:7b (218) | 58.7% | 0.0% | 0.0% | 0.0% |
+| llama3.1:8b (220) | 15.0% | 0.0% | 0.0% | 0.0% |
+| ornith:9b (216) | 56.0% | 0.0% | 0.0% | 0.0% |
+| Gemini 3.5 Flash-Lite (99) | 29.3% | 0.0% | no arm | 0.0% |
+
+*Harmful executed* counts a call held for a human as not executed. Held for review, the trivial baseline leaves a harmful call
+waiting in 12.4% / 0 / 19.0% of cases (qwen2.5:7b / llama3.1:8b / ornith:9b), the gateway in none and the hooks in 5 / 2 / 3 cases.
+
+Task done (`user_task`, %):
+
+| agent (paired cases) | no guard | gateway | hooks | baseline |
+|---|---|---|---|---|
+| qwen2.5:7b (218) | 68.6 | 42.9 | 50.7 | 51.4 |
+| llama3.1:8b (220) | 70.0 | 22.1 | 57.1 | 36.4 |
+| ornith:9b (216) | 82.7 | 51.1 | 54.0 | 59.7 |
+| Gemini 3.5 Flash-Lite (99) | 96.8 | 58.7 | no arm | 66.7 |
+
+Gateway minus baseline, task done, in points [95% paired cluster bootstrap interval]: qwen2.5:7b -8.6 [-16.1, -3.8], llama3.1:8b
+-14.3 [-26.0, -5.1], ornith:9b -8.6 [-16.7, -2.5], Gemini 3.5 Flash-Lite -7.9 [-19.6, 0.0].
+
+What the tables show:
+- No guarded arm let a harmful action run, against 15 to 59% unguarded, but the trivial baseline reaches 0.0% too, so this metric
+  cannot rank guards.
+- The gateway's measurable gain is that no harmful call waits in the review queue (the baseline leaves up to 19% of cases there).
+- It costs 8 to 14 points of task completion against the baseline, and it raises the reviews per case on three of the four agents.
+
+What they do not show: these are single runs of small models on tuning templates, and only the three qwen2.5:7b arms were rerun on
+recent code. Overhead is about 75 ms per hook event and about 150 ms per guarded MCP call (`benchmarks/latency.py`).
 
 ### Other measurements (summary)
 
@@ -82,8 +150,8 @@ Overhead detail (Apple M5, 3 runs on 2026-11-11 on the working tree after `63301
 
 ### Detail behind the headline
 
-The README's results table is the MSB part of the headline above. The measurements below were summarised
-there in one line each; they are given here in full, with their caveats.
+The headline table above and the MSB tables summarise each measurement below in one line; they are given here in full,
+with their caveats.
 
 **Self-disclosure parameter stripping**, 159 distinct tool schemas the 4 MSB agents saw (756 cases):
 
@@ -93,23 +161,38 @@ there in one line each; they are given here in full, with their caveats.
   (ornith) harmful calls in the unpaired undefended runs (`results/self-disclosure.md`).
 
 **Prompt-injection detection**, 3,717 texts including 142 hard benign ones (held out for the learned
-detectors; the rules were tuned on 1,505 of the 2,959 injections):
+detectors; the rules were tuned on 1,505 of the 2,959 injections). Measured on 2026-11-12 with the 0.4.4 rules and the
+exemplar index of the earlier table, by `benchmarks/injection_eval.py --combine rules+exemplars` (see [Reproduce](#reproduce)):
 
-- On the 1,454 injections from families independent of the rules' tuning, the rules catch 2.1% (30/1,454) and
-  rules + exemplars 18.1% (263/1,454). These figures are from the rules as they were before 0.3.5 (the table was made on
-  2026-10-21). With the 0.4.3 rules, `benchmarks/injection_eval.py` (about 2 seconds, needs an InjecAgent checkout) gives 55 of the
-  1,454 for the rules alone; 27 of those are AgentDojo `ignore_previous` rows that a 0.3.5 rule was written from, so they are no
-  longer independent, and without them the rules catch 28 of 1,427 (2.0%). Rules + exemplars were not re-measured with the 0.4.3
-  rules.
-- Most of that 18.1% is in distribution for the exemplar index. The index is built from the train split of the
-  same dataset (`exemplars.py`: MCPTox descriptions, outputs written by a local model in four injection styles,
-  translations and hard negatives). 228 of the 263 hits are on the 346 generated-output test rows, which share
-  their styles and generator with the train rows and differ only by MCPTox server.
-- On the 1,108 injections from sources the index never saw (AgentDojo `direct` and `ignore_previous`, InjecAgent
-  base), rules + exemplars catch 35 (3.2%) and the rules alone 17 (1.5%), as measured before 0.3.5; with the 0.4.3 rules the rules
-  alone catch 44, of which 27 are the `ignore_previous` rows. That is the figure to read as generalisation. Both come from the per-family rows of `results/injection/table.txt`.
-- Over all 2,959 injections, rules + exemplars on outputs catch 57.8% (rules alone 49.9% before 0.3.5 and 50.8%, 1,503 of 2,959,
-  with the 0.4.3 rules). They flag 2.5% of the 758 benign texts (rules alone 2.1%; 16 of 758 with the 0.4.3 rules).
+| family | n | rules | rules + exemplars |
+|---|---|---|---|
+| InjecAgent base, two settings | 1,054 | 17 (1.6%) | 23 (2.2%) |
+| AgentDojo `direct` | 27 | 0 | 1 |
+| AgentDojo `ignore_previous` (a 0.3.5 rule was written from these) | 27 | 27 | 27 |
+| generated outputs, four styles (the exemplar index's own styles) | 346 | 11 (3.2%) | 228 (65.9%) |
+| **these four, 1,454 injections not tuned on** | 1,454 | 55 (3.8%) | 279 (19.2%) |
+| **without `ignore_previous`, 1,427 no rule was written from** | 1,427 | 28 (2.0%) | 252 (17.7%) |
+| InjecAgent "enhanced": a literal marker, "IMPORTANT!!! Ignore all previous instructions" | 1,054 | 1,054 (100%) | 1,054 (100%) |
+| AgentDojo `important_instructions`, `system_message`, `tool_knowledge` (used to write the rules) | 81 | 81 (100%) | 81 (100%) |
+| MCPTox poisoned descriptions with translations (used to write the rules) | 370 | 313 (84.6%) | 313 (84.6%) |
+| **all injections** | 2,959 | 1,503 (50.8%) | 1,727 (58.4%) |
+| benign texts flagged | 758 | 16 (2.1%) | 18 (2.4%) |
+| of which hard benign texts | 142 | 14 | 14 |
+
+What changed since the earlier table (2026-10-21, `results/injection/table.txt`, the rules as they were before 0.3.5): the rules caught
+30 of the 1,454 (2.1%) and rules + exemplars 263 (18.1%). The 0.3.5 rule that reads "Ignore your previous iunstructions" now flags all 27 `ignore_previous`
+rows (27 more for the rules, 16 more for rules + exemplars), and rule changes since then no longer flag two generated outputs. The
+exemplar index is the same: its column alone is 337 of 2,959 in both runs. The new output is not committed.
+
+- Most of the exemplar gain is in distribution. The index is built from the train split of the same dataset (`exemplars.py`: MCPTox
+  descriptions, outputs written by a local model in four injection styles, translations and hard negatives). 228 of the 279 hits are on the 346 generated-output test rows,
+  which share their styles and generator with the train rows and differ only by MCPTox server.
+- On the 1,081 injections from sources the index never saw and no rule was written from (InjecAgent base and AgentDojo `direct`), the rules
+  catch 17 (1.6%) and rules + exemplars 24 (2.2%). With the 27 `ignore_previous` rows added (1,108), 44 and 51. Read the first pair as generalisation.
+- The 1,054 "enhanced" InjecAgent rows are the same attacks with a literal override marker in front, and the rules were written from that
+  phrase, so they count as tuned on. The rules' 50.8% over all injections is mostly these, the MCPTox descriptions and the
+  AgentDojo templates.
+- Rows share templates, so an interval on these counts would be too narrow.
 - Plain-language injections from independent sources stay mostly undetected
   ([detectors.md](detectors.md#adaptive-injection-detection)).
 
@@ -127,7 +210,7 @@ frozen before one test run; the judge got no user request, which the hook would 
   11.9% (14/118) and 8.0% (14/176). 13 of the rules' flags are on the 24 benign texts in this set that quote an
   attack (without them, rules + judge flag 5/94 and 7/152).
 - This benign set is enriched with hard cases (agent hints, requests between people, quoted attacks), so these
-  rates are not comparable to the 2.1% above. The rules alone catch about 4% of the injections, Prompt Guard 2
+  rates are not comparable to the 2.1% in the table above. The rules alone catch about 4% of the injections, Prompt Guard 2
   none. The injections were written by an LLM for this corpus (`results/judge/outputs-*-test*.json`,
   `benchmarks/judge_outputs_eval.py`).
 
@@ -157,8 +240,11 @@ the real hook.
 
 **Against Meta's Prompt Guard 2** (the detector in LlamaFirewall; rerun 2026-10-29, paired on the same texts):
 
-- On InjecAgent, the one source neither was tuned on, the rules catch 50.8% and Prompt Guard 2 50.3%; on
-  plain-language injections both stay under 4%.
+- On InjecAgent, a source neither was written from, the rules catch 1,071 of 2,108 (50.8%) and Prompt Guard 2 1,060 (50.3%). Of each
+  count, 1,054 are the "enhanced" half, which carries a literal "Ignore all previous instructions" marker and which both catch in
+  full; this page and [detectors.md](detectors.md#adaptive-injection-detection) count those rows among the ones the rules were tuned on. On the
+  1,054 base rows alone the rules catch 17 (1.6%) and Prompt Guard 2 6 (0.6%). On plain-language injections both stay under 4%.
+  (Prompt Guard 2 was not rerun on the current rules; these counts are the committed run of 2026-10-29, `results/injection/table.txt`.)
 - The rules lead only where they were written from the data (MCPTox, AgentDojo templates), so they are an
   offline equal, not a better detector ([detectors.md](detectors.md#adaptive-injection-detection)).
 
@@ -180,9 +266,6 @@ the real hook.
 - Live Gemini CLI, same check: notes exfiltrated 3/3 unguarded, 0/3 with hooks, though one `send_email` with a
   benign body still reached the attacker address under hooks alone (prompted by a poisoned description before
   any tool output, which hooks never see; `--review always` denies it).
-
-**MCPTox replay** (11 models' responses; rules developed on MCPTox, so tuning-set): full proxy 0.4% attack
-success, 3.5% benign false block, 46.3% benign calls to review.
 
 **Overhead** (Apple M5, `benchmarks/latency.py --calls 50 --hooks 30` on the working tree after `633014e`, three runs on
 2026-11-11, load average about 2, `results/latency-2026-11-11/tree-run{1,2,3}.json`):
@@ -233,7 +316,7 @@ its section.
   held out for them.
 - The trivial baseline also reaches 0.0% executed harm; "best performing" is not supported (the comparison
   with other guards is in
-  [contribution-history.md](research-notes/contribution-history.md#121-where-it-stands-among-open-source-mcp-guards)).
+  [contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md#121-where-it-stands-among-open-source-mcp-guards)).
 
 **Live harness runs**
 
@@ -668,6 +751,8 @@ reruns of 2026-10-19 on current code; `results/README.md` maps every file to its
 | | gateway | **0.0%** | 0.0% | 0 | 0 | 61.1% | 51.1% |
 | | hooks | **0.0%** | 3.7% | 3 | 4 | 66.2% | 54.0% |
 
+*Harm executed* counts a call held for a human (the "harmful case in review" column) as not executed.
+
 "Harmful case in review" counts cases where a harmful call waits for a human who must reject
 it. The trivial baseline withholds descriptions, strips self-disclosure parameters and holds
 every mutation for review. Hooks also defused harmful calls by rewriting the self-disclosure
@@ -700,7 +785,7 @@ What the guarded 0.0% means:
 
 Earlier MSB runs (the frozen commit `05bb91a`, the v3/v4/v5 runs of 2026-10-12/13) predate the
 neutral server ids or later gateway and hook fixes, and are superseded by the table above; their
-dates and commits are in `docs/research-notes/artifact-paper.md` §4. The LLM judge has never run on neutral
+dates and commits are in [artifact-paper.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/artifact-paper.md) §4. The LLM judge has never run on neutral
 ids: its only MSB catches (v3) were on `attack:`-named tools, which the old server names gave
 away, so no claim is made about the judge on MSB.
 
@@ -765,7 +850,7 @@ tool, and a capable agent fills it in because the schema asked. MSB's out-of-sco
 tool-transfer attacks are this channel. IntentShield removes such parameters from the schema the
 agent sees (`mcp_inspect.self_disclosure_fields`: by name in any spelling, or by a description
 that asks for "the model calling this tool"), drops any value sent for them, and sends an empty
-string where the upstream schema requires the field. None of the seven guards surveyed on 2026-10-29 (table in [contribution-history.md](research-notes/contribution-history.md) §12.1)
+string where the upstream schema requires the field. None of the seven guards surveyed on 2026-10-29 (table in [contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md) §12.1)
 does this.
 
 `benchmarks/self_disclosure_eval.py` measures the rule on every tool schema the four MSB agents
@@ -788,7 +873,7 @@ Every one of the 36 stripped parameters is on an attack-role server, and every o
 parameters on the 86 clean tools was touched. On the same traces, harm executed through a stripped parameter in 23 of Gemini 3.5
 Flash-Lite's 29 harmful cases, 33 of 33 for llama3.1:8b, 48 of 129 for qwen2.5:7b and 51 of 122 for ornith:9b (the denominators
 are harmful calls in the unpaired undefended runs). With the parameters stripped, Gemini attempted none of them (§5.7 of
-`docs/research-notes/artifact-paper.md`), and Claude Haiku's live leak (3 of 3 runs) arrived as an empty field.
+[artifact-paper.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/artifact-paper.md)), and Claude Haiku's live leak (3 of 3 runs) arrived as an empty field.
 
 Limits: this is an in-sample check, not a detection rate. The rule was written for the channel MSB's attack servers use (a
 parameter such as `llm_model_name`) and was added on 2026-10-09, after the MSB runner existed (2026-10-06) and in a commit that
@@ -939,7 +1024,7 @@ to 10 ms slower per event here. The runs of the code at `633014e` (`run{1,2,3}.j
 The earlier figures in `results/latency.json` (2026-10-16: 35 ms per event, 0.02 to 1.1 ms in process, +1.9 ms) and
 `results/improve/baseline/latency.json` (41 to 47 ms per event, the source of the old "42 ms per MCP call", which was one event)
 were measured before the threat memory, value extraction and the shell parser and are kept as history; a run on an idle machine
-may come in lower (a reviewer measured 54 ms per event on the 2026-10-31 code). The adapters follow each harness's documented hook
+may come in lower (54 ms per event was measured on the 2026-10-31 code). The adapters follow each harness's documented hook
 format and are tested on those event shapes (`tests/test_harness.py`).
 
 Claude Code, Gemini CLI, Codex CLI and Cursor have been run live (Codex and Cursor above).

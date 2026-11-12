@@ -2,13 +2,13 @@
 
 A measurement study of Claude Code, Codex CLI and Gemini CLI, with IntentShield's own hook as one of the things measured. It is a
 measurement note, not a paper and not a vulnerability report. Denominator variants, per-build detail and long caveats are in the
-[appendix](hook-fidelity-report-appendix.md). The working record is
-[`hook-fidelity-study.md`](research-notes/hook-fidelity/hook-fidelity-study.md) and the data are in
+[appendix](hook-fidelity-report-appendix.md). The working record, which is kept outside this tree, is
+[`hook-fidelity-study.md`](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md) and the data are in
 [`results/hook-fidelity/`](../results/hook-fidelity/README.md).
 
 **Summary.** A `deny` was enforced on every build where the hook ran, but whether it ran depended on trust, matchers and flags outside its
-reply. An `ask` with no human is handled three ways. A hook that runs past its timeout let the call run on every build tested with the
-default configuration. In unattended runs, where an ask is not a stop, IntentShield's hook is behind safety-net on denies alone, as scored
+reply. An `ask` with no human is handled three ways. A hook that runs past its timeout (3 s in these cells) let the call run on every
+build tested: 22 of 22 Claude Code, 12 of 12 Codex CLI and 1 of 1 Gemini CLI builds. In unattended runs, where an ask is not a stop, IntentShield's hook is behind safety-net on denies alone, as scored
 in the study and on the current rules (section 5); the attended comparison was not made. All runs used a scripted stub model on macOS.
 
 ## 1. Question
@@ -85,8 +85,11 @@ scored count. Claude Code's ask cell uses a pre-approval rule, `--allowedTools B
 ## 4. Findings
 
 **Finding 1. A deny was enforced wherever the hook ran, and the hook did not always run.** The figure to read is 65 of 65 builds: those
-on which a deny ran the hook in any trust state and for any tool kind (22 Claude Code, 17 Codex CLI, 26 Gemini CLI). It is not the deny rows of
-the matrix below, which count the shell command only and also add up to 65. On 47
+on which a deny ran the hook in any trust state and for any tool kind (22 Claude Code, 17 Codex CLI, 26 Gemini CLI). The 17 include the 5 Codex builds excluded from the scored set because the flag that trusts hooks
+did nothing there; they ran with persisted trust. It is not the deny rows of
+the matrix below, which count the shell command only and also add up to 65.
+
+On 47
 of 271 deny rows the hook did not run and the call ran: a Codex hook the user had not trusted (40 rows), a Claude Code `mcp__.*` matcher
 that does not see a resource read (5), and Gemini CLI before 0.26.0, where hooks were opt-in (2). Six more rows, all Gemini CLI 0.66.0 in its
 default approval mode, were blocked without the hook running and are in neither count. No cell shows a running hook's deny
@@ -99,10 +102,10 @@ ignored. This is not a finding that an attacker can bypass a guard.
 - Codex CLI: RAN on 12 of 12 builds. Its documentation says an `ask` is parsed but not supported.
 - Gemini CLI: RAN to 0.37.2, then HUNG from 0.38.0 (15 of 28 builds).
 
-**Finding 3. With the default configuration a timeout fails open on every build tested.** The hook's timeout in the cells was 3 s, not the vendors' default. R9 RAN on 22 of 22 Claude Code builds, 12 of 12
-Codex CLI builds and 1 of 1 Gemini CLI build. The other failure replies ran on one to two builds of Claude Code and Codex CLI, so nothing
+**Finding 3. A timeout fails open on every build tested, with a 3 s hook timeout.** The hook's timeout in the cells was 3 s, not the vendors' default. R9 RAN on 22 of 22 Claude Code builds, 12 of 12
+Codex CLI builds and 1 of 1 Gemini CLI build, so the Gemini CLI result rests on one build. The other failure replies ran on one to two builds (one of Claude Code, 2.1.316, and two of Codex CLI), so nothing
 general about "a crashed hook" follows. Claude Code's documented `onFailure: "block"` setting, which IntentShield's `install` writes,
-changed RAN to BLOCKED for R8, R9, R10a, R10b and R13 on 2.1.316 (RAN in 3 of 3 runs without the key, BLOCKED in 3 of 3 with it). R7 and R11
+changed RAN to BLOCKED for R8, R9, R10a, R10b and R13 on 2.1.316, one build (RAN in 3 of 3 runs without the key, BLOCKED in 3 of 3 with it). R7 and R11
 were already BLOCKED without it, and R5 and R6 still RAN with it. On 2.1.281 (before that version), R9 RAN 2 of 2 either way and R8 2 of 2 with it.
 
 **Finding 4. State outside the reply decides more than the reply does.** Codex CLI with an untrusted hook ran the hook in 0 of 70 rows and
@@ -123,9 +126,13 @@ sample: an interval below is sampling noise on these items only.
   IntentShield trails safety-net. With a person at the prompt an ask is a stop; that comparison was not made. Paired on the same 85 items,
   safety-net denied 24 that IntentShield did not and IntentShield denied 7 that safety-net did not (exact sign test, p = 0.0033); on knox's
   73 items the denies split 18 to 17.
-- The same items with the rules in the repository now (`fresh_report.py --current-rules`, after 0.4.3): IntentShield denies 29 of the 85 and asks on 31;
+- The same items with the rules in the repository now (`fresh_report.py --current-rules`, the rules of 0.4.4): IntentShield denies 29 of the 85 and asks on 31;
   21 items that only safety-net denied and 9 that only IntentShield denied (p = 0.043); on knox's items 16 only knox and 17 only IntentShield. The rules changed after
-  the items had been seen, so this is no cleaner than the study's figure.
+  the items had been seen, so this is no cleaner than the study's figure. With one item moved, 10 against 20, p would be 0.099.
+- **The p-values are descriptive.** The 85 items are author-written and are treated as exchangeable, but they cluster by category (credential read 19,
+  exfiltration 17, destructive 15, git 14, pipe to shell 12, rc and CI write 8) and by source. The rules changed after the items had been seen, and
+  the data were cut several ways (the 467 and 214 sets, with and without overlap, the study's rules and the current ones) with no correction for
+  multiplicity. The current-rules result is one item from non-significance.
 
 **Where IntentShield is ahead: only on its own rule categories, and post hoc.** The opt-in rules were written after the first set's result was known. The
 214 items sample the same six categories the rules were written from, and the set was built by the same model family. The gain measures
@@ -162,7 +169,7 @@ Nothing was tested outside the six categories, so no claim about generalisation 
 - **Order of writing.** According to the author, the expectations and the kill criterion were written and committed before the runs. Those
   commits are not in `main`, because the study was merged as one squashed commit, so an outside reader cannot verify them, and the available
   timestamps do not settle the order. Read "written before the runs" as the author's statement.
-- **Kill criterion.** The author's test for whether the results amount to a paper was at least 5 undocumented deviations that replicate on
+- **Kill criterion.** The author's stopping rule, not a tested prediction, for whether the results amount to a paper was at least 5 undocumented deviations that replicate on
   three or more builds. The count is 3, so it is not met, but only just: there are 20 undocumented groups, 2 of the 3 that replicate are
   Gemini CLI's, and the threshold of 5 has no rationale beyond "several". At a threshold of 3 the criterion would be met.
 - **Standing.** A measurement note and an artifact. [`contribution.md`](contribution.md) says what the work does and does not support.

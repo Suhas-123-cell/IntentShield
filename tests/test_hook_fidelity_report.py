@@ -30,9 +30,7 @@ def _flat(text: str) -> str:
 
 
 FLAT = _flat(REPORT)
-STUDY = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md").read_text()
 CONTRIBUTION = (ROOT / "docs" / "contribution.md").read_text()
-HISTORY = (ROOT / "docs" / "research-notes" / "contribution-history.md").read_text()
 
 
 def _script_output() -> str:
@@ -199,27 +197,15 @@ def test_report_has_no_process_vocabulary():
 
 def test_the_main_text_stays_short_and_links_to_its_appendix():
     words = [w for w in REPORT.split() if not set(w) <= set("|-")]
-    assert len(words) <= 2450, len(words)
+    assert len(words) <= 2650, len(words)    # 2,450 before the sign-test caveat, the build counts and the timeout value went in
     assert "(hook-fidelity-report-appendix.md)" in REPORT and "(hook-fidelity-report.md)" in APPENDIX
     assert "#reproduce-in-full" in REPORT
-
-
-# ------------------------------------------------------------------------------------------------------------- the study
-def test_study_points_to_the_report_and_opens_with_a_five_line_status():
-    head = STUDY.split("## Full record (working notes)")[0]
-    assert "hook-fidelity-report.md" in head and "full record" in head
-    status = head.split("Status (2026-11-11):\n")[1].strip().splitlines()
-    assert len(status) == 5 and [line[:2] for line in status] == ["1.", "2.", "3.", "4.", "5."]
-    assert "round 8 integrated" not in STUDY and "rounds 1 to 9" in head
-    glossary = STUDY.split("## Full record (working notes)")[1].split("## 0. Verdict first")[0]
-    for term in ("*round*", "*lane*", "*critic*"):
-        assert term in glossary, term
 
 
 def test_the_order_of_writing_is_stated_as_the_authors_word_everywhere():
     pattern = re.compile(r"registered in advance|before any matrix run|author-registered|advance registration", re.I)
     files = [ROOT / "docs" / name for name in ("hook-fidelity-report.md", "hook-fidelity-report-appendix.md", "contribution.md")]
-    files += sorted((ROOT / "docs" / "research-notes").rglob("*.md")) + [ROOT / "results" / "hook-fidelity" / "README.md"]
+    files += [ROOT / "results" / "hook-fidelity" / "README.md"]
     files += sorted(BENCH.glob("*.py"))
     for path in files:
         for line in path.read_text().splitlines():
@@ -228,21 +214,7 @@ def test_the_order_of_writing_is_stated_as_the_authors_word_everywhere():
             if "Read \"registered in advance\" as" in line:
                 continue
             assert not pattern.search(line), (path.name, line[:120])
-    for text in (REPORT, STUDY):
-        assert "the available timestamps do not settle the order" in _flat(text)
-
-
-def test_study_never_calls_the_registration_pre_registered_without_a_qualifier():
-    hits = [line for line in STUDY.splitlines() if re.search(r"pre-?registered|pre-?registration", line, re.I)]
-    # the one remaining use describes another group's probes, not this study's predictions
-    assert len(hits) == 1 and "violation predicates" in hits[0]
-    assert "not verifiable from this repository" in STUDY or "cannot verify them" in STUDY
-
-
-def test_study_section_14_does_not_overstate_what_regenerates():
-    section = STUDY.split("## 14. Companion documents and how to reproduce")[1].split("## 15.")[0]
-    assert "fetch_corpus.py" in section and "no clone present" in section
-    assert "the guard decisions themselves" in section
+    assert "the available timestamps do not settle the order" in _flat(REPORT)
 
 
 # --------------------------------------------------------------------------------------------------------- contribution.md
@@ -263,24 +235,6 @@ def test_contribution_is_a_short_current_page_with_each_part_the_verdict_needs()
 
 def test_contribution_keeps_the_anchor_that_other_documents_link_to():
     assert '<a id="121-where-it-stands-among-open-source-mcp-guards"></a>' in CONTRIBUTION
-    assert "### 12.1 Where it stands among open-source MCP guards" in HISTORY
-
-
-def test_contribution_history_keeps_the_old_sections_and_their_superseded_marks():
-    top = [int(m.group(1)) for m in re.finditer(r"^## (\d+)\. ", HISTORY, re.M)]
-    assert top == list(range(1, len(top) + 1)), top
-    subs = {m.group(1) for m in re.finditer(r"^#{3} (\d+\.\d+) ", HISTORY, re.M)}
-    assert {"6.1", "9.1", "9.5", "12.1", "12.2"} <= subs
-    for ref in re.findall(r"§(\d+(?:\.\d+)?)", HISTORY):
-        top_level = int(ref.split(".")[0])
-        assert top_level in top and ("." not in ref or ref in subs), ref
-    section6 = HISTORY.split("## 6. The numbers that hold up")[1].split("### 6.1")[0]
-    assert section6.count("SUPERSEDED") >= 5  # the lead paragraph and four items
-    for needle in ("MSB held-out, live servers, neutral ids", "Earlier MSB rows", "Paired on 218 cases", "Tests:**"):
-        line = next(line for line in section6.splitlines() if needle in line)
-        assert "SUPERSEDED" in line, needle
-    assert "**SUPERSEDED table" in HISTORY.split("## 9. Route 3")[1].split("### 9.1")[0]
-    assert "Verdict (current" not in HISTORY.split("## The contribution, in detail")[0] + HISTORY.split("## 1. ")[0]
 
 
 # ---------------------------------------------------------------------------------------------- one denominator, no slips
@@ -351,7 +305,7 @@ def test_the_checker_catches_the_slip_it_was_written_for():
 def test_no_percentage_in_the_study_documents_disagrees_with_its_k_over_n():
     docs = ROOT / "docs"
     files = sorted(docs.glob("hook-fidelity-*.md")) + [docs / "contribution.md", docs / "coverage-study.md"]
-    files += sorted((docs / "research-notes").rglob("*.md")) + [ROOT / "results" / "README.md"]
+    files += [ROOT / "results" / "README.md"]
     files += [p for p in sorted((ROOT / "results" / "hook-fidelity").rglob("README.md")) if "vendor-archive" not in p.parts]
     bad = {path.name: percentage_mismatches(path.read_text()) for path in files}
     assert not {name: found for name, found in bad.items() if found}

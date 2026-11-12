@@ -1,7 +1,5 @@
-"""The figures docs/research-notes/hook-fidelity/hook-fidelity-study.md cites, recomputed from the committed rows (no harness is launched), the way
-benchmarks/paper_numbers.py does for the MSB papers. A reviewer found 20 count and wording mismatches between the study and the
-rows;
-this pins the ones that were wrong so they cannot drift back."""
+"""Counts and ranges in the committed hook-fidelity rows, recomputed from the rows themselves (no harness is launched). They pin the
+figures the study's working notes quoted. The notes are on the research-notes branch; their wording is not checked here."""
 import json
 from pathlib import Path
 
@@ -11,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "results" / "hook-fidelity"
 if not RES.is_dir():
     pytest.skip("needs the repository's docs/ and results/ (a full clone, not an installed package)", allow_module_level=True)
-STUDY = (ROOT / "docs" / "research-notes" / "hook-fidelity" / "hook-fidelity-study.md").read_text()
 
 
 def rows(*parts: str) -> list[dict]:
@@ -24,7 +21,6 @@ def test_untrusted_codex_rows_are_70_not_40():
     untrusted = [r for r in codex if r["state"] == "untrusted"]
     assert len(codex) == 428 and len(untrusted) == 70
     assert sum(r["version"] in ("0.165.0", "0.166.0") for r in untrusted) == 40
-    assert "all **70** untrusted rows" in STUDY
 
 
 def test_claude_r9_rows_and_wall_times():
@@ -34,13 +30,11 @@ def test_claude_r9_rows_and_wall_times():
     ran = [r for r in r9 if r["outcome"] == "RAN"]
     assert len(ran) == 48 and (min(r["wall_s"] for r in ran), max(r["wall_s"] for r in ran)) == (3.53, 4.33)
     assert sum(r["version"] == "2.1.0" for r in r9) == 2
-    assert "3.53 to 4.33 s" in STUDY
 
 
 def test_codex_r9_wall_times():
     r9 = [r for r in rows("codex", "runs.jsonl") if r["reply"] == "R9"]
     assert len(r9) == 24 and (min(r["wall_s"] for r in r9), max(r["wall_s"] for r in r9)) == (3.9, 4.13)
-    assert "3.9 to 4.1 s" in STUDY
 
 
 def test_committed_stub_rows_are_1350_and_the_kill_criterion_is_three_of_five():
@@ -55,14 +49,12 @@ def test_committed_stub_rows_are_1350_and_the_kill_criterion_is_three_of_five():
     assert kill["met"] is False
     assert sum(v["undocumented"] for v in kill["harness"].values()) == 20
     assert sum(v["replicated_on_3"] for v in kill["harness"].values()) == 3
-    assert "1342 rows: 1350 are committed" in STUDY
 
 
 def test_the_claude_ask_flip_is_between_2_1_84_and_2_1_85():
     flip = rows("claude", "r4-gaps", "bisect", "runs.jsonl")
     ask = {v: {r["outcome"] for r in flip if r["version"] == v and r["reply"] == "R3"} for v in {r["version"] for r in flip}}
     assert ask == {"2.1.78": {"RAN"}, "2.1.83": {"RAN"}, "2.1.84": {"RAN"}, "2.1.85": {"BLOCKED"}, "2.1.86": {"BLOCKED"}}
-    assert "between the **adjacent patch releases 2.1.84 and 2.1.85**" in STUDY
 
 
 def test_codex_persisted_trust_failure_replies_all_ran():
@@ -122,7 +114,6 @@ def test_round_8_launch_ledgers_sum_to_the_200_the_study_cites():
     assert lane == [59, 51, 34, 27, 10] and sum(lane) == 181
     critics = [9, lines("real-model-critic", "launches.jsonl")]   # the close-out critic's 9 are reported, not ledgered in the repo
     assert critics[1] == 10 and sum(lane) + sum(critics) == 200
-    assert "**181 lane launches and 19 critic launches, 200 in all**" in STUDY
 
 
 def test_round_8_closeout_figures():
@@ -143,8 +134,6 @@ def test_round_8_closeout_figures():
     assert (allow["allows"], allow["allows_blocked_by_default"], allow["allows_blocked_by_on_empty_allow"]) == (17, 12, 0)
     pairs = summary["allow_fraction"]["by_pair_claude_codex_gemini"]
     assert (pairs["silent_allow_pairs"], pairs["allow_pairs"], pairs["silent_allow_pairs_excluding_fail_open"], pairs["allow_pairs_excluding_fail_open"]) == (6, 9, 5, 8)
-    for fragment in ("36/36 rows", "12/17", "41 are real flag reads", "3/3", "0/12"):
-        assert fragment in STUDY
 
 
 def test_round_8_linux_figures():
@@ -153,14 +142,11 @@ def test_round_8_linux_figures():
     summary = json.loads((RES / "linux" / "summary.json").read_text())
     g = summary["by_group"]
     assert (g["matrix"]["agree"], g["matrix"]["n"], g["hidepid"]["agree"], g["pid1"]["agree"], g["pid1"]["n"], g["pid1"]["mode_equal"]) == (28, 28, 1, 0, 8, 6)
-    assert "27/27" in STUDY and "0/8" in STUDY
 
 
-def test_round_8_detection_headline_figures_in_the_study():
+def test_round_8_detection_fixture_sizes():
     summary = json.loads((RES / "detect" / "summary.json").read_text())
     assert summary["fixtures"]["heldout"] == {"harmful": 166, "benign": 234}
-    for fragment in ("137/166", "20/24", "29/29", "10/10", "61/61", "**59 lines (30 invalid, 29 valid)**"):
-        assert fragment in STUDY, fragment
 
 
 def test_codex_round4_rows_are_51_not_47():
@@ -170,7 +156,6 @@ def test_codex_round4_rows_are_51_not_47():
     assert counts == [39, 2, 6, 4]
     ids = {r["run_id"] for p in parts for r in rows("codex", *p)}
     assert len(ids) == sum(counts) == 51
-    assert "plus pilots and 51 round-4 rows" in STUDY and "51 run ids, 39 gap runs + 2" in STUDY
 
 
 def _committed_stub_rows() -> list[dict]:
@@ -208,20 +193,4 @@ def test_the_coding_is_deterministic_over_the_committed_rows():
         other = summarize.summarize(shuffled)
         assert same(first, other), seed
         assert sorted(summarize.format_report(other).splitlines()) == sorted(summarize.format_report(first).splitlines())
-
-
-def test_the_study_states_the_installed_and_scored_build_counts_not_the_early_sweep_ones():
-    from hook_fidelity import report_numbers as rn
-
-    counts = rn.build_counts(rn.stub_rows())
-    c, x, g = counts["claude"], counts["codex"], counts["gemini"]
-    scored = f"{c['scored']}, {x['scored']} and {g['scored']} scored builds"
-    installed = f"({c['installed']}, {x['installed']} and {g['installed']} installed)"
-    assert f"on {scored} {installed}" in STUDY
-    assert f"The {c['scored']}, {x['scored']} and {g['scored']} are the scored builds" in STUDY
-    assert f"{c['scored']} scored builds with the bisect builds" not in STUDY  # the sampling bullet names the three counts
-    assert f"the scored counts with the bisect builds are {c['scored']}, {x['scored']} and {g['scored']}" in STUDY
-    for stale in ("on 23, 17 and 28 sampled builds", "The 23, 17 and 28 are", "across 17 builds", "across 23 builds"):
-        assert stale not in STUDY, stale
-    assert "Codex 17 of 17 sampled" not in STUDY
 

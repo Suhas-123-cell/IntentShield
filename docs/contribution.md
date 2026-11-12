@@ -2,7 +2,7 @@
 
 This page says what the repository supports as a research contribution, as of 2026-11-11. It is kept brief. The longer record
 with every earlier verdict, the superseded tables and the day-by-day account of the hook study is in
-[research-notes/contribution-history.md](research-notes/contribution-history.md).
+[contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md).
 
 > **Verdict.** Not publishable at a main research track as it stands. The supportable outputs are an artifact (the guard, the
 > stub-model runner, the committed rows and the scripts that regenerate every table) and a measurement note or workshop paper about
@@ -10,7 +10,7 @@ with every earlier verdict, the superseded tables and the day-by-day account of 
 
 Most of IntentShield is engineering over prior art. The regex rules, argument provenance, quarantine, rug-pull detection and the
 rules-plus-judge design each have a published owner (the table is in section 2 of the
-[history](research-notes/contribution-history.md#2-every-mechanism-is-prior-art)). The learned detectors gave negative or null results and
+[history](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md#2-every-mechanism-is-prior-art)). The learned detectors gave negative or null results and
 are off by default or evidence-only ([detectors.md](detectors.md)).
 
 ## What is claimed, and the limit of each claim
@@ -20,9 +20,9 @@ are off by default or evidence-only ([detectors.md](detectors.md)).
      reply: trust, matchers and flags.
    - An `ask` with nobody to answer it is handled three different ways, and one of them changed between two adjacent Claude Code
      releases (2.1.84 and 2.1.85). That sweep ran with Bash pre-approved; with nothing pre-approved the cell ran on one build only.
-   - A hook that runs past its timeout let the call run on every build tested with the default hook configuration. Claude Code's
-     documented `onFailure: "block"` setting, which IntentShield's `install` writes, blocked it on 2.1.316 (3 of 3 runs) and had no
-     effect on 2.1.281 (2 of 2 RAN).
+   - A hook that ran past its timeout (3 s in these cells) let the call run on 22 of 22 Claude Code, 12 of 12 Codex CLI and 1 of 1
+     Gemini CLI builds. Claude Code's documented `onFailure: "block"` setting, which IntentShield's
+     `install` writes, blocked it on one build, 2.1.316 (3 of 3 runs), and had no effect on 2.1.281 (2 of 2 RAN).
    - Account: [hook-fidelity-report.md](hook-fidelity-report.md). Scored builds are those whose neutral control ran the hook; the
      report's table gives installed, scored and excluded builds per harness.
    - *Limits:* a scripted stub model, headless runs, macOS only, one author, sampled builds, Cursor not measured, most behaviours
@@ -72,7 +72,7 @@ An artifact or tool paper, plus the hook-fidelity measurement note. A research-t
 - a Linux or second-OS run of a real harness, and Cursor measured on a plan that allows it;
 - a completed vendor disclosure (drafts exist; nothing has been sent).
 
-[hook-fidelity-study.md](research-notes/hook-fidelity/hook-fidelity-study.md), section 15, lists these with their costs.
+[hook-fidelity-study.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md), section 15, lists these with their costs.
 
 ## Where it stands among open-source MCP guards
 
@@ -83,15 +83,29 @@ only. Among the seven, IntentShield is the most broadly scoped keyless guard and
 that publishes benchmark results and false-positive rates. That supports "broadly scoped and measured", not "best". The guards have
 things IntentShield lacks: sandboxed server execution, masking of secrets in results, signed server packages and a trace-level
 alignment check. A head-to-head run of another guard on IntentShield's corpora was not done. The table, the survey notes and the
-architecture review are in the [history](research-notes/contribution-history.md#121-where-it-stands-among-open-source-mcp-guards).
+architecture review are in the [history](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md#121-where-it-stands-among-open-source-mcp-guards).
+
+## Authorship and process
+
+IntentShield is the work of one author, a student who wants to study AI at graduate level and work on cheaper, faster and safer AI
+models.
+
+What the repository and its documents show:
+
+- The author set the goals and the working rules: security work stays defensive, claims are stated at what the evidence supports, and
+  the budget is small. The author made the decisions to release and to merge.
+- The code, the tests, the documents, the study runs and the reviews were produced with AI coding agents under the author's direction.
+  [hook-fidelity-report.md](hook-fidelity-report.md) already says this for the hook study.
+- No second human coder exists, so no agreement between coders can be reported.
+- How much of the agents' work the author checked by hand is not documented, and this page claims nothing about it.
 
 ## Pointers
 
 - The hook study, in order of length: [hook-fidelity-report.md](hook-fidelity-report.md) (read this), its
   [appendix](hook-fidelity-report-appendix.md) (denominators, per-build detail, caveats), then
-  [hook-fidelity-study.md](research-notes/hook-fidelity/hook-fidelity-study.md) (the full working record), and the data in
+  [hook-fidelity-study.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md) (the full working record), and the data in
   [results/hook-fidelity/](../results/hook-fidelity/README.md).
 - Numbers and limits of every other benchmark: [benchmarks.md](benchmarks.md).
 - Literature and prior art: [related-work.md](related-work.md).
 - Old section numbers (§5 why it is not publishable, §7 two routes, §9.5 the AgentDojo kill test, §12.1 the comparison table, §13 the
-  hook study as it stood): [research-notes/contribution-history.md](research-notes/contribution-history.md).
+  hook study as it stood): [contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md).

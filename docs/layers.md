@@ -16,6 +16,14 @@ The one glossary for the project's documents; the README and the other pages lin
 - **Provenance:** where a value in a call (an address, URL, account or path) came from: the user's prompt or
   only a tool output.
 - **Rug pull:** an MCP server changes a tool's description after you accepted it.
+- **Verdict translation:** the step that turns the guard's reply into one the harness will enforce. An ask that nobody can answer becomes a
+  deny with a reason, and a hook that fails or runs too long becomes a refusal.
+- **Fail-closed launcher:** the shell wrapper `install` writes around the hook. A hook that cannot start (exit 126 or 127) becomes a
+  refusal with a reason instead of a call that runs.
+- **Ancestry, hand-piped event:** the hook records whether the harness is among its parent processes. An event that you pipe in by hand
+  from a terminal has no harness among them, so `doctor` does not count it as a run of the hook.
+- **Sourced read:** a read-only call that carries a value (an address, URL or path) that only a tool output supplied. The hook asks
+  before such a call unless `--allow-sourced-reads` is set.
 - **Self-disclosure parameter:** a tool parameter that asks the agent for its own model name, system prompt or conversation
   (for example `llm_model_name`). A malicious server adds one to an ordinary tool, and a capable agent fills it in because the
   schema asked. IntentShield removes such parameters from the schema and sends them empty.
@@ -110,8 +118,8 @@ read (an unknown event name, or a command, path or URL that is missing or not te
   substitutions or a long brace list) asks and is never allowed. The `PowerShell` tool is read as the POSIX commands its
   cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content`, `Invoke-WebRequest` uploads, a download run with
   `Invoke-Expression`); other cmdlets are not read (the list is in the guide). The wrappers, the limits and the PowerShell
-  cmdlets are on main, after 0.4.3.
-- The text rules read the harness's own tools. With `--builtin-tools` they also read (on main, after 0.4.3) the path and command
+  cmdlets are there since 0.4.4.
+- The text rules read the harness's own tools. With `--builtin-tools` they also read (since 0.4.4) the path and command
   arguments of MCP tools (`path`, `file`, `filename`, `command`, `cmd` and a few more); anything else an MCP filesystem or shell
   server is asked to do is not read.
 - One difference between the tools: in a session where an output tried to instruct the agent, `curl` to a host the user did
@@ -176,7 +184,7 @@ the gateway's tools and the proxy config keys are in
 
 `install` merges the hook entries into the harness's own settings file (`~/.claude/settings.json`,
 `~/.codex/config.toml`, `~/.cursor/hooks.json`, `~/.gemini/settings.json`; `--scope project` uses the file in
-the current directory, and for Claude Code that is `.claude/settings.local.json` on main, after 0.4.3), naming the installed executable by absolute path, and leaves every other setting alone.
+the current directory, and for Claude Code that is `.claude/settings.local.json` since 0.4.4 and `.claude/settings.json` in 0.4.3), naming the installed executable by absolute path, and leaves every other setting alone.
 Both `install` and `wrap` are idempotent and reversible (`uninstall`, `unwrap`), and `--dry-run` prints the file
 instead of writing it.
 
@@ -192,7 +200,7 @@ of your shell's environment, so name any other variable it needs (a proxy settin
 in `env`.
 
 Both write absolute paths of the machine they ran on. Do not commit a project file they changed
-(`.mcp.json`, `.claude/settings.json`, `.cursor/hooks.json`, `.gemini/settings.json`; on main, after 0.4.3, Claude Code's project hooks
+(`.mcp.json`, `.claude/settings.json`, `.cursor/hooks.json`, `.gemini/settings.json`; since 0.4.4, Claude Code's project hooks
 go to `.claude/settings.local.json` instead of `.claude/settings.json`): a teammate who clones
 it gets a server entry or hook that points at a path that does not exist, and a hook launcher that refuses every
 MCP call. Run `install` and `wrap` on each machine instead.
@@ -245,7 +253,9 @@ intentshield scan --format sarif   # for GitHub code scanning; also --format jso
 It starts each server as its client would, with only the environment its config names plus basics such as `PATH` and `HOME` (none
 of your API keys), lists its tools (calling none) and checks them offline with the guard's rules: poisoned descriptions and
 schemas, an instruction split across one server's tools, parameters that ask for the agent's own model, prompt or conversation,
-shadowing and tool names two servers share.
+shadowing and tool names two servers share. For a server that `wrap` has already put behind the proxy, `scan` starts the upstream
+command, not the proxy, so it reports the poisoned description that the proxy would hide: it shows what the server sends, not what the
+agent sees.
 
 It also reports credentials written into a config (shown masked), a config holding one that other users can read, and a toxic
 flow: one client that can read untrusted content, reach private data and send data out. The toxic-flow roles come from tool names,
@@ -346,7 +356,7 @@ every key is explained in [gateway.md](gateway.md#configure-another-upstream-ser
 
 ## Try it from a clone
 
-Needs Python 3.11+ and [uv](https://docs.astral.sh/uv/). No API key or model download.
+Needs Python 3.11 or later and [uv](https://docs.astral.sh/uv/). No API key or model download.
 
 ```bash
 git clone https://github.com/Suhas-123-cell/IntentShield.git && cd IntentShield

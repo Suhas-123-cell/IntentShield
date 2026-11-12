@@ -152,7 +152,8 @@ def main(argv: list[str]) -> int:
           "Every cell is k/n with a Wilson 95% interval in brackets (percent, computed here from k and n). n counts valid "
           "launches of one stub-model run; the stub model is deterministic, so n=3 shows run-to-run stability of the "
           "harness, not sampling variance of a model. See "
-          "`docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md` for the method and limits.", ""]
+          "[hook-fidelity-coverage-rerun.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/"
+          "docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md) for the method and limits.", ""]
     harness_builds = sorted({(c["harness"], c["version"], c["variant"]) for c in cs.values()},
                             key=lambda t: (t[0], version_key(t[1]), t[2]))
     for harness, version, variant in harness_builds:

@@ -55,7 +55,7 @@ that holds mutations for review and strips self-disclosure fields gets 0% mechan
 Candidate contributions that survive the search, strongest first:
 
 1. **What third-party hooks cannot see (chosen and measured 2026-10-12; on review not publishable as it stands; see
-   [contribution-history.md](research-notes/contribution-history.md) §5 and §7).** A measurement and attack study of hook-based MCP
+   [contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md) §5 and §7).** A measurement and attack study of hook-based MCP
    guards across harnesses: which MCP channels bypass a hook scoped to tool calls (tool descriptions, MCP resources and prompts,
    sampling and elicitation), the transparent proxy as the fix, with utility cost.
 
@@ -64,8 +64,8 @@ Candidate contributions that survive the search, strongest first:
    carried descriptions; a `*` matcher saw Claude's resource read and Gemini's model-level hooks carried the prompt; the proxy
    mediates descriptions and does not expose resources or prompts (functionality lost, not mediated).
 
-   See [coverage-study.md](coverage-study.md), [contribution-history.md](research-notes/contribution-history.md) and
-   [paper-draft.md](research-notes/paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in mechanisms, not third-party
+   See [coverage-study.md](coverage-study.md), [contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md) and
+   [paper-draft.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/paper-draft.md). Nearest prior work: HarnessSecurity-Bench (built-in mechanisms, not third-party
    guards) and CapScope (hooks for coding-agent authority, not MCP channels). Still a hypothesis until confirmed with live
    per-channel attacks (§3.5 of the draft); findings in shipping harnesses need responsible disclosure.
 2. **Rules plus an evidence-only LLM judge on held-out live MCP servers, with reviewer

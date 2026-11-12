@@ -8,6 +8,8 @@ one tool call and then answers `done`; what it cannot say is how a real model be
 Files: `pilot/` (10 runs, bash script), `core/`, `fail/`, `sweep/` (each `runs.jsonl` one row per run, `streams/` the scrubbed
 stream-json, `run.log`), `smoke/` (10 wiring runs, 2 INVALID), `all-runs.jsonl` and `report.txt` (summarizer over core+fail+sweep),
 `version-table.md`, `launch-accounting.json`. Archived vendor docs: `../vendor-archive/claude/`.
+`launch-accounting.json` counts 560 launches (pilot 10, smoke 10, core 251, fail 69, sweep 220). `all-runs.jsonl` holds the 540 rows of core, fail
+and sweep; the 20 pilot and smoke launches are counted but are not in it. Their records are in `pilot/` and `smoke/`.
 
 Config differences from production (state them wherever the numbers are cited): `ENABLE_TOOL_SEARCH=false`; telemetry,
 error reporting, autoupdate and non-essential traffic off; `--setting-sources project --strict-mcp-config --no-session-persistence`
@@ -38,7 +40,7 @@ that ran left a marker with the attestation), so no other attestation was needed
 | M2 (`--dangerously-skip-permissions`) | 0/5 | 0/5 | 0/5 | 0/5 | the hook's own reason text |
 
 So on 2.1.316 an ask in `-p` is a deny in every mode, bypass included, and it never hangs (each run 0.6 to 0.9 s). My
-prediction for M2, written before the runs according to the author (`docs/research-notes/hook-fidelity/hook-fidelity-study.md` section 7), was RAN (inference); it was wrong. The docs fetched 2026-11-01 (headless.md, hooks.md
+prediction for M2, written before the runs according to the author ([hook-fidelity-study.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md) section 7), was RAN (inference); it was wrong. The docs fetched 2026-11-01 (headless.md, hooks.md
 `permissionDecisionReason`) say an unanswerable prompt is denied in `-p`; they do not mention bypass.
 
 Across releases (M1h shell, n=2 per release, `version-table.md`): **R3 ask was RAN 2/2 on 2.0.41, 2.1.47 and 2.1.69** (hook invoked

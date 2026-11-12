@@ -1,7 +1,7 @@
 """Figures that the front-door documents state, checked against the committed data or the scripts that print them.
 
-The README line budget, the reading path's word counts, the split of the exemplar detector's 18.1%, the upper bounds printed
-beside 0.0% cells and the baseline outputs in CONTRIBUTING.md.
+The README line budget, the reading path's word counts, the injection table, the upper bounds printed beside 0.0% cells and the
+baseline outputs in CONTRIBUTING.md.
 """
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ def _wilson_upper(k: int, n: int, z: float = 1.959964) -> float:
     return 100 * (centre + half)
 
 
-def test_the_readme_stays_under_260_lines():
-    assert len(READ("README.md").splitlines()) < 260
+def test_the_readme_stays_a_front_page_of_at_most_140_lines():
+    assert len(READ("README.md").splitlines()) <= 140
 
 
 def test_the_reading_path_word_counts_are_wc_counts():
@@ -55,28 +55,24 @@ def _words(paths) -> int:
 
 
 def test_the_stated_size_of_each_group_of_documents_is_a_wc_count():
-    """docs/README.md says how many words the product documentation, the research write-ups and the archived notes hold."""
+    """docs/README.md says how many words the product documentation and the research write-ups hold."""
     text = " ".join(READ("docs/README.md").split())
     product = [ROOT / name for name in ("README.md", "docs/guide.md", "docs/layers.md", "docs/gateway.md", "docs/detectors.md",
                                          "docs/benchmarks.md", "docs/security-review.md", "docs/architecture-and-testing.md",
                                          "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md")]
     research = [ROOT / "docs" / name for name in ("contribution.md", "hook-fidelity-report.md",
                                                    "hook-fidelity-report-appendix.md", "related-work.md", "coverage-study.md")]
-    archive = [path for folder in ("research-notes", "hook-fidelity-archive")
-               for path in sorted((ROOT / "docs" / folder).rglob("*.md"))]
     user = [ROOT / "README.md", ROOT / "docs" / "guide.md"]
     stated = {
         "product": (r"\*\*Product documentation\*\*[^.]*?about ([\d,]+) words in all", product),
         "user": (r"needs only the README and the guide, about ([\d,]+) words", user),
         "research": (r"\*\*Research write-ups\*\*[^:]*?about ([\d,]+) words", research),
-        "archive": (r"about ([\d,]+) words in (\d+) Markdown files", archive),
     }
     for name, (pattern, files) in stated.items():
         match = re.search(pattern, text)
         assert match, name
         count = int(match.group(1).replace(",", ""))
         assert abs(count - _words(files)) <= 0.03 * _words(files), (name, count, _words(files))
-    assert int(re.search(r"words in (\d+) Markdown files", text).group(1)) == len(archive)
 
 
 def _injection_rows() -> dict[str, list[tuple[int, int]]]:
@@ -89,22 +85,69 @@ def _injection_rows() -> dict[str, list[tuple[int, int]]]:
     return rows
 
 
-def test_the_exemplar_detectors_18_percent_is_split_into_seen_and_unseen_sources():
-    rows = _injection_rows()
-    generated = [f for f in rows if f.startswith("instruction:generated_output_")]
-    unseen = ["instruction:agentdojo_direct", "instruction:agentdojo_ignore_previous", "instruction:injecagent_dh_base",
-              "instruction:injecagent_ds_base"]
-    rules, rules_exemplars = 0, 3   # column positions in the table
-    in_distribution = (sum(rows[f][rules_exemplars][0] for f in generated), sum(rows[f][0][1] for f in generated))
-    never_seen = (sum(rows[f][rules_exemplars][0] for f in unseen), sum(rows[f][0][1] for f in unseen))
-    rules_unseen = sum(rows[f][rules][0] for f in unseen)
-    assert in_distribution == (228, 346) and never_seen == (35, 1108) and rules_unseen == 17
-    assert in_distribution[0] + never_seen[0] == 263 and in_distribution[1] + never_seen[1] == 1454
-    assert sum(rows[f][rules][0] for f in generated + unseen) == 30
-    flat = {name: re.sub(r"\s+", " ", READ(name)) for name in ("README.md", "docs/benchmarks.md", "docs/detectors.md")}
-    assert "228 of its 263 hits" in flat["README.md"] and "35, or 3.2%" in flat["README.md"]
-    for name in ("docs/benchmarks.md", "docs/detectors.md"):
-        assert "228 of the 263 hits" in flat[name] and "35 (3.2%)" in flat[name] and "17 (1.5%)" in flat[name], name
+def _rules_column() -> dict[str, tuple[int, int]]:
+    """The rules' hits per group of rows, from the committed corpus, with the rules in this checkout.
+
+    InjecAgent is not committed, so its rows are not here."""
+    import injection_eval
+
+    res = ROOT / "results" / "injection"
+    rows = [r for r in injection_eval.load_corpus(res / "dataset.jsonl", Path("/nonexistent"), res / "agentdojo-strings.jsonl",
+                                                   res / "hard_negatives.jsonl") if r["split"] in ("test", "external")]
+    groups: dict[str, list[int]] = {}
+    for r in rows:
+        family = r["family"]
+        if r["label"] == "data":
+            key = "benign"
+        elif family.startswith("generated_output_"):
+            key = "generated"
+        elif family.startswith("mcptox_poisoned_description"):
+            key = "mcptox"
+        elif family in ("agentdojo_important_instructions", "agentdojo_system_message", "agentdojo_tool_knowledge"):
+            key = "agentdojo_tuned"
+        else:
+            key = family
+        hit = injection_eval.rules(r["text"], r["kind"])
+        groups.setdefault(key, [0, 0])
+        groups[key][0] += bool(hit)
+        groups[key][1] += 1
+    return {k: (v[0], v[1]) for k, v in groups.items()}
+
+
+def test_the_injection_table_in_benchmarks_matches_the_rules_and_the_committed_table():
+    """The table of docs/benchmarks.md was measured on 2026-11-12 with the exemplar index, which is not committed.
+
+    The rules' column for every family that does not need InjecAgent is recomputed here, the sums are checked, and the exemplar
+    column is checked against the committed table of 2026-10-21 for the families whose figure did not change."""
+    mine = _rules_column()
+    assert mine["generated"] == (11, 346) and mine["agentdojo_direct"] == (0, 27)
+    assert mine["agentdojo_ignore_previous"] == (27, 27) and mine["agentdojo_tuned"] == (81, 81) and mine["mcptox"] == (313, 370)
+    assert mine["benign"][0] == 16 - 0 and mine["benign"][1] == 758 - 17      # the 17 InjecAgent benign rows are not committed
+    old = _injection_rows()
+    rules, rules_exemplars = 0, 3     # column positions in the committed table
+    generated = [f for f in old if f.startswith("instruction:generated_output_")]
+    assert sum(old[f][rules_exemplars][0] for f in generated) == 228 and sum(old[f][rules][0] for f in generated) == 13
+    assert old["instruction:agentdojo_direct"][rules_exemplars][0] == 1
+    ignore_previous = old["instruction:agentdojo_ignore_previous"]
+    assert ignore_previous[rules] == (0, 27) and ignore_previous[rules_exemplars] == (11, 27)
+    dh_base, ds_base = old["instruction:injecagent_dh_base"], old["instruction:injecagent_ds_base"]
+    assert dh_base[rules][0] + ds_base[rules][0] == 17
+    assert dh_base[rules_exemplars][0] + ds_base[rules_exemplars][0] == 23
+    # the sums in the document's table
+    assert 17 + 0 + 27 + 11 == 55 and 23 + 1 + 27 + 228 == 279 and 55 - 27 == 28 and 279 - 27 == 252
+    assert 55 + 1054 + 81 + 313 == 1503 and 279 + 1054 + 81 + 313 == 1727 and 1454 + 1054 + 81 + 370 == 2959
+    flat = re.sub(r"\s+", " ", READ("docs/benchmarks.md"))
+    for row in ("| InjecAgent base, two settings | 1,054 | 17 (1.6%) | 23 (2.2%) |",
+                "| AgentDojo `ignore_previous` (a 0.3.5 rule was written from these) | 27 | 27 | 27 |",
+                "| generated outputs, four styles (the exemplar index's own styles) | 346 | 11 (3.2%) | 228 (65.9%) |",
+                "| **these four, 1,454 injections not tuned on** | 1,454 | 55 (3.8%) | 279 (19.2%) |",
+                "| **without `ignore_previous`, 1,427 no rule was written from** | 1,427 | 28 (2.0%) | 252 (17.7%) |",
+                "| **all injections** | 2,959 | 1,503 (50.8%) | 1,727 (58.4%) |",
+                "| benign texts flagged | 758 | 16 (2.1%) | 18 (2.4%) |"):
+        assert row in flat, row
+    assert "30 of the 1,454 (2.1%) and rules + exemplars 263 (18.1%)" in flat
+    readme = re.sub(r"\s+", " ", READ("README.md"))
+    assert "28 of 1,427 (2.0%)" in readme and "252 (17.7%)" in readme and "50.8% of all 2,959 injections" in readme
 
 
 def test_the_upper_bounds_printed_beside_zero_counts_are_wilson_bounds():
@@ -112,8 +155,8 @@ def test_the_upper_bounds_printed_beside_zero_counts_are_wilson_bounds():
         assert f"{_wilson_upper(0, n):.1f}" == "1.7", n
     assert f"{_wilson_upper(0, 99):.1f}" == "3.7"
     assert f"{_wilson_upper(0, 194):.1f}" == "1.9"
-    readme = re.sub(r"\s+", " ", READ("README.md"))
-    assert "0 of 216 to 220 cases (95% upper bound 1.7%) or 0 of 99 (3.7%)" in readme
+    benchmarks = re.sub(r"\s+", " ", READ("docs/benchmarks.md"))
+    assert "0 of 216 to 220 cases (95% upper bound 1.7%) or 0 of 99 (3.7%)" in benchmarks
     assert "95% upper bound 1.9%" in re.sub(r"\s+", " ", READ("docs/contribution.md"))
     assert "0 of 194" in READ("docs/benchmarks.md") and "1.9%" in READ("docs/benchmarks.md")
 
@@ -145,28 +188,25 @@ def test_contributings_baseline_outputs_are_what_the_scripts_print(tmp_path):
     assert write and f"`write: {write.group(1)}`" in text, write and write.group(1)
 
 
-def test_the_readme_puts_what_it_stops_the_demo_and_local_storage_before_the_results():
+def test_the_readme_puts_what_it_stops_the_install_and_local_storage_before_the_results():
     headings = re.findall(r"^## (.+)$", READ("README.md"), re.M)
     results, study = headings.index("Results"), headings.index("The hook study")
-    for early in ("See it work", "What it stops and does not stop", "What is stored locally"):
+    for early in ("Install", "What it stops and does not stop", "What is stored locally", "Upgrading and removing"):
         assert headings.index(early) < results < study, early
 
 
-def test_the_injection_headline_says_which_rules_it_was_measured_with():
-    """The committed table was made before the 0.3.5 rule that reads "Ignore your previous iunstructions". The rules now flag
-    all 27 AgentDojo `ignore_previous` rows that the table counts as missed, so those rows are no longer independent of the
-    rules."""
-    import json
+def test_the_readme_results_summary_is_short_and_leads_with_the_weak_numbers():
+    section = READ("README.md").split("\n## Results\n")[1].split("\n## ")[0]
+    lines = [line for line in section.splitlines() if line.strip()]
+    assert len(lines) <= 9, len(lines)      # the lead-in line and at most eight lines of summary
+    assert lines[1].startswith("- **Injection text the rules were not written for")
 
-    import injection_eval
 
-    assert _injection_rows()["instruction:agentdojo_ignore_previous"][0] == (0, 27)    # the rules column of the committed table
-    rows = [json.loads(line) for line in READ("results/injection/agentdojo-strings.jsonl").splitlines()]
-    mine = [r for r in rows if r["source"] == "agentdojo_ignore_previous"]
-    assert len(mine) == 27 and all(injection_eval.rules(r["text"], "output") for r in mine)
-    flat = re.sub(r"\s+", " ", READ("README.md"))
-    assert "before 0.3.5" in flat and "27 are AgentDojo `ignore_previous` rows" in flat
-    assert "28 of 1,427 (2.0%)" in flat and "not re-measured with the 0.4.3 rules" in flat
+def test_the_msb_tables_say_how_a_held_call_is_counted():
+    """Every table of 'harmful executed' carries the footnote that a call held for a human counts as not executed."""
+    text = re.sub(r"\s+", " ", READ("docs/benchmarks.md"))
+    assert text.count("*Harmful executed* counts a call held for a human as not executed") == 2
+    assert "*Harm executed* counts a call held for a human" in text
 
 
 def test_the_hook_overhead_in_the_guide_matches_the_benchmark_row_and_the_readme():

@@ -1,6 +1,6 @@
 # Codex 0.131.0 debug launches (round 3 coverage lane), committed in round 4
 
-What this is: the artifacts of the exploratory launches behind two statements of `docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md`: (1) Codex
+What this is: the artifacts of the exploratory launches behind two statements of [hook-fidelity-coverage-rerun.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-coverage-rerun.md): (1) Codex
 0.131.0 ran no hook under `exec --dangerously-bypass-hook-trust` (0 hook events), and (2) one non-stub request in a
 `RUST_LOG=trace` run (an unauthenticated plugin-cache request to a ChatGPT host, HTTP 401). The files were copied from the
 round-3 scratch directory, **not re-run**; paths are scrubbed (`<HOME>`, `<SCRATCH>`, `<TMP>`). `debug_launches.txt` is the lane's

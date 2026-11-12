@@ -330,8 +330,8 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --group dev --frozen` and has none of those variables set.
 
-Expect every test to pass. Measured on 2026-11-11 at the working tree after `f39199b` (the v0.4.3 tag plus the changes listed under
-"Unreleased" in the changelog):
+Expect every test to pass. Measured on 2026-11-11 on the tree that became 0.4.4, before its last fixes (the v0.4.3 tag plus the changes
+listed under "0.4.4" in the changelog), so the totals are close and not exact:
 
 | platform | result |
 |---|---|
@@ -482,8 +482,8 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_injection_eval.py`, `test_adaptive_attacker.py`, `test_self_disclosure_eval.py` | injection evaluation corpus and per-family scoring; the adaptive-attacker protocol; self-disclosure stripping over recorded catalogs |
 | `test_docs_inventory.py`, `test_docs_links.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository, and the README links to its own sections by `#anchor` |
 | `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, no paragraph in the front-door documents or the guide is longer than 900 characters (700 in the README, 500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
-| `test_docs_figures.py` | the README stays under 260 lines; the reading path's word counts and the stated size of the product documentation are `wc -w` counts; the split of the exemplar detector's 18.1% and the upper bounds beside 0.0% cells match the committed data; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
-| `test_docs_unreleased.py` | the README has one note that PyPI has an older version and links the changelog while "Unreleased" is not empty, and no inline "on main, after 0.4.3"; a statement in `docs/guide.md` about a feature under "Unreleased" says "on main, after 0.4.3" until it is released; a new "Added" entry has to be listed in the test |
+| `test_docs_figures.py` | the README stays at 140 lines or fewer; the reading path's word counts and the stated size of the product documentation are `wc -w` counts; the injection table's rules column and its sums match the committed corpus and table; the upper bounds beside 0.0% cells are Wilson bounds; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
+| `test_docs_unreleased.py` | while "Unreleased" in the changelog is empty, no document carries a "on main, after <version>" qualifier and the README has no note that PyPI has an older version; while it is not empty, the README has that note and the guide marks features under "Unreleased" |
 | `test_import_declarations.py` | every third-party package that `src/intentshield` imports is declared in `pyproject.toml` |
 | `test_workflow_files.py` | the workflow files parse (no `: ` in a plain step name), nothing installs the removed `dev` extra, and every supported Python has a classifier and a CI job |
 | `test_coverage_study.py`, `test_security_review_counts.py` | coverage-study instrumentation; `docs/security-review.md` table counts equal its finding rows |
@@ -493,14 +493,16 @@ For focused investigation, use the relevant file rather than repeating everythin
 | Files | Covered behavior |
 |---|---|
 | `test_hook_fidelity.py` | the matrix: stub hook replies, config generation, row scoring, taxonomy, plan and summarizer |
-| `test_hook_fidelity_stub.py`, `test_hook_fidelity_model_lane.py`, `test_hook_fidelity_model_arms.py` | the model-free stub endpoint for three wire formats; the local-model lane; the real-model arms' counts from committed rows |
+| `test_hook_fidelity_stub.py`, `test_hook_fidelity_model_lane.py`, `test_hook_fidelity_model_arms.py` | the model-free stub endpoint for three wire formats; the local-model arm; the real-model arms' counts from committed rows |
 | `test_hook_fidelity_claude_lane.py`, `test_hook_fidelity_gemini_lane.py`, `test_hook_fidelity_cursor.py`, `test_hook_fidelity_codex_matrices.py` | per-harness cell lists, run modes, budgets and sign-off files; the Codex matrices and report |
-| `test_hook_fidelity_pty.py`, `test_hook_fidelity_pty_plan_and_observer.py` | the interactive terminal lane: terminal-text cleaner, plan, outcome classifier, driver against a fake terminal |
+| `test_hook_fidelity_pty.py`, `test_hook_fidelity_pty_plan_and_observer.py` | the interactive terminal runs: terminal-text cleaner, plan, outcome classifier, driver against a fake terminal |
 | `test_hook_fidelity_compare.py`, `test_hook_fidelity_compare_arms.py`, `test_hook_fidelity_compare_rerun_and_shim.py`, `test_hook_fidelity_guards.py` | the head-to-head runner, the wrapped, allow and deny-all arms, `--on-empty allow` cells, guard byte capture and replay |
 | `test_hook_fidelity_detect.py`, `test_hook_fidelity_fresh_report.py` | the decision comparison: fixtures, reply classification, metrics; a guard never run on a row is excluded, not scored; `--current-rules` scores IntentShield with the code in the checkout; `overlap_check.py` names an item that matches the tests and is not pinned |
 | `test_hook_fidelity_coverage.py`, `test_hook_fidelity_linux_probe.py` | the coverage re-run tooling; the Linux `/proc` probe's case matrix and committed rows |
-| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` carries the matrix and build counts of `benchmarks/hook_fidelity/report_numbers.py` and stays under 2,450 words beside its appendix, which embeds exactly the script's output; the 467-fixture set is rescored without the items now in the rules' tests; one build count per harness is used in every document; the report carries its limits and no process wording, every percentage next to its k/n is the rounding of that k/n, and the old "registered in advance" wording does not return |
-| `test_hook_fidelity_study_numbers.py`, `test_hook_fidelity_reproduce.py` | every figure the study cites, recomputed from committed rows; a clean clone regenerates the detection tables without the guard clones |
+| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` carries the matrix and build counts of `benchmarks/hook_fidelity/report_numbers.py` and stays under 2,650 words; its appendix embeds exactly the script's output; the 467-fixture set is rescored without the items now in the rules' tests; one build count per harness is used in every document; the report carries its limits and no process wording, every percentage matches its k/n, and "registered in advance" does not return |
+| `test_hook_fidelity_study_numbers.py`, `test_hook_fidelity_reproduce.py` | the counts and ranges in the committed rows that the study quoted, recomputed from the rows; a clean clone regenerates the detection tables without the guard clones |
+
+The study's working notes are not in this tree; they are on the `research-notes` branch. The checks of their wording and numbers (the study's status lines, its glossary, its section 14, the contribution history's section numbers, the corpus inventory's counts and the claims about the order of writing in the notes) went with them and live on that branch. The checks of the report, the data under `results/` and the code stay here.
 
 Example:
 

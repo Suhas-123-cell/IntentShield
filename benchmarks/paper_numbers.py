@@ -136,7 +136,7 @@ def model_report(model_dir: Path, grid: list[dict[str, Any]], reps: int) -> dict
 
 
 def headline(models: dict[str, dict[str, Any]]) -> list[str]:
-    """The strings the README quotes: paired n per model and the gateway minus baseline user_task
+    """The strings the README and docs/benchmarks.md quote: paired n per model and the gateway minus baseline user_task
     range across the agents (points, from the unrounded differences)."""
     diffs = {m: h["user_task_gateway_minus_baseline"] for m, h in models.items()
              if h["user_task_gateway_minus_baseline"] is not None}

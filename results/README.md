@@ -1,6 +1,6 @@
 # Results behind the papers
 
-Raw outputs of every experiment `docs/research-notes/icse27-demo/main.tex` and `docs/research-notes/artifact-paper.md` cite,
+Raw outputs of every experiment [main.tex](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/icse27-demo/main.tex) and [artifact-paper.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/artifact-paper.md) cite,
 verified on 2026-10-20. Write numbers from these files, not from older notes.
 
 ## Regenerate
@@ -85,7 +85,7 @@ verified, because they carry no provenance. The qwen2.5:7b `none`, `baseline` an
 2026-10-19; the originals (2026-10-12/13) predated gateway and hook fixes.
 
 Runs from v12 on carry their commit, intent model hash, Ollama model digest and container image in `MANIFEST.json`; older runs
-have `"provenance": null`, and their dates and commits are in `docs/research-notes/artifact-paper.md` §4. Only those three qwen
+have `"provenance": null`, and their dates and commits are in [artifact-paper.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/artifact-paper.md) §4. Only those three qwen
 files have provenance; the other 19 of the 22 trace files are earlier runs on older code: every `hooks` arm,
 `gateway-prompt-guard` and all the llama3.1:8b and ornith:9b main arms are MSB v8, the Gemini arms v9, `gateway-intent-veto` v10
 and `gateway-intent-advisory` v11 (`source` in `MANIFEST.json`).
@@ -93,7 +93,7 @@ and `gateway-intent-advisory` v11 (`source` in `MANIFEST.json`).
 **What does not replay offline.** `paper_numbers.py` and the injection table's rules column do; the
 rest needs inputs or services that are not in this directory: the exemplar index
 (`artifacts/exemplars`, built from the e5 embedder) and Prompt Guard 2 scores (Groq), so the
-exemplar and Prompt Guard columns are the committed reports only; the MCPTox-Benchmark and
+exemplar and Prompt Guard columns are the committed reports only (`injection/table.txt` is the run of 2026-10-21 with the rules as they were before 0.3.5; the figures in `docs/benchmarks.md` are from a rerun on 2026-11-12 with the 0.4.4 rules and the same exemplar index, whose output is not committed); the MCPTox-Benchmark and
 InjecAgent checkouts (`artifacts/data/`); the LLM judge runs (`judge/`, Groq, Gemini or Ollama) and the
 adaptive-attacker runs (`adaptive-*.json`, a rewriting model); and the MSB trace files themselves,
 which need Docker and the agent model to regenerate, 19 of which carry `provenance: null`.
@@ -136,7 +136,7 @@ says:
 | `injection/dataset.jsonl` rows whose `source` starts with `mcptox_` (poisoned and clean tool descriptions and their translations); `mcptox/` | the MCPTox-Benchmark | see the upstream repository |
 | `injection/agentdojo-strings.jsonl`; `agentdojo/` (a replay of AgentDojo's published GPT-4o logs) | AgentDojo | see the upstream repository |
 | InjecAgent (https://github.com/uiuc-kang-lab/InjecAgent): only per-family counts in `injection/report-*.json` and `adaptive-*.json`; none of its data is committed | InjecAgent | see the upstream repository |
-| `hook-fidelity/` | the recorded output of third-party command-line tools (Claude Code, Codex CLI, Gemini CLI and the guards in `docs/research-notes/hook-fidelity/hook-fidelity-corpus.md`) run for measurement; vendor documentation is cited by URL and sha256, not copied | the tools' own terms; see `hook-fidelity/README.md` |
+| `hook-fidelity/` | the recorded output of third-party command-line tools (Claude Code, Codex CLI, Gemini CLI and the guards in [hook-fidelity-corpus.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-corpus.md)) run for measurement; vendor documentation is cited by URL and sha256, not copied | the tools' own terms; see `hook-fidelity/README.md` |
 
 The `generated_output_*` and `hard_*` rows of `injection/` were generated for this project (`docs/detectors.md`) and are under the repository
 licence.

@@ -2,6 +2,9 @@
 
 All of these are optional and evidence-only; the README keeps the summary.
 
+The PyPI package ships no trained model and has no `ml` extra. The detectors are off by default and their PyTorch path is not exercised
+in CI, so the packages they need (PyTorch, transformers, sentencepiece, protobuf) are listed in `requirements-ml.txt` for a clone.
+
 ## Train the local intent classifier
 
 Install the optional training runtime and fine-tune the checked-in,
@@ -128,13 +131,17 @@ injections caught and the share of benign texts flagged:
 | rules + Prompt Guard + exemplars on outputs | 58.5% | 2.9% | 15/142 |
 | any of the four (rules, classifier, Prompt Guard, exemplars on outputs) | 70.6% | 24.9% (189/758) | 113/142 |
 
-The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked (1,505 of the 2,959 injections in all); on the remaining independent families the rules catch 2.1% (30/1,454) and rules+exemplars 18.1% (263/1,454).
+The rows above are the committed run of 2026-10-21, with the rules as they were before 0.3.5. Rerun on 2026-11-12 with the 0.4.4 rules,
+the rules catch 50.8% of the injections and flag 2.1% of benign texts (16/758), and rules + exemplars catch 58.4% and flag 2.4%
+(18/758); [benchmarks.md](benchmarks.md#detail-behind-the-headline) has that run by family. Prompt Guard 2 and the classifier were not rerun.
 
-That 18.1% is mostly in distribution for the exemplar index. The index is built from the train split of the same dataset (MCPTox
-descriptions, outputs written by a local model in four injection styles, translations and hard negatives), and 228 of the 263 hits
+The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked (1,505 of the 2,959 injections in all). On the remaining 1,454, rules + exemplars catch 19.2% (279) and the rules 3.8% (55); without the 27 AgentDojo `ignore_previous` rows that a 0.3.5 rule was written from, 17.7% (252 of 1,427) and 2.0% (28). In the 2026-10-21 run these were 18.1% (263/1,454) and 2.1% (30/1,454).
+
+That exemplar figure is mostly in distribution for the exemplar index. The index is built from the train split of the same dataset (MCPTox
+descriptions, outputs written by a local model in four injection styles, translations and hard negatives), and 228 of the 279 hits
 are on the 346 generated-output test rows, which share their styles and generator with the train rows and differ only by MCPTox
-server. On the 1,108 injections from sources the index never saw (AgentDojo `direct` and `ignore_previous`, InjecAgent base)
-rules+exemplars catch 35 (3.2%) and the rules alone 17 (1.5%), read from the per-family rows of `results/injection/table.txt`.
+server. On the 1,081 injections from sources the index never saw and no rule was written from (AgentDojo `direct`, InjecAgent base)
+rules + exemplars catch 24 (2.2%) and the rules 17 (1.6%).
 
 Sources: the rules, Prompt Guard, exemplars-on-outputs and combination rows are
 `results/injection/report-rules-pg-exemplars.json` (`table.txt` is its per-family print-out); the
@@ -153,7 +160,9 @@ Wilson 95% intervals and an exact McNemar test on the paired verdicts:
 
 | source | | rules | Prompt Guard 2 | only rules / only PG2 | p |
 |---|---|---|---|---|---|
-| InjecAgent (neither tuned on it) | attacks | 1,071/2,108 50.8% [48.7, 52.9] | 1,060/2,108 50.3% [48.2, 52.4] | 17 / 6 | 0.035 |
+| InjecAgent, all rows | attacks | 1,071/2,108 50.8% [48.7, 52.9] | 1,060/2,108 50.3% [48.2, 52.4] | 17 / 6 | 0.035 |
+| InjecAgent, "enhanced" rows only (a literal "Ignore all previous instructions" marker) | attacks | 1,054/1,054 100% | 1,054/1,054 100% | 0 / 0 | - |
+| InjecAgent, base rows only | attacks | 17/1,054 1.6% [1.0, 2.6] | 6/1,054 0.6% [0.3, 1.2] | 17 / 6 | 0.035 |
 | AgentDojo (rules partly written from it) | attacks | 108/135 80.0% | 34/135 25.2% | 74 / 0 | <0.001 |
 | AgentDojo | benign | 0/397 | 3/397 | 0 / 3 | 0.25 |
 | LLM-written plain-language outputs | attacks | 13/346 3.8% | 0/346 0.0% | 13 / 0 | <0.001 |
@@ -162,9 +171,10 @@ Wilson 95% intervals and an exact McNemar test on the paired verdicts:
 | hard benign texts | benign | 15/142 10.6% | 12/142 8.5% | 3 / 0 | 0.25 |
 
 On the 1,427 injections independent of the rules (InjecAgent base, the LLM-written outputs, AgentDojo
-`direct`) the rules catch 30 (2.1%) and Prompt Guard 2 catches 6 (0.4%). Read together: on explicit
-injections neither was tuned on, the rules and Prompt Guard 2 are level (half a point apart on InjecAgent);
-both miss plain-language injections; the rules' large leads are on data they were written from. The rules
+`direct`) the rules caught 30 (2.1%) in this run, which used the 0.3.5 rules (28 with the 0.4.4 rules), and Prompt Guard 2 caught 6 (0.4%). Read together: the
+two are level on the full InjecAgent set (half a point apart), but that is because both catch every "enhanced" row, which carries a
+literal override marker; on the base rows the rules catch 1.6% and Prompt Guard 2 0.6%. Both miss plain-language injections; the rules'
+large leads are on data they were written from. The rules
 are an offline, keyless equal of Prompt Guard 2 on explicit attacks, not a better detector.
 
 Each detector covers different ground:
