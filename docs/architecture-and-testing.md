@@ -370,6 +370,8 @@ Expect every test to pass. Measured on 2026-11-12 on the working tree released a
 | platform | result |
 |---|---|
 | macOS, Python 3.14 | 15135 passed, 5 skipped |
+| Linux container, Python 3.11, with `--cov` (92.1% covered; the floor is 85%) | 15130 passed, 10 skipped |
+| Linux container, Python 3.14, with `--cov` (92.2% covered) | 15130 passed, 10 skipped |
 
 The totals change with every commit, so the figure to trust is the latest CI run (the badge in the README links to it). The number of
 skips depends on the machine (a handful on macOS, more on Linux, which skips the platform-specific tests) and on whether the optional
