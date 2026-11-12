@@ -255,7 +255,7 @@ def tune(index: ExemplarIndex, rows: list[tuple[str, bool, str]], max_fpr: float
 
 
 def _rows(path: Path) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()] if path.exists() else []
 
 
 def main(argv: list[str] | None = None) -> None:

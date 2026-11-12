@@ -23,6 +23,9 @@ DENY, ASK = "deny", "ask"
 # ``assess_shell`` and ``assess_file``; empty means the process's own).
 _WORKDIR: ContextVar[str] = ContextVar("intentshield_workdir", default="")
 
+# Home directories the event names beyond the running user's own (see ``paths._homes``), set the same way.
+_EVENT_HOMES: ContextVar[tuple[str, ...]] = ContextVar("intentshield_event_homes", default=())
+
 
 def _is_opt(arg: str, *names: str) -> bool:
     """True when ``arg`` spells one of the long options ``names`` whole or cut short, as getopt_long and git's option parser

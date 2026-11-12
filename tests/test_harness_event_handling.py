@@ -138,7 +138,7 @@ def test_a_good_deadline_option_arms_the_timer(monkeypatch, tmp_path):
     monkeypatch.setenv("INTENTSHIELD_HOOK_TRANSLATE", "on")   # the test environment turns the translation (and the deadline) off
     monkeypatch.setattr(harness.translation, "resolve", lambda *a, **k: harness.translation.Semantics("claude", None))
     armed = []
-    monkeypatch.setattr(harness, "_arm_deadline", lambda h, s: armed.append(s))
+    monkeypatch.setattr(harness.cli, "_arm_deadline", lambda h, s: armed.append(s))
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
                                                               "tool_input": {"command": "ls"}})))
     harness.main(["claude", "--db", str(tmp_path / "h.db"), "--deadline", "7.5", "--no-threat-memory"])
@@ -164,12 +164,17 @@ def test_the_timer_clamps_a_value_past_the_platform_limit(monkeypatch):
 
 # --- an event piped in by hand is not a run of the harness --------------------------------------------------------------------
 
-def _installed(home: Path) -> Path:
+def _installed(home: Path, minutes_ago: float = 0.0) -> Path:
+    """The install of Claude Code's hooks, recorded as made ``minutes_ago`` minutes ago (so that a hook run made right after is
+    later than it, whatever the clock's step)."""
     hook = home.parent / "bin" / "intentshield-hook"   # a program that exists, named as the installer names it
     hook.parent.mkdir(parents=True, exist_ok=True)
     hook.write_text("#!/bin/sh\nexit 0\n")
     hook.chmod(0o755)
-    return install.install("claude", "user", hook=str(hook), home=home)
+    path = install.install("claude", "user", hook=str(hook), home=home)
+    if minutes_ago:
+        install._record_install(path, home, time.time() - 60 * minutes_ago)
+    return path
 
 
 @pytest.fixture(autouse=True)
@@ -199,8 +204,7 @@ def test_an_event_from_a_process_that_is_not_the_harness_is_kept_apart_from_its_
 
 def test_a_hand_piped_event_does_not_turn_doctors_missing_run_into_ok(tmp_path, capsys):
     home = tmp_path / "home"
-    _installed(home)
-    time.sleep(0.01)
+    _installed(home, minutes_ago=1)
     g = HarnessGuard(home / ".intentshield" / "hooks.db")
     g.from_harness = False
     handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": "demo", "prompt": "x"}, g)
@@ -213,8 +217,7 @@ def test_a_hand_piped_event_does_not_turn_doctors_missing_run_into_ok(tmp_path, 
 
 def test_a_run_by_the_harness_is_ok(tmp_path, capsys):
     home = tmp_path / "home"
-    _installed(home)
-    time.sleep(0.01)
+    _installed(home, minutes_ago=1)
     g = HarnessGuard(home / ".intentshield" / "hooks.db")
     g.from_harness = True
     handle("claude", {"hook_event_name": "UserPromptSubmit", "session_id": "real", "prompt": "x"}, g)

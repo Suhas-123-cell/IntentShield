@@ -14,7 +14,7 @@ Every entry is gated before it is loaded, and a rejected entry is reported with 
 loaded: a regex must pass ``signatures.safety_problem`` (bounded length, no nested quantifiers,
 lookarounds or backreferences, enough literal letters, no addresses or numbers) and match no benign
 gate text; a fingerprint must be specific (``threat_memory.MIN_WORDS``) and contained in no benign
-text; a domain indicator may not name shared infrastructure (``hostlists.PROTECTED``, tenant platforms bare).
+text; a domain indicator may not name shared infrastructure (``hostlists.PROTECTED_FIRST_PARTY``, tenant platforms bare).
 
 Packs only add evidence. The format has no way to remove or relax a built-in rule, allowlist a value
 or authorize a call; fields that try (``allowlist``, ``disable``, ...) are reported and ignored, the

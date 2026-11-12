@@ -292,92 +292,62 @@ def _covers_mcp(harness: str, matcher: str) -> bool:
     return any(re.match(r"\^?\(*(?:\?:)?mcp_", alt.strip()) for alt in matcher.split("|"))
 
 
-def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, home: Path,
-                   project: Path | None = None, cwd: Path | None = None) -> bool:
-    """Checks one settings file; False when it holds none of our hooks."""
-    subject = f"{harness} ({path})"
-    try:
-        hooks = _hooks(harness, path)
-    except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
-        report.line("FAIL", subject, f"cannot read the settings file: {exc}")
-        return True
-    if not hooks:
-        return False
-    problems_before = report.problems
-    before, why_stale = translation.recorded_version(harness, home)
-    version = _harness_version(harness, home)
-    if before is None and why_stale and not why_stale.startswith("no version"):
-        # What the hook saw until this run: it sent every ask as a refusal, because it could not trust the recorded version.
-        report.line("note", subject, f"the recorded harness version was stale ({why_stale.split(' (run')[0]}); refreshed now. "
-                                     "Until then the hook sent every ask as a refusal")
-    missing = [event for event in REQUIRED[harness] if event not in hooks]
-    if missing:
-        report.line("FAIL", subject, f"no IntentShield hook for {', '.join(missing)}; run `intentshield install {harness}`")
-    commands = {h["command"] for handlers in hooks.values() for h in handlers}
-    for command in sorted(commands):
-        argv = shlex.split(command)
-        program = argv[0]
-        if os.path.isabs(program):
-            if not (os.path.isfile(program) and os.access(program, os.X_OK)):
-                report.line("FAIL", subject, f"the hook executable {program} does not exist (a deleted environment?); "
-                                             f"run `intentshield install {harness}` again from the one you use")
-            elif dead := _dead_interpreter(program):
-                level, effect = _dead_effect(harness, version, hooks)
-                report.line(level, subject, f"the hook executable {program} starts with #!{dead}, which does not "
-                                            "exist (an environment whose Python was removed or upgraded?): it exits 126, so "
-                                            f"{effect}; "
-                                            f"run `intentshield install {harness}` again from the environment you use")
-        else:
-            where = shutil.which(program)
-            report.line("FAIL", subject, f"the hook command names {program!r} without a path"
-                        + (f" (here it is {where}, but the harness may run with another PATH)" if where else
-                           ", and it is not on PATH") + f"; run `intentshield install {harness}` again")
-        if "--judge" in argv:
-            provider = argv[argv.index("--judge") + 1].partition(":")[0] if argv.index("--judge") + 1 < len(argv) else ""
-            key = _KEYS.get(provider)
-            stored = _stored_keys(home)
-            # The hook is a child of the harness: what this shell exports is not proof that the hook sees it.
-            if provider == "custom" and "INTENTSHIELD_JUDGE_URL" not in stored:
-                report.line("warn" if os.getenv("INTENTSHIELD_JUDGE_URL") else "FAIL", subject,
-                            "the custom judge has no INTENTSHIELD_JUDGE_URL in "
-                            f"{home / '.intentshield' / '.env'}"
-                            + (" (it is set in this shell only, which a harness started elsewhere does not inherit)"
-                               if os.getenv("INTENTSHIELD_JUDGE_URL") else "; every call runs on the rules alone")
-                            + f". Run `intentshield install {harness} --judge custom:<model> --judge-url <URL>`")
-            if key and key not in stored:
-                report.line("warn" if os.getenv(key) else "FAIL", subject,
-                            f"the {provider} judge has no {key} in {home / '.intentshield' / '.env'}"
-                            + (" (it is set in this shell only, which a harness started from the Dock or an IDE "
-                               "does not inherit, so the hook may run on the rules alone)" if os.getenv(key) else
-                               "; every call runs on the rules alone")
-                            + f". Run `intentshield install {harness} --judge {provider}` to store it")
-        if "--builtin-tools" in argv and harness == "claude":
-            matchers = [h.get("matcher") or "" for h in hooks.get("PreToolUse", [])]
-            if not any("Bash" in m for m in matchers):
-                report.line("FAIL", subject, "the hook reads built-in tools but its PreToolUse matcher does not send "
-                                             "Bash; run `intentshield install claude --builtin-tools` again")
-        if "--gemini-ask" in argv and harness == "gemini":
-            _check_gemini_ask(report, subject, version)
-    if why := _disabled(harness, path, home, cwd):
-        report.line("FAIL", subject, f"the hooks are installed but switched off: {why}")
-    for note in _loosening_settings(harness, path, home, cwd):
-        report.line("warn", subject, note)
-    if harness in translation.LAUNCHER_HARNESSES:
-        plain = [h for event in translation.CALL_EVENTS for h in hooks.get(event, []) if translation.LAUNCHER not in h["command"]]
-        if plain:
-            report.line("warn", subject, "the hook that checks calls was installed without the verdict translation (no launcher, "
-                                         "no deadline): a hook that cannot start, or a slow one, lets the call run on every "
-                                         f"harness measured; run `intentshield install {harness}` again")
-    gemini_ask = any("--gemini-ask" in h["command"] for handlers in hooks.values() for h in handlers)
-    for level, message in translation.findings(harness, version, gemini_ask):
-        report.line(level, subject, message)
-    for event, what in ((_CALL_EVENT.get(harness), "call is checked"),
-                        (_RESULT_EVENT.get(harness), "result is scanned or tainted")):
-        for handler in hooks.get(event or "", []):
-            matcher = handler.get("matcher")
-            if matcher is not None and not _covers_mcp(harness, matcher):
-                report.line("FAIL", subject, f"the {event} matcher {matcher!r} does not match MCP tools, so no MCP "
-                                             f"{what}; run `intentshield install {harness}` again")
+def _check_judge(report: Report, subject: str, harness: str, argv: list[str], home: Path) -> None:
+    """The judge the hook is started with: is its key or address stored where the hook, a child of the harness, reads it."""
+    provider = argv[argv.index("--judge") + 1].partition(":")[0] if argv.index("--judge") + 1 < len(argv) else ""
+    key = _KEYS.get(provider)
+    stored = _stored_keys(home)
+    # The hook is a child of the harness: what this shell exports is not proof that the hook sees it.
+    if provider == "custom" and "INTENTSHIELD_JUDGE_URL" not in stored:
+        report.line("warn" if os.getenv("INTENTSHIELD_JUDGE_URL") else "FAIL", subject,
+                    "the custom judge has no INTENTSHIELD_JUDGE_URL in "
+                    f"{home / '.intentshield' / '.env'}"
+                    + (" (it is set in this shell only, which a harness started elsewhere does not inherit)"
+                       if os.getenv("INTENTSHIELD_JUDGE_URL") else "; every call runs on the rules alone")
+                    + f". Run `intentshield install {harness} --judge custom:<model> --judge-url <URL>`")
+    if key and key not in stored:
+        report.line("warn" if os.getenv(key) else "FAIL", subject,
+                    f"the {provider} judge has no {key} in {home / '.intentshield' / '.env'}"
+                    + (" (it is set in this shell only, which a harness started from the Dock or an IDE "
+                       "does not inherit, so the hook may run on the rules alone)" if os.getenv(key) else
+                       "; every call runs on the rules alone")
+                    + f". Run `intentshield install {harness} --judge {provider}` to store it")
+
+
+def _check_command(report: Report, subject: str, harness: str, command: str, hooks: dict[str, list[dict[str, str]]],
+                   home: Path, version: tuple[int, ...] | None) -> None:
+    """One hook command: its program exists and starts, and the judge and the flags it carries are usable."""
+    argv = shlex.split(command)
+    program = argv[0]
+    if os.path.isabs(program):
+        if not (os.path.isfile(program) and os.access(program, os.X_OK)):
+            report.line("FAIL", subject, f"the hook executable {program} does not exist (a deleted environment?); "
+                                         f"run `intentshield install {harness}` again from the one you use")
+        elif dead := _dead_interpreter(program):
+            level, effect = _dead_effect(harness, version, hooks)
+            report.line(level, subject, f"the hook executable {program} starts with #!{dead}, which does not "
+                                        "exist (an environment whose Python was removed or upgraded?): it exits 126, so "
+                                        f"{effect}; "
+                                        f"run `intentshield install {harness}` again from the environment you use")
+    else:
+        where = shutil.which(program)
+        report.line("FAIL", subject, f"the hook command names {program!r} without a path"
+                    + (f" (here it is {where}, but the harness may run with another PATH)" if where else
+                       ", and it is not on PATH") + f"; run `intentshield install {harness}` again")
+    if "--judge" in argv:
+        _check_judge(report, subject, harness, argv, home)
+    if "--builtin-tools" in argv and harness == "claude":
+        matchers = [h.get("matcher") or "" for h in hooks.get("PreToolUse", [])]
+        if not any("Bash" in m for m in matchers):
+            report.line("FAIL", subject, "the hook reads built-in tools but its PreToolUse matcher does not send "
+                                         "Bash; run `intentshield install claude --builtin-tools` again")
+    if "--gemini-ask" in argv and harness == "gemini":
+        _check_gemini_ask(report, subject, version)
+
+
+def _check_runs(report: Report, subject: str, harness: str, path: Path, home: Path, runs: Runs | None, project: Path | None,
+                problems_before: int) -> None:
+    """Whether the harness has run the hooks since install changed them."""
     # When install last changed the hooks (not the file's modification time, which every unrelated edit moves).
     installed = install.installed_at(path, home) or path.stat().st_mtime
     last = runs.last(harness, project) if runs is not None else None
@@ -412,6 +382,56 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last))
         note = " (Cursor's hooks cannot be told from an event piped in by hand)" if harness == "cursor" else ""
         report.line("ok", subject, f"hooks installed; last ran {when}{note}")
+
+
+def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, home: Path,
+                   project: Path | None = None, cwd: Path | None = None) -> bool:
+    """Checks one settings file; False when it holds none of our hooks."""
+    subject = f"{harness} ({path})"
+    try:
+        hooks = _hooks(harness, path)
+    except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+        report.line("FAIL", subject, f"cannot read the settings file: {exc}")
+        return True
+    if not hooks:
+        return False
+    problems_before = report.problems
+    before, why_stale = translation.recorded_version(harness, home)
+    version = _harness_version(harness, home)
+    if before is None and why_stale and not why_stale.startswith("no version"):
+        # What the hook saw until this run: it sent every ask as a refusal, because it could not trust the recorded version.
+        report.line("note", subject, f"the recorded harness version was stale ({why_stale.split(' (run')[0]}); refreshed now. "
+                                     "Until then the hook sent every ask as a refusal")
+    missing = [event for event in REQUIRED[harness] if event not in hooks]
+    if missing:
+        report.line("FAIL", subject, f"no IntentShield hook for {', '.join(missing)}; run `intentshield install {harness}`")
+    if harness == "codex" and (switched_off := install.codex_hooks_switched_off(path)):
+        report.line("warn", subject, f"[features] {switched_off} is false, which can switch Codex's hooks off, so these hooks "
+                                     "may not run; remove that line or set it to true")
+    commands = {h["command"] for handlers in hooks.values() for h in handlers}
+    for command in sorted(commands):
+        _check_command(report, subject, harness, command, hooks, home, version)
+    if why := _disabled(harness, path, home, cwd):
+        report.line("FAIL", subject, f"the hooks are installed but switched off: {why}")
+    for note in _loosening_settings(harness, path, home, cwd):
+        report.line("warn", subject, note)
+    if harness in translation.LAUNCHER_HARNESSES:
+        plain = [h for event in translation.CALL_EVENTS for h in hooks.get(event, []) if translation.LAUNCHER not in h["command"]]
+        if plain:
+            report.line("warn", subject, "the hook that checks calls was installed without the verdict translation (no launcher, "
+                                         "no deadline): a hook that cannot start, or a slow one, lets the call run on every "
+                                         f"harness measured; run `intentshield install {harness}` again")
+    gemini_ask = any("--gemini-ask" in h["command"] for handlers in hooks.values() for h in handlers)
+    for level, message in translation.findings(harness, version, gemini_ask):
+        report.line(level, subject, message)
+    for event, what in ((_CALL_EVENT.get(harness), "call is checked"),
+                        (_RESULT_EVENT.get(harness), "result is scanned or tainted")):
+        for handler in hooks.get(event or "", []):
+            matcher = handler.get("matcher")
+            if matcher is not None and not _covers_mcp(harness, matcher):
+                report.line("FAIL", subject, f"the {event} matcher {matcher!r} does not match MCP tools, so no MCP "
+                                             f"{what}; run `intentshield install {harness}` again")
+    _check_runs(report, subject, harness, path, home, runs, project, problems_before)
     return True
 
 
@@ -555,10 +575,7 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
     proxied = 0
     started: list[tuple[Path, str, dict[str, Any]]] = []
     unstarted: list[Path] = []
-    user_files = (home / ".claude.json", home / ".cursor" / "mcp.json", home / ".gemini" / "settings.json",
-                  home / ".codex" / "config.toml")
-    project_files = (cwd / ".mcp.json", cwd / ".cursor" / "mcp.json", cwd / ".gemini" / "settings.json",
-                     cwd / ".vscode" / "mcp.json")
+    user_files, project_files = install.client_config_files(home, cwd)
     for path in (*user_files, *project_files):
         if path.exists():
             targets: list[tuple[Path, str, dict[str, Any]]] = []
@@ -576,7 +593,9 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
         print(f"\n{report.problems} problem(s)" + (f", {report.warnings} warning(s)" if report.warnings else ""))
     elif not guarded and not proxied:
         print("\nnothing is installed: no IntentShield hooks and no wrapped MCP server were found, so nothing is guarded. "
-              "Install the hooks with `intentshield install <harness>` (claude, codex, cursor or gemini).")
+              "Install the hooks with `intentshield install <harness>` (claude, codex, cursor or gemini). That is as far as "
+              "doctor can tell: it reads the usual config files of each client and those of this directory, and a server "
+              "wrapped in some other file is checked with `intentshield scan <file>`.")
     elif report.warnings:
         print(f"\nno problems found, {report.warnings} warning(s) above")
     else:

@@ -154,16 +154,20 @@ extend-exclude = ["artifacts", "results", "benchmarks/hook_fidelity/prevalence"]
 [tool.ruff.lint]
 # Beyond the base set (E, F, W, I, B, UP): the families the whole tree already passes, so that they stay clean (shadowed builtins,
 # logging calls, debugger statements, version checks, banned relative-import tricks, blanket noqa and type: ignore, __future__),
-# unused noqa comments (RUF100) and a ceiling on a function's complexity (C901, below).
-select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT", "RUF100", "C901"]
+# unused noqa comments (RUF100), URLs opened with any scheme (S310: the package sends its requests through ``outbound``) and a
+# ceiling on a function's complexity (C901, below).
+select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT", "RUF100", "C901", "S310"]
 ignore = ["E741", "E731", "B008", "B023", "B905", "UP035", "UP037"]
 
 [tool.ruff.lint.mccabe]
-# A ceiling just above the most complex function today (33: shell._read, rules._net_hit, benchmarks cmd_run); lower it as those
-# are split.
-max-complexity = 35
+# A ceiling at the most complex function of the package today (25: dangerous.rules._git_hit, shell.heredocs._prepare). Five study
+# scripts under benchmarks/ are above it and are listed below; the package is held to it.
+max-complexity = 25
 
 [tool.ruff.lint.per-file-ignores]
+# S310 (a URL opened with any scheme) is kept for the package: the tests and the study scripts open addresses of their own.
+"tests/*.py" = ["S310"]
+"benchmarks/**/*.py" = ["S310"]
 # The corpus readings are prose data (long quoted lines, printf-style row builders): not code style.
 "benchmarks/hook_fidelity/corpus_build/*.py" = ["E501", "UP031", "I001"]
 # Guard capture and replay: long prose strings (reasons, quoted payloads, table rows) are data, not code style.
@@ -173,3 +177,9 @@ max-complexity = 35
 "benchmarks/hook_fidelity/compare.py" = ["E501"]
 # The local-model lane: prose docstring, table headers and row builders are data, not code style.
 "benchmarks/hook_fidelity/model_lane.py" = ["E501"]
+# Drivers of the studies (one long procedure each: a campaign, a pty session, a report), above the package's ceiling.
+"benchmarks/hook_fidelity/pty_lane.py" = ["C901"]
+"benchmarks/hook_fidelity/run.py" = ["C901"]
+"benchmarks/hook_fidelity/stub_model.py" = ["C901"]
+"benchmarks/hook_fidelity/summarize.py" = ["C901"]
+"benchmarks/msb.py" = ["C901"]

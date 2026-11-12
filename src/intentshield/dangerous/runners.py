@@ -167,6 +167,56 @@ def _stdin_of(stage: _Stage) -> str:
     return "".join(f" {op} {shlex.quote(target)}" for op, target in stage.redirects if op in ("<", "<<<"))
 
 
+def _skip_flags(name: str, argv: list[str]) -> tuple[list[str], bool]:
+    """The words after a wrapper's flags (and the values those flags take). True when ``sudo`` was given a flag that starts a
+    shell, which is then handed the rest as one command line."""
+    shell_words = False
+    while argv and argv[0].startswith("-") and argv[0] != "--":
+        flag = argv.pop(0)
+        if name in ("sudo", "doas"):
+            flag = _canon(flag, _SUDO_LONG)
+            shell_words = shell_words or flag in _SHELL_WORDS
+        elif name == "env":
+            flag = _canon(flag, _ENV_LONG)
+        elif name in ("nice", "ionice"):
+            flag = _canon(flag, _NICE_LONG)
+        elif name in ("timeout", "gtimeout"):
+            flag = _canon(flag, _TIMEOUT_LONG)
+        if name in ("sudo", "doas") and flag in _SUDO_VALUED and argv:
+            argv.pop(0)
+        # env -S'cmd', --split-string=cmd
+        elif name == "env" and (split := re.fullmatch(r"-[iv0]*S(.+)|--split-string=(.*)", flag, re.S)):
+            try:
+                argv = [*shlex.split(split[1] or split[2]), *argv]
+            except ValueError:
+                pass
+        elif name == "env" and flag in ("-S", "--split-string") and argv:  # the program and its arguments, as one word
+            try:
+                argv = [*shlex.split(argv.pop(0)), *argv]
+            except ValueError:
+                pass
+        elif name == "env" and flag in ("-u", "-C", "--unset", "--chdir", "-a", "--argv0", "-P") and argv:
+            argv.pop(0)
+        elif name in ("nice", "ionice") and flag in ("-n", "-c", "-p", "--adjustment", "--class") and argv:
+            argv.pop(0)
+        elif name in ("timeout", "gtimeout") and flag in ("-s", "-k", "--signal", "--kill-after") and argv:
+            argv.pop(0)
+        elif name == "xargs" and flag in _XARGS_VALUED and argv:
+            argv.pop(0)
+    return argv, shell_words
+
+
+def _runner_tail(name: str, argv: list[str]) -> list[str]:
+    """What is left of a runner's words once its own settings are read: ``setarch``'s architecture, and the placeholders of
+    ``parallel`` and the values it is fed after ``:::``."""
+    if name == "setarch" and argv and argv[0] in _ARCH_WORDS:
+        argv.pop(0)
+    if name == "parallel" and (marks := [k for k, a in enumerate(argv) if a in (":::", "::::", ":::+", "::::+")]):
+        head, fed = argv[:marks[0]], [a for a in argv[marks[0] + 1:] if a not in (":::", "::::", ":::+", "::::+")]
+        argv = [*(a for a in head if not re.fullmatch(r"\{[^{}]{0,4}\}", a)), *fed]
+    return argv
+
+
 def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
     """Strips assignments, sudo, env, nohup, time... from the front. Returns the bare stage and what the wrappers carried: shell
     text they run (``("code", text)``, ``flock -c``, ``sudo -s``) and a limit that stopped the reading (``("note", why)``)."""
@@ -197,45 +247,9 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
         if name in _RUNNERS:
             argv, code = _read_runner(_RUNNERS[name], argv)
             inner.extend(("code", c) for c in code)
-            if name == "setarch" and argv and argv[0] in _ARCH_WORDS:
-                argv.pop(0)
-            if name == "parallel" and (marks := [k for k, a in enumerate(argv) if a in (":::", "::::", ":::+", "::::+")]):
-                head, fed = argv[:marks[0]], [a for a in argv[marks[0] + 1:] if a not in (":::", "::::", ":::+", "::::+")]
-                argv = [*(a for a in head if not re.fullmatch(r"\{[^{}]{0,4}\}", a)), *fed]
+            argv = _runner_tail(name, argv)
             continue
-        shell_words = False
-        while argv and argv[0].startswith("-") and argv[0] != "--":
-            flag = argv.pop(0)
-            if name in ("sudo", "doas"):
-                flag = _canon(flag, _SUDO_LONG)
-                shell_words = shell_words or flag in _SHELL_WORDS
-            elif name == "env":
-                flag = _canon(flag, _ENV_LONG)
-            elif name in ("nice", "ionice"):
-                flag = _canon(flag, _NICE_LONG)
-            elif name in ("timeout", "gtimeout"):
-                flag = _canon(flag, _TIMEOUT_LONG)
-            if name in ("sudo", "doas") and flag in _SUDO_VALUED and argv:
-                argv.pop(0)
-            # env -S'cmd', --split-string=cmd
-            elif name == "env" and (split := re.fullmatch(r"-[iv0]*S(.+)|--split-string=(.*)", flag, re.S)):
-                try:
-                    argv = [*shlex.split(split[1] or split[2]), *argv]
-                except ValueError:
-                    pass
-            elif name == "env" and flag in ("-S", "--split-string") and argv:  # the program and its arguments, as one word
-                try:
-                    argv = [*shlex.split(argv.pop(0)), *argv]
-                except ValueError:
-                    pass
-            elif name == "env" and flag in ("-u", "-C", "--unset", "--chdir", "-a", "--argv0", "-P") and argv:
-                argv.pop(0)
-            elif name in ("nice", "ionice") and flag in ("-n", "-c", "-p", "--adjustment", "--class") and argv:
-                argv.pop(0)
-            elif name in ("timeout", "gtimeout") and flag in ("-s", "-k", "--signal", "--kill-after") and argv:
-                argv.pop(0)
-            elif name == "xargs" and flag in _XARGS_VALUED and argv:
-                argv.pop(0)
+        argv, shell_words = _skip_flags(name, argv)
         if argv and argv[0] == "--":
             argv.pop(0)
         if name in ("timeout", "gtimeout") and argv:

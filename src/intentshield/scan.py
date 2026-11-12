@@ -182,7 +182,7 @@ def upstream_config(server: Server) -> dict[str, Any] | None:
     command, args = entry.get("command"), [str(a) for a in entry.get("args") or []]
     if command and Path(str(command)).stem == "intentshield-mcp" and "--config" in args:
         try:
-            upstream = json.loads(Path(args[args.index("--config") + 1]).read_text())["upstreams"][0]
+            upstream = json.loads(Path(args[args.index("--config") + 1]).read_text(encoding="utf-8"))["upstreams"][0]
             command, args = upstream["command"], upstream.get("args", [])
         except (OSError, ValueError, KeyError, IndexError, TypeError):
             return None
@@ -481,7 +481,7 @@ def load_pins(path: Path) -> dict[str, str]:
     """The saved tool hashes. A file that cannot be read as a {key: hash} object is not trusted as a baseline
     and is not lost either: it is copied to ``.bak`` before the next save replaces it, and the user is told."""
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return {}
     except OSError as exc:

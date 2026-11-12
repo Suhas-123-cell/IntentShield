@@ -525,8 +525,11 @@ def _stdio_target(path: Path, config: MCPProxyConfig) -> StdioServerParameters:
     names |= {"GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"} if config.judge or config.prompt_guard else set()
     # the proxy's own tokens as exported here, for an HTTP endpoint that is started this way
     names |= {"INTENTSHIELD_CONTROL_TOKEN", "INTENTSHIELD_AGENT_TOKEN"}
+    # The proxy logs each policy decision at INFO, among them the BLOCK of the canary call that the checks send on purpose; that
+    # line on the terminal reads as a failure, so the child logs warnings and worse unless the caller set a level.
+    level = {"INTENTSHIELD_LOG_LEVEL": os.environ.get("INTENTSHIELD_LOG_LEVEL", "WARNING")}
     return StdioServerParameters(
-        env={**get_default_environment(), **{name: os.environ[name] for name in names if name in os.environ}},
+        env={**get_default_environment(), **level, **{name: os.environ[name] for name in names if name in os.environ}},
         command=sys.executable,
         args=["-m", "intentshield.mcp_server", "--transport", "stdio", "--config", str(path)],
     )

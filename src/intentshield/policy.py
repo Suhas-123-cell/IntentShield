@@ -41,7 +41,7 @@ class PolicyConfig(BaseModel):
 
     @classmethod
     def from_file(cls, path: str | Path) -> "PolicyConfig":
-        return cls.model_validate(json.loads(Path(path).read_text()))
+        return cls.model_validate(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
 class PolicyOutcome(BaseModel):

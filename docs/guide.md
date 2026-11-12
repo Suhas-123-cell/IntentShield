@@ -139,9 +139,13 @@ sandbox:
   (`~/Documents`, `~/Desktop`, `~/Downloads`, `~/Pictures`, `~/Music`, `~/Movies`, `~/Library`, `~/Developer`, `~/.config`,
   `~/.local`). A file below one, as in `rm -rf ~/Downloads/*.dmg`, is allowed. No prompt can approve a deny, so empty one of those
   folders by hand.
+- Case: the names in the destruction rule match without regard to case, as the key rules do (`~/documents`, `/ETC`, `/USERS/x`: the
+  same folders on a default macOS volume). Only the whole path counts, so `~/Documents/old` and `/tmp/ETC` are not caught. On a
+  case-sensitive file system `~/documents` is another folder and still a deny.
 - Mode and owner, and `find`: a recursive `chmod` or `chown` of root or a system directory whatever the mode (`chmod -R 644 /`,
   `chown -R me /usr/lib`), and of the home directory with `sudo` or a zero or world-writable mode; `find ~ -delete` and
-  `find / -delete` with no test on the name (`-type`, `-mtime` and `-size` do not count); a write to a block device, `mkfs`,
+  `find / -delete` with no test on the name (`-type`, `-mtime`, `-size` and `-empty` do not count there: `find ~ -mtime +365 -delete`
+  is a deny too); a write to a block device, `mkfs`,
   `wipefs`; a fork bomb. On main, after 0.4.3, the other programs that empty the same targets are read too: `rsync --delete` (or
   `--remove-source-files`) onto root, the home directory or a system directory, `tar --remove-files` of one, `chattr -R` of one, and a
   glob that matches nearly every hidden entry of the home directory (`~/.[a-z]*`, `~/.??*`) like `~/.*`.
@@ -154,6 +158,8 @@ sandbox:
   `known_hosts`, `authorized_keys`, `allowed_signers`, `environment`, `rc` and `*.pub`, and their backups (`config.bak`, `config~`,
   `known_hosts.old`), are not held (0.4.3 denied every other file of the directory, a backup of the config included); any other
   file in `~/.ssh` is an ask whose reason says it is not a known public file and may be a private key.
+- `cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys` is a deny too, as a stranger's key looks the same. It becomes an ask only when
+  the prompt names the path in full (`~/.ssh/authorized_keys`).
 - The directory of a credential store, or a glob over it: `cat ~/.ssh`, `cat ~/.ssh/*`, and (on main, after 0.4.3) `cat ~/.aws`,
   `cat ~/.aws/*`, `cat ~/.aws/c*` and `~/.gnupg`. A key read into a command by `$(< ~/.ssh/id_rsa)` or by a loop fed from one is a
   deny too (on main, after 0.4.3).
@@ -163,7 +169,8 @@ sandbox:
 
 **Ask** (a prompt in an interactive Claude Code session; a refusal where nobody can answer):
 
-- Git: hook bypass (`--no-verify`, `git commit -n`, setting `core.hooksPath`; reading or unsetting it does not ask, on main, after 0.4.3);
+- Git: hook bypass (`--no-verify`, `git commit -n`, setting `core.hooksPath`; reading or unsetting it does not ask, on main, after 0.4.3). So does the same bypass
+  through the environment (`GIT_CONFIG_KEY_0=core.hooksPath`, `export HUSKY=0; git commit`; on main, after 0.4.3);
   any other force-push, including the usual one after
   a rebase (`git push --force-with-lease origin HEAD`, `git push -f origin my-feature`) and a branch such as
   `release-candidate`; `git reset --hard`, `git restore .` and `git clean -f` (not `git clean -n`, which deletes nothing).
@@ -172,13 +179,16 @@ sandbox:
   are an ask.
 - Deletes: `sudo rm -rf` of a direct subdirectory of a system directory (`/opt/app`, `/etc/app.d`; a deny cannot be
   approved, and these are common clean-ups); a delete by `find` at a system directory, or with `-o` or `-prune`, that names
-  the files it removes; `rm -rf` of a variable that may be empty, also after a root or home (`$DIR`, `/$DIR`, `~/$DIR`,
+  the files it removes, and (on main, after 0.4.3) by `find` of a folder of the
+  home directory limited by age, size, emptiness or owner, not by name (`find ~/Downloads -mtime +30 -delete`, `-size +1G`, `-empty`, `-newer FILE`; the
+  reason names the test; `-mtime -3`, the newest files, limits nothing); `rm -rf` of a variable that may be empty, also after a root or home (`$DIR`, `/$DIR`, `~/$DIR`,
   `$HOME/$DIR`, `/*$DIR`).
 - Permissions: `chmod 777`; a `chmod` to `000` or to a world-writable mode, or any `chown`, of a system path (not
   `chmod 644 /etc/hosts`); a recursive `chmod` or `chown` of the home
   directory (without `sudo`) or of a `/usr/local` directory, and `chown -R $USER` or `chown -R $(whoami)` of a
   `/usr/local` directory (Homebrew's own advice).
-- Credentials read: a read of `.env`, a `.pem` that is not a certificate, or a cloud token; a read of a harness's own credential file
+- Credentials read: a read of `.env`, a `.pem` that is not a certificate, or a cloud token (`aws configure get` asks for a key, not for `region`, on main,
+  after 0.4.3); a read of a harness's own credential file
   (`~/.codex/auth.json`, `~/.gemini/oauth_creds.json`, `~/.gemini/mcp-oauth-tokens.json`, `~/.claude.json`;
   `~/.claude/.credentials.json` is covered too, on a report that some Claude Code installs keep it there, which the vendor pages
   archived here do not confirm).
@@ -241,10 +251,20 @@ sandbox:
   command, `$@` or `$()` or `${X:-}` (empty where they stand), a default that is spelled out (`${RM:-rm} -rf /` is `rm -rf /`), NUL
   bytes (bash ignores them in a script), and a long option cut short the way the program accepts it (`git push --del origin main`,
   `git reset --har`, `rm --rec --fo ~`, `chmod --rec 000 /etc`, `sudo --us root rm -rf /`).
+- A path is normalised before any rule reads it (on main, after 0.4.3), in every rule that reads one: the key, startup-file, destroy-list,
+  system-path and guard-file rules, the file tools and the path arguments of an MCP tool. `.` segments, repeated slashes and a
+  trailing slash go, and `..` is resolved, also above the home directory: `~/../x/.ssh/id_rsa` and `$HOME/../x/.aws/credentials`
+  (`x` the user) are the key and the credential file. 0.4.3 dropped what followed a `..` that left `~`, so those were allowed.
+- The home directory is `~`, `~name`, `$HOME`, `/Users/<name>`, `/home/<name>`, `/root` and `/var/root`, and (on main, after 0.4.3) the
+  home of the running user wherever it lies: the `HOME` and `USERPROFILE` of the hook, the home of the user it runs as, the same of
+  an `env` the event carries, and the folder that holds `.claude`, `.codex`, `.gemini` or `.cursor` when the transcript lies in one
+  (`/mnt/c/Users/x`, `/workspace`). Their parent (`/data/home`) is protected like `/Users`; `/`, `/tmp` and system directories are never
+  taken for a home.
 - A `$(...)` inside a word does not end the command (`rm -rf $(pwd) /`). A glob made of glob characters alone at the root or home
   (`/[a-z]*`, `/?`) is read as everything in it, and `echo / | xargs rm -rf` is read as `rm -rf /`.
 - A `find` that deletes only the files it names (`find ~ -name .DS_Store -delete`, `find ~ -name '*.pyc' -delete`) is read like `rm`
-  of those files and allowed under the home directory; asked at a system directory.
+  of those files and allowed under the home directory; asked at a system directory. With only an age, a size, `-empty` or an owner as the test it
+  asks at a folder of the home directory and denies at `~`, a root or a system directory.
 
 **Limits on what is read.** A command that goes past any of these limits is **asked about, with the limit named**, never allowed: a
 deny hidden after the limit cannot get through by padding the command.
@@ -322,14 +342,17 @@ approve the ask. Without `--builtin-tools` none of this is checked.
   - a download run with `Invoke-Expression` (`iex`), in a pipe or around it; and `pwsh -Command` or `-EncodedCommand`.
   Parameters may be cut short as PowerShell accepts it (`-r`, `-fo`). Other cmdlets are **not read**: `Set-Content`, `Out-File` and
   `Copy-Item` to a startup file, `Start-Process`, .NET calls such as `[IO.File]::Delete`, and scripts.
-- A tool name that starts with `mcp__` but has no server or no tool part is refused (on main, after 0.4.3). So is a Gemini CLI tool
+- A tool name that starts with `mcp__` but is not of the form `mcp__SERVER__TOOL` (`mcp__`, `mcp__srv`) is refused (on main, after
+  0.4.3); one with an empty server or tool part (`mcp__srv__`, `mcp____x`) is read as a call and checked like any MCP call. Also refused: a Gemini CLI tool
   named like an MCP tool (`mcp_...`) that has no `mcp_context`, a call with no `tool_name` or an empty one (with `--builtin-tools`),
   and a `tool_name` that is not text; the reply says what was wrong.
 - A tool with another name that runs a command (a future tool, or one a plugin adds) is not matched by name. Claude Code's matcher
   names the tools it sends to the hook, so such a tool never reaches it. Codex CLI's and Gemini CLI's send every tool, and there
   (on main, after 0.4.3) a tool the hook has no name for whose input holds a `command` or `cmd` text is read as a shell call.
 - A built-in tool call whose event name or tool input the hook cannot read (a missing or re-cased `hook_event_name`, a `command` that
-  is not text) is refused, because a changed event schema must not read as an allow.
+  is not text) is refused, because a changed event schema must not read as an allow. On main, after 0.4.3, that includes a shell tool
+  whose whole input is a list and a `command` list that is empty or holds more than words (`[]`, `[[...]]`). A list of words is an
+  argv and is read (`["bash", "-lc", "..."]`); a list of one word is read as the command line it holds.
 
 **MCP tools are mostly outside these rules.**
 
@@ -347,6 +370,11 @@ approve the ask. Without `--builtin-tools` none of this is checked.
 **Long results.** A tool result longer than 1,000,000 characters is scanned (on main, after 0.4.3) at its first and last 500,000
 characters, so that the hook finishes inside its harness's timeout. The reply tells the model the rest was not checked, and later
 state-changing calls in the session ask.
+
+**Long arguments.** The arguments of an MCP call, with or without `--builtin-tools`, are read the same way (on main, after 0.4.3):
+only the first and last 500,000 characters are scanned, and the call asks, naming the limit (with `--review never` it runs with a
+note). Every character was scanned before, at about 4 seconds a megabyte (17.6 s for 4 MB), so the scan now takes about 4 seconds
+whatever the size.
 
 What the study measured about these rules (the method is in `docs/research-notes/hook-fidelity/hook-fidelity-study.md`, the rows
 in `results/hook-fidelity/detect/fresh/`):

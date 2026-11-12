@@ -58,7 +58,7 @@ def test_a_down_judge_adds_a_note_but_no_ask_or_deny(harness, tool, tmp_path: Pa
 
 def test_a_judge_without_a_key_does_not_refuse_codex_writes(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    monkeypatch.setattr(harness_module, "ENV_FILE", tmp_path / "none.env")
+    monkeypatch.setattr(harness_module.env, "ENV_FILE", tmp_path / "none.env")
     guard = HarnessGuard(tmp_path / "h.db", judge="groq")
     out = _pre("codex", guard, "mcp__github__create_issue")["hookSpecificOutput"]
     assert "permissionDecision" not in out and "no API key" in out["additionalContext"]

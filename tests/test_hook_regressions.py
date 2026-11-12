@@ -215,7 +215,7 @@ def _main_flag(monkeypatch, value: str | None) -> None:
 @pytest.mark.parametrize("value", ["1", "true", "YES", "on", "On"])
 def test_judge_outputs_env_accepts_the_usual_truthy_words(monkeypatch, tmp_path: Path, value: str):
     seen = {}
-    monkeypatch.setattr(harness, "HarnessGuard", lambda *a, **kw: seen.update(kw) or (_ for _ in ()).throw(RuntimeError()))
+    monkeypatch.setattr(harness.cli, "HarnessGuard", lambda *a, **kw: seen.update(kw) or (_ for _ in ()).throw(RuntimeError()))
     _main_flag(monkeypatch, value)
     monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
     harness.main(["claude", "--db", str(tmp_path / "h.db"), "--judge", "ollama"])

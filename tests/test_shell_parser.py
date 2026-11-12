@@ -1,4 +1,4 @@
-"""The shell parser (src/intentshield/shell.py): newlines, comments, here-documents, variables, read-only options,
+"""The shell parser (src/intentshield/shell/): newlines, comments, here-documents, variables, read-only options,
 wrappers and indirection, send detection, and the cost of parsing a long command.
 
 These are the regressions of audit findings hooks-1 to hooks-6 and hooks-15. Every address is a reserved example

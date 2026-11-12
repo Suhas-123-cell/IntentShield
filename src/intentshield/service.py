@@ -249,16 +249,9 @@ class IntentShieldService:
             return False, ReasonCode.BLOCK_APPROVAL_NOT_APPROVED
         return True, None
 
-    def evaluate_and_execute(self, run_id: str, user_intent: str, call: ToolCall) -> GatewayResult:
-        run = self.storage.get_run(run_id)
-        if not run:
-            raise KeyError(f"Unknown run: {run_id}")
-        # The run's persisted intent is authoritative; a resume caller cannot
-        # swap in a more permissive intent string.
-        user_intent = run["user_intent"]
-
-        signals, assessment = self._security_assessment(user_intent, call)
-        fingerprint = self.fingerprint(run_id, call)
+    def _record_proposal(self, run_id: str, run: dict[str, Any], call: ToolCall, signals: SecuritySignals,
+                         assessment: SecurityAssessment | None) -> int:
+        """Writes the event that a call was proposed (or resumed after its approval), and returns the call's index in the run."""
         if call.approval_id:
             bound_approval = self.storage.get_approval(call.approval_id)
             call_index = int(bound_approval["call_index"]) if bound_approval else int(run["call_count"])
@@ -279,6 +272,58 @@ class IntentShieldService:
                 ),
                 "call_index": call_index,
             })
+        return call_index
+
+    def _reserve_mutation(self, run_id: str, call: ToolCall, spec: ToolSpec, fingerprint: str, approval_verified: bool,
+                          signals: SecuritySignals, assessment: SecurityAssessment | None,
+                          ) -> tuple[str, dict[str, Any] | None, GatewayResult | None]:
+        """Reserves a mutation's idempotency key and consumes its approval. Returns the reservation, the result of an earlier run
+        of the same call, and the response to give when the call ends here (blocked, or a replay) instead of executing."""
+        reservation = "NONE"
+        replay_result: dict[str, Any] | None = None
+        if spec.mutation:
+            if not (call.idempotency_key and call.approval_id):  # the policy engine guarantees both
+                raise RuntimeError("mutation reached execution without an approval and idempotency key")
+            reservation, replay_result = self.storage.reserve_idempotency(call.idempotency_key, fingerprint, run_id)
+            if reservation in ("CONFLICT", "IN_PROGRESS"):
+                self._consume_denied_approval(call, fingerprint, approval_verified)
+                return reservation, replay_result, self._blocked(run_id, call, _IDEMPOTENCY_BLOCKS[reservation], signals,
+                                                                 assessment)
+            if reservation == "IN_DOUBT":
+                # Consume this separately granted approval: it was considered,
+                # but execution is forbidden until a human reconciles the first outcome.
+                self.storage.consume_approval(call.approval_id, fingerprint)
+                return reservation, replay_result, self._blocked(
+                    run_id, call, ReasonCode.BLOCK_EXECUTION_IN_DOUBT, signals, assessment
+                )
+            if not self.storage.consume_approval(call.approval_id, fingerprint):
+                if reservation == "RESERVED":
+                    self.storage.release_idempotency(call.idempotency_key, fingerprint)
+                return reservation, replay_result, self._blocked(
+                    run_id, call, ReasonCode.BLOCK_APPROVAL_CONSUMED, signals, assessment
+                )
+            if reservation == "REPLAY":
+                response = self._result(
+                    run_id, call, signals, Decision.ALLOW, [ReasonCode.ALLOW_IDEMPOTENT_REPLAY],
+                    approval_id=call.approval_id, replayed=True, result=replay_result,
+                    assessment=assessment,
+                )
+                self._record_decision(response)
+                self.storage.finish_run(run_id, Decision.ALLOW.value)
+                return reservation, replay_result, response
+        return reservation, replay_result, None
+
+    def evaluate_and_execute(self, run_id: str, user_intent: str, call: ToolCall) -> GatewayResult:
+        run = self.storage.get_run(run_id)
+        if not run:
+            raise KeyError(f"Unknown run: {run_id}")
+        # The run's persisted intent is authoritative; a resume caller cannot
+        # swap in a more permissive intent string.
+        user_intent = run["user_intent"]
+
+        signals, assessment = self._security_assessment(user_intent, call)
+        fingerprint = self.fingerprint(run_id, call)
+        call_index = self._record_proposal(run_id, run, call, signals, assessment)
 
         approval_verified, approval_error = self._approval_state(run_id, call, fingerprint)
         if approval_error:
@@ -328,37 +373,10 @@ class IntentShieldService:
             return response
 
         spec = self.registry[call.tool_name]
-        reservation = "NONE"
-        replay_result: dict[str, Any] | None = None
-        if spec.mutation:
-            if not (call.idempotency_key and call.approval_id):  # the policy engine guarantees both
-                raise RuntimeError("mutation reached execution without an approval and idempotency key")
-            reservation, replay_result = self.storage.reserve_idempotency(call.idempotency_key, fingerprint, run_id)
-            if reservation in ("CONFLICT", "IN_PROGRESS"):
-                self._consume_denied_approval(call, fingerprint, approval_verified)
-                return self._blocked(run_id, call, _IDEMPOTENCY_BLOCKS[reservation], signals, assessment)
-            if reservation == "IN_DOUBT":
-                # Consume this separately granted approval: it was considered,
-                # but execution is forbidden until a human reconciles the first outcome.
-                self.storage.consume_approval(call.approval_id, fingerprint)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_EXECUTION_IN_DOUBT, signals, assessment
-                )
-            if not self.storage.consume_approval(call.approval_id, fingerprint):
-                if reservation == "RESERVED":
-                    self.storage.release_idempotency(call.idempotency_key, fingerprint)
-                return self._blocked(
-                    run_id, call, ReasonCode.BLOCK_APPROVAL_CONSUMED, signals, assessment
-                )
-            if reservation == "REPLAY":
-                response = self._result(
-                    run_id, call, signals, Decision.ALLOW, [ReasonCode.ALLOW_IDEMPOTENT_REPLAY],
-                    approval_id=call.approval_id, replayed=True, result=replay_result,
-                    assessment=assessment,
-                )
-                self._record_decision(response)
-                self.storage.finish_run(run_id, Decision.ALLOW.value)
-                return response
+        reservation, replay_result, early = self._reserve_mutation(run_id, call, spec, fingerprint, approval_verified, signals,
+                                                                   assessment)
+        if early is not None:
+            return early
 
         if not spec.mutation and approval_verified and call.approval_id \
                 and not self.storage.consume_approval(call.approval_id, fingerprint):

@@ -425,14 +425,13 @@ def propose_patterns(ask: Callable[[str], Any], text: str) -> list[str]:
 
 def ollama(model: str = "qwen2.5:7b", host: str = "http://127.0.0.1:11434", timeout: float = 300) -> Callable[[str], Any]:
     """An ``ask`` for ``propose_patterns`` on a local Ollama model (JSON mode, temperature 0)."""
-    import urllib.request
+    from .outbound import open_json_post
 
     def ask(prompt: str) -> Any:
-        body = json.dumps({"model": model, "prompt": prompt, "format": "json", "stream": False,
-                           "options": {"temperature": 0, "num_ctx": 4096}}).encode()
-        request = urllib.request.Request(f"{host}/api/generate", data=body, headers={"Content-Type": "application/json"})
+        body = {"model": model, "prompt": prompt, "format": "json", "stream": False,
+                "options": {"temperature": 0, "num_ctx": 4096}}
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with open_json_post(f"{host}/api/generate", body, {}, timeout) as response:
                 return json.loads(json.load(response)["response"])
         except (OSError, ValueError, KeyError):
             return None

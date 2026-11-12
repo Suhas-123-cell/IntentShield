@@ -14,10 +14,10 @@ from collections.abc import Callable, Mapping
 from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, ConfigDict
 
+from .outbound import open_json_post
 from .tools import ToolSpec
 
 ModelProvider = Literal["gemini"]
@@ -256,14 +256,8 @@ def _post_json(
     payload: dict[str, Any],
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    request = Request(
-        url,
-        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers},
-        method="POST",
-    )
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:  # fixed HTTPS URLs
+        with open_json_post(url, payload, headers, timeout_seconds) as response:
             body = response.read(_MAX_RESPONSE_BYTES + 1)
     except HTTPError as exc:
         message = _redact_message(
@@ -281,6 +275,9 @@ def _post_json(
             f"Model provider connection failed: {type(exc.reason).__name__}",
             provider="remote",
         ) from exc
+    except ValueError as exc:  # the address is not http or https
+        raise ModelProviderError("MODEL_PROVIDER_UNAVAILABLE", "Model provider address is not an http or https URL",
+                                 provider="remote") from exc
     if len(body) > _MAX_RESPONSE_BYTES:
         raise ModelProviderError(
             "MODEL_RESPONSE_TOO_LARGE",

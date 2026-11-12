@@ -25,7 +25,7 @@ def _isolate_environment(monkeypatch, tmp_path):
         monkeypatch.delenv(name)
     home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
-    monkeypatch.setattr("intentshield.harness.ENV_FILE", home / ".intentshield" / ".env")
+    monkeypatch.setattr("intentshield.harness.env.ENV_FILE", home / ".intentshield" / ".env")
     # A locally trained classifier would change decisions; tests run the deterministic agents.
     monkeypatch.setenv("INTENTSHIELD_INTENT_MODEL_DIR", "tests/no-intent-model")
     # The hook's verdict translation picks its replies by the harness's version and mode, which a test process cannot have

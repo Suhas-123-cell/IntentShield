@@ -172,8 +172,6 @@ trafficmanager.net trycloudflare.com vercel.app web.app webflow.io weebly.com wi
 workers.dev
 """.split())
 
-PROTECTED = PROTECTED_FIRST_PARTY | TENANT_SUFFIXES
-
 
 def shared_host(host: str | None, first_party: frozenset[str] = COMMON_FIRST_PARTY) -> bool:
     """``host`` is a site of ``first_party`` or a name under one, or a tenant platform's bare suffix. A name under a

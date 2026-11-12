@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import posixpath
 import re
+from dataclasses import replace
 from typing import Any
 
 from intentshield import shell
 
 from .core import (
+    _EVENT_HOMES,
     _MAX,
     _MAX_DEPTH,
     _MAX_SUBSTITUTIONS,
@@ -254,7 +256,7 @@ def _credential_read_hits(name: str, argv: list[str], state: dict[str, Any]) -> 
     if name in _READERS or name in _INTERPRETERS:
         cred = _cred_args(argv) if name in _READERS and name not in _NET_SINKS else None  # those are read by _net_hit
         if name in _INTERPRETERS:
-            m = _CRED_TEXT.search(" ".join(argv[1:]))
+            m = _CRED_TEXT.search(_clean_path(" ".join(argv[1:])))   # ``.ssh//./id_rsa`` in the code is ``.ssh/id_rsa``
             if m:
                 cred = (DENY, "a credential store", m[0])
         if name == "find" and cred and "-exec" not in argv:
@@ -271,10 +273,15 @@ def _credential_read_hits(name: str, argv: list[str], state: dict[str, Any]) -> 
             state["secret"] = True
     for needle, decision in _CLI_SECRETS:
         if _bin(argv[0]) == needle[0] and _in_order([_bin(argv[0]), *argv[1:]], needle):
+            if needle == ("aws", "configure", "get") and not _AWS_SECRET_SETTING.search(" ".join(argv[1:])):
+                continue   # ``aws configure get region`` prints a setting, not a key
             out.append(Hit(decision, f"{' '.join(needle)} prints credentials."))
             state["secret"] = state.get("secret") or decision == DENY
             break
     return out
+
+
+_AWS_SECRET_SETTING = re.compile(r"secret|token|access_key|password|credential", re.I)
 
 
 def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
@@ -455,10 +462,10 @@ def _piped_xargs(prev: _Stage, st: _Stage, intent: str, depth: int, state: dict[
     return _stage_hits(_Stage([*bare.argv, *words], [], False, 0, bare.sudo, list(bare.assigns)), intent, depth, dict(state))
 
 
-def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo: bool = False) -> list[Hit]:
+def _text_hits(data: str, text: str, depth: int, sudo: bool) -> list[Hit]:
+    """What the command line's text shows before it is split into stages: fork bombs, code run from a download, reverse shells
+    and raw sockets, a deleted home, and an attack on the guard itself. ``data`` is ``text`` with single-quoted data masked."""
     hits: list[Hit] = []
-    text = _normalise(command[:_MAX + 4096])[:_MAX]
-    data = _mask_data(text)  # what the raw patterns read: single-quoted data is not code
     if _FORK_BOMB.search(data) and re.search(r"\|\s{0,3}[\w:.-]{1,40}\s{0,3}&", data) or _FORK_LOOP.search(data):
         hits.append(Hit(DENY, "a fork bomb: a function or loop that starts copies of itself until the machine stops."))
     if _FORK_CODE.search(data) and ("while" in data.lower()
@@ -484,12 +491,12 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     own = _guard_text(data, text) if depth == 0 else None
     if own:
         hits.append(own)
-    notes: list[str] = []
-    stages = _stages(text, notes)
-    for note in notes:
-        hits.append(Hit(ASK, f"the command has {note}, too long to read in full; check the part after that."))
-    if stages is None:
-        return hits
+    return hits
+
+
+def _walk_stages(stages: list[_Stage], intent: str, depth: int, state: dict[str, Any], sudo: bool) -> list[Hit]:
+    """The hits of each stage, in order, with the variables and the working directory the stages before it set."""
+    hits: list[Hit] = []
     state_pipe_secret = False
     env: dict[str, list[str]] = {}
     # The directory after the cd and pushd of this command line, from where the command runs: a relative path means the same
@@ -510,7 +517,7 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
         for note in dict.fromkeys(loop_notes):
             hits.append(Hit(ASK, f"the command uses {note}, too many to follow; check what it does."))
         for variant in variants:
-            found = _stage_hits(variant, intent, depth, local)
+            found = _stage_hits(_with_hook_variables(variant, env), intent, depth, local)
             hits.extend(found)
             cwd = where["cwd"]
             if cwd:  # after a cd, a relative target is read from where the cd went
@@ -526,6 +533,20 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
             state_pipe_secret = False
         if local.get("secret") and not state.get("secret"):
             state_pipe_secret = True
+    return hits
+
+
+def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo: bool = False) -> list[Hit]:
+    text = _normalise(command[:_MAX + 4096])[:_MAX]
+    data = _mask_data(text)  # what the raw patterns read: single-quoted data is not code
+    hits = _text_hits(data, text, depth, sudo)
+    notes: list[str] = []
+    stages = _stages(text, notes)
+    for note in notes:
+        hits.append(Hit(ASK, f"the command has {note}, too long to read in full; check the part after that."))
+    if stages is None:
+        return hits
+    hits.extend(_walk_stages(stages, intent, depth, state, sudo))
     for pipe in _pipe_hits(stages, intent):
         if not any(h.reason == pipe.reason for h in hits):
             hits.append(pipe)
@@ -542,6 +563,16 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     if len(spans) > _MAX_SUBSTITUTIONS:
         hits.append(Hit(ASK, f"the command has more than {_MAX_SUBSTITUTIONS} command substitutions, too many to read in full."))
     return hits
+
+
+_HOOK_VARIABLE = re.compile(r"(?:HUSKY|HUSKY_SKIP_HOOKS|SKIP|PRE_COMMIT_ALLOW_NO_CONFIG|GIT_CONFIG_(?:KEY_\d{1,4}|PARAMETERS))$")
+
+
+def _with_hook_variables(stage: _Stage, env: dict[str, list[str]]) -> _Stage:
+    """``stage`` with the variables that skip or replace a repository's hooks, as set earlier in the command line (``export
+    HUSKY=0; git commit``), counted among the assignments it starts with."""
+    carried = [f"{key}={values[0]}" for key, values in env.items() if values and _HOOK_VARIABLE.match(key)]
+    return replace(stage, assigns=[*stage.assigns, *carried]) if carried else stage
 
 
 def _start_dir() -> str | None:
@@ -566,18 +597,21 @@ def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
     return left[0] if left else None
 
 
-def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: str = "") -> Hit | None:
+def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: str = "",
+                 homes: tuple[str, ...] = ()) -> Hit | None:
     """The verdict on a shell command by its text, or None when nothing here objects. ``powershell``: the command is the input of
     the PowerShell tool, read as POSIX shell as well as by its cmdlets (see ``_ps_posix``). ``cwd``: the directory the command
-    runs in, from which a relative path is opened where a rule must look inside the file."""
+    runs in, from which a relative path is opened where a rule must look inside the file. ``homes``: home directories the event
+    names, besides those of the running user (see ``paths._homes``)."""
     if not command or not command.strip():
         return None
-    token = _WORKDIR.set(cwd)
+    token, home_token = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes))
     try:
         hits = _analyse(command, intent, 0, {})
         if powershell:
             hits.extend(_ps_hits(command, intent, 0, {}, False))
     finally:
+        _EVENT_HOMES.reset(home_token)
         _WORKDIR.reset(token)
     if len(command) > _MAX and not any(h.decision == DENY for h in hits):  # the rest was not read: do not pass it as safe
         hits.append(Hit(ASK,
@@ -587,12 +621,15 @@ def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: 
     return _worst(hits, intent)
 
 
-def assess_file(path: str, content: Any = None, write: bool = False, intent: str = "", cwd: str = "") -> Hit | None:
-    """The verdict on a file read or write by a built-in tool. ``cwd``: the directory a relative ``path`` is read from."""
-    token = _WORKDIR.set(cwd)
+def assess_file(path: str, content: Any = None, write: bool = False, intent: str = "", cwd: str = "",
+                homes: tuple[str, ...] = ()) -> Hit | None:
+    """The verdict on a file read or write by a built-in tool. ``cwd``: the directory a relative ``path`` is read from.
+    ``homes``: as for ``assess_shell``."""
+    token, home_token = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes))
     try:
         return _assess_file(path, content, write, intent)
     finally:
+        _EVENT_HOMES.reset(home_token)
         _WORKDIR.reset(token)
 
 

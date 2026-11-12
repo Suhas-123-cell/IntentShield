@@ -92,6 +92,11 @@ def _sets_hooks_path(args: list[str]) -> bool:
     return any(a.lower().startswith("core.hookspath") and ("=" in a or k + 1 < len(positional)) for k, a in enumerate(positional))
 
 
+# ``GIT_CONFIG_VALUE_0=core.hooksPath`` and its key, and ``GIT_CONFIG_PARAMETERS='core.hooksPath=/dev/null'``: the settings of
+# ``git -c`` given through the environment.
+_GIT_CONFIG_ENV = re.compile(r"GIT_CONFIG_(?:KEY_\d{1,4}|PARAMETERS)=[^=]{0,10}[\"']{0,2}core\.(?:hookspath|fsmonitor)", re.I)
+
+
 def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
     sub, args, settings = _git(argv)
     flags = [a for a in args if a.startswith("-")]
@@ -100,6 +105,9 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
         return Hit(ASK, "git run with a hooks path or fsmonitor override, which bypasses or replaces the repository's hooks.")
     if any(a.split("=")[0].upper() in ("HUSKY", "HUSKY_SKIP_HOOKS", "SKIP", "PRE_COMMIT_ALLOW_NO_CONFIG") for a in assigns):
         return Hit(ASK, "git run with the hook-skipping environment variable set.")
+    if any(_GIT_CONFIG_ENV.match(a) for a in assigns):
+        return Hit(ASK, "git run with a hooks path or fsmonitor set in its environment, which bypasses or replaces the "
+                        "repository's hooks.")
     if sub in ("commit", "push", "merge", "am", "cherry-pick", "rebase", "revert") and any(_is_opt(a, "--no-verify")
         for a in flags):
         return Hit(ASK, f"git {sub} --no-verify skips the repository's hooks.")
@@ -192,13 +200,33 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
 
 _FIND_NAMED = frozenset({"-name", "-iname", "-regex", "-iregex", "-path", "-ipath", "-wholename", "-iwholename", "-lname",
                          "-ilname"})
+_FIND_AGE = frozenset({"-mtime", "-atime", "-ctime", "-mmin", "-amin", "-cmin"})
+_FIND_NEWER = ("-newer", "-anewer", "-cnewer")   # also ``-newermt DATE`` and the other ``-newerXY`` forms
+
+
+def _find_filter(args: list[str]) -> tuple[str, str]:
+    """(kind, test) of the first test that limits what ``find`` matches: kind ``name`` for a test on the name, ``other`` for an
+    age (``-mtime +30``, older than; ``-mtime -3`` is the newest files, no limit), a time after a file or date (``-newer FILE``),
+    a size, ``-empty`` or an owner. ``("", "")`` when there is none."""
+    other = ""
+    for k, a in enumerate(args):
+        value = args[k + 1] if k + 1 < len(args) else ""
+        if a in _FIND_NAMED and re.search(r"[A-Za-z0-9_]", value):
+            return "name", f"{a} {value}"
+        if not other and ((a in _FIND_AGE and value and not value.startswith("-")) or (a in ("-size", "-user") and value)
+                          or (a.startswith(_FIND_NEWER) and value) or a == "-empty"):
+            other = f"{a} {value}" if a != "-empty" else a
+    return ("other", other) if other else ("", "")
 
 
 def _find_hit(argv: list[str]) -> Hit | None:
-    """``find START ... -delete`` (or ``-exec rm``) at a root, home or system directory. With no test on the name it removes
-    everything under START (``-type f``, an age or a size do not narrow that enough): denied. With a test on the name
-    (``-name .DS_Store``, ``-name '*.pyc'``) it removes only what matches, like ``rm`` of those files: allowed under the home
-    directory, asked at a system directory, and asked when an ``-o`` or ``-prune`` lets other files through."""
+    """``find START ... -delete`` (or ``-exec rm``) at a root, home or system directory. With no test that limits what it matches
+    (``-type f`` and ``-mtime -3`` do not) it removes everything under START: denied. With a test on the name (``-name
+    .DS_Store``, ``-name '*.pyc'``) it removes only what matches, like ``rm`` of those files: allowed under the home directory,
+    asked at a system directory. With an age, a size, ``-empty`` or an owner as the only test (``-mtime +30``, ``-size +1G``)
+    it removes the files of that kind from START: asked about at a folder of the home directory (``~/Downloads``), and still a
+    deny at the home directory itself, a root or a system directory, where that is most of what is there. An ``-o`` or
+    ``-prune`` that lets other files through is a deny, or an ask when ``-prune`` is there."""
     args = argv[1:]
     starts = []
     for a in args:
@@ -211,13 +239,21 @@ def _find_hit(argv: list[str]) -> Hit | None:
     if not protected:
         return None
     start = protected[0]
-    named = any(a in _FIND_NAMED and k + 1 < len(args) and re.search(r"[A-Za-z0-9_]", args[k + 1]) for k, a in enumerate(args))
+    kind, test = _find_filter(args)
     widened = any(a in ("-o", "-or", "!", "-not") for a in args)
-    if not named or (widened and "-prune" not in args):
-        return Hit(DENY, f"find {start} deletes everything under a root, home or system directory.", start)
-    if not widened and _norm(start) == "~":
+    if widened and "-prune" not in args:
+        return Hit(DENY, f"find {start} with -o, ! or -not can delete files that none of its tests name, anywhere under {start} "
+                         "(a root, home or system directory).", start)
+    if not kind:
+        return Hit(DENY, f"find {start} has no test on the name, age or size, so it deletes everything under {start} "
+                         "(a root, home or system directory).", start)
+    if kind == "other" and not _norm(start).startswith("~/"):   # the home directory itself, a root, a system directory
+        return Hit(DENY, f"find {start} with only a test on age, size or emptiness ({test}) still deletes most of {start} (a "
+                         "root, home or system directory); only a test on the name limits it enough.", start)
+    if kind == "name" and not widened and _norm(start) == "~":
         return None
-    return Hit(ASK, f"find {start} deletes the files it matches under a root, home or system directory; check the test.", start)
+    return Hit(ASK, f"find {start} deletes the files that match {test} under {start} (a root, home or system directory); "
+                    "check that the test is what you mean.", start)
 
 
 def _disk_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
@@ -468,82 +504,108 @@ _SSH_VALUED = {
 
 def _net_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool, intent: str) -> Hit | None:
     if name in ("curl", "wget", "http", "https", "xh"):
-        hosts = _remote_hosts(argv) or ([] if any(shell.is_loopback(v) for a in argv[1:] for v in shell.network_values(a))
-                                        else ["?"])
-        if not hosts:
-            return None
-        named = all(_named(h, intent) for h in hosts if h != "?") and "?" not in hosts
-        files = [f for f in _data_files(name, argv) if f]
-        if named:  # a destination the user named takes their files, unless it is a key or a cloud credential
-            files = [f for f in files if (_cred_level(f) or ("", ""))[0] == DENY or f != "-" and _protected(f)]
-        stdin_data = "-" in files or stage.piped and any(a in ("-d", "@-", "--data-binary", "-T") or a.endswith("@-")
-                                                         for a in argv[1:])
-        for f in files:
-            if f != "-" and (level := _source_level([f])):
-                return Hit(level, f"uploads {f}, a sensitive file, to {hosts[0]}." if level == DENY else
-                           f"uploads {f}, a file that holds secrets, to {hosts[0]}; confirm it.", f, escalate=True)
-        if sensitive_upstream and (stdin_data or files):
-            return Hit(DENY, f"sends credential or home-directory data on to {hosts[0]}.")
-        if files and not named:
-            return Hit(ASK, f"uploads {files[0]} to {hosts[0]}, which the user did not name.", hosts[0])
-        for a in argv[1:]:
-            if re.search(r"\$\(\s{0,3}(?:cat|base64|tar|printenv|env|zip)\b|`\s{0,3}(?:cat|base64|tar|printenv)\b", a):
-                if _cred_args(["cat", *shlex_args(a)]):
-                    return Hit(DENY, f"sends the contents of a credential file to {hosts[0]}.")
-                if not named and any(_data_flag_before(argv, a)):
-                    return Hit(ASK, f"sends command output to {hosts[0]}, which the user did not name.", hosts[0])
-        return None
+        return _upload_hit(name, stage, argv, sensitive_upstream, intent)
     if name in ("scp", "sftp", "rsync", "rclone", "gsutil"):
-        valued = _SSH_VALUED.get(name, frozenset())
-        pos = [a for k, a in enumerate(argv[1:]) if not a.startswith("-") and (k == 0 or argv[k] not in valued)]
-        if name in ("rclone", "gsutil") and pos:
-            pos = pos[1:] if pos[0] in ("copy", "sync", "copyto", "move", "moveto", "cp", "rsync", "mv") else pos
-        if len(pos) < 2:
-            return None
-        dest, srcs = pos[-1], pos[:-1]
-        if not _REMOTE.match(dest) or shell.is_loopback(shell.host(next(iter(shell.network_values(dest)), dest))):
-            return None
-        if any(_REMOTE.match(s) for s in srcs):
-            return None
-        for s in srcs:
-            if level := _source_level([s]):
-                return Hit(level, f"{name} sends {s}, a sensitive path, to {dest}." if level == DENY else
-                           f"{name} sends {s}, a file that holds secrets, to {dest}; confirm it.", s, escalate=True)
-        host = dest.partition(":")[0].rpartition("@")[2]
-        if host and _named(host, intent):
-            return None
-        return Hit(ASK, f"{name} copies local files to the remote {dest}, which the user did not name.", dest)
+        return _copy_hit(name, argv, intent)
     if name in ("nc", "ncat", "netcat", "socat"):
-        pos = [a for a in argv[1:] if not a.startswith("-")]
-        if any(a in ("-e", "-c", "--exec", "--sh-exec") for a in argv[1:]) and pos:
-            return Hit(DENY, f"{name} hands a shell to {pos[0]}: a reverse or bind shell.")
-        if any(a.startswith(("exec:", "EXEC:", "system:", "SYSTEM:")) for a in pos):
-            return Hit(DENY, "socat hands a shell to a remote peer.")
-        if any(a in ("-l", "-lp", "-lvp", "-lk") or (a.startswith("-") and "l" in a[1:])
-               for a in argv[1:]) and not stage.piped and not stage.redirects:
-            return None
-        if pos and not all(shell.is_loopback(p) for p in pos[:1]):
-            fed = [t for op, t in stage.redirects if op == "<"]
-            level = _source_level(fed)
-            if level == DENY or sensitive_upstream:
-                return Hit(DENY, f"{name} sends a sensitive file to {pos[0]}.")
-            if level == ASK:
-                return Hit(ASK, f"{name} sends a file that holds secrets to {pos[0]}; confirm it.", pos[0], escalate=True)
-            if fed or stage.piped:
-                return Hit(ASK, f"{name} sends data to {pos[0]}.", pos[0])
-        return None
+        return _socket_hit(name, stage, argv, sensitive_upstream)
     if name in ("mail", "mailx", "sendmail"):
+        return _mail_hit(name, stage, sensitive_upstream)
+    if name == "aws" and len(argv) > 3 and argv[1] == "s3" and argv[2] in ("cp", "sync", "mv"):
+        return _bucket_hit(argv)
+    return None
+
+
+def _upload_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool, intent: str) -> Hit | None:
+    """curl, wget and the like: files or command output sent to a host."""
+    hosts = _remote_hosts(argv) or ([] if any(shell.is_loopback(v) for a in argv[1:] for v in shell.network_values(a))
+                                    else ["?"])
+    if not hosts:
+        return None
+    named = all(_named(h, intent) for h in hosts if h != "?") and "?" not in hosts
+    files = [f for f in _data_files(name, argv) if f]
+    if named:  # a destination the user named takes their files, unless it is a key or a cloud credential
+        files = [f for f in files if (_cred_level(f) or ("", ""))[0] == DENY or f != "-" and _protected(f)]
+    stdin_data = "-" in files or stage.piped and any(a in ("-d", "@-", "--data-binary", "-T") or a.endswith("@-")
+                                                     for a in argv[1:])
+    for f in files:
+        if f != "-" and (level := _source_level([f])):
+            return Hit(level, f"uploads {f}, a sensitive file, to {hosts[0]}." if level == DENY else
+                       f"uploads {f}, a file that holds secrets, to {hosts[0]}; confirm it.", f, escalate=True)
+    if sensitive_upstream and (stdin_data or files):
+        return Hit(DENY, f"sends credential or home-directory data on to {hosts[0]}.")
+    if files and not named:
+        return Hit(ASK, f"uploads {files[0]} to {hosts[0]}, which the user did not name.", hosts[0])
+    for a in argv[1:]:
+        if re.search(r"\$\(\s{0,3}(?:cat|base64|tar|printenv|env|zip)\b|`\s{0,3}(?:cat|base64|tar|printenv)\b", a):
+            if _cred_args(["cat", *shlex_args(a)]):
+                return Hit(DENY, f"sends the contents of a credential file to {hosts[0]}.")
+            if not named and any(_data_flag_before(argv, a)):
+                return Hit(ASK, f"sends command output to {hosts[0]}, which the user did not name.", hosts[0])
+    return None
+
+
+def _copy_hit(name: str, argv: list[str], intent: str) -> Hit | None:
+    """scp, sftp, rsync, rclone, gsutil: local files copied to a remote."""
+    valued = _SSH_VALUED.get(name, frozenset())
+    pos = [a for k, a in enumerate(argv[1:]) if not a.startswith("-") and (k == 0 or argv[k] not in valued)]
+    if name in ("rclone", "gsutil") and pos:
+        pos = pos[1:] if pos[0] in ("copy", "sync", "copyto", "move", "moveto", "cp", "rsync", "mv") else pos
+    if len(pos) < 2:
+        return None
+    dest, srcs = pos[-1], pos[:-1]
+    if not _REMOTE.match(dest) or shell.is_loopback(shell.host(next(iter(shell.network_values(dest)), dest))):
+        return None
+    if any(_REMOTE.match(s) for s in srcs):
+        return None
+    for s in srcs:
+        if level := _source_level([s]):
+            return Hit(level, f"{name} sends {s}, a sensitive path, to {dest}." if level == DENY else
+                       f"{name} sends {s}, a file that holds secrets, to {dest}; confirm it.", s, escalate=True)
+    host = dest.partition(":")[0].rpartition("@")[2]
+    if host and _named(host, intent):
+        return None
+    return Hit(ASK, f"{name} copies local files to the remote {dest}, which the user did not name.", dest)
+
+
+def _socket_hit(name: str, stage: _Stage, argv: list[str], sensitive_upstream: bool) -> Hit | None:
+    """nc, ncat, netcat, socat: a shell handed to a peer, or data sent to one."""
+    pos = [a for a in argv[1:] if not a.startswith("-")]
+    if any(a in ("-e", "-c", "--exec", "--sh-exec") for a in argv[1:]) and pos:
+        return Hit(DENY, f"{name} hands a shell to {pos[0]}: a reverse or bind shell.")
+    if any(a.startswith(("exec:", "EXEC:", "system:", "SYSTEM:")) for a in pos):
+        return Hit(DENY, "socat hands a shell to a remote peer.")
+    if any(a in ("-l", "-lp", "-lvp", "-lk") or (a.startswith("-") and "l" in a[1:])
+           for a in argv[1:]) and not stage.piped and not stage.redirects:
+        return None
+    if pos and not all(shell.is_loopback(p) for p in pos[:1]):
         fed = [t for op, t in stage.redirects if op == "<"]
         level = _source_level(fed)
         if level == DENY or sensitive_upstream:
-            return Hit(DENY, f"{name} mails a sensitive file.")
-        return Hit(ASK, f"{name} mails a file that holds secrets; confirm it.", escalate=True) if level == ASK else None
-    if name == "aws" and len(argv) > 3 and argv[1] == "s3" and argv[2] in ("cp", "sync", "mv"):
-        pos = [a for a in argv[3:] if not a.startswith("-")]
-        if len(pos) >= 2 and pos[-1].startswith("s3://") and not pos[0].startswith("s3://"):
-            if _source_level(pos[:-1]) == DENY:
-                return Hit(DENY, f"aws s3 {argv[2]} uploads {pos[0]}, a sensitive path.", pos[0])
-            return Hit(ASK, f"aws s3 {argv[2]} uploads local files to {pos[-1]}.", pos[-1])
+            return Hit(DENY, f"{name} sends a sensitive file to {pos[0]}.")
+        if level == ASK:
+            return Hit(ASK, f"{name} sends a file that holds secrets to {pos[0]}; confirm it.", pos[0], escalate=True)
+        if fed or stage.piped:
+            return Hit(ASK, f"{name} sends data to {pos[0]}.", pos[0])
+    return None
+
+
+def _mail_hit(name: str, stage: _Stage, sensitive_upstream: bool) -> Hit | None:
+    """mail, mailx, sendmail: a file mailed."""
+    fed = [t for op, t in stage.redirects if op == "<"]
+    level = _source_level(fed)
+    if level == DENY or sensitive_upstream:
+        return Hit(DENY, f"{name} mails a sensitive file.")
+    return Hit(ASK, f"{name} mails a file that holds secrets; confirm it.", escalate=True) if level == ASK else None
+
+
+def _bucket_hit(argv: list[str]) -> Hit | None:
+    """aws s3 cp, sync, mv: local files uploaded to a bucket."""
+    pos = [a for a in argv[3:] if not a.startswith("-")]
+    if len(pos) >= 2 and pos[-1].startswith("s3://") and not pos[0].startswith("s3://"):
+        if _source_level(pos[:-1]) == DENY:
+            return Hit(DENY, f"aws s3 {argv[2]} uploads {pos[0]}, a sensitive path.", pos[0])
+        return Hit(ASK, f"aws s3 {argv[2]} uploads local files to {pos[-1]}.", pos[-1])
     return None
 
 

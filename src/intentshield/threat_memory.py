@@ -17,7 +17,7 @@ Who may teach it, and what:
   the other mails of an inbox are not learned). From it come:
 
   * indicators: emails, URLs, accounts and paths (``authority_values``) minus what the user typed, the
-    operator allowlist and URLs on shared hosts (``hostlists.PROTECTED``: one host serves everyone, and an
+    operator allowlist and URLs on shared hosts (the lists of ``hostlists``: one host serves everyone, and an
     injected page links to itself; a tenant's own name on a platform that rents them out, as
     ``evil.workers.dev``, is not shared). A mailbox at a shared provider is one owner's, so it is kept.
   * domains: an email or URL host becomes a domain indicator once at least two distinct exact
@@ -115,7 +115,7 @@ ESCALATE_INDICATORS, ESCALATE_RUNS, ESCALATE_SERVERS, HOSTILE_RUNS, HOSTILE_DAYS
 ANCHOR_WORDS, ANCHOR_CONTAINMENT = 4, 0.5
 VARIANT = "known_attack_variant"
 BENIGN_PATH = Path(__file__).with_name("data") / "benign_gate.jsonl"
-# Shared infrastructure (``hostlists.PROTECTED``): never learned as a domain, and URLs on a first-party site are not
+# Shared infrastructure (the lists of ``hostlists``): never learned as a domain, and URLs on a first-party site are not
 # learned at all. A platform that rents out names (``workers.dev``, ``ngrok.io``, ``github.io``) is shared only as a
 # whole: its bare suffix is never a domain indicator, but a tenant's own name under it (``evil.workers.dev``) is one
 # owner's, and its URLs are learned like any other site's.
@@ -248,8 +248,8 @@ def _without_www(value: str) -> str:
 
 
 def shared(host: str | None) -> bool:
-    """``host`` is shared infrastructure: a first-party site in ``PROTECTED`` (or a name under one), or the bare suffix
-    of a platform that rents out names. A tenant's name under that suffix is not."""
+    """``host`` is shared infrastructure: a site in ``PROTECTED_FIRST_PARTY`` (or a name under one), or the bare suffix of a
+    platform that rents out names. A tenant's name under that suffix is not."""
     return shared_host(host, PROTECTED_FIRST_PARTY)
 
 

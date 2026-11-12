@@ -36,6 +36,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from .outbound import open_json_post
+
 # Defaults chosen for free tiers (October 2026): Groq's gpt-oss-120b allows 30 requests and 8,000
 # tokens a minute and 1,000 requests a day per organisation, which a busy coding session exhausts;
 # Gemini's free gemini-2.5-flash allows only 20 requests a day, flash-lite far more. ``ollama`` runs a
@@ -153,15 +155,14 @@ def post_chat_message(url: str, api_key: str, body: dict[str, Any], timeout: flo
 
     Rate limits and server errors are retried with backoff (``retry-after`` when given); a daily
     free-tier quota is not, since it does not come back within any retry window."""
-    request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={
-        "Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": "intentshield-judge"})
+    headers = {"Authorization": f"Bearer {api_key}", "User-Agent": "intentshield-judge"}
     error = ""
     # ``timeout`` bounds each attempt; the whole call, sleeps included, must finish within
     # (retries + 1) attempts' worth, so a ``Retry-After`` of minutes never holds a hook.
     deadline = time.monotonic() + timeout * (retries + 1)
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with open_json_post(url, body, headers, timeout) as response:
                 reply = json.load(response)
                 # OpenAI-compatible, or Ollama's native /api/chat
                 message = reply["choices"][0]["message"] if "choices" in reply else reply["message"]

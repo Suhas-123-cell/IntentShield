@@ -26,7 +26,7 @@ from intentshield.tools import ToolSpec
 def test_an_unread_tool_with_an_empty_skeleton_does_not_show_its_raw_schema(tmp_path: Path, monkeypatch, schema):
     from intentshield import mcp_proxy
 
-    monkeypatch.setattr(mcp_proxy, "Judge", AuditJudge)
+    monkeypatch.setattr(mcp_proxy.runtime, "Judge", AuditJudge)
     monkeypatch.setattr(AuditJudge, "down", True)
     upstream = Fixture({"read_page": "Look up a note."})
     upstream.schemas["read_page"] = schema

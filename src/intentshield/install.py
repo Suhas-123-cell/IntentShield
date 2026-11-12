@@ -853,11 +853,15 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
     if translate and not dry_run:
         seen = translation.probe_and_record(harness, home)
         if seen:
-            print(f"{harness} version {'.'.join(map(str, seen))} recorded: the hook picks its replies for it "
-                  "(`intentshield doctor` shows what is measured)")
+            print(f"{harness} version {'.'.join(map(str, seen))} found and recorded, so the hook answers in the way that "
+                  "version expects (`intentshield doctor` shows what is measured)")
         else:
-            print(f"{harness} was not found on PATH, so its version is not recorded: asks are sent as refusals until "
-                  "`intentshield doctor` records it")
+            print(f"IntentShield could not read the version of {harness} (it is not on PATH), so a call that would normally "
+                  "ask you is blocked instead, which is the safe side. Put it on PATH and run `intentshield doctor` to "
+                  "record the version.")
+    if harness == "codex" and (switched_off := codex_hooks_switched_off(path)):
+        print(f"warning: {path} has `{switched_off} = false` under [features], which can switch Codex's hooks off, so these "
+              "hooks may not run. Remove that line or set it to true.")
     if harness == "codex":
         # Measured 2026-10-29 with Codex CLI 0.165: hooks nobody has trusted are skipped, and the
         # session runs unguarded with no warning from Codex.
@@ -873,6 +877,26 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         print(f"Next: {NEXT_STEP.format(harness=harness)} Until the harness has run a hook, `doctor` says \"no hook has run "
               "yet\" as a warning: that is expected right after an install.")
     return path
+
+
+def codex_hooks_switched_off(path: Path) -> str:
+    """The name of the ``[features]`` flag (``codex_hooks`` or ``hooks``) that is false in Codex's config file, or "". Codex's
+    feature flags can switch its hooks off, and then the hooks installed here do not run."""
+    try:
+        features = tomllib.loads(path.read_text(encoding="utf-8")).get("features")
+    except (OSError, ValueError):
+        return ""
+    if isinstance(features, dict):
+        return next((name for name in ("codex_hooks", "hooks") if features.get(name) is False), "")
+    return ""
+
+
+def client_config_files(home: Path, cwd: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
+    """(user files, project files): the MCP client config files ``doctor`` reads, those of the user's home and those of the
+    current directory. A server wrapped in any other file is not found by it."""
+    return ((home / ".claude.json", home / ".cursor" / "mcp.json", home / ".gemini" / "settings.json",
+             home / ".codex" / "config.toml"),
+            (cwd / ".mcp.json", cwd / ".cursor" / "mcp.json", cwd / ".gemini" / "settings.json", cwd / ".vscode" / "mcp.json"))
 
 
 def legacy_project_settings(harness: str, cwd: Path | None = None) -> Path | None:
@@ -1067,23 +1091,10 @@ class Wrapped(list[str]):
     skipped = False
 
 
-def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
-         dry_run: bool = False, allow_ephemeral: bool = False) -> Wrapped:
-    """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file, the project-scoped
-    ones of ``~/.claude.json`` included. Every entry is checked first and one the proxy cannot take is skipped with its reason;
-    the proxy configs are written only then, and removed again when the client file cannot be written."""
-    out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
-    _require_file(path)
-    data = _read_client(path)
-    groups = _server_groups(data)
-    if not groups:
-        raise ValueError(_no_servers(path))
-    if servers:
-        missing = sorted(set(servers) - {name for _, entries in groups for name in entries})
-        if missing:
-            raise ValueError(f"no such server in {path}: {', '.join(missing)}")
-    proxy = proxy or executable(_PROXY)
-    _refuse_ephemeral(proxy, "proxy command", dry_run, allow_ephemeral)
+def _plan_wrap(path: Path, groups: list[tuple[str, dict[str, Any]]], servers: list[str] | None, proxy: str,
+               out_dir: Path) -> tuple[list[tuple[dict[str, Any], str, str, dict[str, Any], Path, dict[str, Any]]], bool]:
+    """Each stdio server to wrap, with the config the proxy gets for it; one it cannot take is said and skipped. True when
+    one was skipped for a reason the user can fix."""
     from .mcp_proxy import MCPProxyConfig  # the proxy must accept each config before the client file changes
     plan: list[tuple[dict[str, Any], str, str, dict[str, Any], Path, dict[str, Any]]] = []
     skipped = False
@@ -1134,6 +1145,53 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
                 skipped = True
                 continue
             plan.append((entries, name, scope, server, config_path, generated))
+    return plan, skipped
+
+
+def _say_wrapped(path: Path, wrapped: Wrapped, groups: list[tuple[str, dict[str, Any]]], skipped: bool,
+                 dry_run: bool) -> None:
+    """What a wrap did, and the next step."""
+    if wrapped:
+        print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
+        if not dry_run and _in_repository(path):
+            print(f"note: {path} now holds absolute paths of this machine (the proxy and its config): do not commit it, or "
+                  "run `intentshield unwrap` on it first.")
+        if not dry_run:
+            local = _inside(path, Path.cwd())
+            closing_note = (" (close it before wrapping ~/.claude.json, which Claude Code rewrites)"
+                            if path.name == ".claude.json" else "")
+            known = {p.resolve() for files in client_config_files(Path.home(), Path.cwd()) for p in files}
+            if path.resolve() in known:
+                check = (f"`intentshield doctor --connect{'-project' if local else ''}` to check that each wrapped server "
+                         "starts through the proxy.")
+            else:   # doctor reads only the usual client files, so it would not list this one
+                check = (f"`intentshield scan {shlex.quote(str(path))}` to start each wrapped server through the proxy and "
+                         "check its tools (`intentshield doctor` reads only the usual client files, not this one).")
+            print(f"Next: restart the MCP client that reads {path}{closing_note}, then run {check}")
+    elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
+        print(f"already wrapped: {path}")
+    elif not skipped:
+        print(f"nothing to wrap in {path}: no stdio servers")
+
+
+def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = None, proxy: str | None = None,
+         dry_run: bool = False, allow_ephemeral: bool = False) -> Wrapped:
+    """Put the transparent proxy in front of each stdio server in an ``mcpServers`` file, the project-scoped
+    ones of ``~/.claude.json`` included. Every entry is checked first and one the proxy cannot take is skipped with its reason;
+    the proxy configs are written only then, and removed again when the client file cannot be written."""
+    out_dir = (out_dir or Path.home() / ".intentshield" / "proxies").expanduser()
+    _require_file(path)
+    data = _read_client(path)
+    groups = _server_groups(data)
+    if not groups:
+        raise ValueError(_no_servers(path))
+    if servers:
+        missing = sorted(set(servers) - {name for _, entries in groups for name in entries})
+        if missing:
+            raise ValueError(f"no such server in {path}: {', '.join(missing)}")
+    proxy = proxy or executable(_PROXY)
+    _refuse_ephemeral(proxy, "proxy command", dry_run, allow_ephemeral)
+    plan, skipped = _plan_wrap(path, groups, servers, proxy, out_dir)
     wrapped = Wrapped()
     wrapped.skipped = skipped
     before: dict[str, dict[str, Any]] = {}
@@ -1160,22 +1218,7 @@ def wrap(path: Path, servers: list[str] | None = None, out_dir: Path | None = No
             config_path.unlink(missing_ok=True)
             _SEEN.pop(config_path.resolve(), None)
         raise
-    if wrapped:
-        print(f"{'would wrap' if dry_run else 'wrapped'} {len(wrapped)} server(s) in {path}: {', '.join(wrapped)}")
-        if not dry_run and _in_repository(path):
-            print(f"note: {path} now holds absolute paths of this machine (the proxy and its config): do not commit it, or "
-                  "run `intentshield unwrap` on it first.")
-        if not dry_run:
-            local = _inside(path, Path.cwd())
-            closing_note = (" (close it before wrapping ~/.claude.json, which Claude Code rewrites)"
-                            if path.name == ".claude.json" else "")
-            print(f"Next: restart the MCP client that reads {path}{closing_note}, then run "
-                  f"`intentshield doctor --connect{'-project' if local else ''}` to check that each wrapped server starts "
-                  "through the proxy.")
-    elif any(isinstance(s, dict) and _is_wrapped(s) for _, entries in groups for s in entries.values()):
-        print(f"already wrapped: {path}")
-    elif not skipped:
-        print(f"nothing to wrap in {path}: no stdio servers")
+    _say_wrapped(path, wrapped, groups, skipped, dry_run)
     return wrapped
 
 
@@ -1220,7 +1263,7 @@ def unwrap(path: Path, servers: list[str] | None = None, dry_run: bool = False) 
                       "unwrap restores the server's original command and arguments, so those changes are dropped.",
                       file=sys.stderr)
             try:
-                generated = json.loads(config.read_text())
+                generated = json.loads(config.read_text(encoding="utf-8"))
                 upstream = generated["upstreams"][0]
             except (OSError, ValueError, KeyError, IndexError, TypeError):
                 generated = {}

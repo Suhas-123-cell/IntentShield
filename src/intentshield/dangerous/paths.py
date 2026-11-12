@@ -4,12 +4,14 @@ from __future__ import annotations
 import os
 import posixpath
 import re
+from functools import lru_cache
+from pathlib import Path
 
-from .core import _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, _bin
+from .core import _EVENT_HOMES, _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, _bin
 
 # --- paths -----------------------------------------------------------------------------------------------------
 
-_HOME = re.compile(r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|~[\w.-]{0,32}|/Users/[^/]+|/home/[^/]+|/root|/var/root)(?=/|$)")
+_HOME = re.compile(r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|~[\w.-]{0,32}|(?i:/Users/[^/]+|/home/[^/]+|/root|/var/root))(?=/|$)")
 _GLOB_TAIL = re.compile(r"/(?:\.?\*{1,2}|\.\[!\.\]\*|\.\[\^\.\]\*|\.\?\*)$")
 _BRACKET = re.compile(r"\[[^\]/\s]{1,30}\]")
 
@@ -30,31 +32,82 @@ _PROTECTED = frozenset({"/", "~", *_SYSTEM_ROOTS, "/usr/bin", "/usr/lib", "/usr/
                         "/private/etc", "/private/var", "/etc/ssh", "/lib/modules"})
 _HOME_DIRS = frozenset({"Documents", "Desktop", "Downloads", "Pictures", "Music", "Movies", "Library", "Developer", ".ssh",
                         ".aws", ".gnupg", ".config", ".kube", ".local"})
-
+# The listed names are compared without regard to case, as the secret and persistence rules compare theirs: on a default macOS
+# or Windows volume ``~/documents`` and ``/ETC`` are the same directories. Only these names match, and only the whole path
+# (a system directory also by its prefix): ``~/Documents/Notes`` and ``~/projects/Library`` stay as they were.
+_PROTECTED_LOWER = frozenset(name.lower() for name in _PROTECTED)
+_HOME_DIRS_LOWER = frozenset(name.lower() for name in _HOME_DIRS)
+_SYSTEM_PREFIXES = tuple(r.lower() for r in _SYSTEM_ROOTS if r not in ("/Users", "/home", "/root", "/mnt", "/Volumes", "/srv"))
 
 _HOME_HEAD = re.compile(r"^(?:~[\w.-]{0,32}|\$\{?(?:HOME|USERPROFILE)\}?|\$\{(?:HOME|USERPROFILE):?[-?=][^}]{0,60}\})(?=/|$)")
+# What stands in for ``~`` when no home directory is known, and the directories that are never taken for a home (a home that
+# is ``/`` or ``/tmp`` would make every path a home path).
+_FALLBACK_HOME = "/Users/user"
+_NOT_A_HOME = frozenset({"/tmp", "/private/tmp", "/var/tmp", "/dev/shm", "/dev/null"})
+
+
+@lru_cache(maxsize=64)
+def _clean_homes(raw: tuple[str, ...]) -> tuple[str, ...]:
+    homes: list[str] = []
+    for item in raw:
+        if not item.startswith("/"):
+            continue
+        for spelled in (item, os.path.realpath(item)):
+            home = posixpath.normpath("/" + spelled.lstrip("/"))
+            if home.lower() not in _PROTECTED_LOWER and home.lower() not in _NOT_A_HOME and home not in homes:
+                homes.append(home)
+    return tuple(homes)
+
+
+def _homes() -> tuple[str, ...]:
+    """The home directories this call can touch, the first being what ``~`` and ``$HOME`` mean: the home the event names (when
+    the harness gave one), then the ``HOME`` and ``USERPROFILE`` of this process and the home of the user it runs as, each with
+    its real path. A path under one of them is a home path whatever its place in the file system (``/mnt/c/Users/x``,
+    ``/workspace``); ``/Users/<name>``, ``/home/<name>`` and ``/root`` are home directories whoever's they are."""
+    raw = [*_EVENT_HOMES.get(), os.environ.get("HOME", ""), os.environ.get("USERPROFILE", "")]
+    try:
+        raw.append(str(Path.home()))
+    except (RuntimeError, KeyError, OSError):
+        pass
+    return _clean_homes(tuple(h for h in raw if h))
+
+
+def _head_home(head: str) -> str:
+    """The directory a leading ``~``, ``~name``, ``$HOME`` or ``${HOME:-x}`` stands for, as an absolute path."""
+    if len(head) > 1 and head[0] == "~":
+        try:
+            spelled = os.path.expanduser(head)
+        except (KeyError, OSError):
+            spelled = head
+        return posixpath.normpath(spelled) if spelled.startswith("/") else "/Users/" + head[1:]
+    homes = _homes()
+    return homes[0] if homes else _FALLBACK_HOME
+
+
+def _map_home(p: str, base: str = "") -> str:
+    """``p`` (absolute, normalised) as ``~`` plus what follows, when it is a home directory or lies in one."""
+    low = p.lower()
+    for home in sorted({base, *_homes()} - {""}, key=len, reverse=True):
+        if low == home.lower() or low.startswith(home.lower() + "/"):
+            return "~" + p[len(home):]
+    match = _HOME.match(p)
+    return "~" + p[match.end():] if match else p
 
 
 def _norm(path: str) -> str:
-    """A path with the home directory as ``~``, ``..`` resolved and a trailing glob removed: ``/Users/x/../x/*`` is ``~``."""
+    """A path with the home directory as ``~``, ``..`` resolved and a trailing glob removed: ``/Users/x/../x/*`` is ``~``, and
+    so is ``~/../x`` (the climb past the home directory is made on the real path, so what comes back down is read as it is)."""
     p = path.strip().strip("\"'")
     if not p:
         return ""
     head = _HOME_HEAD.match(p)
     if head:
-        stack: list[str] = []
-        for seg in p[head.end():].split("/"):
-            if seg in ("", "."):
-                continue
-            if seg == "..":
-                if not stack:
-                    return "/Users"  # above the home directory
-                stack.pop()
-            else:
-                stack.append(seg)
-        p = "/".join(["~", *stack])
+        base = _head_home(head[0])
+        p = _map_home(posixpath.normpath(base + "/" + p[head.end():]), base)
+    elif p.startswith("/"):
+        p = _map_home(posixpath.normpath("/" + p.lstrip("/")))
     else:
-        p = posixpath.normpath("/" + p.lstrip("/")) if p.startswith("/") else posixpath.normpath(p)
+        p = posixpath.normpath(p)
         home = _HOME.match(p)
         if home:
             p = "~" + p[home.end():]
@@ -71,17 +124,17 @@ def _norm(path: str) -> str:
 
 def _protected(path: str) -> bool:
     p = _norm(path)
-    if p in _PROTECTED:
+    low = p.lower()
+    if low in _PROTECTED_LOWER:
         return True
-    if p.startswith("~/") and p[2:] in _HOME_DIRS:
+    if low.startswith("~/") and low[2:] in _HOME_DIRS_LOWER:
         return True
-    return False
+    return any(low == posixpath.dirname(h).lower() for h in _homes() if posixpath.dirname(h) != "/")   # the directory of homes
 
 
 def _system(path: str) -> bool:
-    p = _norm(path)
-    return any(p == r or p.startswith(r + "/") for r in _SYSTEM_ROOTS if r not in ("/Users", "/home", "/root", "/mnt", "/Volumes",
-                                                                                   "/srv"))
+    low = _norm(path).lower()
+    return any(low == r or low.startswith(r + "/") for r in _SYSTEM_PREFIXES)
 
 
 _DEVICE = re.compile(r"^/dev/(?:r?disk\d|sd[a-z]|hd[a-z]|nvme\d|mmcblk\d|vd[a-z]|xvd[a-z]|md\d|dm-\d|loop\d|mapper/|sr\d|"
@@ -91,6 +144,8 @@ _SAFE_DEVICE = frozenset({"/dev/null", "/dev/stdout", "/dev/stderr", "/dev/stdin
 
 
 def _device(path: str) -> bool:
+    if path.startswith("/"):
+        path = posixpath.normpath("/" + path.lstrip("/"))   # /dev//sda and /dev/./sda are /dev/sda
     return bool(_DEVICE.match(path)) and path not in _SAFE_DEVICE
 
 
@@ -434,7 +489,7 @@ def persistence_path(path: str) -> tuple[str, str] | None:
     path = _clean_path(path)
     if len(path) > _PATH_CAP:
         return (ASK, _PATH_CAP_WHY) if _pathlike(path) else None
-    n = _norm(path).lower() if path.startswith(("~", "$", "/")) else path.strip().replace("\\", "/").lower()
+    n = _norm(path).lower() if path.startswith(("~", "$", "/")) else posixpath.normpath(path.strip().replace("\\", "/")).lower()
     if not n:
         return None
     if _PERSIST_DENY.search(n):

@@ -308,7 +308,7 @@ def main(argv: list[str] | None = None) -> None:
     report = run_evaluation()
     print(to_markdown(report))
     if args.out:
-        Path(args.out).write_text(json.dumps(report, indent=2))
+        Path(args.out).write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

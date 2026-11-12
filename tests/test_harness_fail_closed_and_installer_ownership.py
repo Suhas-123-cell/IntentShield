@@ -244,7 +244,7 @@ def test_install_with_a_hosted_judge_asks_for_the_key_once_and_the_hook_reads_it
     install.install("claude", "user", hook="intentshield-hook", home=home, judge="groq", ask=lambda p: 1 / 0)
     install.install("gemini", "user", hook="intentshield-hook", home=home, judge="ollama", ask=lambda p: 1 / 0)
     # The hook loads the stored key with no dotenv dependency.
-    monkeypatch.setattr(harness, "ENV_FILE", env)
+    monkeypatch.setattr(harness.env, "ENV_FILE", env)
     harness.load_env_file(env)
     import os
     assert os.environ["GROQ_API_KEY"] == "gsk_test_key"
@@ -252,7 +252,7 @@ def test_install_with_a_hosted_judge_asks_for_the_key_once_and_the_hook_reads_it
 
 def test_a_judge_without_a_key_degrades_to_rules_and_says_so(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    monkeypatch.setattr(harness, "ENV_FILE", tmp_path / "missing.env")
+    monkeypatch.setattr(harness.env, "ENV_FILE", tmp_path / "missing.env")
     g = HarnessGuard(tmp_path / "h.db", judge="groq")
     assert g.judge is None and "GROQ_API_KEY" in g.judge_missing
     assert "intentshield install <harness> --judge groq" in capsys.readouterr().err

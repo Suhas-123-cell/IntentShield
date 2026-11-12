@@ -157,6 +157,7 @@ async def _run_with_model(request: ModelRunRequest, runtime: MCPProxyRuntime | N
 
 def _add_rate_limit(app: FastAPI, limiter: RateLimiter, approval_token: str) -> None:
     """Limit the requests of each client address; the operator's approval requests have a bucket of their own."""
+
     @app.middleware("http")
     async def rate_limit(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         client = request.client.host if request.client else "unknown"
@@ -184,6 +185,116 @@ def _bearer_check(accepted_tokens: list[str], message: str) -> Callable[..., Non
             raise HTTPException(401, message, headers={"WWW-Authenticate": "Bearer"})
 
     return check
+
+
+def _add_health_route(app: FastAPI, runtime: MCPProxyRuntime | None) -> None:
+    """The health check."""
+
+    @app.get("/health")
+    @app.get("/api/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok", "mode": "mcp-proxy" if runtime else "offline"}
+
+
+def _add_run_routes(app: FastAPI, runtime: MCPProxyRuntime | None, service: Callable[[], IntentShieldService],
+                    models: ModelGateway, model_slots: asyncio.Semaphore, require_run_access: Callable[..., None]) -> None:
+    """The routes that create, list and read runs, and the model runs."""
+
+    @app.post("/api/runs", status_code=201)
+    async def create_run(request: RunCreateRequest, _authorized: None = Depends(require_run_access)) -> GatewayResult:
+        return await _run_call(request, runtime, service)
+
+    @app.get("/api/models")
+    def list_models() -> list[ModelProviderStatus]:
+        return models.statuses()
+
+    @app.post("/api/model-runs", status_code=201)
+    async def create_model_run(request: ModelRunRequest,
+                               _authorized: None = Depends(require_run_access)) -> dict[str, Any]:
+        return await _run_with_model(request, runtime, service, models, model_slots)
+
+    @app.get("/api/runs")
+    def list_runs(
+        limit: int = Query(default=100, ge=1, le=500),
+        _authorized: None = Depends(require_run_access),
+    ) -> list[dict[str, Any]]:
+        return service().storage.list_runs(limit)
+
+    @app.get("/api/runs/{run_id}")
+    def get_run(run_id: str, _authorized: None = Depends(require_run_access)) -> dict[str, Any]:
+        run = service().storage.get_run(run_id)
+        if not run:
+            raise HTTPException(404, "Run not found")
+        return {**run, "events": service().storage.list_events(run_id)}
+
+    @app.get("/api/runs/{run_id}/events")
+    def get_events(run_id: str, _authorized: None = Depends(require_run_access)) -> list[dict[str, Any]]:
+        if not service().storage.get_run(run_id):
+            raise HTTPException(404, "Run not found")
+        return service().storage.list_events(run_id)
+
+
+def _add_approval_routes(app: FastAPI, runtime: MCPProxyRuntime | None, service: Callable[[], IntentShieldService],
+                         require_approval_access: Callable[..., None]) -> None:
+    """The routes that list approvals and decide them."""
+
+    @app.get("/api/approvals")
+    def list_approvals(
+        status: str | None = None,
+        _authorized: None = Depends(require_approval_access),
+    ) -> list[dict[str, Any]]:
+        return service().storage.list_approvals(status.upper() if status else None)
+
+    @app.post("/api/approvals/{approval_id}/decision")
+    async def decide_approval(
+        approval_id: str,
+        request: ApprovalDecisionRequest,
+        _authorized: None = Depends(require_approval_access),
+    ) -> GatewayResult:
+        try:
+            if runtime is not None:
+                return await runtime.decide_approval(
+                    approval_id, request.decision == "approve", request.trust_source
+                )
+            return await asyncio.to_thread(
+                service().decide_approval, approval_id, request.decision == "approve"
+            )
+        except KeyError:
+            raise HTTPException(404, "Approval not found") from None
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+
+def _add_status_routes(app: FastAPI, runtime: MCPProxyRuntime | None, service: Callable[[], IntentShieldService],
+                       require_run_access: Callable[..., None]) -> None:
+    """The routes for the tool catalog, the metrics and the security status."""
+
+    @app.get("/api/tools", dependencies=[Depends(require_run_access)])
+    async def tools() -> list[dict[str, Any]]:
+        if runtime is not None:
+            return await runtime.tool_catalog()
+        return service().tool_catalog()
+
+    @app.get("/api/metrics", dependencies=[Depends(require_run_access)])
+    def metrics() -> dict[str, Any]:
+        return service().storage.metrics()
+
+    @app.get("/api/security/status", dependencies=[Depends(require_run_access)])
+    def security_status() -> dict[str, Any]:
+        return service().security_status()
+
+
+def _add_dashboard(app: FastAPI) -> None:
+    """The dashboard's page and files, mounted after the API routes so static content can never shadow ``/api``."""
+
+    static_dir = Path(__file__).with_name("static")
+    if static_dir.exists():
+        # Mount after API routes so static content can never shadow /api.
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+        @app.get("/", include_in_schema=False)
+        def dashboard() -> FileResponse:
+            return FileResponse(static_dir / "index.html")
 
 
 def create_app(
@@ -261,92 +372,11 @@ def create_app(
     require_run_access = _bearer_check([t for t in (run_token, approval_token) if t] if run_token else [],
                                        "A valid agent or operator token is required")
 
-    @app.get("/health")
-    @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "mode": "mcp-proxy" if runtime else "offline"}
-
-    @app.post("/api/runs", status_code=201)
-    async def create_run(request: RunCreateRequest, _authorized: None = Depends(require_run_access)) -> GatewayResult:
-        return await _run_call(request, runtime, service)
-
-    @app.get("/api/models")
-    def list_models() -> list[ModelProviderStatus]:
-        return models.statuses()
-
-    @app.post("/api/model-runs", status_code=201)
-    async def create_model_run(request: ModelRunRequest,
-                               _authorized: None = Depends(require_run_access)) -> dict[str, Any]:
-        return await _run_with_model(request, runtime, service, models, model_slots)
-
-    @app.get("/api/runs")
-    def list_runs(
-        limit: int = Query(default=100, ge=1, le=500),
-        _authorized: None = Depends(require_run_access),
-    ) -> list[dict[str, Any]]:
-        return service().storage.list_runs(limit)
-
-    @app.get("/api/runs/{run_id}")
-    def get_run(run_id: str, _authorized: None = Depends(require_run_access)) -> dict[str, Any]:
-        run = service().storage.get_run(run_id)
-        if not run:
-            raise HTTPException(404, "Run not found")
-        return {**run, "events": service().storage.list_events(run_id)}
-
-    @app.get("/api/runs/{run_id}/events")
-    def get_events(run_id: str, _authorized: None = Depends(require_run_access)) -> list[dict[str, Any]]:
-        if not service().storage.get_run(run_id):
-            raise HTTPException(404, "Run not found")
-        return service().storage.list_events(run_id)
-
-    @app.get("/api/approvals")
-    def list_approvals(
-        status: str | None = None,
-        _authorized: None = Depends(require_approval_access),
-    ) -> list[dict[str, Any]]:
-        return service().storage.list_approvals(status.upper() if status else None)
-
-    @app.post("/api/approvals/{approval_id}/decision")
-    async def decide_approval(
-        approval_id: str,
-        request: ApprovalDecisionRequest,
-        _authorized: None = Depends(require_approval_access),
-    ) -> GatewayResult:
-        try:
-            if runtime is not None:
-                return await runtime.decide_approval(
-                    approval_id, request.decision == "approve", request.trust_source
-                )
-            return await asyncio.to_thread(
-                service().decide_approval, approval_id, request.decision == "approve"
-            )
-        except KeyError:
-            raise HTTPException(404, "Approval not found") from None
-        except ValueError as exc:
-            raise HTTPException(409, str(exc)) from exc
-
-    @app.get("/api/tools", dependencies=[Depends(require_run_access)])
-    async def tools() -> list[dict[str, Any]]:
-        if runtime is not None:
-            return await runtime.tool_catalog()
-        return service().tool_catalog()
-
-    @app.get("/api/metrics", dependencies=[Depends(require_run_access)])
-    def metrics() -> dict[str, Any]:
-        return service().storage.metrics()
-
-    @app.get("/api/security/status", dependencies=[Depends(require_run_access)])
-    def security_status() -> dict[str, Any]:
-        return service().security_status()
-
-    static_dir = Path(__file__).with_name("static")
-    if static_dir.exists():
-        # Mount after API routes so static content can never shadow /api.
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-        @app.get("/", include_in_schema=False)
-        def dashboard() -> FileResponse:
-            return FileResponse(static_dir / "index.html")
+    _add_health_route(app, runtime)
+    _add_run_routes(app, runtime, service, models, model_slots, require_run_access)
+    _add_approval_routes(app, runtime, service, require_approval_access)
+    _add_status_routes(app, runtime, service, require_run_access)
+    _add_dashboard(app)
 
     return app
 

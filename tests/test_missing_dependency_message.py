@@ -42,7 +42,7 @@ def test_wrap_names_the_missing_package_and_leaves_the_file_alone(tmp_path):
     config.write_text(json.dumps({"mcpServers": {"s": {"command": "echo"}}}))
     before = config.read_bytes()
     done = run(tmp_path, f"from intentshield.__main__ import main\nmain(['wrap', {str(config)!r}, '--allow-ephemeral'])")
-    one_line(done, "jsonschema")
+    one_line(done, ("jsonschema", "pydantic"))  # the first of the two that the proxy package imports
     assert config.read_bytes() == before
 
 
