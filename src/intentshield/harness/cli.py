@@ -87,14 +87,15 @@ _LOOSENING_ENV = (
 
 
 def loosening_env(argv: list[str]) -> list[str]:
-    """Notes for each environment variable that changes the hook's settings and is not overridden by a flag on its command line.
-    A project's settings can set them for a session, so the hook says so on stderr instead of obeying them silently."""
+    """One sentence for each environment variable that changes the hook's settings and is not overridden by a flag on its command
+    line (``INTENTSHIELD_HOOK_REVIEW=never is set in the environment and turns off the asks before state-changing calls.``). A
+    project's settings can set them for a session, so the hook says so on stderr instead of obeying them silently."""
     notes = []
     for name, flags, loosens, what in _LOOSENING_ENV:
         value = os.environ.get(name)
         if value is None or not loosens(value) or any(a == f or a.startswith(f + "=") for a in argv for f in flags):
             continue
-        notes.append(f"{name}={value} (from the environment) {what}")
+        notes.append(f"{name}={value} is set in the environment and {what}.")
     return notes
 
 
@@ -104,7 +105,7 @@ def _with_loosening_notes(harness: str, reply: dict[str, Any] | None, notes: lis
     model (Claude Code also shows it to the user), Gemini CLI as a system message. Cursor has no field for it on a call."""
     if not notes or harness == "cursor":
         return reply
-    text = "IntentShield is running with " + "; ".join(notes) + "."
+    text = "IntentShield: " + " ".join(notes)
     out = dict(reply) if reply else {}
     if harness == "gemini":
         out["systemMessage"] = f"{out['systemMessage']} {text}" if out.get("systemMessage") else text

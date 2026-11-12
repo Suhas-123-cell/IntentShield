@@ -64,7 +64,9 @@ per-session SQLite file at `~/.intentshield/hooks.db`.
 - Asks before a call carries a credential the user did not give (GitHub, AWS, Slack, Stripe, OpenAI,
   Anthropic, Google, Groq and Hugging Face token formats, private keys, JWTs), and denies it once the session
   is tainted.
-- Scans every result and taints the session.
+- Scans every result and taints the session. A result longer than 1,000,000 characters is scanned at its
+  first and last 500,000 characters, the reply says the rest was not checked, and later state-changing calls ask. The arguments of a
+  call are read the same way, and the call asks, naming the limit (since 0.4.4).
 - Asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before
   state-changing calls once tainted (`--review always|tainted|never`).
 - A hook that cannot start or crashes is refused on every harness. Since 0.4.3, `install` puts a launcher in front
@@ -119,6 +121,14 @@ read (an unknown event name, or a command, path or URL that is missing or not te
   cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content`, `Invoke-WebRequest` uploads, a download run with
   `Invoke-Expression`); other cmdlets are not read (the list is in the guide). The wrappers, the limits and the PowerShell
   cmdlets are there since 0.4.4.
+- The text rules read a path as the place it names, not as it is spelled: dot segments, doubled slashes, a trailing slash and a
+  climb (`~/../x/.ssh/id_rsa`) get the verdict of the plain path. A relative path climbs from the call's working directory as
+  the event wrote it; it is resolved for the path arguments of commands (also the file arguments of a shell or an interpreter), redirect
+  targets and the file tools, and not for a path inside code given to an interpreter with `-c` or `-e`, a path in a script file or a
+  directory an earlier call changed. A write is read as one in these forms (`perl -pi`, `sed -ni`, `awk -i inplace`, an editor, `cp -t DIR`,
+  `tar -C DIR`, `unzip -d DIR`, `rsync` or `scp` to a local path, a `find` that deletes or runs a command), so a write to an access file
+  such as `/etc/sudoers` is a deny in each. A home directory is also the home of the running user wherever it lies (`/mnt/c/Users/x`, `/workspace`), and
+  the listed folder names match in any case (since 0.4.4).
 - The text rules read the harness's own tools. With `--builtin-tools` they also read (since 0.4.4) the path and command
   arguments of MCP tools (`path`, `file`, `filename`, `command`, `cmd` and a few more); anything else an MCP filesystem or shell
   server is asked to do is not read.
@@ -298,7 +308,7 @@ flowchart LR
 ```
 
 The gateway path (`service.py`) runs the full `PolicyEngine`, approvals and idempotency checks. The
-harness hook (`harness.py`) applies the same `mcp_inspect` rules with per-session taint in SQLite and
+harness hook (`harness/`) applies the same `mcp_inspect` rules with per-session taint in SQLite and
 answers allow / ask / deny, which the harness maps to the same three outcomes. Detectors only add
 evidence; no model output can authorize a call. The full diagram and component table are in
 [architecture-and-testing.md](architecture-and-testing.md).

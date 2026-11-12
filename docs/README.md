@@ -4,11 +4,11 @@ Start with the [README](../README.md) in the repository root. The files here are
 
 **Which files are which.** Word counts are from `wc -w`.
 
-- **Product documentation** (using, checking and changing the tool), about 68,500 words in all: the [README](../README.md),
+- **Product documentation** (using, checking and changing the tool), about 71,400 words in all: the [README](../README.md),
   [guide.md](guide.md), [layers.md](layers.md), [gateway.md](gateway.md), [detectors.md](detectors.md), [benchmarks.md](benchmarks.md),
   [security-review.md](security-review.md), [architecture-and-testing.md](architecture-and-testing.md),
   [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md) and [CHANGELOG.md](../CHANGELOG.md). A user needs only the
-  README and the guide, about 12,900 words.
+  README and the guide, about 14,000 words.
 - **Research write-ups** (what the measurements support), about 14,100 words: [contribution.md](contribution.md), the
   [hook study report](hook-fidelity-report.md) and its [appendix](hook-fidelity-report-appendix.md), [related-work.md](related-work.md)
   and [coverage-study.md](coverage-study.md).
@@ -21,10 +21,10 @@ Start with the [README](../README.md) in the repository root. The files here are
 
 | step | what you get | words | minutes |
 |---|---|---|---|
-| the [README](../README.md) down to Results | what it does, its threat model, how to install it, what it stops and does not stop, what is stored locally | 1,170 | 5 |
+| the [README](../README.md) down to Results | what it does, its threat model, how to install it, what it stops and does not stop, what is stored locally | 1,200 | 5 |
 | [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,420 | 6 |
 | [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,780 | 11 |
-| all three | | 5,370 | 22 |
+| all three | | 5,400 | 22 |
 
 The first two steps alone take 11 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
 and its [appendix](hook-fidelity-report-appendix.md) (5,250 words) holds the denominators, the per-build detail and the long caveats. Everything

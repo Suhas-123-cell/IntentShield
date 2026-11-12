@@ -57,7 +57,7 @@ the model; "echo only" means the model had it (it quoted it) but no hook event d
 
 **Rug-pull row, under the proxy.** The probe changed the lookup tool's description after its
 first call and sent `tools/list_changed`. The proxy fails closed on any change after connect
-(`_refresh_catalog` adds the tool to a drifted set that is never cleared, `mcp_proxy.py:469`).
+(`_refresh_catalog` adds the tool to a drifted set that is never cleared, in `mcp_proxy/catalog.py`).
 In the Claude run the second and third lookups failed with "Tool lookup is not available through
 IntentShield" (two `PostToolUseFailure` events); in the Gemini run the second lookup never
 reached the upstream (the probe logged one `tools/call`). A new session starts a new proxy

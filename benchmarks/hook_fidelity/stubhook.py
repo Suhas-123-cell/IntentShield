@@ -12,7 +12,7 @@ changes the reply. A reply that sleeps (R9, the latency variant) appends a secon
 sleep: if the harness killed the hook at its timeout that line never appears, which is how a run shows whether the
 timeout was honoured.
 
-Independence: this file imports nothing from IntentShield (not harness.py). The byte tables below are written
+Independence: this file imports nothing from IntentShield (not the harness package). The byte tables below are written
 from the vendors' public hook documentation, not from IntentShield's adapters, so a shared reading of the
 code cannot confirm itself. Each table row names the documentation it comes from; none of the rows has had a
 second reader yet (section 6 of hook-fidelity-study.md (research-notes branch)), and they are what a hook

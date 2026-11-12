@@ -594,13 +594,51 @@ def no_loosening_variable(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+LOOSENING_SENTENCES = {
+    "INTENTSHIELD_HOOK_REVIEW": "INTENTSHIELD_HOOK_REVIEW=never is set in the environment and turns off the asks before "
+                                "state-changing calls.",
+    "INTENTSHIELD_HOOK_TRANSLATE": "INTENTSHIELD_HOOK_TRANSLATE=off is set in the environment and turns off the deadline and "
+                                   "the choice of ask or refusal by the harness.",
+    "INTENTSHIELD_HOOK_DEADLINE": "INTENTSHIELD_HOOK_DEADLINE=0 is set in the environment and turns off the deadline.",
+    "INTENTSHIELD_HOOK_SOURCED_READS": "INTENTSHIELD_HOOK_SOURCED_READS=allow is set in the environment and stops the asks "
+                                       "before a read whose argument came from a tool output.",
+    "INTENTSHIELD_THREAT_MEMORY": "INTENTSHIELD_THREAT_MEMORY=0 is set in the environment and turns off threat memory.",
+    "INTENTSHIELD_HOOK_DB": "INTENTSHIELD_HOOK_DB=/tmp/elsewhere.db is set in the environment and moves the session database, "
+                            "so what other sessions saw is not seen.",
+    "INTENTSHIELD_THREAT_DB": "INTENTSHIELD_THREAT_DB=/tmp/elsewhere-threats.db is set in the environment and moves the threat "
+                              "memory file.",
+    "INTENTSHIELD_THREAT_PACKS": "INTENTSHIELD_THREAT_PACKS=/tmp/packs is set in the environment and loads threat packs from "
+                                 "another directory.",
+    "INTENTSHIELD_HOOK_CATALOG": "INTENTSHIELD_HOOK_CATALOG=/tmp/catalog is set in the environment and moves the tool catalog "
+                                 "the proxies write.",
+}
+
+
 @pytest.mark.parametrize(("name", "value"), LOOSENING)
-def test_each_variable_that_loosens_the_hook_is_named_on_stderr(name, value, no_loosening_variable, monkeypatch):
+def test_each_variable_that_loosens_the_hook_is_named_on_stderr_in_one_sentence(name, value, no_loosening_variable, monkeypatch):
     notes = harness.loosening_env([])
     assert notes == []
     monkeypatch.setenv(name, value)
+    assert harness.loosening_env([]) == [LOOSENING_SENTENCES[name]]
+
+
+@pytest.mark.parametrize(("name", "value"), LOOSENING)
+def test_the_reply_carries_the_sentence_of_each_loosening_variable_as_it_is(name, value, no_loosening_variable, monkeypatch):
+    monkeypatch.setenv(name, value)
     notes = harness.loosening_env([])
-    assert len(notes) == 1 and notes[0].startswith(f"{name}={value} (from the environment)")
+    for kind in ("claude", "codex", "gemini"):
+        reply = harness.cli._with_loosening_notes(kind, None, notes)
+        text = reply["systemMessage"] if kind == "gemini" else reply["hookSpecificOutput"]["additionalContext"]
+        assert text == "IntentShield: " + LOOSENING_SENTENCES[name]
+    assert harness.cli._with_loosening_notes("cursor", None, notes) is None
+
+
+def test_two_loosening_variables_make_two_sentences_in_the_reply(no_loosening_variable, monkeypatch):
+    monkeypatch.setenv("INTENTSHIELD_HOOK_REVIEW", "never")
+    monkeypatch.setenv("INTENTSHIELD_THREAT_MEMORY", "0")
+    reply = harness.cli._with_loosening_notes("claude", None, harness.loosening_env([]))
+    both = LOOSENING_SENTENCES["INTENTSHIELD_HOOK_REVIEW"] + " " + LOOSENING_SENTENCES["INTENTSHIELD_THREAT_MEMORY"]
+    assert reply["hookSpecificOutput"]["additionalContext"] == "IntentShield: " + both
 
 
 @pytest.mark.parametrize(("name", "value"), [
@@ -626,7 +664,8 @@ def test_the_hook_says_so_on_stderr_when_a_call_runs_under_such_a_variable(tmp_p
     monkeypatch.setenv("INTENTSHIELD_THREAT_MEMORY", "0")
     harness.main(["claude", "--db", str(tmp_path / "hooks.db"), "--catalog", str(tmp_path / "c")])
     err = capsys.readouterr().err
-    assert "INTENTSHIELD_HOOK_REVIEW=never (from the environment)" in err and "INTENTSHIELD_THREAT_MEMORY=0" in err
+    assert LOOSENING_SENTENCES["INTENTSHIELD_HOOK_REVIEW"] in err
+    assert "INTENTSHIELD_THREAT_MEMORY=0 is set in the environment" in err
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(claude("UserPromptSubmit", prompt="hi"))))
     harness.main(["claude", "--db", str(tmp_path / "hooks.db"), "--catalog", str(tmp_path / "c")])
-    assert "from the environment" not in capsys.readouterr().err  # only a call is held to it: no noise on other events
+    assert "set in the environment" not in capsys.readouterr().err  # only a call is held to it: no noise on other events

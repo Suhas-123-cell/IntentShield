@@ -1,7 +1,7 @@
 """White-box evasion of the description scanner (no model needed).
 
 Takes every MCPTox poisoned description the scanner currently flags and rewrites it
-the way an attacker who has read mcp_inspect.py would: same instruction for an LLM
+the way an attacker who has read the mcp_inspect package would: same instruction for an LLM
 reader, different surface for the regexes. Reports how many stay flagged.
 
     .venv/bin/python benchmarks/adaptive.py --data artifacts/data/MCPTox-Benchmark

@@ -19,13 +19,14 @@ is not seen, and that is a limit, not a feature.
 
 The package: ``core`` (limits, ``Hit``), ``parsing`` (command text into stages), ``runners`` (wrappers such as sudo, flock, ssh),
 ``paths`` (path and credential-store rules), ``rules`` (git, rm, find, disks, modes, network), ``variables`` (variables, braces,
-``cd``), ``selfguard`` (the guard's own files), ``powershell`` (cmdlets read as POSIX commands) and ``analysis`` (a whole command,
-``assess_shell`` and ``assess_file``). The public names are imported here; the private ones stay reachable as ``dangerous._name``.
+``cd``), ``writes`` (which paths a command writes), ``selfguard`` (the guard's own files), ``powershell`` (cmdlets read as POSIX
+commands) and ``analysis`` (a whole command, ``assess_shell`` and ``assess_file``). The public names are imported here;
+the private ones stay reachable as ``dangerous._name``.
 """
 from __future__ import annotations
 
 # The names of the private rules stay reachable as ``dangerous._name`` (the tests read the limits and the tables there).
-from . import analysis, core, parsing, paths, powershell, rules, runners, selfguard, variables
+from . import analysis, core, parsing, paths, powershell, rules, runners, selfguard, variables, writes
 from .analysis import assess_file as assess_file
 from .analysis import assess_shell as assess_shell
 from .core import ASK as ASK
@@ -36,7 +37,7 @@ from .rules import path_risk as path_risk
 from .rules import shlex_args as shlex_args
 from .selfguard import guard_surface as guard_surface
 
-for _module in (core, parsing, runners, paths, rules, variables, selfguard, powershell, analysis):
+for _module in (core, parsing, runners, paths, rules, variables, selfguard, powershell, writes, analysis):
     for _name, _value in vars(_module).items():
         if _name.startswith("_") and not _name.startswith("__"):
             globals().setdefault(_name, _value)

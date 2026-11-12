@@ -40,8 +40,8 @@ Reporters are credited by name in the release notes and the changelog entry unle
 ## What is stored locally
 
 The guard keeps state on your machine, under `~/.intentshield/` unless a variable or a flag names another path. It sends
-nothing anywhere itself; only the optional judge and Prompt Guard send text to a provider you chose (see the
-[guide](docs/guide.md)).
+nothing anywhere itself; only the optional judge and Prompt Guard send text to a provider you chose, and only over `http` or
+`https` (see the [guide](docs/guide.md)).
 
 | File | What it holds | How long |
 |---|---|---|
@@ -84,7 +84,7 @@ To delete it, first run `intentshield uninstall <harness>` and `intentshield unw
 points at a missing file; `unwrap` and `uninstall` may need the backups. Then remove what you want:
 
 ```sh
-rm -f ~/.intentshield/hooks.db*    # prompts and observed values; a later hook event starts a new file
+rm -f ~/.intentshield/hooks.db*    # prompts and observed values; a later hook event starts a new file (also the cure if a hook says it cannot use the file)
 rm -f ~/.intentshield/threats.db*  # what the threat memory learned
 rm -r ~/.intentshield              # everything above, judge keys and backups included
 ```

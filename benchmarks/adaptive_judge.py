@@ -161,7 +161,7 @@ def judge_endpoint(judge: Judge) -> dict[str, Any]:
 def provenance(result: str, calls: list[dict[str, Any]], canary: str) -> str | None:
     """Why the hook's argument gate stops the victim's ``send_email`` to the canary, or None (it passes): a
     value of a flagged output (taint), then a recipient, URL, account or path seen in an output and not given
-    by the user (``harness.py``)."""
+    by the user (the ``harness`` package)."""
     user = distinctive_values(USER_REQUEST)
     for call in calls:
         arguments = call["arguments"]

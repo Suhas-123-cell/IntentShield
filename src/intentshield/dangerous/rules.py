@@ -20,6 +20,7 @@ from .paths import (
     persistence_path,
 )
 from .selfguard import guard_surface
+from .writes import written_paths
 
 # --- the rules ---------------------------------------------------------------------------------------------------
 
@@ -299,6 +300,9 @@ def _disk_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
             hit = [pos[-1]] if pos and _device(pos[-1]) else []
         if hit:
             return Hit(DENY, f"{name} writes to the block device {hit[0]}.", hit[0])
+    for target in written_paths(name, argv):   # an editor, an in-place edit, a copy into a directory, tar -C
+        if _device(target):
+            return Hit(DENY, f"{name} writes to the block device {target}.", target)
     return None
 
 
@@ -384,25 +388,10 @@ def _wipe_hit(name: str, argv: list[str]) -> Hit | None:
     return None
 
 
-_PERSIST_WRITERS = frozenset({"cp", "mv", "ln", "install", "rsync", "ditto", "dd"})
-
-
 def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
     args = argv[1:]
-    targets = [t for op, t in stage.redirects if op.startswith(">") and t not in ("/dev/null", "/dev/stderr", "/dev/stdout")]
-    pos = [a for a in args if not a.startswith("-")]
-    if name == "tee":
-        targets += pos
-    elif name in _PERSIST_WRITERS:
-        if name == "dd":
-            targets += [a[3:] for a in args if a.startswith("of=")]
-        elif pos:
-            targets.append(pos[-1])
-    elif name in ("sed", "perl", "ruby", "python3") and any(a.startswith("-i") or _is_opt(a, "--in-place") for a in args):
-        targets += pos[1:] if name == "sed" else pos
-    elif name == "touch" or name == "chmod":
-        targets += []
-    elif name == "crontab":
+    targets = written_paths(name, argv, stage.redirects)
+    if name == "crontab":
         if not any(a == "-l" for a in args):
             return Hit(ASK, "crontab installs or removes scheduled jobs.")
     elif name == "launchctl" and any(a in ("load", "bootstrap", "submit", "enable", "bootout", "unload", "kickstart")
@@ -416,11 +405,14 @@ def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
         return Hit(ASK, "gh secret changes a repository's CI secrets.")
     elif name == "defaults" and "write" in args and any("LoginItems" in a or "loginwindow" in a for a in args):
         return Hit(ASK, "defaults write sets up a login item.")
-    for t in targets:
+    asked: Hit | None = None
+    for t in targets:  # ``cp -t ~/.ssh authorized_keys`` writes the directory and the file in it: the stricter verdict counts
         hit = persistence_path(t) or guard_surface(t) or overwrite_level(t)
-        if hit:
-            return Hit(hit[0], f"writes {t}, {hit[1]}.", t)
-    return None
+        if hit and hit[0] == DENY:
+            return Hit(DENY, f"writes {t}, {hit[1]}.", t)
+        if hit and asked is None:
+            asked = Hit(hit[0], f"writes {t}, {hit[1]}.", t)
+    return asked
 
 
 _REMOTE = re.compile(r"^(?:[\w.+-]{1,64}@)?[\w.-]{1,255}:(?!//)[^\s]*$|^[a-z]{2,10}://")

@@ -6,8 +6,8 @@ title: "IntentShield: an offline-first guardrail for MCP tool calls"
 authors:
   - family-names: "Maddali"
     given-names: "Suhas Choudary"
-version: "0.4.3"
-date-released: "2026-11-11"
+version: "0.4.4"
+date-released: "2026-11-12"
 license: Apache-2.0
 repository-code: "https://github.com/Suhas-123-cell/IntentShield"
 url: "https://github.com/Suhas-123-cell/IntentShield"

@@ -31,6 +31,7 @@ from .paths import (
     _CRED_TEXT,
     _MALICIOUS_CONTENT,
     _READERS,
+    _as_written,
     _clean_path,
     _cred_args,
     _cred_level,
@@ -67,7 +68,8 @@ from .rules import (
 )
 from .runners import _stdin_of, _unwrap
 from .selfguard import _erase_hit, _guard_hit, _guard_text, guard_surface
-from .variables import _EXPANDED, _braces, _expand_vars, _in_dir, _track
+from .variables import _EXPANDED, _braces, _expand_vars, _moved_stages, _track
+from .writes import _placeholder, _run_by_find
 
 
 def _inner_hits(extras: list[tuple[str, str]], intent: str, depth: int, state: dict[str, Any], sudo: bool) -> list[Hit]:
@@ -85,32 +87,10 @@ def _inner_hits(extras: list[tuple[str, str]], intent: str, depth: int, state: d
 
 # What stands at the end of a loop or block that is fed from a file, and the shell's own reads: they show the file's text.
 _SHELL_READS = frozenset({"done", "fi", "esac", "}", ")", "read", "mapfile", "readarray", "eval", "exec"})
-_FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 _FD_RUNS = frozenset({"-x", "-X", "--exec", "--exec-batch"})
 _SSH_OPTIONS = frozenset({"-b", "-c", "-D", "-E", "-e", "-F", "-I", "-i", "-J", "-L", "-l", "-m", "-O", "-o", "-p", "-Q", "-R",
                           "-S",
                          "-W", "-w"})
-
-
-def _placeholder(words: list[str], marks: tuple[str, ...]) -> list[str]:
-    """``words`` with the places where find or fd put a file name filled with one harmless relative name."""
-    return [re.sub(r"\{(?:/|//|\.|/\.)?\}", "found", w) if any(m in w for m in marks) else w for w in words]
-
-
-def _run_by_find(argv: list[str]) -> list[list[str]]:
-    """The commands ``find`` runs for each file (``-exec``, ``-execdir``, ``-ok``, ``-okdir``; up to ``;`` or ``{} +``)."""
-    out: list[list[str]] = []
-    i = 1
-    while i < len(argv):
-        if argv[i] not in _FIND_RUNS:
-            i += 1
-            continue
-        j = i + 1
-        while j < len(argv) and argv[j] != ";" and not (argv[j] == "+" and argv[j - 1].endswith("{}")):
-            j += 1
-        out.append(_placeholder(argv[i + 1:j], ("{}",)))
-        i = j + 1
-    return out
 
 
 def _run_by_fd(argv: list[str]) -> list[list[str]]:
@@ -285,6 +265,19 @@ _AWS_SECRET_SETTING = re.compile(r"secret|token|access_key|password|credential",
 
 
 def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
+    """The hits of one command as it is written, and then of the same command with its relative paths read from the directory it
+    runs in (``state["cwd"]``, where a ``cd`` before it has taken the call), so that a path the rules read gets the verdict of the
+    absolute path it names whichever program takes it."""
+    found = _stage_hits_as_written(stage, intent, depth, state)
+    cwd = state.get("cwd")
+    if cwd:
+        for moved in _moved_stages(stage, cwd):
+            extra = _stage_hits_as_written(moved, intent, depth, dict(state))
+            found = [*found, *(h for h in extra if h not in found)]
+    return found
+
+
+def _stage_hits_as_written(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
     bare, extras = _unwrap(stage)
     argv = bare.argv
     out: list[Hit] = _inner_hits(extras, intent, depth, state, bare.sudo)
@@ -505,7 +498,7 @@ def _walk_stages(stages: list[_Stage], intent: str, depth: int, state: dict[str,
     for k, st in enumerate(stages):
         if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
             hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
-            hits.extend(_piped_xargs(stages[k - 1], st, intent, depth, state))
+            hits.extend(_piped_xargs(stages[k - 1], st, intent, depth, {**state, "cwd": where["cwd"]}))
         elif st.piped and k and _piped_text(stages[k - 1], st, intent, 0, sudo):
             hits.append(Hit(ASK, _TOO_DEEP))
         local = dict(state)
@@ -517,17 +510,7 @@ def _walk_stages(stages: list[_Stage], intent: str, depth: int, state: dict[str,
         for note in dict.fromkeys(loop_notes):
             hits.append(Hit(ASK, f"the command uses {note}, too many to follow; check what it does."))
         for variant in variants:
-            found = _stage_hits(_with_hook_variables(variant, env), intent, depth, local)
-            hits.extend(found)
-            cwd = where["cwd"]
-            if cwd:  # after a cd, a relative target is read from where the cd went
-                bare, _ = _unwrap(variant)
-                name = _bin(bare.argv[0]) if bare.argv else ""
-                if name in _EXPANDED:
-                    moved = _Stage(_in_dir(cwd, name, bare.argv), variant.redirects, variant.piped, variant.pipeline, bare.sudo,
-                                   list(bare.assigns), bare.xargs)
-                    if moved.argv != bare.argv:
-                        hits.extend(h for h in _stage_hits(moved, intent, depth, dict(local)) if h not in found)
+            hits.extend(_stage_hits(_with_hook_variables(variant, env), intent, depth, local))
         _track(st, env, where)
         if not st.piped:
             state_pipe_secret = False
@@ -576,10 +559,10 @@ def _with_hook_variables(stage: _Stage, env: dict[str, list[str]]) -> _Stage:
 
 
 def _start_dir() -> str | None:
-    """The working directory the call runs in as the rules spell paths (``~`` for the home directory), or None when the event
-    carried none or not an absolute one."""
+    """The working directory the call runs in, as the event wrote it (not turned into ``~``: a relative path that climbs is
+    resolved on this directory), or None when the event carried none or not an absolute one."""
     cwd = _WORKDIR.get()
-    return _norm(cwd) if cwd.startswith("/") else None
+    return _as_written(cwd) if cwd.startswith("/") else None
 
 
 def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
@@ -634,6 +617,17 @@ def assess_file(path: str, content: Any = None, write: bool = False, intent: str
 
 
 def _assess_file(path: str, content: Any, write: bool, intent: str) -> Hit | None:
+    """The verdict on ``path`` as it is written and, when it is relative, on the path it names from the working directory: the
+    worse of the two."""
+    hit = _assess_file_as_written(path, content, write, intent)
+    resolved = _from_workdir(path) if path else None
+    if resolved is None or resolved == path:
+        return hit
+    other = _assess_file_as_written(resolved, content, write, intent)
+    return other if other and (not hit or other.decision == DENY and hit.decision != DENY) else hit
+
+
+def _assess_file_as_written(path: str, content: Any, write: bool, intent: str) -> Hit | None:
     if not path:
         return None
     if len(_clean_path(path)) > _PATH_CAP:  # a path, whatever it looks like: not read in full, so asked about

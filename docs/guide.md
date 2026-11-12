@@ -122,7 +122,7 @@ The session rules apply to a shell command, fetch or file access:
 - After an injection a read-only command, and an ordinary local build, test or version-control command such as `pytest` or
   `git commit`, still run; `rm`, `sed -i`, `pip install` and a download from a host the user did not name ask.
 - After an injection a `curl` to `localhost`, `127.0.0.1` or `[::1]` still runs, with or without `http://` and a port; `-X DELETE`
-  asks (on main, after 0.4.3; the form with `http://` asked before).
+  asks (since 0.4.4; the form with `http://` asked before).
 
 **Dangerous-command rules.** With `--builtin-tools` the hook also runs `src/intentshield/dangerous/` on every
 shell command, file read and file write, and the stricter of its verdict and the session rules' verdict wins (a deny
@@ -134,7 +134,7 @@ sandbox:
 **Deny** (a deny cannot be approved in the prompt, so these are the cases where the target is plainly the whole machine or a secret):
 
 - Destruction: a recursive `rm` of root, the home directory or a system directory (`/`, `~`, `/etc`, `/usr`, `/var/lib`; also `/run`,
-  `/nix`, `/cores` and `/lost+found`, on main, after 0.4.3), or of a folder of the home directory, whole or as `~/Downloads/*`
+  `/nix`, `/cores` and `/lost+found`, since 0.4.4), or of a folder of the home directory, whole or as `~/Downloads/*`
   (`~/Documents`, `~/Desktop`, `~/Downloads`, `~/Pictures`, `~/Music`, `~/Movies`, `~/Library`, `~/Developer`, `~/.config`,
   `~/.local`). A file below one, as in `rm -rf ~/Downloads/*.dmg`, is allowed. No prompt can approve a deny, so empty one of those
   folders by hand.
@@ -145,7 +145,7 @@ sandbox:
   `chown -R me /usr/lib`), and of the home directory with `sudo` or a zero or world-writable mode; `find ~ -delete` and
   `find / -delete` with no test on the name (`-type`, `-mtime`, `-size` and `-empty` do not count there: `find ~ -mtime +365 -delete`
   is a deny too); a write to a block device, `mkfs`,
-  `wipefs`; a fork bomb. On main, after 0.4.3, the other programs that empty the same targets are read too: `rsync --delete` (or
+  `wipefs`; a fork bomb. Since 0.4.4 the other programs that empty the same targets are read too: `rsync --delete` (or
   `--remove-source-files`) onto root, the home directory or a system directory, `tar --remove-files` of one, `chattr -R` of one, and a
   glob that matches nearly every hidden entry of the home directory (`~/.[a-z]*`, `~/.??*`) like `~/.*`.
 - Git: a force-push or deletion of a shared branch (`main`, `master`, `develop`, `release`, `release/...`, `release-1.2`,
@@ -153,23 +153,23 @@ sandbox:
 - Credentials: a read of an SSH private key, a cloud credential file, `/etc/shadow`, `~/.netrc` or a keychain; a sensitive file sent
   to a network destination; a write to `authorized_keys` or sudoers. A file in `~/.ssh` is a private key when it is named like one
   (`id_*`, `identity`, `*_rsa`, `*_ed25519`, `.pem`, `.key`, `.ppk`, a copy such as `id_rsa.bak`) or, when the file is there to read,
-  when it starts with a private-key header. The reason says "an SSH private key". On main, after 0.4.3, `config`, `config.d/*`,
+  when it starts with a private-key header. The reason says "an SSH private key". Since 0.4.4, `config`, `config.d/*`,
   `known_hosts`, `authorized_keys`, `allowed_signers`, `environment`, `rc` and `*.pub`, and their backups (`config.bak`, `config~`,
   `known_hosts.old`), are not held (0.4.3 denied every other file of the directory, a backup of the config included); any other
   file in `~/.ssh` is an ask whose reason says it is not a known public file and may be a private key.
 - `cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys` is a deny too, as a stranger's key looks the same. It becomes an ask only when
   the prompt names the path in full (`~/.ssh/authorized_keys`).
-- The directory of a credential store, or a glob over it: `cat ~/.ssh`, `cat ~/.ssh/*`, and (on main, after 0.4.3) `cat ~/.aws`,
+- The directory of a credential store, or a glob over it: `cat ~/.ssh`, `cat ~/.ssh/*`, and (since 0.4.4) `cat ~/.aws`,
   `cat ~/.aws/*`, `cat ~/.aws/c*` and `~/.gnupg`. A key read into a command by `$(< ~/.ssh/id_rsa)` or by a loop fed from one is a
-  deny too (on main, after 0.4.3).
+  deny too (since 0.4.4).
 - A reverse shell: `bash -i >& /dev/tcp/...`, or a shell that reads from a socket opened with `exec 3<>/dev/tcp/HOST/PORT`. The
   `exec` form is a deny when something reads the socket (a `while read` loop, a shell, `eval`, `<&3` or `$line`); without that it
-  asks (on main, after 0.4.3; 0.4.3 denied every such socket, a port probe of localhost included).
+  asks (since 0.4.4; 0.4.3 denied every such socket, a port probe of localhost included).
 
 **Ask** (a prompt in an interactive Claude Code session; a refusal where nobody can answer):
 
-- Git: hook bypass (`--no-verify`, `git commit -n`, setting `core.hooksPath`; reading or unsetting it does not ask, on main, after 0.4.3). So does the same bypass
-  through the environment (`GIT_CONFIG_KEY_0=core.hooksPath`, `export HUSKY=0; git commit`; on main, after 0.4.3);
+- Git: hook bypass (`--no-verify`, `git commit -n`, setting `core.hooksPath`; reading or unsetting it does not ask, since 0.4.4). So does the same bypass
+  through the environment (`GIT_CONFIG_KEY_0=core.hooksPath`, `GIT_CONFIG_PARAMETERS`, `export HUSKY=0; git commit`; since 0.4.4);
   any other force-push, including the usual one after
   a rebase (`git push --force-with-lease origin HEAD`, `git push -f origin my-feature`) and a branch such as
   `release-candidate`; `git reset --hard`, `git restore .` and `git clean -f` (not `git clean -n`, which deletes nothing).
@@ -178,40 +178,40 @@ sandbox:
   are an ask.
 - Deletes: `sudo rm -rf` of a direct subdirectory of a system directory (`/opt/app`, `/etc/app.d`; a deny cannot be
   approved, and these are common clean-ups); a delete by `find` at a system directory, or with `-o` or `-prune`, that names
-  the files it removes, and (on main, after 0.4.3) by `find` of a folder of the
+  the files it removes, and (since 0.4.4) by `find` of a folder of the
   home directory limited by age, size, emptiness or owner, not by name (`find ~/Downloads -mtime +30 -delete`, `-size +1G`, `-empty`, `-newer FILE`; the
-  reason names the test; `-mtime -3`, the newest files, limits nothing); `rm -rf` of a variable that may be empty, also after a root or home (`$DIR`, `/$DIR`, `~/$DIR`,
+  reason names the test). `find ~/Downloads -mtime -3 -delete` is not in this list: it is a deny, because `-mtime -3` means the
+  newest files, so it is no test that limits what is deleted, and the reason says the find "has no test on the name, age or size" and
+  deletes everything under the folder. `rm -rf` of a variable that may be empty, also after a root or home (`$DIR`, `/$DIR`, `~/$DIR`,
   `$HOME/$DIR`, `/*$DIR`).
 - Permissions: `chmod 777`; a `chmod` to `000` or to a world-writable mode, or any `chown`, of a system path (not
   `chmod 644 /etc/hosts`); a recursive `chmod` or `chown` of the home
   directory (without `sudo`) or of a `/usr/local` directory, and `chown -R $USER` or `chown -R $(whoami)` of a
   `/usr/local` directory (Homebrew's own advice).
-- Credentials read: a read of `.env`, a `.pem` that is not a certificate, or a cloud token (`aws configure get` asks for a key, not for `region`, on main,
-  after 0.4.3); a read of a harness's own credential file
+- Credentials read: a read of `.env`, a `.pem` that is not a certificate, or a cloud token (`aws configure get` asks for a key, not for `region`, since 0.4.4); a read of a harness's own credential file
   (`~/.codex/auth.json`, `~/.gemini/oauth_creds.json`, `~/.gemini/mcp-oauth-tokens.json`, `~/.claude.json`;
   `~/.claude/.credentials.json` is covered too, on a report that some Claude Code installs keep it there, which the vendor pages
   archived here do not confirm).
 - A file named like a key inside a test directory of the project (`tests/fixtures/id_rsa`): a relative path asks. An absolute path asks
-  only when the file lies inside the call's working directory and in no directory that starts with a dot (on main, after 0.4.3; it
+  only when the file lies inside the call's working directory and in no directory that starts with a dot (since 0.4.4; it
   was a deny). `~/tests/id_rsa` and a test directory outside the working directory are still denies.
-- `/etc/sudoers` (on main, after 0.4.3; it was a deny, and a write is still a deny). `~/.kube`, `~/.docker`, `~/.config/gh`
-  and `~/.config/gcloud` as a directory or by a glob, and a search (Grep) of the whole home directory (on main, after 0.4.3; the
+- Reading `/etc/sudoers` (since 0.4.4; it was a deny: it holds rules, not secrets). Writing it is a deny, as is writing any access
+  file, by any of the write forms listed under "What the parser reads" below. `~/.kube`, `~/.docker`, `~/.config/gh`
+  and `~/.config/gcloud` as a directory or by a glob, and a search (Grep) of the whole home directory (since 0.4.4; the
   `gcloud` directory already asked).
 - A key or cloud credential named as an argument by a program that no rule reads (`git add ~/.ssh/id_rsa`, `gh gist create`, `az`,
   `rsync` to a local directory, `curl file://...`, `ln -s`), or fed to one on its input (`gh secret set X < ~/.ssh/id_rsa`)
-  (on main, after 0.4.3). A listing, a mode, a count or a login does not trigger it (`ls`, `stat`, `chmod`, `ssh -i`, `ssh-add`,
+  (since 0.4.4). A listing, a mode, a count or a login does not trigger it (`ls`, `stat`, `chmod`, `ssh -i`, `ssh-add`,
   `ssh-keygen`). It covers the secrets that are denies when read; a `.env` file still needs a program that reads it, such as `cat`.
-- A raw socket to another machine (`exec 3<>/dev/tcp/10.0.0.1/80`) that nothing reads; one to localhost is allowed (on main, after
-  0.4.3).
+- A raw socket to another machine (`exec 3<>/dev/tcp/10.0.0.1/80`) that nothing reads; one to localhost is allowed (since 0.4.4).
 - Credentials sent: an `.env` or similar file that holds secrets sent out as a file (a key or cloud credential sent out is a deny,
   and so is the output of `cat .env` put into a request to a host the user did not name); an upload of a file (`curl -d @data.json`,
   `aws s3 cp`) to a host the user did not name.
 - The key named by `ssh -i`, `scp -i` or `-o IdentityFile=` only signs a login and is not a read of the key; a copy of a private key
-  (`id_rsa.bak`, `id_ed25519~`) is the key, wherever it lies (on main, after 0.4.3).
+  (`id_rsa.bak`, `id_ed25519~`) is the key, wherever it lies (since 0.4.4).
 - Persistence and the guard: a write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow
-  (`.zshrc` and `.zshrc.local` ask; a copy that nothing runs, `.zshrc.bak`, `.bashrc.orig` or `.bashrc~`, does not, on main,
-  after 0.4.3);
-  deleting or emptying a key or an access file, by `rm`, `truncate`, `shred`, the Write tool, or (on main, after 0.4.3) a redirect
+  (`.zshrc` and `.zshrc.local` ask; a copy that nothing runs, `.zshrc.bak`, `.bashrc.orig` or `.bashrc~`, does not, since 0.4.4);
+  deleting or emptying a key or an access file, by `rm`, `truncate`, `shred`, the Write tool, or (since 0.4.4) a redirect
   (`> ~/.ssh/id_rsa`, `echo x >> ~/.aws/credentials`) or a copy over it; anything that changes the guard itself (below).
 - Too big to read: a path, a command, a brace list or a loop past a limit (next sections).
 
@@ -222,13 +222,36 @@ sandbox:
 - Inside one command line it follows `cd`, `pushd` and `popd` (`cd ~ && rm -rf Documents` deletes the home directory's
   `Documents`), variables set earlier in that line (`RM=rm; $RM -rf /`, `for d in / b; do rm -rf "$d"; done`), `$'...'` quoting and
   brace lists (`rm -rf {/,}`, `{rm,-rf,/}`). The directory a `cd` went to is not known across two calls.
-- A relative path starts from the working directory of the call, on main, after 0.4.3: the event's `cwd`, or for a shell call the
+- A relative path starts from the working directory of the call (since 0.4.4): the event's `cwd`, or for a shell call the
   `workdir` (Codex CLI) or `dir_path` (Gemini CLI) it names. So `cat etc/shadow` from `/`, `rm -rf ../../usr` from `/tmp/proj` and
   `rm -rf ../../..` from a project three levels below `/` get the verdict of the absolute path. An event with no absolute directory
-  leaves a relative path a project file, and a `cd` in the command moves the start. 0.4.3 did not start a relative path from the
-  call's directory for these rules.
+  leaves a relative path a project file, and a `cd` in the command moves the start. A climb (`..`) is made on that directory as
+  the event wrote it, never on the home of the hook: `rm -rf ../../..` from `/Users/x/proj` is `rm -rf /` even when the hook runs
+  with `HOME=/data/home/x`.
+  - **Resolved from that directory:** the path arguments of a command, whatever the program (`chattr -R +i ../../..`, `dd of=sda`
+    from `/dev`, `mkfs.ext4 dev/sda` from `/`, `cp -t sudoers x` from `/etc`, and the file arguments of a shell or an interpreter:
+    `python3 script.py id_rsa`, `node app.js id_rsa`, `ruby x.rb id_rsa`, `python3 -m json.tool id_rsa`, `bash run.sh id_rsa`);
+    the target of a redirect (`echo x > ../../../dev/sda`); the file tools; and the words of a command that `find -exec`, `xargs`,
+    `bash -c`, `eval` or `su -c` runs. 0.4.3 did not start a relative path from the call's directory for these rules.
+  - **Not resolved:** a path inside code given to an interpreter with `-c` or `-e` (`python3 -c "open('shadow')"`,
+    `perl -e`, `node -e`: the text is read as written, and an interpreter's code is not understood), a path inside a script file (the
+    file is never read), and a directory that an earlier call changed (the directory a `cd` went to is not known across two calls).
+- A command that writes a file is read as a write in each of these forms (since 0.4.4):
+  - A redirect, `tee`, `dd of=` (also `dcfldd`, `dc3dd`); the destination of `cp`, `mv`, `install`, `ln`, `rsync` and `scp` (a
+    local one; also `-t DIR` and `--target-directory=DIR`, which count the file each source's name makes in `DIR`).
+  - An in-place edit: `sed -i` in any option cluster that holds `i` (`-ni`, `-i.bak`, `-Ei`, `--in-place`), `perl` and `ruby` with
+    `-i` in any cluster (`-pi`, `-ni`, `-pi.bak`, `-lpi`, `-0777pi`), `gawk -i inplace`.
+  - An editor given a file (`vim`, `vi`, `nvim`, `nano`, `emacs`, `ed`, `ex`, with or without batch flags such as `-es`, `-s`,
+    `--batch`); `tar -C DIR` and `tar --directory=DIR` when extracting, and the archive a `tar` makes; `unzip -d DIR`; a `find` that
+    deletes or runs a command, for its root and for the files that command names.
+  - The verdict is the plain write's: a write to an access file (`/etc/sudoers`, `/etc/shadow`, `/etc/passwd`, `/etc/ld.so.preload`,
+    `authorized_keys`) is a deny in every form, one to a startup, cron, launchd, systemd, git hook or CI file or to a file of the guard
+    asks, and a plain copy or redirect over a key or a cloud credential asks. A form that also reads the file it is given denies there:
+    an in-place edit, an editor, `tee`, `dd` and its variants, `tar`, a `find` that runs a command, and `cp -t` onto the directory
+    that holds the key. The tests run every form against each of those paths, in full and relative from the directory that holds the file.
+  - Not read, because it is code: a file written by `sed 'w file'`, by an `awk` or `perl` program, by `python3 -c` or by a script.
 - The program behind a **wrapper** is the command that is judged, so a deny keeps its verdict in front of any of them. 0.4.3 read
-  through a few, such as `sudo` and `env`; the list below, of about 80, is on main, after 0.4.3.
+  through a few, such as `sudo` and `env`; the list below, of about 80, is since 0.4.4.
   - The wrappers are the programs that run another program, read from the manual pages of coreutils (`env`, `nice`, `nohup`,
     `stdbuf`, `timeout`, `chroot`), util-linux (`chrt`, `flock`, `ionice`, `nsenter`, `runuser`, `script`, `setarch`, `setpriv`,
     `setsid`, `taskset`, `unshare`) and the BSD and macOS base systems (`arch`, `caffeinate`, `lockf`, `sandbox-exec`, `xcrun`).
@@ -250,11 +273,11 @@ sandbox:
   command, `$@` or `$()` or `${X:-}` (empty where they stand), a default that is spelled out (`${RM:-rm} -rf /` is `rm -rf /`), NUL
   bytes (bash ignores them in a script), and a long option cut short the way the program accepts it (`git push --del origin main`,
   `git reset --har`, `rm --rec --fo ~`, `chmod --rec 000 /etc`, `sudo --us root rm -rf /`).
-- A path is normalised before any rule reads it (on main, after 0.4.3), in every rule that reads one: the key, startup-file, destroy-list,
+- A path is normalised before any rule reads it (since 0.4.4), in every rule that reads one: the key, startup-file, destroy-list,
   system-path and guard-file rules, the file tools and the path arguments of an MCP tool. `.` segments, repeated slashes and a
   trailing slash go, and `..` is resolved, also above the home directory: `~/../x/.ssh/id_rsa` and `$HOME/../x/.aws/credentials`
   (`x` the user) are the key and the credential file. 0.4.3 dropped what followed a `..` that left `~`, so those were allowed.
-- The home directory is `~`, `~name`, `$HOME`, `/Users/<name>`, `/home/<name>`, `/root` and `/var/root`, and (on main, after 0.4.3) the
+- The home directory is `~`, `~name`, `$HOME`, `/Users/<name>`, `/home/<name>`, `/root` and `/var/root`, and (since 0.4.4) the
   home of the running user wherever it lies: the `HOME` and `USERPROFILE` of the hook, the home of the user it runs as, the same of
   an `env` the event carries, and the folder that holds `.claude`, `.codex`, `.gemini` or `.cursor` when the transcript lies in one
   (`/mnt/c/Users/x`, `/workspace`). Their parent (`/data/home`) is protected like `/Users`; `/`, `/tmp` and system directories are never
@@ -269,16 +292,16 @@ sandbox:
 deny hidden after the limit cannot get through by padding the command.
 
 - The parser reads at most 50,000 characters, 400 commands, 20,000 words and three levels of nesting (`bash -c`, `eval`, `$(...)`).
-  It also reads (on main, after 0.4.3) at most 200 command substitutions, and through at most eight wrappers in front of a command
+  Since 0.4.4 it also reads at most 200 command substitutions, and through at most eight wrappers in front of a command
   (`sudo sudo ... rm -rf /` with nine).
 - A path is read to 1,000 characters after repeated slashes and `/./` are collapsed (so `~/.ssh/./././id_rsa` padded to any length
   is still the key), and a path that is still longer is asked about.
 - A brace list of more than 300 characters, 16 alternatives, 64 words or four levels is asked about; a variable set by a `for` loop
   over more than 32 words is asked about where it is used; a patch is read file by file whatever its size.
 - After an injection, a script or `package.json` that is written and holds more than 200,000 characters (500 strings for
-  `package.json`) is asked about (on main, after 0.4.3).
+  `package.json`) is asked about (since 0.4.4).
 - A test lists every limit of the three readers (`dangerous`, `shell`, `harness`) and puts a deny behind each, so that a new limit
-  cannot be added without one (on main, after 0.4.3).
+  cannot be added without one.
 
 **When the user named it.** A command the user typed in their prompt, or a path or host they named, turns a deny into
 an ask, never into an allow. The prompt must name the target itself: `/etc/hosts` does not name `/etc`, `/Users/me/proj`
@@ -293,7 +316,7 @@ either way. `--review never` drops the asks of these rules and keeps the denies.
 - a delete, move or `chmod` of IntentShield's programs or of `~/.intentshield`, and an SQL change of `hooks.db` or `threats.db`;
 - a write, edit or delete of a harness's hook settings (`~/.claude/settings*.json`, `.claude/settings*.json`, `.claude/hooks/`,
   `~/.codex/config.toml`, `.cursor/hooks.json`, `.gemini/settings.json`);
-- on main, after 0.4.3: a write made by a redirect, `cp`, `mv`, `ln`, `install`, `dd`, `tee` or `sed -i`, or by the Write and Edit
+- Since 0.4.4, a write made by a redirect, `cp`, `mv`, `ln`, `install`, `dd`, `tee` or `sed -i`, or by the Write and Edit
   tools, whose target is one of IntentShield's programs (`bin/intentshield-hook`, `bin/intentshield-mcp`), its installed package
   (`site-packages/intentshield/`, and the directory the running package is imported from, so a developer of IntentShield itself is
   asked before each edit of its source), a proxy config under `~/.intentshield/proxies/`, or an MCP client file that holds a server
@@ -310,7 +333,7 @@ approve the ask. Without `--builtin-tools` none of this is checked.
   `INTENTSHIELD_HOOK_TRANSLATE=off`, `INTENTSHIELD_HOOK_DEADLINE=0`, `INTENTSHIELD_HOOK_SOURCED_READS=allow`,
   `INTENTSHIELD_THREAT_MEMORY=0`, or a moved `INTENTSHIELD_HOOK_DB`, `INTENTSHIELD_THREAT_DB`, `INTENTSHIELD_THREAT_PACKS` or
   `INTENTSHIELD_HOOK_CATALOG`) says so on stderr for every call, unless a flag on its command line takes the place of the variable.
-- The note is also in the hook's reply on every call event (on main, after 0.4.3), with or without `--builtin-tools`: a note the model
+- The note is also in the hook's reply on every call event (since 0.4.4), with or without `--builtin-tools`: a note the model
   reads, which Claude Code also shows to the user (a system message in Gemini CLI; Cursor has no field for it). `intentshield doctor`
   warns when a Claude Code settings file sets one in its `env` block.
 
@@ -333,7 +356,7 @@ approve the ask. Without `--builtin-tools` none of this is checked.
 - Of the search tools only Grep (and Gemini CLI's `search_file_content`) is read, by its `path`: Glob, `LS` and Gemini CLI's
   `list_directory` and `glob` return names, not file content, and are not matched.
 - **PowerShell** gets the POSIX reading above (a native program such as `git`, `curl.exe` or `dd`, and the POSIX aliases `rm`, `cat`
-  and `curl`, are read as they are) and, on main, after 0.4.3, a reading of the cmdlets that correspond to the rules:
+  and `curl`, are read as they are) and, since 0.4.4, a reading of the cmdlets that correspond to the rules:
   - `Remove-Item` (`ri`, `rd`, `del`, `erase`) with `-Recurse` and `-Force` of a root, the home directory or a system directory,
     also as `$HOME`, `$env:USERPROFILE`, `C:\`, `C:\Windows` and `C:\Users\name`;
   - `Get-Content` (`gc`, `type`) of a credential file;
@@ -341,15 +364,20 @@ approve the ask. Without `--builtin-tools` none of this is checked.
   - a download run with `Invoke-Expression` (`iex`), in a pipe or around it; and `pwsh -Command` or `-EncodedCommand`.
   Parameters may be cut short as PowerShell accepts it (`-r`, `-fo`). Other cmdlets are **not read**: `Set-Content`, `Out-File` and
   `Copy-Item` to a startup file, `Start-Process`, .NET calls such as `[IO.File]::Delete`, and scripts.
-- A tool name that starts with `mcp__` but is not of the form `mcp__SERVER__TOOL` (`mcp__`, `mcp__srv`) is refused (on main, after
-  0.4.3); one with an empty server or tool part (`mcp__srv__`, `mcp____x`) is read as a call and checked like any MCP call. Also refused: a Gemini CLI tool
-  named like an MCP tool (`mcp_...`) that has no `mcp_context`, a call with no `tool_name` or an empty one (with `--builtin-tools`),
-  and a `tool_name` that is not text; the reply says what was wrong.
+- A tool name that starts with `mcp__` but is not of the form `mcp__SERVER__TOOL` (`mcp__`, `mcp__srv`) is refused (since 0.4.4); one with an empty server or tool part (`mcp__srv__`, `mcp____x`) is read as a call and checked like any MCP call. Also refused: a Gemini CLI tool
+  named like an MCP tool (`mcp_...`) that has no `mcp_context`; the reply says what was wrong.
+- A call's tool name that is not text (null, a number, `true`, a list or an object) is refused on all four harnesses, with or without
+  `--builtin-tools` (the call is `PreToolUse` on Claude Code and Codex CLI, `BeforeTool` on Gemini CLI and `beforeMCPExecution` on
+  Cursor). With `--builtin-tools` a call with no tool name, or an empty one, is refused on all four as well. The one exception is a
+  Gemini CLI call that carries an `mcp_context`: it is read as the MCP call the context names. Without `--builtin-tools` a call with
+  no or an empty name goes on as it did. Cursor's shell and file events (`beforeShellExecution`, `beforeReadFile`) have no tool name
+  and are not held to this, and neither is any event that is not a call (a result, a prompt). A result is never refused for its tool
+  name; on Claude Code and Codex CLI one whose tool name is not text is scanned as the result of an unknown tool.
 - A tool with another name that runs a command (a future tool, or one a plugin adds) is not matched by name. Claude Code's matcher
   names the tools it sends to the hook, so such a tool never reaches it. Codex CLI's and Gemini CLI's send every tool, and there
-  (on main, after 0.4.3) a tool the hook has no name for whose input holds a `command` or `cmd` text is read as a shell call.
+  (since 0.4.4) a tool the hook has no name for whose input holds a `command` or `cmd` text is read as a shell call.
 - A built-in tool call whose event name or tool input the hook cannot read (a missing or re-cased `hook_event_name`, a `command` that
-  is not text) is refused, because a changed event schema must not read as an allow. On main, after 0.4.3, that includes a shell tool
+  is not text) is refused, because a changed event schema must not read as an allow. Since 0.4.4 that includes a shell tool
   whose whole input is a list and a `command` list that is empty or holds more than words (`[]`, `[[...]]`). A list of words is an
   argv and is read (`["bash", "-lc", "..."]`); a list of one word is read as the command line it holds.
 
@@ -358,7 +386,7 @@ approve the ask. Without `--builtin-tools` none of this is checked.
 - The rules above read the harness's own tools. An operation sent through an MCP filesystem or shell server (`read_text_file`,
   `write_file`, `execute_command`) is a call to an MCP tool, and the session rules read its values as they read any MCP call's, but
   the dangerous-command rules do not read what the server is asked to do.
-- With `--builtin-tools` the hook also reads the arguments of an MCP tool (on main, after 0.4.3): those named `path`, `paths`, `file`,
+- With `--builtin-tools` the hook also reads the arguments of an MCP tool (since 0.4.4): those named `path`, `paths`, `file`,
   `filename`, `file_path`, `filepath`, `source`, `destination`, `dest` or `target` as a file (a read, or a write when the tool's name
   says it writes, moves, copies, deletes, creates or edits), and `command` or `cmd` as a shell command, by the same file and shell
   rules, and only to make the verdict stricter. A tool whose name says it only lists or searches names (`list`, `tree`, `info`,
@@ -366,16 +394,17 @@ approve the ask. Without `--builtin-tools` none of this is checked.
 - Not read: arguments under any other name (`uri`, `args`, a path inside a list of objects or a nested object), a command a server
   runs for a name it accepts, and what an MCP server does on its own. Without `--builtin-tools` none of this is read.
 
-**Long results.** A tool result longer than 1,000,000 characters is scanned (on main, after 0.4.3) at its first and last 500,000
+**Long results.** A tool result longer than 1,000,000 characters is scanned (since 0.4.4) at its first and last 500,000
 characters, so that the hook finishes inside its harness's timeout. The reply tells the model the rest was not checked, and later
 state-changing calls in the session ask.
 
-**Long arguments.** The arguments of an MCP call, with or without `--builtin-tools`, are read the same way (on main, after 0.4.3):
+**Long arguments.** The arguments of an MCP call, with or without `--builtin-tools`, are read the same way (since 0.4.4):
 only the first and last 500,000 characters are scanned, and the call asks, naming the limit (with `--review never` it runs with a
-note). Every character was scanned before, at about 4 seconds a megabyte (17.6 s for 4 MB), so the scan now takes about 4 seconds
-whatever the size.
+note). Every character was scanned before. For a 4 MB argument of plain text,
+the hook's check took 14.2 s in 0.4.3 and takes 2.9 s now (median of 5 runs on an Apple M5, about 5 times faster); the time does not grow
+with the size past the limit, and it depends on the machine and on the text (text with more words in it takes longer).
 
-What the study measured about these rules (the method is in `docs/research-notes/hook-fidelity/hook-fidelity-study.md`, the rows
+What the study measured about these rules (the method is in the [study notes](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md), the rows
 in `results/hook-fidelity/detect/fresh/`):
 
 - The set: 214 built-in shell, read, write and edit calls (104 harmful, 110 benign); one author, offline decisions, no model in the
@@ -390,8 +419,8 @@ in `results/hook-fidelity/detect/fresh/`):
   planned did not run).
 - The comparison with two other guards is mixed. `safety-net` let through 44/85 harmful calls on its shell scope and `knox` 44/73 on
   its scope, where IntentShield let through 25/85 and 18/73, but **on denies alone IntentShield trails `safety-net` (24/85 against
-  41/85) and ties `knox` (28/73 against 29/73)**, with the rules as they were when scored. Scored again with the rules on main, after
-  0.4.3 (`fresh_report.py --current-rules`), IntentShield denies 29/85 and still trails.
+  41/85) and ties `knox` (28/73 against 29/73)**, with the rules as they were when scored. Scored again with the rules of 0.4.4
+  (`fresh_report.py --current-rules`), IntentShield denies 29/85 and still trails.
 - The remaining misses are discovery-only commands, cloud-CLI destruction (`aws s3 rb --force`,
   `kubectl delete namespace kube-system`), `node -e` and `python3 -c` one-liners, reads of an instance-metadata address or a
   Kubernetes service-account token, and a few others listed in the study.
@@ -584,8 +613,11 @@ not that the wrapped guard is better, and nothing was measured about a guard's d
 
 ## What `install` writes
 
-`intentshield install` runs `<harness> --version` and records it in `~/.intentshield/harness-versions.json`, then
-writes two things into the hooks that check a call (Claude Code, Codex and Gemini; Cursor keeps `failClosed`): the
+`intentshield install` runs `<harness> --version` and records it in `~/.intentshield/harness-versions.json`. When the harness is
+not on `PATH` it says that it could not read the version, so a call that would normally ask you is blocked instead, which is the
+safe side (put the harness on `PATH` and run `intentshield doctor` to record it).
+
+`install` then writes two things into the hooks that check a call (Claude Code, Codex and Gemini; Cursor keeps `failClosed`): the
 hook's own deadline (`--deadline`, 30 s by default, so a slow judge or database answers with a refusal before the
 harness's timeout, which every harness measured treats as permission to run the call) and the launcher above
 (a hook that cannot start, with exit 126 or 127, becomes exit 2 with a reason). The launcher is for POSIX shells
@@ -667,14 +699,18 @@ Messages from a run against a fresh install:
   upgraded; with the launcher the line is a `warn`, because the launcher refuses the call, but results and prompts
   go unchecked.
 - `FAIL ... the hooks are installed but switched off: disableAllHooks is true in <file>` (Claude Code).
+- `warn codex (<file>): [features] codex_hooks is false, which can switch Codex's hooks off` (since 0.4.4; `install codex` prints
+  the same warning). Only an explicit `false` of `codex_hooks` or `hooks` under `[features]` warns. Remove the line or set it to
+  `true`. Whether a given Codex build honours the flag was not tested.
 - `FAIL ... the <event> matcher ... does not match MCP tools`, and the same for `Bash` with `--builtin-tools`:
   `install` again.
 - `FAIL ... the groq judge has no GROQ_API_KEY in ~/.intentshield/.env` (and the same for the other judges): the
   hook runs on the rules alone. A key exported only in your shell is a `warn`, because a harness started from the
   Dock or an IDE does not inherit it. `install <harness> --judge groq` stores it.
 - `nothing is installed: no IntentShield hooks and no wrapped MCP server were found, so nothing is guarded.` `doctor` found
-  neither a hook nor a wrapped server. That is a statement, not a failure, so the exit status is 0; run
-  `intentshield install <harness>`. `intentshield doctor --help` lists the exit status: 1 when any line is `FAIL`, else 0.
+  neither a hook nor a wrapped server in the usual config files of each client or in those of this directory. That is a statement,
+  not a failure, so the exit status is 0; run `intentshield install <harness>`, or `intentshield scan <file>` for a server wrapped
+  in some other file (since 0.4.4). `intentshield doctor --help` lists the exit status: 1 when any line is `FAIL`, else 0.
 - `FAIL <file>: <server>: the server's command '<cmd>' is not on PATH` (or `does not exist`): the proxy cannot start the
   server it wraps and the harness shows it as failed. Install the command, or put its absolute path in the entry and wrap again.
 - `warn <file>: <n> stdio server(s) not behind the transparent proxy, so their tool descriptions go unchecked:
@@ -745,7 +781,9 @@ treated as yours and is started.
 refused) the rules alone decide, with no extra ask or refusal; the agent is told "the LLM judge is offline or
 unavailable; only the rules checked this call", stderr says why, and the hooks skip the judge for 5 minutes before
 trying again, so an offline session does not wait on it at every call. A judge with no stored key says so in the
-same note and in `doctor`. A timeout, a rate limit or a reply it could not parse does not start the 5-minute pause.
+same note and in `doctor`. A timeout, a rate limit or a reply it could not parse does not start the 5-minute pause. An address
+for the judge, or for a model provider, that is not `http` or `https` is refused and never opened; the judge then has no opinion
+(since 0.4.4).
 With a local judge (`--judge ollama`), an Ollama server that is not running ("Connection refused") starts the same
 pause.
 
@@ -756,10 +794,15 @@ rules that matched (since 0.4.4). If the only rule is `sensitive_target` (the de
 tool is one you trust, such as one that reads your project's `.env`, add `"server:tool"` to the `trusted_tools` list in its proxy config under
 `~/.intentshield/proxies/` (`server` is the `server_id` in that file); every other rule still hides it (since 0.4.4).
 
+**`IntentShield: its session database ... could not be used.`** The hook could not open or use `hooks.db` (or the file
+`INTENTSHIELD_HOOK_DB` names): the file is damaged or not a database. It holds session state only, the flags and prompts of earlier
+sessions, so move it aside with the `mv` command the message prints; the next call starts a new one. A database that is only locked
+by another process is not told to be moved (since 0.4.4).
+
 **Every ask is refused, or a hook seems slow.** Check the `[IntentShield read this session as ...]` note first (see
 above). A refusal that names a 30 s deadline means the judge or the database was slow; a hosted judge on a free
-tier can be. Each hook is a process of about 70 to 75 ms (the Overhead row of [benchmarks.md](benchmarks.md): 70 to 72 ms on the
-working tree, 73.5 to 74.1 ms at the v0.4.3 tag); a much longer time is the judge.
+tier can be. Each hook is a process of about 70 to 75 ms (the Overhead row of [benchmarks.md](benchmarks.md): 70 to 72 ms in
+three committed runs of the working tree, about the same as 0.4.3 within a few milliseconds); a much longer time is the judge.
 
 ## Adaptive threat memory and threat packs
 

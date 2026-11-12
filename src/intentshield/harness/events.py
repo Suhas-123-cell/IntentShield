@@ -75,12 +75,15 @@ def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = Fal
     if name and (not builtin_tools or name in _HANDLED_EVENTS.get(harness, ())):
         return None
     if harness in ("claude", "codex"):
-        tool = str(event.get("tool_name", ""))
-        mcp = _split_claude(tool) is not None or tool in _RESOURCE_TOOLS or (builtin_tools and tool in _BUILTIN)
+        tool = event.get("tool_name", "")
+        mcp = _odd_tool_name(event) or (isinstance(tool, str) and (
+            _split_claude(tool) is not None or tool in _RESOURCE_TOOLS or (builtin_tools and tool in _BUILTIN)))
     elif harness == "cursor":
-        mcp = bool(event.get("tool_name")) or (builtin_tools and any(k in event for k in ("command", "file_path")))
+        mcp = bool(event.get("tool_name")) or _odd_tool_name(event) or (
+            builtin_tools and any(k in event for k in ("command", "file_path")))
     else:
-        mcp = "mcp_context" in event or (builtin_tools and str(event.get("tool_name") or "") in _BUILTIN)
+        mcp = "mcp_context" in event or _odd_tool_name(event) or (
+            builtin_tools and str(event.get("tool_name") or "") in _BUILTIN)
     if not mcp:
         return None
     reason = ("IntentShield could not tell what this hook event is (its hook_event_name is "
@@ -168,8 +171,13 @@ def _claude(harness: str, name: str, session: str, event: dict[str, Any],
     """Claude Code and Codex CLI share one hook format; they differ in what a reply can do."""
     if name == "UserPromptSubmit":
         return _prompt_hint(name, session, event, guard)
-    if unreadable := _unreadable_tool_name(name, event, guard.builtin_tools):
+    if name == "PreToolUse" and (unreadable := _unreadable_tool_name(event, guard.builtin_tools)):
         return _claude_reply(harness, session, "builtin:unreadable", event, guard, Verdict("deny", unreadable))
+    if not isinstance(event.get("tool_name", ""), str):
+        # A result whose tool is not named in text: it is read as a tool no rule knows, and scanned all the same.
+        if name in _CLAUDE_RESULT_EVENTS:
+            return _claude_result(harness, name, session, "unknown:tool", event, guard)
+        return None
     split = _split_claude(event.get("tool_name", ""))
     if split is None and event.get("tool_name") in _RESOURCE_TOOLS:
         split = (str(_as_dict(event.get("tool_input")).get("server") or "mcp"), _RESOURCE_TOOLS[event["tool_name"]])
@@ -195,28 +203,32 @@ def _claude(harness: str, name: str, session: str, event: dict[str, Any],
     return None
 
 
-def _unreadable_tool_name(name: str, event: dict[str, Any], builtin_tools: bool) -> str | None:
-    """The reason to refuse a Claude or Codex call whose ``tool_name`` is not text, or (with ``--builtin-tools``) is missing or
-    empty: a changed event schema must not read as an allow, and the refusal says what was wrong. Other events are not calls, so
-    they get no reason here."""
-    if name != "PreToolUse":
-        return None
+def _unreadable_tool_name(event: dict[str, Any], builtin_tools: bool, identified: bool = False) -> str | None:
+    """The reason to refuse a tool call whose ``tool_name`` is not text, or (with ``--builtin-tools``) is missing or empty: a
+    changed event schema must not read as an allow, and the refusal says what was wrong. ``identified`` is true when the event
+    names its tool some other way (Gemini CLI's ``mcp_context``), which makes a missing name harmless. The caller says which
+    events are calls; any other event gets no reason."""
     tool = event.get("tool_name", "")
     if not isinstance(tool, str):
         return (f"IntentShield could not read the tool name of this call (it is {type(tool).__name__}, not text), so it is "
                 "refused.")
-    if builtin_tools and not tool:
+    if builtin_tools and not tool and not identified:
         return ("IntentShield could not read this call (it has no tool_name), so it is refused rather than let through "
                 "unchecked.")
     return None
+
+
+def _odd_tool_name(event: dict[str, Any]) -> bool:
+    """True when the event has a ``tool_name`` that is not text (a null, a number, a list): it names a tool all the same."""
+    return "tool_name" in event and not isinstance(event["tool_name"], str)
 
 
 def _unlisted_command(event: dict[str, Any]) -> str | None:
     """The shell command of a tool the hook has no name for (a new or renamed shell tool of the harness): any tool that is not
     an MCP tool and whose input carries a ``command`` or ``cmd`` text is read as a shell call, so that a new name is not a way
     past the rules."""
-    tool = str(event.get("tool_name") or "")
-    if not tool or tool in _BUILTIN or tool.startswith("mcp_"):
+    tool = event.get("tool_name")
+    if not isinstance(tool, str) or not tool or tool in _BUILTIN or tool.startswith("mcp_"):
         return None
     arguments = _as_dict(event.get("tool_input"))
     for key in ("command", "cmd"):
@@ -309,6 +321,8 @@ def _cursor(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
     if name == "beforeSubmitPrompt":
         guard.prompt(session, event.get("prompt", ""))
         return {"continue": True}
+    if name == "beforeMCPExecution" and (unreadable := _unreadable_tool_name(event, guard.builtin_tools)):
+        return _cursor_reply(Verdict("deny", unreadable + NO_RETRY))
     tool = f"{event.get('mcp_server_name') or event.get('server') or 'mcp'}:{event.get('tool_name', '')}"
     if name == "beforeMCPExecution":
         v = guard.call(session, tool, _as_dict(event.get("tool_input")))
@@ -384,6 +398,9 @@ def _cursor_reply(v: Verdict) -> dict[str, Any]:
 def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard) -> dict[str, Any] | None:
     if name == "BeforeAgent":
         return _prompt_hint(name, session, event, guard)
+    if name == "BeforeTool" and (unreadable := _unreadable_tool_name(event, guard.builtin_tools, "mcp_context" in event)):
+        print(unreadable, file=sys.stderr)
+        return _gemini_decision(session, Verdict("deny", unreadable), guard, "mcp")
     if "mcp_context" not in event:  # a built-in tool, not MCP
         builtin = str(event.get("tool_name") or "")
         if name == "BeforeTool" and builtin.startswith("mcp_") and builtin not in _BUILTIN:

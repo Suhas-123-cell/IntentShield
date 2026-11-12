@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .core import _EVENT_HOMES, _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, _bin
+from .writes import _EDITORS
 
 # --- paths -----------------------------------------------------------------------------------------------------
 
@@ -92,6 +93,13 @@ def _map_home(p: str, base: str = "") -> str:
             return "~" + p[len(home):]
     match = _HOME.match(p)
     return "~" + p[match.end():] if match else p
+
+
+def _as_written(path: str) -> str:
+    """An absolute path normalised (``..`` and ``.`` resolved, slashes joined) and otherwise left as it was written. Unlike
+    ``_norm`` it does not turn a home into ``~``: a climb from a working directory is made on that directory, never on the home of
+    this process, so ``../../..`` from ``/Users/x/proj`` reaches ``/`` whatever ``HOME`` is."""
+    return posixpath.normpath("/" + path.lstrip("/"))
 
 
 def _norm(path: str) -> str:
@@ -359,9 +367,10 @@ _READERS = frozenset({"cat", "bat", "batcat", "less", "more", "most", "head", "t
                       "strings", "base64", "openssl", "cp", "rsync", "scp", "tar", "zip", "7z", "7za", "gzip", "bzip2", "xz",
                       "zstd", "cut", "sort", "uniq", "tee", "paste", "rev", "fold", "grep", "egrep", "fgrep", "rg", "ag", "ack",
                       "awk", "gawk", "sed", "open", "vim", "vi", "nano", "emacs", "code", "view", "pbcopy", "xclip", "diff",
-                      "cmp", "jq", "yq", "sqlite3", "split", "dd", "curl", "wget", "ditto", "cpio", "pax", "ln", "install",
-                      "mail", "mailx", "sendmail", "ftp", "sftp", "nc", "ncat", "netcat", "socat", "base32", "uuencode",
-                      "gpg", "age", "find", "xargs", "type", "echo-file", "source", "."})
+                      "cmp", "jq", "yq", "sqlite3", "split", "dd", "dcfldd", "dc3dd", "curl", "wget", "ditto", "cpio", "pax",
+                      "ln", "install", "mail", "mailx", "sendmail", "ftp", "sftp", "nc", "ncat", "netcat", "socat", "base32",
+                      "uuencode",
+                      "gpg", "age", "find", "xargs", "type", "echo-file", "source", "."}) | _EDITORS
 _PATTERN_FIRST = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack", "awk", "gawk", "sed"})
 _CRED_TEXT = re.compile(r"\.ssh/(?:id_|\w{1,20}_rsa)|\.aws/credentials|\.netrc|/etc/shadow|\.vault-token|library/keychains|"
                         r"\.gnupg/private-keys|\.config/gcloud/(?:credentials|application_default)", re.I)

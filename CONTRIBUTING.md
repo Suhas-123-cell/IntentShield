@@ -80,9 +80,9 @@ Where a rule goes:
 
 | What it reads | File | Tests to extend |
 |---|---|---|
-| tool descriptions, tool outputs, arguments (injected instructions, poisoning) | `src/intentshield/mcp_inspect.py` (`scan_description`, `scan_output`) | `tests/test_rules_detection.py`, `tests/test_output_rule_evasions.py` |
+| tool descriptions, tool outputs, arguments (injected instructions, poisoning) | `src/intentshield/mcp_inspect/` (`scan_description`, `scan_output`) | `tests/test_rules_detection.py`, `tests/test_output_rule_evasions.py` |
 | credential formats | `src/intentshield/credentials.py` | `tests/test_credential_masking.py` |
-| a built-in tool call: a shell command, a file read or write (`--builtin-tools`) | `src/intentshield/dangerous/` (`rules.py`, `paths.py`), with `shell.py` for parsing | `tests/test_dangerous_rules.py` |
+| a built-in tool call: a shell command, a file read or write (`--builtin-tools`) | `src/intentshield/dangerous/` (`rules.py`, `paths.py`), with `shell/` for parsing | `tests/test_dangerous_rules.py` |
 
 A rule that should ship as data, without a release, is a threat pack instead (`src/intentshield/rule_packs.py`, [guide](docs/guide.md#adaptive-threat-memory-and-threat-packs)).
 

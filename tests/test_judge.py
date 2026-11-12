@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 from test_mcp_guardrail import Fixture, call, runtime
+from timelimits import limit
 
 from intentshield import judge as judge_module
 from intentshield import mcp_proxy
@@ -317,23 +318,26 @@ def test_a_dropped_connection_is_no_opinion_not_a_crash(monkeypatch, failure):
 
 
 def test_a_judge_budget_caps_the_whole_check_and_counts_what_it_left_unread(monkeypatch):
+    # Thirty windows at 0.25 s each would take 7.5 s. That is more than limit(2.0) even on CI (6 s), so the time limit tells a
+    # capped check from an uncapped one on a slow runner too. The capped check starts no window once less than a second of its
+    # 2 s budget is left, so it sends about four and takes about 1 s.
     calls: list[float] = []
 
     def slow(url, key, body, timeout, retries):
         calls.append(timeout)
-        time.sleep(0.6)
+        time.sleep(0.25)
         return '{"verdict": "clean", "reason": "ok"}', ""
 
     monkeypatch.setattr(judge_module, "post_chat", slow)
     monkeypatch.setattr(Judge, "_answers", {})
     monkeypatch.setenv("GROQ_API_KEY", "k")
-    j = Judge("groq", budget=2.0, timeout=10)
-    long_result = " ".join(f"line {i} of a long page" for i in range(6_000))
+    j = Judge("groq", budget=2.0, timeout=10, max_windows=30)
+    long_result = " ".join(f"line {i} of a long page" for i in range(12_000))
+    started = time.monotonic()
     assert j.output("summarize", "web:fetch", long_result) is None
-    # Without the budget all six windows would be read (6 x 0.6 s): fewer were sent, each was told to wait only for what was
-    # left of the budget, and the rest is counted as unread.
+    assert time.monotonic() - started < limit(2.0)
     assert all(t <= 1.0 for t in calls)  # each request gets what is left, split over its attempts
-    assert j.unread >= 6 - len(calls) and len(calls) < 6
+    assert j.unread >= 30 - len(calls) and len(calls) < 30
 
 
 def test_cached_answers_are_kept_apart_by_provider_and_host(monkeypatch):

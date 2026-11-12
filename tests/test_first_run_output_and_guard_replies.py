@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -122,6 +123,51 @@ def test_a_result_past_the_limit_is_read_at_its_ends_and_the_rest_is_said_to_be_
     asked = handle("claude", {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "mcp__mail__send_email",
                               "tool_input": {"to": "me@example.com", "body": "x"}}, g)
     assert asked["hookSpecificOutput"]["permissionDecision"] == "ask"   # a part nobody read: state changes ask
+    g.close()
+
+
+def _ask_after(g: HarnessGuard) -> str:
+    asked = handle("claude", {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "mcp__mail__send_email",
+                              "tool_input": {"to": "me@example.com", "body": "x"}}, g)
+    assert asked["hookSpecificOutput"]["permissionDecision"] == "ask"
+    return str(asked["hookSpecificOutput"]["permissionDecisionReason"])
+
+
+def _long_result(g: HarnessGuard) -> None:
+    event = {"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "mcp__logs__read", "tool_input": {},
+             "tool_response": {"content": [{"type": "text", "text": "ordinary line of a log\n" * 400}]}}
+    handle("claude", event, g)
+
+
+def test_the_ask_after_a_result_that_was_too_long_says_so_and_does_not_name_the_judge(tmp_path, monkeypatch):
+    monkeypatch.setattr(harness_module.guard, "RESULT_SCAN_CHARS", 2000)
+    g = HarnessGuard(tmp_path / "hooks.db")   # no judge is configured
+    assert g.judge is None
+    _long_result(g)
+    reason = _ask_after(g)
+    assert reason == "A tool result in this session was too long for IntentShield to read in full; confirm this call."
+    assert "judge" not in reason.lower()
+    g.close()
+
+
+def test_the_ask_names_both_reasons_when_a_judge_flagged_an_output_and_another_was_too_long(tmp_path, monkeypatch):
+    monkeypatch.setattr(harness_module.guard, "RESULT_SCAN_CHARS", 2000)
+    g = HarnessGuard(tmp_path / "hooks.db")
+    with g._tx():
+        g.db.execute("INSERT INTO sessions (id, intent, taint, updated, soft) VALUES ('s', '', '[]', ?, 1)", (time.time(),))
+    _long_result(g)
+    reason = _ask_after(g)
+    assert "LLM judge thought a tool output" in reason and "too long to read in full" in reason
+    g.close()
+
+
+def test_the_ask_after_an_output_only_the_judge_suspected_still_names_the_judge(tmp_path):
+    g = HarnessGuard(tmp_path / "hooks.db")
+    with g._tx():
+        g.db.execute("INSERT INTO sessions (id, intent, taint, updated, soft) VALUES ('s', '', '[]', ?, 1)", (time.time(),))
+    reason = _ask_after(g)
+    assert reason == ("IntentShield's LLM judge thought a tool output in this session tried to instruct the agent; "
+                      "confirm this call.")
     g.close()
 
 

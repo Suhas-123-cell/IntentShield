@@ -42,7 +42,7 @@ What you should see:
 - `doctor` right after `install` prints a `warn` that no hook has run yet and exits 0 (since 0.4.4; 0.4.3 printed `FAIL` and
   exited 1). Start the harness (Codex CLI first asks you to trust the hooks), send any prompt and run it again. A line that stays
   `FAIL` is in [Troubleshooting](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#troubleshooting).
-- `intentshield-mcp-verify` ends with `PASS 13/13 checks`. A JSON log line for the blocked canary call may print above it. It checks the bundled demo server, not the proxy `wrap` installs; `doctor --connect` starts each wrapped server through its proxy.
+- `intentshield-mcp-verify` ends with `PASS 13/13 checks`. It checks the bundled demo server, not the proxy `wrap` installs; `doctor --connect` starts each wrapped server through its proxy.
 
 **What the default install guards.** MCP calls. Shell, file and web tools are guarded only with `--builtin-tools`
 (`intentshield install claude --builtin-tools`; opt-in, best effort); `demo` runs its shell calls with that flag on.
@@ -105,7 +105,7 @@ intentshield uninstall claude; intentshield unwrap .mcp.json      # undo your fi
 uv tool uninstall intentshield-mcp; rm -r ~/.intentshield         # last
 ```
 
-Coming from 0.4.3: [Upgrading from 0.4.3](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#upgrading-from-043).
+Coming from 0.4.3: [Upgrading from 0.4.3](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#upgrading-from-043) lists what changes for you, including that a call with MCP arguments over 1,000,000 characters now asks.
 Full steps: [Upgrading and removing](https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#upgrading-and-removing-intentshield).
 
 ## Results
@@ -116,7 +116,7 @@ The weak numbers come first. Protocols, intervals, tables and every caveat are i
 - **MCP Security Bench (MSB):** no guarded arm let a harmful call run, but a trivial baseline did equally well, so the metric cannot rank guards.
   The gateway cost 8 to 14 points of task completion against that baseline. A call held for a human counts as not executed.
 - **MCPTox replay (a tuning set):** 0.4% attack success, 3.5% of benign calls blocked and 46.3% sent to review.
-- **Limits:** single runs of small models on templates the rules were tuned on. Overhead is about 75 ms per hook event and 150 ms per guarded MCP call.
+- **Limits:** single runs of small models on templates the rules were tuned on. Overhead is about 70 ms per hook event and 140 ms per guarded MCP call.
 
 ## The hook study
 

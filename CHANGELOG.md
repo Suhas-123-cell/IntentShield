@@ -19,11 +19,23 @@ Nothing to run: an installed hook keeps working. What changes for you:
 - **Everyone:** a `wrap` of a new server names its database `NAME-<hash>.db`; the files of 0.4.3 are used as they are.
 - **Everyone:** an injection split between two text blocks, a call named `mcp__x` and a result over 1,000,000 characters are now
   flagged, refused or asked about.
-- **Everyone:** a call whose tool name is not text, or a Gemini CLI tool named like an MCP tool with no `mcp_context`, is refused with a
-  reason; the transparent proxy answers a message that is not a JSON-RPC request with `-32600`.
+- **Everyone:** a call whose tool name is not text (on Claude Code, Codex CLI, Gemini CLI and Cursor), or a Gemini CLI tool named like an
+  MCP tool with no `mcp_context`, is refused with a reason; the transparent proxy answers a message that is not a JSON-RPC request with `-32600`.
 - **Everyone:** `pip install intentshield-mcp[dev]` no longer exists; contributors run `uv sync --group dev`.
+- **Everyone:** the arguments of an MCP call longer than 1,000,000 characters are read at their start and end only, and the call asks,
+  naming the limit (0.4.3 scanned every character: for 4 MB of plain text the check took about 5 times as long, 14.2 s against 2.9 s,
+  median of 5 on an Apple M5).
+- **Everyone:** `install codex` and `doctor` warn when `~/.codex/config.toml` sets `codex_hooks` or `hooks` to false under
+  `[features]`.
+- **Everyone:** a hook that cannot use its session database says which file it is and how to move it aside.
+- **Everyone:** an address of the judge or of a model provider that is not `http` or `https` is refused, not opened.
+- **Everyone:** in a `--no-deps` install the one-line missing-package message can name `pydantic` where it named `jsonschema`.
 - **Only with `--builtin-tools`:** more commands are denied or asked about, and a few false asks and denies stop (a backup of
-  `~/.ssh/config`, `~/.ssh/known_hosts`); this applies as soon as the package is upgraded. See [the rules](docs/guide.md#built-in-tools-and-the-dangerous-command-rules).
+  `~/.ssh/config`, `~/.ssh/known_hosts`); this applies as soon as the package is upgraded. Among them: a path that climbs above the
+  home directory and back (`~/../x/.ssh/id_rsa`) is read as the key; a home outside `/Users`, `/home` and `/root` is a home (the
+  `HOME` of the hook and of the event); the listed folder names match without regard to case; `find ~/Downloads -mtime +30 -delete`
+  (or by size, `-empty`, owner, `-newer`) asks instead of denying; git hook overrides through `GIT_CONFIG_KEY_n` or `export HUSKY=0` ask;
+  `aws configure get region` no longer asks; a shell tool input that is a list is refused or read. See [the rules](docs/guide.md#built-in-tools-and-the-dangerous-command-rules).
 
 ### Added
 
@@ -32,7 +44,7 @@ Nothing to run: an installed hook keeps working. What changes for you:
 - `doctor` prints an `ok` line per file whose wrapped servers passed. `doctor --connect` starts each wrapped server through its proxy
   and lists its tools (`--connect-project` for servers named by a file in the working directory); without them it starts nothing.
 - `doctor --verbose` lists the `note` lines, which `doctor` now counts; paths under your home print as `~/`.
-- `intentshield-mcp-verify --summary` prints `PASS 13/13 checks` and one line per failing check.
+- `intentshield-mcp-verify --summary` prints `PASS 13/13 checks` and one line per failing check; with `--stdio` it prints no log line.
 - `intentshield demo` also sends one MCP call to the default install's hook. `install` says when it guards MCP calls only, and which
   options a reinstall dropped.
 - `wrap` ends with a `Next:` line. `wrap-hook --print-entry --harness cursor` notes that the entry needs `"failClosed": true`. `scan`
@@ -47,7 +59,11 @@ Nothing to run: an installed hook keeps working. What changes for you:
 ### Changed
 
 - A tool result split across adjacent text blocks is scanned as one text, by the hook and by the proxy.
-- A tool call named `mcp__x` with no tool part is refused by the Claude Code hook; it was let through.
+- A tool call named `mcp__x` with no tool part is refused by the Claude Code hook; it was let through. `mcp__srv__` and `mcp____x`,
+  with an empty server or tool part, are read as calls and checked.
+- The arguments of an MCP call are scanned to the same 500,000 characters at each end as a result is; a call past that asks.
+- `harness`, `shell`, `mcp_proxy` and `mcp_inspect` are now packages of several modules (the same names import as before), and the lint
+  allows a function a complexity of 25, not 35.
 - `install`, `uninstall`, `wrap` and `unwrap` give a file back with its exact bytes. `uninstall` puts back an original settings file
   that was empty or `{}`.
 - Python 3.11 is supported (CI runs 3.11 to 3.14). The development tools moved from the `dev` extra to a dependency group.
@@ -58,9 +74,11 @@ Nothing to run: an installed hook keeps working. What changes for you:
   JSON key.
 - The hook's reply carries a note when a variable that loosens the guard is set where it runs (not on Cursor). A tool result over
   1,000,000 characters is scanned at its two ends, and later state-changing calls ask.
-- A call whose tool name is not text (Claude Code, Codex CLI), or is named like an MCP tool with no `mcp_context` (Gemini CLI), is
-  refused with the reason; with `--builtin-tools` so is a call with no tool name. The transparent proxy answers a message that is
-  not a JSON-RPC request with `-32600` and keeps serving.
+- A call whose tool name is not text is refused with the reason on all four harnesses, as is a Gemini CLI tool named like an MCP tool
+  with no `mcp_context`. With `--builtin-tools` a call with no tool name, or an empty one, is refused on all four too, except a Gemini
+  CLI call that has an `mcp_context`, which is read as the MCP call it names. Without `--builtin-tools` a call with no name goes on as
+  before, and Cursor's shell and file events have no tool name to check. The transparent proxy answers a message that is not a
+  JSON-RPC request with `-32600` and keeps serving.
 - `doctor` writes `~/` only where a path starts, so the `wrap` command it prints can be copied. `wrap`'s `Next:` line asks you to close
   the client only for `~/.claude.json`; `scan` cuts a start-up error at a word.
 - The help text of `intentshield-mcp --host` said a non-loopback address was accepted with a token; the server refuses it, and the help
@@ -69,6 +87,26 @@ Nothing to run: an installed hook keeps working. What changes for you:
   more cases (a credential given to an unlisted program, `~/.aws`, `/etc/sudoers`, a raw socket, a write to IntentShield's own files, a redirect over a key, `rsync --delete` onto a system directory)
   and ask less in a few; a relative path is read from the call's directory and a file in `~/.ssh` by what it is
   ([the full list](docs/guide.md#built-in-tools-and-the-dangerous-command-rules)).
+- Only with `--builtin-tools`: a path is one path whatever its spelling (dot segments, a climb and a return, doubled slashes, a climb
+  above the home directory and back); a home is also the home of the running user wherever it lies; a climb in a relative path is
+  made on the working directory as the event wrote it, for the path arguments of commands (also the file arguments of a shell or an
+  interpreter: `python3 script.py id_rsa`), for redirect targets and for the file tools (`chattr -R +i ../../..`, `dd of=sda` from
+  `/dev`, `echo x > ../../../dev/sda`), but not for a path inside code given to an interpreter with `-c` or `-e`, a path in a script
+  file, or a directory an earlier call changed; the listed folder names match in any case; a cleanup of a home folder by
+  age, size, emptiness or owner asks; git hook overrides through the environment ask; `aws configure get` asks only for a key; a shell
+  tool input that is a list is refused or read.
+- Only with `--builtin-tools`: a write is read as one in these forms, so one to an access file (`/etc/sudoers`, `/etc/shadow`,
+  `/etc/passwd`, `authorized_keys`) is a deny and one to a startup, cron or guard file asks: `perl` and `ruby` with `-i` in any
+  option cluster (`-pi`, `-ni`, `-pi.bak`), `sed` in any cluster with `i` and `--in-place`, `gawk -i inplace`, an editor given a file,
+  `cp`, `mv`, `install` and `ln` with `-t DIR`, `tar -C DIR`, `unzip -d DIR`, `rsync` and `scp` to a local path, and a `find` that
+  deletes or runs a command. 0.4.3 denied some of these only because it read the file, and `/etc/sudoers` is no longer a secret to read.
+- Only with `--builtin-tools`, these verdicts are weaker than in 0.4.3, on purpose: more than eight wrappers in front of a command ask
+  (the reading stops at eight); reading `/etc/sudoers` asks (it holds rules, not secrets; writing it is still a deny); a raw socket to
+  `localhost` or `127.0.0.1` is allowed and one to another host asks; reading, listing or unsetting `core.hooksPath` is allowed
+  (setting it asks); a dead copy of a startup file or of `~/.ssh/config` (`.zshrc.bak`, `.bashrc.orig`, `.zshrc~`, `config.bak`) is
+  allowed; `~/.ssh/config.d` is allowed, and another `~/.ssh` file not named like a key asks (one named like a key, or holding key
+  text, is still a deny); a cleanup of a home folder by age, size, emptiness or owner (`find ~/Downloads -mtime +30 -delete`) asks;
+  `aws configure get region` is allowed; `~/../x/proj` is the folder `x/proj`, not the home, so `rm -rf ~/../x/proj/build` is allowed.
 
 ### Fixed
 
@@ -76,6 +114,8 @@ Nothing to run: an installed hook keeps working. What changes for you:
   one.
 - A failure of the threat-memory file is reported with the name of the method that failed, and the call goes on as if the memory knew
   nothing.
+- `wrap` names `intentshield scan <file>` as the check for a file `doctor` does not read, and `doctor` with nothing installed says
+  where it looked; `install` says in plain words what an unread harness version costs.
 
 ## 0.4.3 - 2026-11-11
 
@@ -276,7 +316,7 @@ retry, and a dropped judge connection no longer blocks a call.
 - **Built-in tools, opt-in** (`intentshield install <harness> --builtin-tools`, or `--builtin-tools` on the hook). The hooks now
   read the harness's own shell, web and file tools: Claude Code `Bash`, `WebFetch`, `WebSearch`, `Read`, `Write`, `Edit`; Codex's
   shell tool; Gemini CLI's shell, fetch, search, read and write tools; Cursor's `beforeReadFile` and `afterShellExecution`. A shell
-  command is parsed for where it reaches, whether it sends data and which secrets it reads (`src/intentshield/shell.py`).
+  command is parsed for where it reaches, whether it sends data and which secrets it reads (`src/intentshield/shell/`).
 
   A command or fetch to an address from an injected output is denied; sending data to an address that came only from a tool output
   asks, as does reading secrets and sending data out; after an injection, commands that are not read-only ask. A plain download (a

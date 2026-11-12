@@ -12,6 +12,9 @@ from .text import _private_dir, _window
 
 SESSION_TTL = 7 * 86_400  # seconds an idle session's prompts are kept; every hook event of it renews them
 FLAGGED_TTL = 30 * 86_400  # a session with taint or a flag is forgotten only after this much idle time
+# The reasons a session is flagged softly (state-changing calls ask), kept as bits of the ``soft`` column: the LLM judge suspected
+# an output (1), or a result was too long to read in full (2).
+SOFT_JUDGE, SOFT_UNREAD = 1, 2
 
 
 class SessionStore:
@@ -120,6 +123,12 @@ class SessionStore:
         if taint or (row and row[0]):
             return "A tool output in this session tried to instruct the agent; confirm this call."
         if row and row[2] and not row[1]:
+            judged, unread = bool(row[2] & SOFT_JUDGE), bool(row[2] & SOFT_UNREAD)
+            if judged and unread:
+                return ("IntentShield's LLM judge thought a tool output in this session tried to instruct the agent, and "
+                        "another was too long to read in full; confirm this call.")
+            if unread:
+                return "A tool result in this session was too long for IntentShield to read in full; confirm this call."
             return ("IntentShield's LLM judge thought a tool output in this session tried to instruct the "
                     "agent; confirm this call.")
         if row and row[1]:

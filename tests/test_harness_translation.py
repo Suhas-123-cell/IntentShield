@@ -1,6 +1,6 @@
 """Verdict translation (src/intentshield/translation.py): the guard's ask, deny and failure become the reply each harness build,
 in its mode, is measured to honour. The measurements are in the study's working notes
-(docs/research-notes/hook-fidelity/hook-fidelity-study.md) and in results/hook-fidelity/mitigation."""
+(hook-fidelity-study.md on the research-notes branch) and in results/hook-fidelity/mitigation."""
 from __future__ import annotations
 
 import importlib.util

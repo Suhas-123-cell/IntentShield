@@ -1,7 +1,7 @@
 """Verdict translation: what the guard means -> the reply the harness, in its version and mode, is measured to honour.
 
 IntentShield decides allow, ask or deny. A harness does not always do what the matching reply says (the hook-fidelity study,
-docs/research-notes/hook-fidelity/hook-fidelity-study.md): Codex CLI drops an ask and runs the call, Gemini CLI waits on one
+hook-fidelity-study.md on the research-notes branch): Codex CLI drops an ask and runs the call, Gemini CLI waits on one
 in a headless yolo run (to the 90 s to 900 s caps measured; no answer came), Claude Code before 2.1.85 ran a pre-approved call
 its hook asked about, a hook that dies or is slow is let through by every harness measured. This module keeps those findings as
 data, by (harness, version range, mode), and answers four questions:

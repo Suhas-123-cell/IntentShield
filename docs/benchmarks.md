@@ -120,7 +120,8 @@ What the tables show:
 - It costs 8 to 14 points of task completion against the baseline, and it raises the reviews per case on three of the four agents.
 
 What they do not show: these are single runs of small models on tuning templates, and only the three qwen2.5:7b arms were rerun on
-recent code. Overhead is about 75 ms per hook event and about 150 ms per guarded MCP call (`benchmarks/latency.py`).
+recent code. Overhead is about 70 ms per hook event and about 140 ms per guarded MCP call (`benchmarks/latency.py`; the three runs in
+`results/latency-2026-11-11/tree-run{1,2,3}.json` give 69.8 to 71.5 ms per event and 139.6 to 142.8 ms per call).
 
 ### Other measurements (summary)
 
@@ -146,6 +147,11 @@ Overhead detail (Apple M5, 3 runs on 2026-11-11 on the working tree after `63301
 - At the v0.4.3 tag (`1979d0e`), exported cleanly and run three times on 2026-11-11 on the same machine: 73.5 to 74.1 ms per
   event at p50, 83.4 to 83.8 ms with a 4 KB result, a guarded MCP call about 147 to 148 ms, and 1.8 ms added by the proxy. The
   raw output of these three runs was not committed.
+- A paired run on 2026-11-12 did not repeat that ordering. It alternated a clean export of the v0.4.3 tag and the working tree on the
+  same Apple M5, 40 hook processes each (`python -m intentshield.harness claude --no-translate` on one `PreToolUse` MCP event), three
+  times: p50 70.5 to 70.9 ms for the v0.4.3 export and 74.3 to 74.6 ms for the tree, so the tree was about 4 ms slower than 0.4.3
+  there. The unpaired figures above, taken on different days, do not show which of the two is faster; this raw output was not committed
+  either. Read the overhead as about 70 to 75 ms per event for both.
 - The earlier figures of 35 ms, 42 ms and +1.9 ms predate the threat memory, value extraction and shell parser.
 
 ### Detail behind the headline
