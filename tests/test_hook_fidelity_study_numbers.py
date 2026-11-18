@@ -13,7 +13,7 @@ if not RES.is_dir():
 
 def rows(*parts: str) -> list[dict]:
     path = RES.joinpath(*parts)
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def test_untrusted_codex_rows_are_70_not_40():
@@ -95,7 +95,7 @@ def test_round3_mitigation_counts():
 
 
 def test_guard_headline_is_restated_per_run():
-    headline = json.loads((RES / "guards" / "summary.json").read_text())["headline"]
+    headline = json.loads((RES / "guards" / "summary.json").read_text(encoding="utf-8"))["headline"]
     assert headline["live_cells_tested"] == 38 and headline["live_cells_guarded_call_ran"] == 5
     per_run = headline["per_run"]
     assert per_run["codex untrusted"] == {"runs": 12, "call_ran": 12, "hook_invoked": 0}
@@ -107,7 +107,7 @@ def test_guard_headline_is_restated_per_run():
 # ruff: noqa: E501
 def test_round_8_launch_ledgers_sum_to_the_200_the_study_cites():
     def lines(*parts):
-        return len((RES.joinpath(*parts)).read_text().splitlines())
+        return len((RES.joinpath(*parts)).read_text(encoding="utf-8").splitlines())
 
     lane = [lines("detect", "validation", "launches.jsonl"), lines("compare", "launches-r8.jsonl"), lines("real-model", "launches.jsonl"),
             lines("real-model-supp", "launches.jsonl"), lines("real-model-deepseek", "launches.jsonl")]
@@ -117,7 +117,7 @@ def test_round_8_launch_ledgers_sum_to_the_200_the_study_cites():
 
 
 def test_round_8_closeout_figures():
-    summary = json.loads((RES / "compare" / "summary-r8.json").read_text())
+    summary = json.loads((RES / "compare" / "summary-r8.json").read_text(encoding="utf-8"))
     assert (summary["rows"], summary["invalid"], summary["launches"]) == (51, 0, 51)
     p1 = summary["part1"]
     assert (p1["rows"], p1["pairs"]["n"], p1["pairs"]["r8_survived"], p1["groups_same"], p1["rows_same_outcome_as_r7"], p1["changes"]) == (36, 12, 12, 20, 36, [])
@@ -139,13 +139,13 @@ def test_round_8_closeout_figures():
 def test_round_8_linux_figures():
     rows_ = rows("linux", "rows.jsonl")
     assert len(rows_) == 37
-    summary = json.loads((RES / "linux" / "summary.json").read_text())
+    summary = json.loads((RES / "linux" / "summary.json").read_text(encoding="utf-8"))
     g = summary["by_group"]
     assert (g["matrix"]["agree"], g["matrix"]["n"], g["hidepid"]["agree"], g["pid1"]["agree"], g["pid1"]["n"], g["pid1"]["mode_equal"]) == (28, 28, 1, 0, 8, 6)
 
 
 def test_round_8_detection_fixture_sizes():
-    summary = json.loads((RES / "detect" / "summary.json").read_text())
+    summary = json.loads((RES / "detect" / "summary.json").read_text(encoding="utf-8"))
     assert summary["fixtures"]["heldout"] == {"harmful": 166, "benign": 234}
 
 

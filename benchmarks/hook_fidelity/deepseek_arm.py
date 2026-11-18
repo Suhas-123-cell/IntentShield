@@ -151,7 +151,7 @@ def parse_stream(stream: str) -> dict:
 
 def jsonl(path: Path) -> list[dict]:
     try:
-        return [json.loads(x) for x in path.read_text(errors="replace").splitlines() if x.strip()]
+        return [json.loads(x) for x in path.read_text(encoding="utf-8", errors="replace").splitlines() if x.strip()]
     except (OSError, ValueError):
         return []
 
@@ -180,12 +180,12 @@ def launch(label: str, spec: dict, out: Path, proxy: Proxy, proxy_url: str, go: 
     argv = ["sandbox-exec", "-f", str(hf_run.LOOPBACK_PROFILE), *argv]
     if used >= go or used >= MAX_LAUNCHES:
         raise SystemExit(f"launch budget used ({used}/{go})")
-    with (out / "launches.jsonl").open("a") as ledger:    # written BEFORE the launch
+    with (out / "launches.jsonl").open("a", encoding="utf-8") as ledger:    # written BEFORE the launch
         ledger.write(json.dumps({"label": label, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}) + "\n")
     before = len(proxy.log)
     so, se = root / "stdout.txt", root / "stderr.txt"
     t0 = time.monotonic()
-    with so.open("w") as fo, se.open("w") as fe:
+    with so.open("w", encoding="utf-8") as fo, se.open("w", encoding="utf-8") as fe:
         proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=fo, stderr=fe, start_new_session=True)
         capped, _, _ = hf_run.watch(proc, CAP_S, [so, se, hooks_log])
         try:
@@ -193,12 +193,12 @@ def launch(label: str, spec: dict, out: Path, proxy: Proxy, proxy_url: str, go: 
         except PermissionError:
             pass
     wall = time.monotonic() - t0
-    stream = scrub(so.read_text(errors="replace"))
-    err = scrub(se.read_text(errors="replace"))
+    stream = scrub(so.read_text(errors="replace", encoding="utf-8"))
+    err = scrub(se.read_text(errors="replace", encoding="utf-8"))
     parsed = parse_stream(stream)
     marker = Path(work) / f"ran-{nonce}.txt"
     stray = [p.name for p in Path(work).glob("ran-*") if p != marker]
-    attested = marker.exists() and attestation in marker.read_text(errors="replace")
+    attested = marker.exists() and attestation in marker.read_text(errors="replace", encoding="utf-8")
     hooks = jsonl(hooks_log)
     decision_events = [h for h in hooks if h.get("decision_event") or nonce in str(h.get("input", ""))]
     issued = len(parsed["calls"]) >= 1
@@ -227,7 +227,7 @@ def launch(label: str, spec: dict, out: Path, proxy: Proxy, proxy_url: str, go: 
            "stderr_tail": err[-300:] if not issued else "", "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     streams = out / "streams"
     streams.mkdir(exist_ok=True)
-    (streams / f"{label}.stdout.txt").write_text(stream[-60000:].replace(str(root), "<run>"))
+    (streams / f"{label}.stdout.txt").write_text(stream[-60000:].replace(str(root), "<run>"), encoding="utf-8")
     import shutil
     shutil.rmtree(root, ignore_errors=True)
     return row
@@ -266,7 +266,7 @@ def main() -> int:
             continue
         row = launch(label, spec, out, proxy, proxy_url, int(go), used)
         used += 1
-        with (out / "runs.jsonl").open("a") as fh:
+        with (out / "runs.jsonl").open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
         print(label, row["outcome"], "valid" if row["valid"] else "INVALID", "calls", row["tool_calls"], flush=True)
     return 0

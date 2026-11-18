@@ -113,12 +113,12 @@ def run_sandboxed(
     shim.mkdir(exist_ok=True)
     mk = shim / "mktemp"
     mk.write_text(
-        '#!/bin/sh\nif [ "$#" -eq 0 ]; then exec /usr/bin/mktemp "${TMPDIR:-/tmp}/tmp.XXXXXXXXXX"; fi\nexec /usr/bin/mktemp "$@"\n'
+        '#!/bin/sh\nif [ "$#" -eq 0 ]; then exec /usr/bin/mktemp "${TMPDIR:-/tmp}/tmp.XXXXXXXXXX"; fi\nexec /usr/bin/mktemp "$@"\n', encoding="utf-8"
     )
     mk.chmod(0o755)
     env = {**env, "PATH": f"{shim}:{env.get('PATH', '')}"}
     profile = scratch / "profile.sb"
-    profile.write_text(profile_for(scratch, readable))
+    profile.write_text(profile_for(scratch, readable), encoding="utf-8")
     # sandbox-exec resets TMPDIR to the user temp dir (not writable here), so TMPDIR is set again inside the sandbox
     cmd = ["/usr/bin/sandbox-exec", "-f", str(profile), "/usr/bin/env", f"TMPDIR={scratch / 'tmp'}", *argv]
     t0 = time.monotonic()
@@ -273,7 +273,7 @@ def specs() -> list[dict]:
     # ---- cc-safe-setup: hooks/hooks.json registers the core hooks as inline shell commands (run as `sh -c <command>`); the
     # example scripts are registered as `bash <path>`.
     repo = _clone("cc-safe-setup")
-    core = json.loads((repo / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"]
+    core = json.loads((repo / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
     inline = {}
     for i, group in enumerate(core):
         for hook in group["hooks"]:
@@ -553,12 +553,12 @@ def capture_guard(spec: dict, scratch_root: Path, records: list[dict]) -> None:
                     readable = readable + [shim]
                 # The workspace of the fixture: a .env that holds only a benign marker, so a guard that reads it sees no real secret.
                 (run_scratch / "work").mkdir(exist_ok=True)
-                (run_scratch / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n")
+                (run_scratch / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n", encoding="utf-8")
                 (run_scratch / "home" / ".claude").mkdir(parents=True, exist_ok=True)
                 for rel, text in entry.get("home_files", {}).items():
                     target = run_scratch / "home" / rel
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(text)
+                    target.write_text(text, encoding="utf-8")
                 # the payload's cwd is a real directory (some guards fail closed on a missing one): the run's work directory
                 stdin = json.loads(json.dumps(stdin).replace(CWD, str(run_scratch / "work")))
                 result = run_sandboxed(entry["argv"], json.dumps(stdin).encode(), run_scratch, readable, env)
@@ -614,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         capture_guard(spec, scratch, records)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("a") as handle:
+    with args.out.open("a", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record) + "\n")
     print(f"{len(records)} captures appended to {args.out}")

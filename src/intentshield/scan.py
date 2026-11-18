@@ -138,7 +138,7 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
             continue
         seen.add(resolved)
         try:
-            text = path.read_text("utf-8")
+            text = path.read_text(encoding="utf-8")
             if path.suffix == ".toml":
                 data = tomllib.loads(text)
             else:
@@ -375,7 +375,7 @@ def guarded(client: str, home: Path) -> bool:
         return False
     try:
         path = home / rel
-        text = path.read_text("utf-8")
+        text = path.read_text(encoding="utf-8")
         data = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
     except (OSError, ValueError):
         return False
@@ -494,7 +494,7 @@ def load_pins(path: Path) -> dict[str, str]:
     except ValueError as exc:
         backup = path.with_name(path.name + ".bak")
         try:
-            backup.write_text(text)
+            backup.write_text(text, encoding="utf-8")
         except OSError:
             pass
         print(f"intentshield scan: {path} is not a valid pins file ({exc}); its tools are treated as new, "
@@ -508,7 +508,7 @@ def save_pins(path: Path, pins: dict[str, str]) -> None:
     translation.private_dir(path.parent)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
     try:
-        with os.fdopen(fd, "w") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(json.dumps(pins, indent=1, sort_keys=True))
         os.replace(tmp, path)
     except BaseException:

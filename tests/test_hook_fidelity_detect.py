@@ -35,7 +35,7 @@ def rows():
 
 @pytest.fixture(scope="module")
 def decisions():
-    return [json.loads(line) for line in (DETECT / "decisions.jsonl").read_text().splitlines()]
+    return [json.loads(line) for line in (DETECT / "decisions.jsonl").read_text(encoding="utf-8").splitlines()]
 
 
 # ------------------------------------------------------------------------------------------------------------ classification
@@ -154,8 +154,8 @@ def test_mcp_items_carry_a_prelude_in_the_calls_session(rows):
 
 
 def test_a_changed_fixture_file_is_refused(tmp_path):
-    (tmp_path / "fixtures.jsonl").write_text((DETECT / "fixtures.jsonl").read_text() + "\n")
-    (tmp_path / "provenance.md").write_text((DETECT / "provenance.md").read_text())
+    (tmp_path / "fixtures.jsonl").write_text((DETECT / "fixtures.jsonl").read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    (tmp_path / "provenance.md").write_text((DETECT / "provenance.md").read_text(encoding="utf-8"), encoding="utf-8")
     with pytest.raises(SystemExit):
         dc.load_fixtures(tmp_path / "fixtures.jsonl")
 
@@ -246,20 +246,20 @@ def test_decisions_cover_the_fixtures(rows, decisions):
 
 def test_summary_recomputes_from_decisions(rows, decisions):
     summary = dc.summarize(rows, decisions, dc.derive_delivery())
-    committed = json.loads((DETECT / "summary.json").read_text())
+    committed = json.loads((DETECT / "summary.json").read_text(encoding="utf-8"))
     assert json.loads(json.dumps(summary, sort_keys=True)) == committed
 
 
 def test_third_party_guards_never_ran_unsandboxed_and_nothing_was_executed():
-    text = Path(dc.__file__).read_text()
+    text = Path(dc.__file__).read_text(encoding="utf-8")
     assert "run_sandboxed" in text and "subprocess" not in text.replace("# ", "")  # the only process launcher is guard_capture.run_sandboxed
-    prov = (DETECT / "provenance.md").read_text()
+    prov = (DETECT / "provenance.md").read_text(encoding="utf-8")
     assert "Written and committed BEFORE any guard was run" in prov
 
 
 def test_not_run_guards_are_named_with_a_reason():
     run = {g.id.split("[")[0] for g in dc.specs()}
-    corpus = {g["id"] for g in json.loads((ROOT / "results/hook-fidelity/corpus.json").read_text())["guards"]}
+    corpus = {g["id"] for g in json.loads((ROOT / "results/hook-fidelity/corpus.json").read_text(encoding="utf-8"))["guards"]}
     assert not (set(dc.NOT_RUN) & run)
     assert all(dc.NOT_RUN.values())
     # two clones in the scratch corpus directory are not among the 26 inventoried guards
@@ -301,12 +301,12 @@ def test_selection_is_deterministic_and_within_the_cap(rows, decisions):
         assert p["predicted"] == dc.outcome(m, p["build"], p["class"], p["subtype"])
         fx = next(r for r in rows if r["id"] == p["row_id"])
         assert fx["heldout"] and fx["tool_kind"] == "shell"
-    committed = json.loads((DETECT / "validation" / "selection.json").read_text())
+    committed = json.loads((DETECT / "validation" / "selection.json").read_text(encoding="utf-8"))
     assert [(p["build"], p["row_id"], p["guard"]) for p in committed] == [(p["build"], p["row_id"], p["guard"]) for p in a]
 
 
 def test_validation_replay_paths_are_absolute(tmp_path):
-    sel = json.loads((DETECT / "validation" / "selection.json").read_text())
+    sel = json.loads((DETECT / "validation" / "selection.json").read_text(encoding="utf-8"))
     cases = dv.cases_from_selection(sel, Path("results/hook-fidelity/detect/validation"))
     assert cases and all(Path(c["replay"]).is_absolute() for c in cases)
     assert all(Path(c["replay"]).exists() for c in cases)
@@ -314,7 +314,7 @@ def test_validation_replay_paths_are_absolute(tmp_path):
 
 def test_launch_ledger_is_counted(tmp_path):
     assert dv.launches_spent(tmp_path) == 0
-    (tmp_path / "launches.jsonl").write_text('{"a": 1}\n{"a": 2}\n')
+    (tmp_path / "launches.jsonl").write_text('{"a": 1}\n{"a": 2}\n', encoding="utf-8")
     assert dv.launches_spent(tmp_path) == 2
     assert dv.launches_spent(DETECT / "validation") == 59   # 30 invalid first-attempt launches plus the 29 corrected ones
 
@@ -329,14 +329,14 @@ def test_tainted_variant_asks_on_a_shell_call_that_the_untainted_one_allows(rows
 
 def test_validation_rerun_rows_are_recorded_and_the_summary_recomputes():
     val = DETECT / "validation"
-    sel = json.loads((val / "selection.json").read_text())
-    runs = {r["run_id"]: r for r in map(json.loads, (val / "runs.jsonl").read_text().splitlines())}
+    sel = json.loads((val / "selection.json").read_text(encoding="utf-8"))
+    runs = {r["run_id"]: r for r in map(json.loads, (val / "runs.jsonl").read_text(encoding="utf-8").splitlines())}
     assert len(runs) == len(sel) == 29
     assert all(r["hook_invoked"] and r["outcome"] != "INVALID" for r in runs.values())
     matched = sum(runs[dv.cmp.case_id(c)]["outcome"] == p["predicted"] for c, p in zip(dv.cases_from_selection(sel, val), sel, strict=True))
-    summary = json.loads((val / "summary.json").read_text())
+    summary = json.loads((val / "summary.json").read_text(encoding="utf-8"))
     assert (summary["matched"], summary["valid"], summary["attempt1_invalid_rows"]) == (matched, 29, 29)
-    assert len((val / "runs-attempt1-invalid.jsonl").read_text().splitlines()) == 29
+    assert len((val / "runs-attempt1-invalid.jsonl").read_text(encoding="utf-8").splitlines()) == 29
 
 
 # ------------------------------------------------------------------------------------- round 8 integration: critic corrections
@@ -354,7 +354,7 @@ def test_post_hoc_heldout_correction_removes_only_ignore_previous(rows):
 
 @needs_corpus
 def test_committed_summary_uses_the_corrected_heldout_set(rows, decisions):
-    summary = json.loads((DETECT / "summary.json").read_text())
+    summary = json.loads((DETECT / "summary.json").read_text(encoding="utf-8"))
     assert summary["fixtures"]["heldout"] == {"harmful": 166, "benign": 234}
     deciders = {d.gid: d for d in dc.build_deciders(rows, decisions)}
     m = dc.metrics(deciders["intentshield"], rows, "claimed", "heldout")
@@ -366,12 +366,12 @@ def test_committed_summary_uses_the_corrected_heldout_set(rows, decisions):
 
 def test_benign_mcp_supplement_is_post_hoc_and_recomputes():
     out = DETECT / "mcp-benign"
-    items = [json.loads(line) for line in (out / "items.jsonl").read_text().splitlines()]
+    items = [json.loads(line) for line in (out / "items.jsonl").read_text(encoding="utf-8").splitlines()]
     assert items == [json.loads(json.dumps(r)) for r in dmb.build_rows()]
     assert sum(r["dest_kind"] == "result" for r in items) == 24 and sum(r["dest_kind"] == "named" for r in items) == 6
-    decisions = [json.loads(line) for line in (out / "decisions.jsonl").read_text().splitlines()]
+    decisions = [json.loads(line) for line in (out / "decisions.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(decisions) == len(items) * len(dmb.VARIANTS)
-    summary = json.loads((out / "summary.json").read_text())
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     assert summary["post_hoc"] is True
     got = dmb.summarize(items, decisions)
     assert got["variants"] == summary["variants"]
@@ -392,7 +392,7 @@ def test_benign_mcp_supplement_two_items_in_process():
 @needs_corpus
 def test_committed_breakdown_recomputes_and_splits_near_misses(rows, decisions):
     got = dc.breakdown(rows, decisions)
-    assert got == json.loads((DETECT / "breakdown.json").read_text())
+    assert got == json.loads((DETECT / "breakdown.json").read_text(encoding="utf-8"))
     assert got["primary_mix"]["harmful"] == {"claude": 75, "codex": 42, "gemini": 49}
     ps = got["benign_split"]["prevent-destructive"]
     assert (ps["near-miss"]["deny"], ps["ordinary-dev"]["deny"]) == (6, 0)   # its false-denies are all near-miss labels, as the critic suspected

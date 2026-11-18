@@ -116,7 +116,8 @@ def test_summarize_requires_the_no_hook_control_and_excludes_invalid_runs():
 def test_stubhook_replay_emits_exactly_the_captured_bytes_and_exit_code(tmp_path):
     reply = tmp_path / "rp.json"
     reply.write_text(
-        json.dumps({"stdout_b64": _b64('{"decision":"block","reason":"r"}'), "stderr_b64": _b64("why\n"), "exit_code": 2})
+        json.dumps({"stdout_b64": _b64('{"decision":"block","reason":"r"}'), "stderr_b64": _b64("why\n"), "exit_code": 2}),
+            encoding="utf-8"
     )
     proc = subprocess.run(
         [
@@ -138,12 +139,12 @@ def test_stubhook_replay_emits_exactly_the_captured_bytes_and_exit_code(tmp_path
         text=True,
     )
     assert proc.returncode == 2 and proc.stdout == '{"decision":"block","reason":"r"}' and proc.stderr == "why\n"
-    assert json.loads((tmp_path / "log.jsonl").read_text().splitlines()[0])["reply"] == "RP"
+    assert json.loads((tmp_path / "log.jsonl").read_text(encoding="utf-8").splitlines()[0])["reply"] == "RP"
 
 
 def test_stubhook_replay_answers_a_non_decision_event_neutrally_and_refuses_a_missing_or_timed_out_capture(tmp_path):
     reply = tmp_path / "rp.json"
-    reply.write_text(json.dumps({"stdout_b64": _b64("x"), "stderr_b64": "", "exit_code": 2}))
+    reply.write_text(json.dumps({"stdout_b64": _b64("x"), "stderr_b64": "", "exit_code": 2}), encoding="utf-8")
     proc = subprocess.run(
         [
             sys.executable,
@@ -166,7 +167,7 @@ def test_stubhook_replay_answers_a_non_decision_event_neutrally_and_refuses_a_mi
     assert proc.returncode == 0 and proc.stdout == "{}"
     with pytest.raises(ValueError):
         stubhook.planned("claude", "RP")  # no --replay-file
-    reply.write_text(json.dumps({"stdout_b64": "", "stderr_b64": "", "exit_code": None}))
+    reply.write_text(json.dumps({"stdout_b64": "", "stderr_b64": "", "exit_code": None}), encoding="utf-8")
     with pytest.raises(ValueError):
         stubhook.replay_reply(str(reply))
 
@@ -249,7 +250,7 @@ def test_stub_run_refuses_without_a_matching_go_ahead(tmp_path, monkeypatch, cap
 
 # ---------------------------------------------------------------- committed results
 def _jsonl(path):
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def test_committed_captures_carry_exact_bytes_and_no_local_paths():
@@ -267,14 +268,14 @@ def test_committed_captures_carry_exact_bytes_and_no_local_paths():
             and base64.b64decode(r["stderr_b64"]).decode() == r["stderr"]
         )
         assert len(r["guard_commit"]) == 40 and r["sandbox"].startswith("sandbox-exec deny-default")
-    text = (GUARDS / "captures.jsonl").read_text() + (GUARDS / "stub-rows.jsonl").read_text()
+    text = (GUARDS / "captures.jsonl").read_text(encoding="utf-8") + (GUARDS / "stub-rows.jsonl").read_text(encoding="utf-8")
     assert "/Users/" not in text and "claude-501" not in text
-    meta = json.loads((GUARDS / "captures-meta.json").read_text())
+    meta = json.loads((GUARDS / "captures-meta.json").read_text(encoding="utf-8"))
     assert all(v["held"] for v in meta["sandbox_selftest"].values())
 
 
 def test_replay_index_matches_the_captures_and_every_replay_file_exists():
-    index = json.loads((GUARDS / "replay" / "index.json").read_text())
+    index = json.loads((GUARDS / "replay" / "index.json").read_text(encoding="utf-8"))
     captures = [r for r in _jsonl(GUARDS / "captures.jsonl") if not r.get("status")]
     assert sum(len(i["captures"]) for i in index) == len(captures)
     for item in index:
@@ -282,8 +283,10 @@ def test_replay_index_matches_the_captures_and_every_replay_file_exists():
         assert (
             guard_replay.triple_id(
                 {
-                    "stdout_b64": json.loads((GUARDS / "replay" / f"{item['id']}.json").read_text())["stdout_b64"],
-                    "stderr_b64": json.loads((GUARDS / "replay" / f"{item['id']}.json").read_text())["stderr_b64"],
+                    "stdout_b64": json.loads((GUARDS / "replay" / f"{item['id']}.json").read_text(
+                        encoding="utf-8"))["stdout_b64"],
+                    "stderr_b64": json.loads((GUARDS / "replay" / f"{item['id']}.json").read_text(
+                        encoding="utf-8"))["stderr_b64"],
                     "exit_code": item["exit_code"],
                 }
             )
@@ -301,7 +304,7 @@ def test_launch_ledger_stays_under_the_cap_and_every_final_row_has_a_ledger_entr
 
 def test_summary_and_the_headline_are_what_the_rows_derive_and_controls_ran():
     rows = _jsonl(GUARDS / "stub-rows.jsonl")
-    summary = json.loads((GUARDS / "summary.json").read_text())
+    summary = json.loads((GUARDS / "summary.json").read_text(encoding="utf-8"))
     again = guard_replay.summarize_stub(rows)
     assert again["cells"] == summary["cells"] and again["controls"] == summary["controls"]
     live = [c for c in summary["cells"] if c["tested"] and not c["probe"]]
@@ -318,7 +321,7 @@ def test_summary_and_the_headline_are_what_the_rows_derive_and_controls_ran():
 
 
 def test_headline_causes_are_all_untrusted_skips_with_no_hook_invocation():
-    summary = json.loads((GUARDS / "summary.json").read_text())
+    summary = json.loads((GUARDS / "summary.json").read_text(encoding="utf-8"))
     ran = [c for c in summary["cells"] if c["tested"] and not c["probe"] and c["guarded_call_ran"]]
     assert ran and all(
         c["harness"] == "codex" and c["state"] == "untrusted" and c["hook_invoked"] == 0 and c["cause"] == "untrusted skip"
@@ -331,7 +334,7 @@ def test_headline_causes_are_all_untrusted_skips_with_no_hook_invocation():
 def test_gemini_replay_has_22_releases_and_every_native_block_reply_denied():
     files = sorted((GUARDS / "gemini-replay").glob("*.jsonl"))
     assert len(files) == 22
-    index = {i["id"]: i for i in json.loads((GUARDS / "replay" / "index.json").read_text())}
+    index = {i["id"]: i for i in json.loads((GUARDS / "replay" / "index.json").read_text(encoding="utf-8"))}
     for f in files:
         by = {r["scenario"].removeprefix("replay:"): r for r in _jsonl(f)}
         assert set(by) == set(index) and not any("driverError" in r for r in by.values())
@@ -347,7 +350,7 @@ def test_corpus_counts_check_passes_on_the_committed_data():
 
 
 def test_corpus_has_stars_and_age_per_guard_and_the_measured_block():
-    data = json.loads((ROOT / "results" / "hook-fidelity" / "corpus.json").read_text())
+    data = json.loads((ROOT / "results" / "hook-fidelity" / "corpus.json").read_text(encoding="utf-8"))
     for g in data["guards"]:
         assert isinstance(g["stars"], int) and g["repo_pushed_at"] and "commit_age_days_at_2026-11-01" in g, g["id"]
     m = data["measured"]

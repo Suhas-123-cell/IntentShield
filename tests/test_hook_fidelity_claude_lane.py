@@ -86,11 +86,12 @@ def test_resource_cell_names_the_resource_tool_and_wildcard_matcher_is_a_state(t
     _, spec = _spec(tmp_path, _cell(kind="resource"))
     assert spec.argv[spec.argv.index("--tools") + 1] == "ReadMcpResourceTool"
     paths, spec = _spec(tmp_path / "w", _cell(kind="resource", reply="R4", state="mcpwild"))
-    settings = json.loads((paths.root / "settings.json").read_text())
+    settings = json.loads((paths.root / "settings.json").read_text(encoding="utf-8"))
     assert settings["hooks"]["PreToolUse"][0]["matcher"] == "mcp__.*"
     assert configs.lint_config(_cell(kind="resource", reply="R4", state="mcpwild"), paths, spec) == []
     paths, spec = _spec(tmp_path / "p", _cell(kind="resource", reply="R4"))
-    assert json.loads((paths.root / "settings.json").read_text())["hooks"]["PreToolUse"][0]["matcher"] == "ReadMcpResourceTool"
+    assert json.loads((paths.root / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["PreToolUse"][0]["matcher"] == "ReadMcpResourceTool"
 
 
 def test_flags_an_old_release_lacks_are_dropped(tmp_path):
@@ -104,10 +105,11 @@ def test_flags_an_old_release_lacks_are_dropped(tmp_path):
 
 def test_onfailure_key_is_written_only_for_the_block_variant(tmp_path):
     paths, _ = _spec(tmp_path / "a", _cell(reply="R5", failcfg="block"))
-    hooks = json.loads((paths.root / "settings.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]
+    hooks = json.loads((paths.root / "settings.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]
     assert hooks["onFailure"] == "block" and hooks["timeout"] == configs.HOOK_TIMEOUT_S
     paths, _ = _spec(tmp_path / "b", _cell(reply="R5"))
-    assert "onFailure" not in json.loads((paths.root / "settings.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]
+    assert "onFailure" not in json.loads((paths.root / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]
 
 
 # ---------------------------------------------------------------- arm S helpers of run.py
@@ -160,7 +162,7 @@ def test_arm_s_is_refused_for_unwired_harnesses_and_the_cap_is_for_real_models_o
 
 
 def test_loopback_profile_denies_outbound_and_allows_loopback():
-    text = run.LOOPBACK_PROFILE.read_text()
+    text = run.LOOPBACK_PROFILE.read_text(encoding="utf-8")
     assert "(deny network-outbound)" in text and 'remote ip "localhost:*"' in text
 
 
@@ -169,7 +171,7 @@ def test_claude_signoffs_are_complete_for_every_lane_stage():
     for name in ("core", "fail", "sweep"):
         assert run.signoff_gaps(claude_lane.stage(name), committer="someone else") == []
     assert run.signoff_gaps(claude_lane.stage("core"), committer="r3-claude lane agent")  # a reader may not be the committer
-    entries = json.loads(run.SIGNOFF_FILE.read_text())
+    entries = json.loads(run.SIGNOFF_FILE.read_text(encoding="utf-8"))
     for item_id, entry in entries.items():
         if item_id.startswith("_"):
             continue
@@ -179,9 +181,9 @@ def test_claude_signoffs_are_complete_for_every_lane_stage():
         assert "agent" in entry["reader_kind"] and "not a human" in entry["reader_kind"].lower()
         path = configs.ROOT / entry["archive"]
         if not path.is_file():   # a vendor page that is not redistributed: its directory's README records the hash
-            assert entry["sha256"] in (path.parent / "README.md").read_text()
+            assert entry["sha256"] in (path.parent / "README.md").read_text(encoding="utf-8")
             continue
-        archive = path.read_text(errors="replace")
+        archive = path.read_text(errors="replace", encoding="utf-8")
         for segment in entry["quote"].split(" ... "):
             assert segment.strip() in archive, (item_id, segment[:60])
 

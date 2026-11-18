@@ -56,7 +56,7 @@ def scan_traces(recorded: Path, roles: dict[str, dict[str, str]]) -> dict[str, A
     cases = 0
     for trace in sorted(recorded.glob("*/none.jsonl.gz")):
         model = trace.parent.name
-        with gzip.open(trace, "rt") as handle:
+        with gzip.open(trace, "rt", encoding="utf-8") as handle:
             for line in handle:
                 row = json.loads(line)
                 cases += 1
@@ -89,7 +89,7 @@ def harm_through_stripped(results: Path, catalogs: dict[str, dict[str, Any]], gr
     total, via = Counter(), Counter()
     for trace in sorted(results.glob("*/none.jsonl")):
         model = trace.parent.name
-        for line in trace.read_text().splitlines():
+        for line in trace.read_text(encoding="utf-8").splitlines():
             row = json.loads(line)
             if not row.get("harm_executed") or row["id"] not in grid:
                 continue
@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = summarize(result)
     print(report(result, summary), end="")
     if args.out:
-        args.out.write_text(json.dumps({"result": result, "summary": summary}, indent=2))
+        args.out.write_text(json.dumps({"result": result, "summary": summary}, indent=2), encoding="utf-8")
     return 0
 
 

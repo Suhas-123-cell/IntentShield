@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = ("docs/guide.md",)
 # Every Markdown file that describes the product; none may carry a qualifier while Unreleased is empty.
 QUALIFIER_FILES = (
-    "README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/guide.md", "docs/layers.md", "docs/gateway.md", "docs/detectors.md",
+    "README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/guide.md", "docs/rules.md", "docs/layers.md", "docs/gateway.md",
+    "docs/detectors.md",
     "docs/benchmarks.md", "docs/security-review.md", "docs/architecture-and-testing.md", "docs/hook-fidelity-report.md",
     "docs/hook-fidelity-report-appendix.md", "docs/contribution.md", "results/hook-fidelity/README.md",
 )
@@ -26,9 +27,9 @@ PYPI_NOTE = re.compile(r"PyPI has \d+\.\d+\.\d+")
 # Each "Added" bullet of the Unreleased section of CHANGELOG.md, by its first words, with the patterns by which the guide names
 # that feature. An empty tuple says the two documents do not name it. A new bullet fails the first test until it is
 # listed here, so that whoever adds a feature decides whether a document needs the mark. Empty while Unreleased is empty.
-UNRELEASED_ADDED: dict[str, tuple[str, ...]] = {}
+UNRELEASED_ADDED: dict[str, tuple[str, ...]] = {"`doctor` warns when a hook or threat-memory database": ()}
 # Features of the "Changed" and "Fixed" lists that the guide also names.
-UNRELEASED_OTHER: tuple[str, ...] = ()
+UNRELEASED_OTHER: tuple[str, ...] = (r"symbolic link", r"Permission denied\)")
 
 
 def _changelog() -> str:

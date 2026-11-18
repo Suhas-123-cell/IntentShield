@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from .core import _bin, _Stage
+from .links import FOLLOW, KEEP_LAST, real_path
 from .parsing import _ASSIGN, _INTERPRETERS, _SHELLS
 from .paths import _READERS, _as_written, _norm, _pathlike
 from .powershell import _POWERSHELLS
@@ -75,6 +76,8 @@ _REMOTE_WORD = re.compile(r"^(?:[\w.+-]{1,64}@)?[\w.-]{1,255}:(?!//)")
 
 def _under(cwd: str, arg: str) -> str:
     """``arg`` as a path from the directory ``cwd`` when it is relative, else as it is."""
+    if FOLLOW.get():   # the path a link on the way leads to, for an absolute path and a ``~`` path as well
+        return (real_path(arg, cwd) or arg) if arg and not arg.startswith("-") else arg
     if not arg or arg.startswith(("-", "/", "~", "$")) or "://" in arg:
         return arg
     return _norm(cwd + "/" + arg)
@@ -148,15 +151,28 @@ def _in_dir(cwd: str, name: str, argv: list[str]) -> list[str]:
     return [head, *(_resolved_word(cwd, name, a) for a in args)]
 
 
+_ACTS_ON_THE_LINK = frozenset({"rm", "unlink", "rmdir", "mv", "ln"})   # see ``links.KEEP_LAST``
 _PER_WORD = 8   # relative words of one command that are each tried on their own; a command with more is tried whole
 
 
-def _moved_stages(stage: _Stage, cwd: str) -> list[_Stage]:
+def _moved_stages(stage: _Stage, cwd: str, follow: bool = False) -> list[_Stage]:
     """The versions of the stage with its relative paths read from ``cwd``: all of them at once, and (up to ``_PER_WORD`` of
     them) each one alone, since a word that is not a path (``mklabel`` of ``parted``, a mode, a pattern) must stay as it is for
     the rules that read it. A program that only runs the text it is given (``su``, ``eval``, ``ssh``) has none. The rules that
     look at a path read it from here as well as as written, so ``../../../dev/sda`` from ``/Users/x/proj`` is ``/dev/sda`` for
-    every program that names a path, not only for those with a rule of their own for a relative one."""
+    every program that names a path, not only for those with a rule of their own for a relative one. With ``follow`` the words
+    that name a path through a symbolic link are replaced by the real path, and only those (see ``links``)."""
+    token = FOLLOW.set(follow)
+    words = _unwrap(stage)[0].argv
+    last = KEEP_LAST.set(bool(words) and _bin(words[0]) in _ACTS_ON_THE_LINK)
+    try:
+        return _moved(stage, cwd)
+    finally:
+        KEEP_LAST.reset(last)
+        FOLLOW.reset(token)
+
+
+def _moved(stage: _Stage, cwd: str) -> list[_Stage]:
     bare, _ = _unwrap(stage)
     name = _bin(bare.argv[0]) if bare.argv else ""
     if name in _NO_PATHS:
@@ -199,6 +215,16 @@ def _cd_target(argv: list[str], cwd: str | None) -> str | None:
     return _as_written(cwd + "/" + target) if cwd.startswith("/") else _norm(cwd + "/" + target)
 
 
+_KNOWN_VAR = re.compile(r"\$\{?(?:HOME|USERPROFILE)\}?(?![\w{])")
+
+
+def _dynamic(value: str) -> bool:
+    """The text holds something this reading cannot know: a command substitution or a variable other than ``$HOME``, which the
+    rules read as the home directory (``f=$HOME/.ssh/id_rsa; cat $f`` is ``cat ~/.ssh/id_rsa``, as ``f=~/.ssh/id_rsa`` is)."""
+    rest = _KNOWN_VAR.sub("", value)
+    return "$" in rest or "`" in rest
+
+
 def _track(st: _Stage, env: dict[str, list[str]], where: dict[str, Any]) -> None:
     """What one stage changes for the stages after it: variables it sets (``X=v``, ``export X=v``, ``for x in a b``) and
     the directory a ``cd``, ``pushd`` or ``popd`` moves to."""
@@ -206,7 +232,7 @@ def _track(st: _Stage, env: dict[str, list[str]], where: dict[str, Any]) -> None
     if not bare.argv:
         for a in bare.assigns:
             key, _, value = a.partition("=")
-            if "$" in value or "`" in value:
+            if _dynamic(value):
                 env.pop(key, None)
             else:
                 env[key] = [value]
@@ -216,13 +242,13 @@ def _track(st: _Stage, env: dict[str, list[str]], where: dict[str, Any]) -> None
         for a in bare.argv[1:]:
             if _ASSIGN.match(a):
                 key, _, value = a.partition("=")
-                if "$" in value or "`" in value:
+                if _dynamic(value):
                     env.pop(key, None)
                 else:
                     env[key] = [value]
     elif name == "for" and len(bare.argv) >= 4 and bare.argv[2] == "in":
         words = bare.argv[3:]
-        if any("$" in w or "`" in w for w in words):
+        if any(_dynamic(w) for w in words):
             env.pop(bare.argv[1], None)
         elif len(words) > _MAX_VARIANTS:
             env[bare.argv[1]] = _MANY

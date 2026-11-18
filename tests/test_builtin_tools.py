@@ -352,20 +352,20 @@ def test_the_command_parser(command, destinations, sends, secrets, read_only):
 
 def test_install_builtin_tools_widens_the_matchers_and_a_plain_reinstall_narrows_them(tmp_path: Path):
     path = install.install("claude", home=tmp_path, hook="/opt/bin/intentshield-hook", builtin_tools=True, translate=False)
-    hooks = json.loads(path.read_text())["hooks"]
+    hooks = json.loads(path.read_text(encoding="utf-8"))["hooks"]
     assert "Bash" in hooks["PreToolUse"][0]["matcher"] and "WebSearch" in hooks["PostToolUse"][0]["matcher"]
     assert hooks["PreToolUse"][0]["hooks"][0]["command"].endswith("--builtin-tools")
     cursor = install.install("cursor", home=tmp_path, hook="/opt/bin/intentshield-hook", builtin_tools=True)
-    assert {"beforeReadFile", "afterShellExecution"} <= json.loads(cursor.read_text())["hooks"].keys()
+    assert {"beforeReadFile", "afterShellExecution"} <= json.loads(cursor.read_text(encoding="utf-8"))["hooks"].keys()
     install.install("cursor", home=tmp_path, hook="/opt/bin/intentshield-hook")
-    assert "beforeReadFile" not in json.loads(cursor.read_text())["hooks"]
+    assert "beforeReadFile" not in json.loads(cursor.read_text(encoding="utf-8"))["hooks"]
     assert 'matcher = ".*"' in install.codex_toml("h codex --builtin-tools", builtin_tools=True)
 
 
 def _hook_exe(tmp_path: Path) -> str:
     exe = tmp_path / "bin" / "intentshield-hook"
     exe.parent.mkdir()
-    exe.write_text("#!/bin/sh\n")
+    exe.write_text("#!/bin/sh\n", encoding="utf-8")
     exe.chmod(0o755)
     return str(exe)
 
@@ -394,7 +394,7 @@ def test_doctor_passes_a_working_install_and_fails_one_that_never_ran(tmp_path: 
     assert doctor.doctor(home, cwd, db) == 0
     assert "ok   claude" in capsys.readouterr().out
     # The environment the hook lived in was deleted.
-    os.unlink(json.loads(path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"].split()[0])
+    os.unlink(json.loads(path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"].split()[0])
     assert doctor.doctor(home, cwd, db) == 1
     assert "does not exist" in capsys.readouterr().out
 
@@ -407,8 +407,8 @@ def test_doctor_reports_missing_events_bare_names_missing_judge_keys_and_unwrapp
     settings = home / ".gemini" / "settings.json"
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"hooks": {"BeforeTool": [{"matcher": ".*", "hooks": [
-        {"type": "command", "command": "intentshield-hook gemini --judge groq"}]}]}}))
-    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}}))
+        {"type": "command", "command": "intentshield-hook gemini --judge groq"}]}]}}), encoding="utf-8")
+    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}}), encoding="utf-8")
     _ran(db, "gemini", time.time() + 5)
     assert doctor.doctor(home, cwd, db) == 1
     out = capsys.readouterr().out

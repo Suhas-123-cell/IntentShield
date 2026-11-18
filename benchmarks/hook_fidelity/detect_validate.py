@@ -133,7 +133,7 @@ def reply_bytes(pick: dict, rows: list[dict], scratch: Path) -> dict:
             shutil.rmtree(run_scratch)
         (run_scratch / "work").mkdir(parents=True)
         (run_scratch / "home" / ".claude").mkdir(parents=True)
-        (run_scratch / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n")
+        (run_scratch / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n", encoding="utf-8")
         stdin = json.dumps(dc._swap_cwd(fx["payload"], run_scratch / "work")).encode()
         env = dc.gc.clean_env(run_scratch, e.env, [str(dc.NODE_DIR / "bin")] if e.node else [])
         res = dc.gc.run_sandboxed(e.argv, stdin, run_scratch, e.readable, env, timeout=dc.RUN_TIMEOUT)
@@ -200,7 +200,7 @@ def cases_from_selection(sel: list[dict], out: Path) -> list[dict]:
 
 def cmd_select(args) -> int:
     rows = dc.load_fixtures()
-    decisions = [json.loads(line) for line in Path(args.decisions).read_text().splitlines()]
+    decisions = [json.loads(line) for line in Path(args.decisions).read_text(encoding="utf-8").splitlines()]
     matrix = dc.derive_delivery()
     sel = select(rows, decisions, matrix)
     out = Path(args.out)
@@ -211,14 +211,14 @@ def cmd_select(args) -> int:
         p["launch_matcher"] = shipped_matcher(p, b["entry_matcher"])
         p["stdout_text"], p["stderr_text"], p["exit_code"] = b["stdout"].decode("utf-8", "replace")[:300], b["stderr"].decode("utf-8", "replace")[:200], b["exit_code"]
         rec = {"exit_code": b["exit_code"], "stdout_b64": base64.b64encode(b["stdout"]).decode(), "stderr_b64": base64.b64encode(b["stderr"]).decode()}
-        (out / "replays" / f"{p['row_id']}-{p['guard'].replace('[', '_').replace(']', '')}.json").write_text(json.dumps(rec))
-    (out / "selection.json").write_text(json.dumps(sel, indent=1) + "\n")
+        (out / "replays" / f"{p['row_id']}-{p['guard'].replace('[', '_').replace(']', '')}.json").write_text(json.dumps(rec), encoding="utf-8")
+    (out / "selection.json").write_text(json.dumps(sel, indent=1) + "\n", encoding="utf-8")
     print(f"{len(sel)} cells selected: " + str(dict(Counter((p['build'], p['stratum']) for p in sel))))
     return 0
 
 
 def load_cases(out: Path) -> list[dict]:
-    sel = json.loads((out / "selection.json").read_text())
+    sel = json.loads((out / "selection.json").read_text(encoding="utf-8"))
     return cases_from_selection(sel, out)
 
 
@@ -232,7 +232,7 @@ def todo_of(out: Path) -> list[dict]:
 def launches_spent(out: Path) -> int:
     """Launches already in the ledger (``launches.jsonl``: a run, or a Codex hooks/list)."""
     path = out / "launches.jsonl"
-    return len([line for line in path.read_text().splitlines() if line.strip()]) if path.exists() else 0
+    return len([line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]) if path.exists() else 0
 
 
 def cmd_plan(args) -> int:
@@ -297,7 +297,7 @@ def observed_runs(out: Path) -> dict[str, dict]:
 
 def cmd_summarize(args) -> int:
     out = Path(args.out)
-    sel = json.loads((out / "selection.json").read_text())
+    sel = json.loads((out / "selection.json").read_text(encoding="utf-8"))
     runs = observed_runs(out)
     lines = ["| build | stratum | guard | item | reply (class, subtype) | predicted | observed | match | hook invoked |", "|---|---|---|---|---|---|---|---|---|"]
     k = n = 0
@@ -318,14 +318,14 @@ def cmd_summarize(args) -> int:
     quarantined = out / "runs-attempt1-invalid.jsonl"
     attempt1 = len(cmp._jsonl(quarantined)) if quarantined.exists() else 0
     summary = {"matched": k, "valid": n, "invalid": invalid, "planned": len(sel), "attempt1_invalid_rows": attempt1}
-    (out / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
+    (out / "summary.json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     note = ""
     if attempt1:
         note += (f"The {attempt1} rows of the first attempt (`runs-attempt1-invalid.jsonl`, kept as written) are INVALID: the replay path was relative, so every hook crashed and every call ran. "
                  "They are not counted here; the rows below come from the corrected rerun (`runs.jsonl`, 29 launches).\n\n")
     if invalid:
         note += f"{invalid} of {len(sel)} cells are INVALID or missing a valid row and are not counted.\n\n"
-    (out / "table.md").write_text(f"# Predicted vs observed ({len(sel)} cells)\n\n" + f"{dc.fmt(k, n) if n else '0/0'} predictions matched ({invalid} of {len(sel)} cells INVALID, not counted).\n\n" + note + "\n".join(lines) + "\n")
+    (out / "table.md").write_text(f"# Predicted vs observed ({len(sel)} cells)\n\n" + f"{dc.fmt(k, n) if n else '0/0'} predictions matched ({invalid} of {len(sel)} cells INVALID, not counted).\n\n" + note + "\n".join(lines) + "\n", encoding="utf-8")
     print(summary)
     return 0
 

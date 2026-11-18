@@ -132,9 +132,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "streams").mkdir(exist_ok=True)
     ledger_path, rows_path = out / "cap-ledger.json", out / "runs.jsonl"
-    ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {"cursor": 0}
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.exists() else {"cursor": 0}
     rows = scoring.read_rows(rows_path) if rows_path.exists() else []
-    ignored = set((out / "ignore-run-ids.txt").read_text().split()) if (out / "ignore-run-ids.txt").exists() else set()
+    ignored = set((out / "ignore-run-ids.txt").read_text(
+        encoding="utf-8").split()) if (out / "ignore-run-ids.txt").exists() else set()
     runs = [(c, rep) for _, c, rep in planned_runs(tuple(args.only), args.profile)]
     if args.profile == "full":
         random.Random(args.seed).shuffle(runs)
@@ -146,7 +147,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     def say(text: str) -> None:
         print(text, flush=True)
-        with log.open("a") as handle:
+        with log.open("a", encoding="utf-8") as handle:
             handle.write(text + "\n")
 
     say(f"start {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} go={go} cap={args.cap} ledger={ledger['cursor']} "
@@ -186,14 +187,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             launched += 1
             reruns_used += 1 if attempt else 0
             ledger["cursor"] += 1
-            ledger_path.write_text(json.dumps(ledger))
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
             stream_file = out / "streams" / f"{row['run_id']}.stdout.txt"
-            row["model_reported"] = reported_model(stream_file.read_text(errors="replace")) if stream_file.exists() else ""
+            row["model_reported"] = reported_model(stream_file.read_text(errors="replace",
+                encoding="utf-8")) if stream_file.exists() else ""
             row["label"] = specs[cell.key].label
             row["home_isolated"] = False  # execute_one reports the run-directory HOME; the real HOME is used (keychain login)
             row["home_mode"] = HOME_MODE
             stderr_file = Path(tempfile.gettempdir()) / row["run_dir"] / "stderr.txt" if row["run_dir"] else None
-            head = stderr_file.read_text(errors="replace")[:300] if stderr_file and stderr_file.exists() else ""
+            head = stderr_file.read_text(errors="replace", encoding="utf-8")[:300] if stderr_file and stderr_file.exists() else ""
             row["stderr_head"] = run.scrub(head)
             scoring.append_row(rows_path, {**row})
             rows.append(row)

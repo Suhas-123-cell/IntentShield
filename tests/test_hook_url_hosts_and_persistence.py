@@ -108,9 +108,9 @@ def _claude(tmp_path: Path, home: Path) -> tuple[Path, Path]:  # noqa: F811
 
 
 def _set_matcher(path: Path, event: str, matcher: str) -> None:
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["hooks"][event][0]["matcher"] = matcher
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
 
 
 def test_doctor_fails_a_result_matcher_that_matches_no_mcp_tool(tmp_path: Path, home: Path, capsys):  # noqa: F811
@@ -137,7 +137,7 @@ def test_doctor_still_accepts_matchers_narrowed_to_some_servers(tmp_path: Path, 
 def test_doctor_reads_the_projects_disable_all_hooks_for_user_hooks(tmp_path: Path, home: Path, capsys):  # noqa: F811
     cwd, _ = _claude(tmp_path, home)
     (cwd / ".claude").mkdir()
-    (cwd / ".claude" / "settings.local.json").write_text(json.dumps({"disableAllHooks": True}))
+    (cwd / ".claude" / "settings.local.json").write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 1 and "disableAllHooks is true" in out
 

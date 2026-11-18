@@ -57,11 +57,11 @@ def attack_text(kind: str, instruction: str, tool: str) -> str:
 
 
 def load(data: Path) -> tuple[dict[str, list[str]], dict[str, list[dict]], list[dict]]:
-    tasks = {r["agent_name"]: r["tasks"] for r in map(json.loads, (data / "agent_task.jsonl").open())}
+    tasks = {r["agent_name"]: r["tasks"] for r in map(json.loads, (data / "agent_task.jsonl").open(encoding="utf-8"))}
     normal: dict[str, list[dict]] = {}
-    for row in map(json.loads, (data / "all_normal_tools.jsonl").open()):
+    for row in map(json.loads, (data / "all_normal_tools.jsonl").open(encoding="utf-8")):
         normal.setdefault(row["Corresponding Agent"], []).append(row)
-    attacks = [json.loads(line) for line in (data / "all_attack_tools.jsonl").open()]
+    attacks = [json.loads(line) for line in (data / "all_attack_tools.jsonl").open(encoding="utf-8")]
     return tasks, normal, attacks
 
 
@@ -127,11 +127,11 @@ def main(argv: list[str] | None = None) -> None:
     cache_path = args.out / f"generations-{tag}.jsonl"
     cache = {}
     if cache_path.exists():
-        for row in map(json.loads, cache_path.read_text().splitlines()):
+        for row in map(json.loads, cache_path.read_text(encoding="utf-8").splitlines()):
             cache[(row["kind"], row["index"], row["task"])] = row
 
     cases = build_cases(args.data, args.limit, args.seed, args.kinds.split(","))
-    with httpx.Client(base_url=args.host) as client, cache_path.open("a") as sink:
+    with httpx.Client(base_url=args.host) as client, cache_path.open("a", encoding="utf-8") as sink:
         for n, case in enumerate(cases, 1):
             key = (case["kind"], case["index"], case["task"])
             if key in cache:
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> None:
                          "attacks_reached_human": rate(s["human"], total)} for m, s in stats.items()},
         "benign_false_block_rate": {m: rate(c, total) for m, c in benign_blocked.items()},
     }
-    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
+    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

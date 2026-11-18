@@ -93,10 +93,10 @@ async def session(params: StdioServerParameters, calls: int) -> dict[str, Any]:
 
 
 async def proxy(calls: int, tmp: Path) -> dict[str, Any]:
-    config = json.loads(Path("configs/mcp-proxy.demo.json").read_text())
+    config = json.loads(Path("configs/mcp-proxy.demo.json").read_text(encoding="utf-8"))
     config["upstreams"][0]["command"] = PYTHON
     config.update(database_path=str(tmp / "proxy.db"), call_budget=calls * 10)
-    (tmp / "proxy.json").write_text(json.dumps(config))
+    (tmp / "proxy.json").write_text(json.dumps(config), encoding="utf-8")
     env = {**os.environ}
     direct = StdioServerParameters(command=PYTHON, args=["-m", "intentshield.demo_mcp_server"], env=env)
     proxied = StdioServerParameters(command=PYTHON, args=["-m", "intentshield.mcp_server", "--transparent",
@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> None:
     print(json.dumps(report, indent=2))
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report, indent=2))
+        args.out.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

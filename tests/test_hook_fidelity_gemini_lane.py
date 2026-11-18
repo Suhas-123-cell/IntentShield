@@ -40,23 +40,23 @@ def test_lane_cell_lists_are_arm_s_gemini_and_unique():
 
 def test_cells_json_loads_and_refuses_unknown_fields(tmp_path):
     path = tmp_path / "c.json"
-    path.write_text(json.dumps(gemini_lane.main_cells()))
+    path.write_text(json.dumps(gemini_lane.main_cells()), encoding="utf-8")
     loaded = run.cells_from_json(path)
     assert len(loaded) == 50 and all(isinstance(c, cells.Cell) and c.arm == "S" for c in loaded)
     path.write_text(
         json.dumps(
             [{"harness": "gemini", "version": "0.66.0", "mode": "M2", "kind": "shell", "reply": "R1", "bogus": 1}]
-        )
+        ), encoding="utf-8"
     )
     with pytest.raises(ValueError):
         run.cells_from_json(path)
     path.write_text(
-        json.dumps([{"harness": "gemini", "version": "0.66.0", "mode": "M9", "kind": "shell", "reply": "R1"}])
+        json.dumps([{"harness": "gemini", "version": "0.66.0", "mode": "M9", "kind": "shell", "reply": "R1"}]), encoding="utf-8"
     )
     with pytest.raises(ValueError):
         run.cells_from_json(path)
     path.write_text(
-        json.dumps([{"harness": "gemini", "version": "0.66.0", "mode": "M2", "kind": "shell", "reply": "R1"}])
+        json.dumps([{"harness": "gemini", "version": "0.66.0", "mode": "M2", "kind": "shell", "reply": "R1"}]), encoding="utf-8"
     )
     only = run.cells_from_json(path)[0]
     assert only.arm == "S" and only.reps == cells.REPS["S"]
@@ -67,7 +67,7 @@ def test_gemini_hooks_are_enabled_explicitly_only_below_0_26(tmp_path):
         cell = cells.Cell("gemini", version, "M2", "shell", "R3", arm="S")
         paths = configs.make_paths(tmp_path / version)
         configs.build(cell, paths, "rid", ["gemini"], stub_url="http://127.0.0.1:1")
-        return json.loads((paths.home / ".gemini" / "settings.json").read_text())
+        return json.loads((paths.home / ".gemini" / "settings.json").read_text(encoding="utf-8"))
 
     assert settings("0.24.5")["hooks"]["enabled"] is True
     assert settings("0.25.2")["hooks"]["enabled"] is True
@@ -75,7 +75,7 @@ def test_gemini_hooks_are_enabled_explicitly_only_below_0_26(tmp_path):
     cell = cells.Cell("gemini", "0.24.5", "M2", "shell", "R4", "enable-default", arm="S")
     paths = configs.make_paths(tmp_path / "default")
     configs.build(cell, paths, "rid", ["gemini"], stub_url="http://127.0.0.1:1")
-    assert "enabled" not in json.loads((paths.home / ".gemini" / "settings.json").read_text())["hooks"]
+    assert "enabled" not in json.loads((paths.home / ".gemini" / "settings.json").read_text(encoding="utf-8"))["hooks"]
     assert configs._version_key("0.67.0-preview.0") == (0, 67, 0) and configs._version_key(
         "0.9.1"
     ) < configs._version_key("0.10.0")
@@ -85,7 +85,7 @@ def test_gemini_signoffs_are_checkable_against_the_committed_archive():
     items = [i for i, _ in configs.unverified_items(("gemini",))]
     selection = [cells.Cell("gemini", "0.66.0", "M2", kind, "R1", arm="S") for kind in ("shell", "mcp", "write")]
     assert run.signoff_gaps(selection, run.SIGNOFF_FILE, committer="a-human-committer", root=ROOT) == []
-    data = json.loads(run.SIGNOFF_FILE.read_text())
+    data = json.loads(run.SIGNOFF_FILE.read_text(encoding="utf-8"))
     assert all(i in data for i in items)
     assert "AI reader" in data["matcher:gemini:mcp"]["reader"]  # the sign-off says what kind of reader it is
     assert run.signoff_problems(data["timeout:gemini"], data["timeout:gemini"]["reader"], ROOT) == [
@@ -119,7 +119,7 @@ def test_stub_summary_counts_requests_and_keeps_the_first_tool_list(tmp_path):
                 {"kind": "generateContent", "offered_tools": []},
             )
         )
-        + "\n"
+        + "\n", encoding="utf-8"
     )
     got = run.stub_fields(log)
     assert got["stub_requests"] == 2 and got["stub_offered_tools"] == ["run_shell_command"]
@@ -133,7 +133,7 @@ def test_execute_one_arm_s_starts_a_stub_points_the_harness_at_it_and_records_wh
     fake = tmp_path / "fake-gemini"
     fake.write_text(
         '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 0.66.0; exit 0; fi\n'
-        'echo "$GOOGLE_GEMINI_BASE_URL" > "$HOME/seen-url.txt"\nexit 0\n'
+        'echo "$GOOGLE_GEMINI_BASE_URL" > "$HOME/seen-url.txt"\nexit 0\n', encoding="utf-8"
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     out = tmp_path / "out"
@@ -151,7 +151,7 @@ def test_execute_one_arm_s_starts_a_stub_points_the_harness_at_it_and_records_wh
     row = run.execute_one(cell, 0, 0, out, {"gemini": str(fake)}, "", (), keep_dirs=True, cap_s=20)
     assert row["arm"] == "S" and row["stub_requests"] == 0 and row["stub_offered_tools"] is None and row["cap_s"] == 20
     assert row["outcome"] == "INVALID"  # no tool call was ever made: not scored as anything else
-    assert (seen["paths"].home / "seen-url.txt").read_text().strip() == seen["url"]
+    assert (seen["paths"].home / "seen-url.txt").read_text(encoding="utf-8").strip() == seen["url"]
     assert seen["stub"].url == seen["url"]  # the in-process stub served on this URL and was stopped by execute_one
     assert (out / "streams" / f"{row['run_id']}.stub-requests.jsonl").exists() or True
 
@@ -180,7 +180,7 @@ def test_manifest_compares_installed_and_registry_integrity(tmp_path):
     sweep = tmp_path / "sweep" / "0.1.0"
     sweep.mkdir(parents=True)
     (sweep / "package-lock.json").write_text(
-        json.dumps({"packages": {"node_modules/@google/gemini-cli-core": {"integrity": "sha512-A"}}})
+        json.dumps({"packages": {"node_modules/@google/gemini-cli-core": {"integrity": "sha512-A"}}}), encoding="utf-8"
     )
     rows = {("0.1.0", "x"): {"pkgVersion": "0.1.0"}}
     ok = table.manifest(["0.1.0"], rows, tmp_path / "sweep", {"0.1.0": "sha512-A"})
@@ -260,11 +260,11 @@ def test_merge_keeps_each_row_once_and_copies_streams(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     for d in (a, b):
         (d / "streams").mkdir(parents=True)
-    (a / "runs.jsonl").write_text('{"x": 1}\n{"x": 2}\n')
-    (b / "runs.jsonl").write_text('{"x": 1}\n{"x": 3}\n')        # seeded with a row of a
-    (a / "streams" / "s1.txt").write_text("one")
-    (b / "streams" / "s1.txt").write_text("one")
-    (b / "streams" / "s2.txt").write_text("two")
+    (a / "runs.jsonl").write_text('{"x": 1}\n{"x": 2}\n', encoding="utf-8")
+    (b / "runs.jsonl").write_text('{"x": 1}\n{"x": 3}\n', encoding="utf-8")        # seeded with a row of a
+    (a / "streams" / "s1.txt").write_text("one", encoding="utf-8")
+    (b / "streams" / "s1.txt").write_text("one", encoding="utf-8")
+    (b / "streams" / "s2.txt").write_text("two", encoding="utf-8")
     got = gemini_lane.merge(tmp_path / "out", [a, b])
     assert got == {"rows": 3, "streams_copied": 2, "dirs": 2}
-    assert (tmp_path / "out" / "runs.jsonl").read_text().splitlines() == ['{"x": 1}', '{"x": 2}', '{"x": 3}']
+    assert (tmp_path / "out" / "runs.jsonl").read_text(encoding="utf-8").splitlines() == ['{"x": 1}', '{"x": 2}', '{"x": 3}']

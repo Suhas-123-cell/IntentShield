@@ -114,7 +114,7 @@ def test_embedder_checks_every_file_hash_before_it_is_ready(tmp_path: Path):
         (tmp_path / name).write_bytes(name.encode())
     (tmp_path / exemplars.METADATA).write_text(json.dumps({
         "model": exemplars.MODEL,
-        "files": {n: hashlib.sha256(n.encode()).hexdigest() for n in exemplars.FILES}}))
+        "files": {n: hashlib.sha256(n.encode()).hexdigest() for n in exemplars.FILES}}), encoding="utf-8")
     assert Embedder(tmp_path).ready
     (tmp_path / "model.safetensors").write_bytes(b"tampered")
     embedder = Embedder(tmp_path)

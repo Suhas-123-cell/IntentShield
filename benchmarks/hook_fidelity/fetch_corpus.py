@@ -46,7 +46,7 @@ def plan(corpus: Path = CORPUS, scratch: Path | None = None, only: list[str] | N
     """One entry per guard: where it goes, which repository and commit. No network and no writes (it only checks whether the
     destination already has a ``.git`` directory)."""
     scratch = scratch if scratch is not None else default_scratch()
-    guards = json.loads(Path(corpus).read_text())["guards"]
+    guards = json.loads(Path(corpus).read_text(encoding="utf-8"))["guards"]
     wanted = set(only or [])
     unknown = wanted - {g["id"] for g in guards} - {g["dir"] for g in guards}
     if unknown:

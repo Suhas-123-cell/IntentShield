@@ -1,6 +1,7 @@
 """Paths as the rules read them (home, system and protected directories, devices) and the credential stores."""
 from __future__ import annotations
 
+import fnmatch
 import os
 import posixpath
 import re
@@ -27,7 +28,7 @@ def _glob_only(segment: str) -> bool:
     return bool(segment) and set(rest) <= {"?", "*"} and (rest != segment or "?" in segment or "*" in segment)
 _SYSTEM_ROOTS = ("/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/var", "/boot", "/System", "/Library", "/opt", "/private",
                  "/dev", "/sys", "/proc", "/Applications", "/srv", "/mnt", "/Volumes", "/Users", "/home", "/root", "/snap",
-                 "/run", "/nix", "/cores", "/lost+found")
+                 "/run", "/nix", "/cores", "/lost+found", "/media")
 _PROTECTED = frozenset({"/", "~", *_SYSTEM_ROOTS, "/usr/bin", "/usr/lib", "/usr/local", "/usr/local/bin", "/usr/sbin",
                         "/usr/share", "/var/lib", "/var/log", "/var/root", "/System/Library", "/Library/Frameworks",
                         "/private/etc", "/private/var", "/etc/ssh", "/lib/modules"})
@@ -38,7 +39,8 @@ _HOME_DIRS = frozenset({"Documents", "Desktop", "Downloads", "Pictures", "Music"
 # (a system directory also by its prefix): ``~/Documents/Notes`` and ``~/projects/Library`` stay as they were.
 _PROTECTED_LOWER = frozenset(name.lower() for name in _PROTECTED)
 _HOME_DIRS_LOWER = frozenset(name.lower() for name in _HOME_DIRS)
-_SYSTEM_PREFIXES = tuple(r.lower() for r in _SYSTEM_ROOTS if r not in ("/Users", "/home", "/root", "/mnt", "/Volumes", "/srv"))
+_SYSTEM_PREFIXES = tuple(r.lower() for r in _SYSTEM_ROOTS
+                         if r not in ("/Users", "/home", "/root", "/mnt", "/media", "/Volumes", "/srv"))
 
 _HOME_HEAD = re.compile(r"^(?:~[\w.-]{0,32}|\$\{?(?:HOME|USERPROFILE)\}?|\$\{(?:HOME|USERPROFILE):?[-?=][^}]{0,60}\})(?=/|$)")
 # What stands in for ``~`` when no home directory is known, and the directories that are never taken for a home (a home that
@@ -73,14 +75,22 @@ def _homes() -> tuple[str, ...]:
     return _clean_homes(tuple(h for h in raw if h))
 
 
+@lru_cache(maxsize=32768)
+def _user_home(head: str) -> str:
+    """The home directory of ``~name``, from the user database (asked once per name: a command of thousands of ``~a`` words is
+    otherwise thousands of lookups, each of which may cost a directory service a round trip), else the one a user of that name has
+    on macOS."""
+    try:
+        spelled = os.path.expanduser(head)
+    except (KeyError, OSError):
+        spelled = head
+    return posixpath.normpath(spelled) if spelled.startswith("/") else "/Users/" + head[1:]
+
+
 def _head_home(head: str) -> str:
     """The directory a leading ``~``, ``~name``, ``$HOME`` or ``${HOME:-x}`` stands for, as an absolute path."""
     if len(head) > 1 and head[0] == "~":
-        try:
-            spelled = os.path.expanduser(head)
-        except (KeyError, OSError):
-            spelled = head
-        return posixpath.normpath(spelled) if spelled.startswith("/") else "/Users/" + head[1:]
+        return _user_home(head)
     homes = _homes()
     return homes[0] if homes else _FALLBACK_HOME
 
@@ -130,6 +140,12 @@ def _norm(path: str) -> str:
     return p or "/"
 
 
+def _ends_in_glob(path: str) -> bool:
+    """The last part of ``path`` is a glob alone (``~/*``, ``/etc/.*``, ``/[a-z]*``): every name in the directory before it."""
+    p = path.strip().strip("\"'")
+    return bool(_GLOB_TAIL.search(p)) or (lambda parts: bool(parts[1]) and _glob_only(parts[2]))(p.rpartition("/"))
+
+
 def _protected(path: str) -> bool:
     p = _norm(path)
     low = p.lower()
@@ -138,6 +154,37 @@ def _protected(path: str) -> bool:
     if low.startswith("~/") and low[2:] in _HOME_DIRS_LOWER:
         return True
     return any(low == posixpath.dirname(h).lower() for h in _homes() if posixpath.dirname(h) != "/")   # the directory of homes
+
+
+def _home_or_above(path: str) -> bool:
+    """``path`` is a home directory or a directory above one (``/``, ``/Users``, ``/home``, ``/mnt/c/Users``, ``~/..``): a search
+    of it reaches ``~/.ssh`` and ``~/.aws`` as a search of the home itself does. ``/Users/x/..`` is ``/Users``; a path in a
+    project under the home is not."""
+    n = _norm(path)
+    if n in ("~", "/"):
+        return True
+    low = n.lower().rstrip("/")
+    if n.startswith("/"):   # the homes are known by the spelling given and by their real path, so a directory above one is too
+        spellings = {low, os.path.realpath(n).lower().rstrip("/")}
+        if any(h.lower().startswith(s + "/") for h in _homes() for s in spellings):
+            return True
+    return low in ("/users", "/home")
+
+
+# Directories of the home that hold credential stores of several tools: a search of one reaches them all.
+_STORE_PARENTS = frozenset({"~/.config", "~/.local", "~/.local/share", "~/library", "~/library/application support"})
+
+
+def search_root(path: str) -> str | None:
+    """What a search that starts at ``path`` reaches that the file rules guard, or None: the whole home directory (or a directory
+    above it), or the directory in the home that holds the credential stores of several tools."""
+    if _norm(path) == "~":
+        return "the whole home directory, which holds ~/.ssh and ~/.aws"
+    if _home_or_above(path):
+        return "a directory above the home directory, which reaches ~/.ssh and ~/.aws"
+    if _norm(path).lower().rstrip("/") in _STORE_PARENTS:
+        return "a directory of the home that holds credential stores (~/.config/gcloud, ~/.config/gh and the like)"
+    return None
 
 
 def _system(path: str) -> bool:
@@ -304,6 +351,35 @@ def _ssh_level(path: str, n: str, base: str, raw: str) -> tuple[str, str] | None
     return (DENY, "an SSH private key") if _holds_private_key(path) else (ASK, _SSH_OTHER)
 
 
+_SYSTEM_SECRETS = ("/etc/shadow", "/etc/gshadow", "/etc/master.passwd", "/etc/ssh/ssh_host_rsa_key",
+                   "/etc/ssh/ssh_host_ecdsa_key", "/etc/ssh/ssh_host_ed25519_key", "/etc/ssh/ssh_host_dsa_key",
+                   "/proc/self/environ", "/proc/1/environ", "/proc/self/mem", "/proc/self/maps")
+# Files of /etc that a glob over the directory also matches: a pattern that reaches many of them is a read of the directory.
+_ETC_ORDINARY = ("/etc/hosts", "/etc/passwd", "/etc/group", "/etc/fstab", "/etc/hostname", "/etc/resolv.conf", "/etc/services",
+                 "/etc/shells", "/etc/os-release", "/etc/profile", "/etc/bashrc", "/etc/issue", "/etc/motd", "/etc/environment",
+                 "/etc/ssh/sshd_config", "/etc/ssh/ssh_config", "/etc/ssh/ssh_host_rsa_key.pub", "/etc/sudoers")
+
+
+def _segments_match(name: str, pattern: str) -> bool:
+    """``pattern`` (a path with globs) matches ``name`` segment by segment: a ``*`` does not reach across a ``/``."""
+    names, patterns = name.split("/"), pattern.split("/")
+    return len(names) == len(patterns) and all(fnmatch.fnmatchcase(a, b) for a, b in zip(names, patterns, strict=True))
+
+
+def _system_glob(pattern: str) -> tuple[str, str] | None:
+    """The verdict on a glob over the system secrets (``/etc/shado?``, ``/etc/ssh/ssh_host_*_key``, ``/proc/*/environ``): the
+    verdict of the secret it can only be. A glob that reaches many of the ordinary files of ``/etc`` as well (``/etc/*``,
+    ``/etc/s*``) is asked about: it reads the directory."""
+    g = posixpath.normpath("/" + pattern.lstrip("/")).lower().removeprefix("/private") if pattern.startswith("/") else ""
+    if not g or not any(c in g for c in "*?["):
+        return None
+    if not any(_segments_match(secret, g) for secret in _SYSTEM_SECRETS):
+        return None
+    if sum(_segments_match(name, g) for name in _ETC_ORDINARY) >= 3:
+        return ASK, "a glob over /etc that reaches system secret files (shadow, ssh host keys)"
+    return DENY, "a system secret file"
+
+
 def _cred_level(path: str) -> tuple[str, str] | None:
     """(decision, what) when ``path`` names a credential store. A path over ``_PATH_CAP`` characters (after repeated slashes are
     collapsed) is not read: it is asked about, never passed as safe."""
@@ -320,6 +396,8 @@ def _cred_level(path: str) -> tuple[str, str] | None:
         anchored.append(_norm(resolved).lower())
     if any(_ETC_SECRET.match(a) or _PROC_SECRET.match(a) for a in anchored):
         return DENY, "a system secret file"
+    if any(c in path for c in "*?[") and (globbed := _system_glob(path.strip().strip("\"'"))):
+        return globbed
     if any(_SUDOERS.match(a) for a in anchored):
         return ASK, "the sudo rules"
     if base.endswith(".pub"):
@@ -370,7 +448,10 @@ _READERS = frozenset({"cat", "bat", "batcat", "less", "more", "most", "head", "t
                       "cmp", "jq", "yq", "sqlite3", "split", "dd", "dcfldd", "dc3dd", "curl", "wget", "ditto", "cpio", "pax",
                       "ln", "install", "mail", "mailx", "sendmail", "ftp", "sftp", "nc", "ncat", "netcat", "socat", "base32",
                       "uuencode",
-                      "gpg", "age", "find", "xargs", "type", "echo-file", "source", "."}) | _EDITORS
+                      "gpg", "age", "find", "xargs", "type", "echo-file", "source", ".",
+                      # programs that print or pass on the text they are given, as ``cat`` does
+                      "tr", "fmt", "column", "expand", "unexpand", "comm", "join", "pr", "iconv", "shuf", "col", "rs",
+                      }) | _EDITORS
 _PATTERN_FIRST = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack", "awk", "gawk", "sed"})
 _CRED_TEXT = re.compile(r"\.ssh/(?:id_|\w{1,20}_rsa)|\.aws/credentials|\.netrc|/etc/shadow|\.vault-token|library/keychains|"
                         r"\.gnupg/private-keys|\.config/gcloud/(?:credentials|application_default)", re.I)
@@ -412,10 +493,32 @@ def _candidates(arg: str) -> list[str]:
     return out
 
 
+_SEARCHER_NAMES = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack", "ugrep", "ug"})
+_NAME_PATTERN_LONG = frozenset({"exclude", "exclude-dir", "include", "include-dir", "glob", "iglob", "ignore", "ignore-dir"})
+
+
+def _without_name_patterns(name: str, args: list[str]) -> list[str]:
+    """The arguments of a searcher without the values of the options that give a pattern for names (``--exclude-dir=.ssh``,
+    ``--include=*.py``, ``-g '!.ssh'``): they say which names to skip or keep, and are not a path that is read."""
+    if name not in _SEARCHER_NAMES:
+        return args
+    out, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--") and len(a) > 2 and (head := a[2:].partition("="))[0] in _NAME_PATTERN_LONG:
+            i += 1 if head[1] else 2
+        elif name in ("rg", "ag") and a.startswith("-g") and not a.startswith("--"):   # -g GLOB, -gGLOB, -g=GLOB
+            i += 2 if a == "-g" else 1
+        else:
+            out.append(a)
+            i += 1
+    return out
+
+
 def _cred_args(argv: list[str]) -> tuple[str, str, str] | None:
     """(decision, what, path) for the first credential path among the arguments of a reading program."""
-    args = argv[1:]
     name = _bin(argv[0])
+    args = _without_name_patterns(name, argv[1:])
     if name in ("cp", "mv", "ln", "install", "rsync", "scp", "ditto"):  # the last path is where it goes, not what it reads
         positional = [i for i, a in enumerate(args) if not a.startswith("-")]
         if len(positional) > 1:

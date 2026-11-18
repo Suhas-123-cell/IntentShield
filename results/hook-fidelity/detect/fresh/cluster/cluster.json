@@ -1,0 +1,358 @@
+{
+ "current_rules": {
+  "knox": {
+   "by_category": {
+    "rows": {
+     "clusters": 6,
+     "only_intentshield": 2,
+     "only_other": 4,
+     "sign_p": 0.6875,
+     "ties": 0
+    },
+    "table": {
+     "credential-read": [
+      23,
+      9,
+      1
+     ],
+     "destructive": [
+      10,
+      0,
+      3
+     ],
+     "exfiltration": [
+      11,
+      2,
+      3
+     ],
+     "git": [
+      10,
+      3,
+      0
+     ],
+     "pipe-to-shell": [
+      8,
+      0,
+      5
+     ],
+     "rc-and-ci-write": [
+      11,
+      3,
+      4
+     ]
+    }
+   },
+   "by_source": {
+    "bootstrap": {
+     "draws": 10000,
+     "gap_hi": 13.846153846153847,
+     "gap_lo": -16.923076923076923,
+     "gap_points": -1.36986301369863,
+     "seed": 20261119,
+     "share_intentshield_at_least_level": 0.606
+    },
+    "rows": {
+     "clusters": 35,
+     "only_intentshield": 11,
+     "only_other": 11,
+     "sign_p": 1.0,
+     "ties": 13
+    }
+   },
+   "item_level": {
+    "only_intentshield": 17,
+    "only_other": 16,
+    "sign_p": 1.0
+   },
+   "items": 73,
+   "largest_sources": [
+    [
+     "writeup:shai-hulud",
+     8
+    ],
+    [
+     "writeup:teamtnt",
+     8
+    ],
+    [
+     "writeup:kinsing",
+     5
+    ],
+    [
+     "advisory:gitguardian-secrets-sprawl",
+     4
+    ],
+    [
+     "advisory:pytorch-torchtriton",
+     4
+    ]
+   ]
+  },
+  "safety-net": {
+   "by_category": {
+    "rows": {
+     "clusters": 6,
+     "only_intentshield": 2,
+     "only_other": 4,
+     "sign_p": 0.6875,
+     "ties": 0
+    },
+    "table": {
+     "credential-read": [
+      19,
+      4,
+      2
+     ],
+     "destructive": [
+      15,
+      1,
+      3
+     ],
+     "exfiltration": [
+      17,
+      3,
+      4
+     ],
+     "git": [
+      14,
+      0,
+      4
+     ],
+     "pipe-to-shell": [
+      12,
+      0,
+      8
+     ],
+     "rc-and-ci-write": [
+      8,
+      1,
+      0
+     ]
+    }
+   },
+   "by_source": {
+    "bootstrap": {
+     "draws": 10000,
+     "gap_hi": 27.906976744186046,
+     "gap_lo": 0.0,
+     "gap_points": 14.117647058823529,
+     "seed": 20261119,
+     "share_intentshield_at_least_level": 0.0306
+    },
+    "rows": {
+     "clusters": 44,
+     "only_intentshield": 7,
+     "only_other": 15,
+     "sign_p": 0.13380050659179688,
+     "ties": 22
+    }
+   },
+   "item_level": {
+    "only_intentshield": 9,
+    "only_other": 21,
+    "sign_p": 0.04277394525706768
+   },
+   "items": 85,
+   "largest_sources": [
+    [
+     "writeup:ssh-snake",
+     7
+    ],
+    [
+     "writeup:teamtnt",
+     7
+    ],
+    [
+     "writeup:shai-hulud",
+     6
+    ],
+    [
+     "advisory:pytorch-torchtriton",
+     5
+    ],
+    [
+     "writeup:kinsing",
+     5
+    ]
+   ]
+  }
+ },
+ "study_rules": {
+  "knox": {
+   "by_category": {
+    "rows": {
+     "clusters": 6,
+     "only_intentshield": 2,
+     "only_other": 4,
+     "sign_p": 0.6875,
+     "ties": 0
+    },
+    "table": {
+     "credential-read": [
+      23,
+      9,
+      1
+     ],
+     "destructive": [
+      10,
+      0,
+      3
+     ],
+     "exfiltration": [
+      11,
+      1,
+      5
+     ],
+     "git": [
+      10,
+      4,
+      0
+     ],
+     "pipe-to-shell": [
+      8,
+      0,
+      5
+     ],
+     "rc-and-ci-write": [
+      11,
+      3,
+      4
+     ]
+    }
+   },
+   "by_source": {
+    "bootstrap": {
+     "draws": 10000,
+     "gap_hi": 17.647058823529413,
+     "gap_lo": -16.39344262295082,
+     "gap_points": 1.36986301369863,
+     "seed": 20261119,
+     "share_intentshield_at_least_level": 0.4658
+    },
+    "rows": {
+     "clusters": 35,
+     "only_intentshield": 10,
+     "only_other": 11,
+     "sign_p": 1.0,
+     "ties": 14
+    }
+   },
+   "item_level": {
+    "only_intentshield": 17,
+    "only_other": 18,
+    "sign_p": 1.0
+   },
+   "items": 73,
+   "largest_sources": [
+    [
+     "writeup:shai-hulud",
+     8
+    ],
+    [
+     "writeup:teamtnt",
+     8
+    ],
+    [
+     "writeup:kinsing",
+     5
+    ],
+    [
+     "advisory:gitguardian-secrets-sprawl",
+     4
+    ],
+    [
+     "advisory:pytorch-torchtriton",
+     4
+    ]
+   ]
+  },
+  "safety-net": {
+   "by_category": {
+    "rows": {
+     "clusters": 6,
+     "only_intentshield": 2,
+     "only_other": 4,
+     "sign_p": 0.6875,
+     "ties": 0
+    },
+    "table": {
+     "credential-read": [
+      19,
+      4,
+      2
+     ],
+     "destructive": [
+      15,
+      1,
+      3
+     ],
+     "exfiltration": [
+      17,
+      1,
+      8
+     ],
+     "git": [
+      14,
+      0,
+      3
+     ],
+     "pipe-to-shell": [
+      12,
+      0,
+      8
+     ],
+     "rc-and-ci-write": [
+      8,
+      1,
+      0
+     ]
+    }
+   },
+   "by_source": {
+    "bootstrap": {
+     "draws": 10000,
+     "gap_hi": 32.05128205128205,
+     "gap_lo": 5.797101449275362,
+     "gap_points": 20.0,
+     "seed": 20261119,
+     "share_intentshield_at_least_level": 0.0061
+    },
+    "rows": {
+     "clusters": 44,
+     "only_intentshield": 6,
+     "only_other": 17,
+     "sign_p": 0.03468966484069824,
+     "ties": 21
+    }
+   },
+   "item_level": {
+    "only_intentshield": 7,
+    "only_other": 24,
+    "sign_p": 0.003326892852783203
+   },
+   "items": 85,
+   "largest_sources": [
+    [
+     "writeup:ssh-snake",
+     7
+    ],
+    [
+     "writeup:teamtnt",
+     7
+    ],
+    [
+     "writeup:shai-hulud",
+     6
+    ],
+    [
+     "advisory:pytorch-torchtriton",
+     5
+    ],
+    [
+     "writeup:kinsing",
+     5
+    ]
+   ]
+  }
+ }
+}

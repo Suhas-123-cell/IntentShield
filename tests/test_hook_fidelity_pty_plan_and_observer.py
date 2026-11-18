@@ -55,7 +55,7 @@ def test_replays_use_the_captured_bytes_and_the_guards_shipped_matcher(tmp_path)
     for cell, guard in (("replay-ccsafe", "cc-safe-setup"), ("replay-railway", "railway-guard")):
         case = {"harness": "claude", "version": "2.1.316", "cell": cell, "rep": 0, "round": 7}
         assert pl.replay_file(case).exists()
-        record = json.loads(pl.replay_file(case).read_text())
+        record = json.loads(pl.replay_file(case).read_text(encoding="utf-8"))
         sent = json.loads(base64.b64decode(record["stdout_b64"]))["hookSpecificOutput"]
         assert sent["permissionDecision"] == "ask" and record["exit_code"] == 0
         entries = pl.hook_entries(case, tmp_path)
@@ -69,7 +69,7 @@ def test_replays_use_the_captured_bytes_and_the_guards_shipped_matcher(tmp_path)
 
 
 def test_the_ask_replays_are_the_ones_the_study_indexed_as_ask():
-    index = json.loads((pl.GUARDS_REPLAY_DIR / "index.json").read_text())
+    index = json.loads((pl.GUARDS_REPLAY_DIR / "index.json").read_text(encoding="utf-8"))
     for guard, rid in pl.GUARD_REPLAYS.values():
         entry = next(e for e in index if e["id"] == rid)
         assert entry["intent"] == "ASK" and any(c["guard"] == guard and c["shape"] == "claude" for c in entry["captures"])
@@ -80,7 +80,7 @@ def test_the_raw_ask_arm_is_the_installed_entries_with_the_bytes_replayed_and_no
     entries = pl.hook_entries(case, tmp_path)
     commands = [h["command"] for g in entries["PreToolUse"] for h in g["hooks"]]
     assert commands and all("stubhook.py" in c and "||" not in c for c in commands)
-    raw = json.loads(pl.RAW_ASK.read_text())
+    raw = json.loads(pl.RAW_ASK.read_text(encoding="utf-8"))
     sent = json.loads(base64.b64decode(raw["stdout_b64"]))["hookSpecificOutput"]
     assert sent["permissionDecision"] == "ask" and raw["exit_code"] == 0
 
@@ -116,7 +116,7 @@ def test_the_observer_records_ground_truth_facts_that_do_not_come_from_the_detec
     argv = [sys.executable, str(BENCH / "pty_hook.py"), "claude", "--builtin-tools", "--eval-verdict", "ask",
             "--eval-translate", "on", "--pty-log", str(log), "--ancestry-sources", "none"]
     done = subprocess.run(argv, input=json.dumps(event), capture_output=True, text=True, env=env, timeout=60)
-    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     start = next(r for r in rows if r["phase"] == "start")
     assert start["has_ctty"] in (True, False) and start["stdout_isatty"] is False and start["ps_check"]
     assert start["ancestry_sources_env"] == "none" and start["probe_mode"] == "unknown"

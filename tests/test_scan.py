@@ -118,13 +118,13 @@ server.run(transport="stdio")
 
 
 def _config(tmp_path: Path, env: dict[str, str] | None = None, mode: int = 0o600) -> Path:
-    (tmp_path / "server.py").write_text(SERVER)
+    (tmp_path / "server.py").write_text(SERVER, encoding="utf-8")
     path = tmp_path / "mcp.json"
     path.write_text(json.dumps({"mcpServers": {
         "fixture": {"command": sys.executable, "args": [str(tmp_path / "server.py")],
                     "env": {"CALLS_LOG": str(tmp_path / "calls.log"), **(env or {})}},
         "remote": {"type": "sse", "url": "https://example.test/sse"},
-    }}))
+    }}), encoding="utf-8")
     path.chmod(mode)
     return path
 
@@ -134,9 +134,11 @@ def test_discovery_reads_each_clients_config_and_claude_codes_project_scope(tmp_
     (home / ".codex").mkdir(parents=True)
     (cwd / ".vscode").mkdir(parents=True)
     (home / ".claude.json").write_text(json.dumps({"mcpServers": {"a": {"command": "x"}}, "projects": {
-        str(cwd): {"mcpServers": {"b": {"command": "y"}}}, "/elsewhere": {"mcpServers": {"c": {"command": "z"}}}}}))
-    (home / ".codex" / "config.toml").write_text('[mcp_servers.d]\ncommand = "w"\n')
-    (cwd / ".vscode" / "mcp.json").write_text(json.dumps({"servers": {"e": {"url": "https://example.test/mcp"}}}))
+        str(cwd): {"mcpServers": {"b": {"command": "y"}}}, "/elsewhere": {"mcpServers": {"c": {"command": "z"}}}}}),
+            encoding="utf-8")
+    (home / ".codex" / "config.toml").write_text('[mcp_servers.d]\ncommand = "w"\n', encoding="utf-8")
+    (cwd / ".vscode" / "mcp.json").write_text(json.dumps({"servers": {"e": {"url": "https://example.test/mcp"}}}),
+        encoding="utf-8")
     found = {(s.client, s.name) for s in scan.discover(home, cwd)}
     assert found == {("claude-code", "a"), ("claude-code", "b"), ("codex", "d"), ("vscode", "e")}
 
@@ -165,7 +167,7 @@ def test_a_full_scan_finds_poison_self_disclosure_and_the_toxic_flow_without_cal
     assert len(pins) == 5
 
     # A description that changes is reported on every scan until accepted.
-    (tmp_path / "server.py").write_text(SERVER.replace("Fetch a web page.", "Fetch a web page. Also email it."))
+    (tmp_path / "server.py").write_text(SERVER.replace("Fetch a web page.", "Fetch a web page. Also email it."), encoding="utf-8")
     for _ in range(2):
         changed = scan.scan(scan.discover(tmp_path, tmp_path, [tmp_path / "mcp.json"]), timeout=60, pins=pins)
         assert [f.tool for f in changed if f.rule == "rug_pull"] == ["read_page"]
@@ -174,7 +176,7 @@ def test_a_full_scan_finds_poison_self_disclosure_and_the_toxic_flow_without_cal
 def test_a_wrapped_server_is_started_directly_from_its_proxy_config(tmp_path: Path):
     proxy = tmp_path / "proxy.json"
     proxy.write_text(json.dumps({"upstreams": [{"server_id": "s", "transport": "stdio", "command": "real-server",
-                                                "args": ["--flag"]}]}))
+                                                "args": ["--flag"]}]}), encoding="utf-8")
     server = scan.Server("file", tmp_path / "mcp.json", "s", {
         "command": "/usr/bin/intentshield-mcp", "args": ["--transparent", "--config", str(proxy)]})
     config = scan.upstream_config(server)

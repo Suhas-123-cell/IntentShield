@@ -123,8 +123,9 @@ def test_a_key_by_its_name_is_a_deny_and_says_so(ssh: Path, name: str):
 
 
 def test_a_file_that_holds_a_private_key_is_a_deny_whatever_its_name(ssh: Path):
-    (ssh / "work").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nnot a real key\n-----END OPENSSH PRIVATE KEY-----\n")
-    (ssh / "config.bak").write_text("-----BEGIN RSA PRIVATE KEY-----\nnot a real key\n")
+    (ssh / "work").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nnot a real key\n-----END OPENSSH PRIVATE KEY-----\n",
+        encoding="utf-8")
+    (ssh / "config.bak").write_text("-----BEGIN RSA PRIVATE KEY-----\nnot a real key\n", encoding="utf-8")
     for name in ("work", "config.bak"):
         hit = assess_shell(f"cat ~/.ssh/{name}")
         assert hit and hit.decision == "deny" and "SSH private key" in hit.reason
@@ -133,7 +134,7 @@ def test_a_file_that_holds_a_private_key_is_a_deny_whatever_its_name(ssh: Path):
 
 
 def test_any_other_file_in_the_directory_is_asked_about_and_the_reason_says_what_it_is(ssh: Path):
-    (ssh / "notes").write_text("remember to rotate the deploy key\n")
+    (ssh / "notes").write_text("remember to rotate the deploy key\n", encoding="utf-8")
     for name in ("notes", "github", "work_key", "missing-file"):
         hit = assess_shell(f"cat ~/.ssh/{name}")
         assert hit and hit.decision == "ask"
@@ -153,7 +154,7 @@ def test_removing_a_copy_of_the_config_is_not_held_but_removing_a_key_asks(ssh: 
 
 
 def test_a_relative_path_to_a_key_file_is_read_from_the_working_directory(ssh: Path):
-    (ssh / "work").write_text("-----BEGIN PRIVATE KEY-----\nnot a real key\n")
+    (ssh / "work").write_text("-----BEGIN PRIVATE KEY-----\nnot a real key\n", encoding="utf-8")
     assert verdict("cat work", str(ssh)) == "deny"
     assert verdict("cat .ssh/work", str(ssh.parent)) == "deny"
     assert verdict("cat config", str(ssh)) == "allow"

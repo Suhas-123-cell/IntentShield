@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     cache_path = args.out / "generations.jsonl"
     cache = {json.loads(line)["key"]: json.loads(line)["value"]
-             for line in cache_path.read_text().splitlines() if line} if cache_path.exists() else {}
+             for line in cache_path.read_text(encoding="utf-8").splitlines() if line} if cache_path.exists() else {}
     client = httpx.Client(base_url=args.host, timeout=300)
 
     def cached(key: str, prompt: str) -> Any:
@@ -92,11 +92,11 @@ def main(argv: list[str] | None = None) -> None:
             except (httpx.HTTPError, json.JSONDecodeError) as exc:
                 print(f"skipped {key}: {exc}", file=sys.stderr)
                 return None
-            with cache_path.open("a") as handle:
+            with cache_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"key": key, "value": cache[key]}) + "\n")
         return cache[key]
 
-    raw = json.loads((args.data / "response_all.json").read_text())["servers"]
+    raw = json.loads((args.data / "response_all.json").read_text(encoding="utf-8"))["servers"]
     rows: list[dict[str, str]] = []
     seen: set[str] = set()
 
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> None:
         if isinstance(made, dict) and isinstance(made.get("text"), str):
             add(made["text"], row["label"], f"{row['source']}_{language.lower()}", row["group"])
 
-    (args.out / "dataset.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+    (args.out / "dataset.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
     summary: dict[str, dict[str, int]] = {}
     for row in rows:
         counts = summary.setdefault(row["split"], {})

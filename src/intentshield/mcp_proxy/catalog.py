@@ -100,7 +100,7 @@ class _Catalog(_State):
             if path.stem == own:
                 continue
             try:
-                names |= {str(t["name"]).rpartition("__")[2] for t in json.loads(path.read_text())}
+                names |= {str(t["name"]).rpartition("__")[2] for t in json.loads(path.read_text(encoding="utf-8"))}
             except (OSError, ValueError, TypeError, KeyError):
                 continue
         return names

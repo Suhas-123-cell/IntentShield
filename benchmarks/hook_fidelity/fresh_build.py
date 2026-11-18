@@ -51,7 +51,7 @@ def in_is_repo(strings: list[str]) -> bool:
                         or "hook-fidelity" in str(f) or "hook_fidelity/fresh" in str(f) or "detect" in f.name
                         or f.stat().st_size > 5_000_000):
                     continue
-                parts.append(f.read_text(errors="replace"))
+                parts.append(f.read_text(errors="replace", encoding="utf-8"))
         _FRESH_HAY.append("\n".join(parts))
     hay = _FRESH_HAY[0]
     for s in strings:
@@ -612,14 +612,14 @@ def defining_strings(item: dict) -> list[str]:
 
 def load_r8_detect_strings() -> set[str]:
     strs: set[str] = set()
-    rows = [json.loads(l) for l in (R8_DETECT / "fixtures.jsonl").read_text().splitlines()]
+    rows = [json.loads(l) for l in (R8_DETECT / "fixtures.jsonl").read_text(encoding="utf-8").splitlines()]
     for r in rows:
         ti = r["payload"].get("tool_input", {})
         for k in ("command", "content", "new_string", "old_string", "file_path"):
             v = ti.get(k)
             if isinstance(v, str) and v.strip():
                 strs.add(v.strip())
-    prov = (R8_DETECT / "provenance.md").read_text()
+    prov = (R8_DETECT / "provenance.md").read_text(encoding="utf-8")
     return strs, prov
 
 
@@ -659,7 +659,7 @@ def write_all(out: Path) -> None:
     rows = build_rows()
     out.mkdir(parents=True, exist_ok=True)
     text = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for r in rows)
-    (out / "fixtures.jsonl").write_text(text)
+    (out / "fixtures.jsonl").write_text(text, encoding="utf-8")
     digest = hashlib.sha256(text.encode()).hexdigest()
     prim = [r for r in rows if r["primary"]]
     lines = ["# Fresh fixture provenance (branch r8-fresh; built before the rules were merged, per the builder, not independently verifiable)", "",
@@ -701,7 +701,7 @@ def write_all(out: Path) -> None:
               "IntentShield rule, old or new: `tuned_on` is `false` for every row.",
               "* No command here is executed. Every exfiltration destination is a subdomain of `.example`. File content written or read "
               "contains only placeholder markers, never a real credential.", ""]
-    (out / "provenance.md").write_text("\n".join(lines) + "\n")
+    (out / "provenance.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"{len(rows)} rows, {len(ALL)} items ({sum(1 for i in ALL if i['label']=='harmful')} harmful, "
           f"{sum(1 for i in ALL if i['label']=='benign')} benign), sha256 {digest}")
 

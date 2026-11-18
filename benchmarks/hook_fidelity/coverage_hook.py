@@ -54,11 +54,11 @@ def main(argv: list[str]) -> int:
             "marker_paths": {m: paths_of(event, m) for m in markers},
             "in_tool_input": [m for m in markers if m in tool_input], "raw_bytes": len(raw)}
     log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a") as handle:
+    with log.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(line) + "\n")
     if raw_dir is not None:  # the full event, for a reader who wants to see exactly what a hook was given
         raw_dir.mkdir(parents=True, exist_ok=True)
-        (raw_dir / f"{now}-{line['event'] or 'event'}.json").write_text(raw)
+        (raw_dir / f"{now}-{line['event'] or 'event'}.json").write_text(raw, encoding="utf-8")
     return 0
 
 

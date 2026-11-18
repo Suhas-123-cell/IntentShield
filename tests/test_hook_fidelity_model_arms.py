@@ -9,7 +9,7 @@ HF = ROOT / "results/hook-fidelity"
 
 
 def _load(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def _valid(rows: list[dict]) -> list[dict]:

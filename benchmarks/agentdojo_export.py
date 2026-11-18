@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:
                 seen.add(text)
                 rows.append({"text": text, "label": "data", "source": "agentdojo_environment", "group": name})
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    args.out.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     print(f"{len(rows)} rows -> {args.out}")
 
 

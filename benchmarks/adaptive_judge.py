@@ -68,7 +68,7 @@ def canary_for(i: int) -> str:
 
 
 def pick_seeds(per_style: int, seed: int) -> list[dict[str, Any]]:
-    rows = [json.loads(line) for line in open("artifacts/injection/dataset.jsonl")]
+    rows = [json.loads(line) for line in open("artifacts/injection/dataset.jsonl", encoding="utf-8")]
     rng = random.Random(seed)
     picked = []
     for style in STYLES:
@@ -258,7 +258,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                                     provenance_note=PROVENANCE_NOTE if args.objective == "full" else "")
     seeds = pick_seeds(args.per_style, args.seed)
     if args.resume and args.out.exists():
-        done = {r["canary"]: r for r in json.loads(args.out.read_text()).get("seeds", [])}
+        done = {r["canary"]: r for r in json.loads(args.out.read_text(encoding="utf-8")).get("seeds", [])}
     else:
         done = {}
     results = []
@@ -345,7 +345,7 @@ def write(args: argparse.Namespace, results: list[dict[str, Any]], usage: dict[s
               "judge_prompt_sha256": __import__("hashlib").sha256(judge_module.OUTPUT_PROMPT.encode()).hexdigest()[:16],
               "summary": summarize(results, args.objective), "seeds": results}
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=1, ensure_ascii=False))
+    args.out.write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     return report
 
 

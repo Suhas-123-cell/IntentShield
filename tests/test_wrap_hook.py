@@ -26,7 +26,7 @@ def guard(tmp_path, stdout: str = "", stderr: str = "", code: int = 0, sleep: fl
         "import sys, time\n"
         "sys.stdin.read()\n"
         f"time.sleep({sleep!r})\n"
-        f"sys.stdout.write({stdout!r}); sys.stderr.write({stderr!r}); sys.exit({code})\n")
+        f"sys.stdout.write({stdout!r}); sys.stderr.write({stderr!r}); sys.exit({code})\n", encoding="utf-8")
     return [sys.executable, str(path)]
 
 
@@ -103,7 +103,7 @@ def test_a_guard_that_cannot_be_started_is_refused(tmp_path):
 
 def test_a_shell_string_with_a_dead_interpreter_is_refused(tmp_path):
     script = tmp_path / "dead"
-    script.write_text("#!/nonexistent/interpreter\nprint('x')\n")
+    script.write_text("#!/nonexistent/interpreter\nprint('x')\n", encoding="utf-8")
     script.chmod(0o755)
     _c, reply, _t, _e = run("claude", [str(script)])   # one argument: run through a shell, as a harness runs a hook string
     decision, reason = verdict(reply)
@@ -202,7 +202,7 @@ def test_the_mode_override_and_the_recorded_version_are_used(tmp_path, monkeypat
     home = tmp_path / "home"
     monkeypatch.setenv("INTENTSHIELD_HARNESS_MODE", "interactive")
     exe = tmp_path / "claude"
-    exe.write_text("")
+    exe.write_text("", encoding="utf-8")
     translation.record_version("claude", "2.1.316", str(exe), home)
     out, err = io.StringIO(), io.StringIO()
     wrap_hook.wrap("claude", guard(tmp_path, CLAUDE_ASK), json.dumps(EVENT), version=None, home=home, stdout=out, stderr=err)
@@ -227,9 +227,9 @@ def test_events_that_do_not_check_a_call_are_passed_through(tmp_path):
 def test_the_guard_gets_the_harnesss_stdin(tmp_path):
     seen = tmp_path / "seen.json"
     path = tmp_path / "echo.py"
-    path.write_text(f"import sys\nopen({str(seen)!r}, 'w').write(sys.stdin.read())\nprint('{{}}')\n")
+    path.write_text(f"import sys\nopen({str(seen)!r}, 'w').write(sys.stdin.read())\nprint('{{}}')\n", encoding="utf-8")
     run("claude", [sys.executable, str(path)])
-    assert json.loads(seen.read_text()) == EVENT
+    assert json.loads(seen.read_text(encoding="utf-8")) == EVENT
 
 
 def test_wrapped_command_has_the_shim_the_guard_and_the_launcher():
@@ -289,6 +289,18 @@ def test_a_conflicting_reply_is_not_passed_through_to_the_harness(tmp_path):
              "decision": "block", "reason": "no"}
     code, sent, text, _err = run("claude", guard(tmp_path, json.dumps(reply)))
     assert code == 0 and verdict(sent) == ("deny", "no") and "allow" not in text
+
+
+@pytest.mark.parametrize("hso", ["deny", ["deny"], [{"permissionDecision": "deny"}], 1, None, True, ""])
+def test_a_hook_specific_output_that_is_not_an_object_is_refused_not_passed_through(hso):
+    for extra in ({}, {"decision": "allow"}):
+        decision, reason, passthrough = wrap_hook.classify(0, json.dumps({"hookSpecificOutput": hso, **extra}), "")
+        assert decision == "deny" and "hookSpecificOutput is not an object" in reason and not passthrough
+
+
+def test_a_non_object_hook_specific_output_is_refused_end_to_end(tmp_path):
+    code, sent, text, _err = run("claude", guard(tmp_path, json.dumps({"hookSpecificOutput": "deny"})))
+    assert code == 0 and verdict(sent)[0] == "deny" and "malformed" in verdict(sent)[1]
 
 
 def test_a_verdict_that_is_not_text_in_any_place_is_malformed_even_beside_a_valid_one():

@@ -75,7 +75,7 @@ def download(out: Path) -> dict[str, Any]:
     for name in FILES:
         hf_hub_download(MODEL, name, local_dir=out)
     metadata = {"model": MODEL, "files": {name: _sha256(out / name) for name in FILES}}
-    (out / METADATA).write_text(json.dumps(metadata, indent=2))
+    (out / METADATA).write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return metadata
 
 
@@ -87,7 +87,7 @@ class Embedder:
         self.metadata: dict[str, Any] = {}
         self.reason: str | None = None
         try:
-            metadata = json.loads((self.artifact_dir / METADATA).read_text())
+            metadata = json.loads((self.artifact_dir / METADATA).read_text(encoding="utf-8"))
             if metadata.get("model") != MODEL or set(metadata.get("files") or {}) != set(FILES):
                 raise RuntimeError("embedder metadata does not match the expected model and files")
             for name, digest in metadata["files"].items():
@@ -203,11 +203,12 @@ class ExemplarIndex:
         np.savez(out / "index.npz", instruction=self.vectors["instruction"], data=self.vectors["data"])
         (out / "index.json").write_text(json.dumps({
             "thresholds": self.thresholds, "k": self.k, "embedder": self.embedder.metadata,
-            "instruction_texts": self.texts["instruction"], "data_texts": self.texts["data"]}, ensure_ascii=False))
+            "instruction_texts": self.texts["instruction"], "data_texts": self.texts["data"]}, ensure_ascii=False),
+                encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path, embedder: Embedder) -> "ExemplarIndex":
-        meta = json.loads((path / "index.json").read_text())
+        meta = json.loads((path / "index.json").read_text(encoding="utf-8"))
         if meta["embedder"] != embedder.metadata:
             raise RuntimeError("exemplar index was built with a different embedder")
         index = cls(embedder, meta.get("thresholds") or meta["threshold"], meta["k"])

@@ -56,7 +56,7 @@ def span_class(spans: list[list[str]], version: str) -> str:
 
 
 def load(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def summarize(rows: list[dict], fit_only: dict | None = None) -> dict:
@@ -138,9 +138,9 @@ def main() -> None:
     parser.add_argument("--fit-only", type=Path, help="ranges-fit-only.json, to check the table against the held-out builds")
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
-    summary = summarize(load(args.rows), json.loads(args.fit_only.read_text()) if args.fit_only else None)
+    summary = summarize(load(args.rows), json.loads(args.fit_only.read_text(encoding="utf-8")) if args.fit_only else None)
     if args.json:
-        args.json.write_text(json.dumps(summary, indent=1))
+        args.json.write_text(json.dumps(summary, indent=1), encoding="utf-8")
     print(markdown(summary))
 
 

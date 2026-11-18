@@ -280,7 +280,7 @@ def noprompt_reasons(cell: cells.Cell, spec: configs.RunSpec | None = None) -> l
                     if any(m in word.lower() for m in ARGV_NOPROMPT) and not word.startswith(prompts)]
         for path in spec.files:
             try:
-                text = Path(path).read_text(errors="replace")
+                text = Path(path).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             reasons += [f"{pattern.pattern} in {Path(path).name}" for pattern in CONFIG_NOPROMPT if pattern.search(text)]
@@ -368,7 +368,7 @@ def signoff_problems(entry: object, committer: str, root: Path = configs.ROOT) -
             # A vendor page with no licence to redistribute is not committed: the README of its directory records the
             # source and the hash of the file the reader read, and the entry must carry that same hash.
             record = resolved.parent / "README.md"
-            listed = record.read_text() if record.is_file() else ""
+            listed = record.read_text(encoding="utf-8") if record.is_file() else ""
             if not any(resolved.name in line and str(entry.get("sha256")) in line for line in listed.splitlines()):
                 problems.append("archive is not a file inside the repository")
         elif hashlib.sha256(resolved.read_bytes()).hexdigest() != entry.get("sha256"):
@@ -379,7 +379,7 @@ def signoff_problems(entry: object, committer: str, root: Path = configs.ROOT) -
 def signoff_hash(path: Path = SIGNOFF_FILE) -> str:
     """Short hash of the sign-off set in force; stored in every row and printed in the summary."""
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return "none"
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:16]
@@ -389,7 +389,7 @@ def signoff_gaps(selection: list[cells.Cell], path: Path = SIGNOFF_FILE, committ
                  root: Path = configs.ROOT) -> list[str]:
     """Unverified items relevant to this selection whose sign-off is missing or invalid (signoff_problems)."""
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
     who = _committer() if committer is None else committer
@@ -436,7 +436,7 @@ def normalized_config_hash(paths: configs.RunPaths, run_id: str, nonce: str, att
     swaps = [(str(paths.root.resolve()), "<RUN>"), (str(paths.root), "<RUN>"), (str(Path.home()), "<HOME>"),
              (run_id, "<ID>"), (nonce, "<NONCE>"), (attestation, "<ATTEST>")]
     for path in sorted(paths.written, key=lambda p: str(p.relative_to(paths.root))):
-        text = path.read_text(errors="replace")
+        text = path.read_text(errors="replace", encoding="utf-8")
         for old, new in swaps:
             text = text.replace(old, new)
         text = re.sub(r"sha256:[0-9a-f]{64}", "sha256:<HASH>", text)   # Codex's per-hook trust hash differs per run
@@ -515,7 +515,7 @@ def shim_smoke(paths: configs.RunPaths, nonce: str, attestation: str, login: boo
         except (OSError, subprocess.SubprocessError) as exc:
             problems.append(f"{' '.join(shell)}: {exc!r}")
             continue
-        if not (probe.is_file() and attestation in probe.read_text(errors="replace")):
+        if not (probe.is_file() and attestation in probe.read_text(errors="replace", encoding="utf-8")):
             problems.append(f"{' '.join(shell)}: the touch shim did not attest the marker (PATH reordered?)")
         probe.unlink(missing_ok=True)
     return problems
@@ -552,7 +552,7 @@ def egress_lines(log: Path | None) -> list[str]:
     if log is None:
         return []
     try:
-        return [ln for ln in log.read_text().splitlines() if ln.strip()]
+        return [ln for ln in log.read_text(encoding="utf-8").splitlines() if ln.strip()]
     except OSError:
         return []
 
@@ -584,7 +584,7 @@ def stub_summary(log: Path) -> dict:
     log is missing."""
     rows: list[dict] = []
     try:
-        for line in log.read_text(errors="replace").splitlines():
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
             try:
                 row = json.loads(line)
             except ValueError:
@@ -631,7 +631,7 @@ def stub_fields(log: Path) -> dict:
     request that listed any. (The nested ``stub`` object of a row holds the richer ``stub_summary``.)"""
     records = []
     try:
-        records = [json.loads(line) for line in log.read_text(errors="replace").splitlines() if line.strip()]
+        records = [json.loads(line) for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
     except (OSError, ValueError):
         pass
     return {"stub_requests": len(records), "stub_request_kinds": [str(r.get("kind", "")) for r in records],
@@ -683,14 +683,15 @@ def execute_one(cell: cells.Cell, rep: int, order: int, out: Path, bins: dict[st
     trust_entries: list[dict] = []
     if cell.harness == "codex" and cell.state == "trusted-persisted" and cell.reply != "R0":
         try:
-            with (out / "launches.jsonl").open("a") as ledger_file:   # the app-server is a launch of the harness binary too
+            with (out / "launches.jsonl").open("a",
+                encoding="utf-8") as ledger_file:   # the app-server is a launch of the harness binary too
                 ledger_file.write(json.dumps({"run_id": run_id, "key": f"{cell.key}|{rep}|hooks/list", "attempt": attempt,
                                               "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}) + "\n")
             trust_entries = codex_trust.list_hooks(binary, spec.env, spec.cwd)
             if not trust_entries:
                 raise PreflightError(f"{cell.key}: the vendor loader (hooks/list) returned no hook to trust")
             config = Path(spec.env["CODEX_HOME"]) / "config.toml"
-            config.write_text(config.read_text() + codex_trust.trust_toml(trust_entries))
+            config.write_text(config.read_text(encoding="utf-8") + codex_trust.trust_toml(trust_entries), encoding="utf-8")
         except BaseException:
             if stub:
                 stub.stop()
@@ -708,11 +709,12 @@ def execute_one(cell: cells.Cell, rep: int, order: int, out: Path, bins: dict[st
     stdout_path, stderr_path = paths.root / "stdout.txt", paths.root / "stderr.txt"
     capped, survivors = False, True
     egress_before = len(egress_lines(egress_log))
-    with (out / "launches.jsonl").open("a") as ledger_file:   # one line per harness launch, written BEFORE it starts
+    with (out / "launches.jsonl").open("a",
+        encoding="utf-8") as ledger_file:   # one line per harness launch, written BEFORE it starts
         ledger_file.write(json.dumps({"run_id": run_id, "key": f"{cell.key}|{rep}", "attempt": attempt,
                                       "ts": started}) + "\n")
     try:
-        with stdout_path.open("w") as so, stderr_path.open("w") as se:
+        with stdout_path.open("w", encoding="utf-8") as so, stderr_path.open("w", encoding="utf-8") as se:
             proc = subprocess.Popen(argv, cwd=spec.cwd, env=spec.env, stdin=subprocess.DEVNULL, stdout=so, stderr=se,
                                     start_new_session=True)
             capped, kill_ns, last_activity_ns = watch(
@@ -723,8 +725,8 @@ def execute_one(cell: cells.Cell, rep: int, order: int, out: Path, bins: dict[st
             stub.stop()
     wall = time.monotonic() - t0
     stub_log = paths.root / "requests.jsonl"
-    stream = stdout_path.read_text(errors="replace")
-    errors = stderr_path.read_text(errors="replace")[-20000:]
+    stream = stdout_path.read_text(errors="replace", encoding="utf-8")
+    errors = stderr_path.read_text(errors="replace", encoding="utf-8")[-20000:]
     hook_events = scoring.read_events(paths.hooks_log, paths.witness, run_id=run_id)
     target_ts = [e.get("ts_ns", 0) for e in hook_events if scoring.tool_matches(cell.kind, e, spec.nonce)]
     quiet = scoring.quiet_seconds(kill_ns, [last_activity_ns], target_ts) if capped else None
@@ -765,9 +767,10 @@ def execute_one(cell: cells.Cell, rep: int, order: int, out: Path, bins: dict[st
         row["hook_stderr_lines"] = [scrub(ln, paths)[:200] for ln in errors.splitlines() if ln.strip()][-3:]
         row["stream_events"] = scrub(json.dumps(stream_events(stream)), paths)[:1500]
     if (out / "streams").is_dir():
-        (out / "streams" / f"{run_id}.stdout.txt").write_text(scrub(stream, paths))
+        (out / "streams" / f"{run_id}.stdout.txt").write_text(scrub(stream, paths), encoding="utf-8")
         if cell.arm == "S" and stub_log.is_file():
-            (out / "streams" / f"{run_id}.stub-requests.jsonl").write_text(scrub(stub_log.read_text(errors="replace"), paths))
+            stub_text = scrub(stub_log.read_text(errors="replace", encoding="utf-8"), paths)
+            (out / "streams" / f"{run_id}.stub-requests.jsonl").write_text(stub_text, encoding="utf-8")
     if not keep_dirs and row["outcome"] != "INVALID":
         shutil.rmtree(paths.root, ignore_errors=True)
         row["run_dir"] = ""
@@ -799,7 +802,7 @@ def pilot_script(harness: str, out: Path, port: int, bins: dict[str, str]) -> Pa
         paths = configs.make_paths(out / f"run-{order:02d}-{cell.reply}-{cell.kind}")
         spec = configs.build(cell, paths, run_id, words, stub_url=url)
         script = paths.root / "stub-script.json"
-        script.write_text(json.dumps(configs.stub_script(cell, spec.nonce, paths.work)))
+        script.write_text(json.dumps(configs.stub_script(cell, spec.nonce, paths.work)), encoding="utf-8")
         env = " ".join(f"{k}={shlex.quote(v)}" for k, v in sorted(spec.env.items()))
         log, dump = shlex.quote(str(paths.root / "requests.jsonl")), shlex.quote(str(paths.root / "dump"))
         stub_cmd = (f"python3 -I {shlex.quote(str(stub))} --script {shlex.quote(str(script))} --log {log} "
@@ -814,7 +817,7 @@ def pilot_script(harness: str, out: Path, port: int, bins: dict[str, str]) -> Pa
                   f"$(ls {shlex.quote(str(paths.work))} | grep -c '^\\(ran\\|written\\)-')  hook events: "
                   f"$(cat {shlex.quote(str(paths.hooks_log))} 2>/dev/null | wc -l)\"", ""]
     path = out / f"pilot-{harness}.sh"
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
@@ -833,7 +836,7 @@ def cells_from_json(path: Path) -> list[cells.Cell]:
     """An explicit cell list (a JSON array of objects with the fields of cells.Cell; version, mode, kind and reply are
     required, arm defaults to S, reps to the arm's default). It replaces the generated matrix, so a lane can run exactly the
     cells it planned. Unknown fields and unknown modes or replies are refused."""
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, list):
         raise ValueError("--cells-json must hold a JSON array")
     fields = set(cells.Cell.__dataclass_fields__)
@@ -876,7 +879,7 @@ def _refuse(message: str, code: int = 2) -> int:
 
 def _load_json(path: Path) -> dict:
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
@@ -987,7 +990,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             reported, since = versions.get(vkey, ("", VERSION_RECHECK_EVERY))
             if since >= VERSION_RECHECK_EVERY:
                 stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                with (out / "probes.jsonl").open("a") as handle:   # a --version call launches the binary (no model): counted
+                with (out / "probes.jsonl").open("a",
+                    encoding="utf-8") as handle:   # a --version call launches the binary (no model): counted
                     handle.write(json.dumps({"binary": binary[-1][-60:], "ts": stamp}) + "\n")
                 probed = probe_version(binary, passthrough)
                 if cell.version not in probed and not (cell.harness == "codex" and binary[0] == "npx"):
@@ -1017,7 +1021,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             launched += 1
             ledger_key = cell.harness if cell.arm != "S" else f"{cell.harness}-stub"   # arm S launches are counted, not capped
             ledger[ledger_key] = ledger.get(ledger_key, 0) + 1
-            ledger_path.write_text(json.dumps(ledger))
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
             scoring.append_row(rows_path, row)
             rows.append(row)
             print(f"{row['run_id']} {cell.key} -> {row['outcome']} hook_invoked={row['hook_invoked']} "

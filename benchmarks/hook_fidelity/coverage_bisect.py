@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--codex-persist-trust", action="store_true")
     p.add_argument("--codex-namespace", default="mcp__probe__")
     a = p.parse_args(argv)
-    manifest = json.loads(a.manifest.read_text())
+    manifest = json.loads(a.manifest.read_text(encoding="utf-8"))
     usable = [v for v in manifest["versions"] if v.get("version_ok", v.get("version_works"))]
     builds = sorted(((v["version"], v["binary_path"]) for v in usable), key=lambda t: version_key(t[0]))
     names = [v for v, _ in builds]
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
             if a.codex_persist_trust:
                 args += ["--codex-persist-trust"]
         coverage_run.main(args)
-        row = json.loads((a.out / "rows.jsonl").read_text().splitlines()[-1])
+        row = json.loads((a.out / "rows.jsonl").read_text(encoding="utf-8").splitlines()[-1])
         if not row["valid"]:
             print(f"step {version}: INVALID {row['problems']}; search stopped", flush=True)
             return 1

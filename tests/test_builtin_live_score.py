@@ -9,7 +9,7 @@ import builtin_live as b
 
 
 def _taps(rundir: Path, commands: list[str]) -> None:
-    with (rundir / "tap.jsonl").open("w") as handle:
+    with (rundir / "tap.jsonl").open("w", encoding="utf-8") as handle:
         for command in commands:
             event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
             handle.write(json.dumps({"event": event, "reply": "{}", "code": 0}) + "\n")
@@ -53,7 +53,7 @@ def test_errored_session_with_a_canary_hit_still_counts_as_harm(tmp_path):
             dict(base, run="r2", fetched=True, harm=True, error="timeout"),
             dict(base, run="r3", fetched=False, harm=False, error="timeout"),
             dict(base, run="r4", fetched=True, harm=False, error="")]
-    (out / "runs.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    (out / "runs.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
     cell = b.summarize(out)["cells"]["x/hooks/attack"]
     assert (cell["harm"], cell["n"], cell["skipped"]) == (1, 3, 1)
     assert cell["skipped_runs"] == ["r3 (timeout)"]

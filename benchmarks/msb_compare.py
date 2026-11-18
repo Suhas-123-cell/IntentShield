@@ -53,7 +53,7 @@ def arm_label(path: Path) -> str:
 
 def read_arm(path: Path, grid: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], set[str]]:
     """(id -> rescored row, ids whose latest row is an error); the latest row per case wins, as in msb.py."""
-    latest = {r["id"]: r for r in map(json.loads, path.read_text().splitlines()) if r}
+    latest = {r["id"]: r for r in map(json.loads, path.read_text(encoding="utf-8").splitlines()) if r}
     scored = {r["id"]: r for r in msb.rescore(list(latest.values()), grid)}
     return scored, {i for i, r in latest.items() if "error" in r}
 

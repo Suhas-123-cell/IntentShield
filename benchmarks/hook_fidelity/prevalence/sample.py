@@ -2,12 +2,12 @@ import json,glob,random,re,os,sys,hashlib
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import analyze as A
 D=A.D
-S=json.load(open(f"{D}/S_by_pattern.json")); cache=json.load(open(f"{D}/hookcache.json"))
-G={h:json.load(open(f"{D}/hookrepos_{h}.json")) for h in ["claude","codex","gemini","cursor"]}
+S=json.load(open(f"{D}/S_by_pattern.json", encoding="utf-8")); cache=json.load(open(f"{D}/hookcache.json", encoding="utf-8"))
+G={h:json.load(open(f"{D}/hookrepos_{h}.json", encoding="utf-8")) for h in ["claude","codex","gemini","cursor"]}
 H2F={"claude_cli":"claude","claude_action":"claude","codex_cli":"codex","codex_action":"codex","gemini_cli":"gemini","gemini_action":"gemini","cursor_cli":"cursor"}
 files={}
 for f in sorted(glob.glob(f"{D}/E_h_*.json")):
-    for i in json.load(open(f))["items"]: files.setdefault((i["repo"],i["path"]),i)
+    for i in json.load(open(f, encoding="utf-8"))["items"]: files.setdefault((i["repo"],i["path"]),i)
 rng=random.Random(20261031)
 plan=[("claude_action",4),("claude_cli",3),("codex_action",2),("codex_cli",1),("gemini_action",1),("cursor_cli",1)]
 sel=[]
@@ -19,7 +19,7 @@ for pat,n in plan:
 for h,pat,n in [("claude","claude_action",3),("claude","claude_cli",2),("codex","codex_action",1),("gemini","gemini_action",1),("cursor","cursor_cli",1)]:
     pool=sorted(set(G[h]["guard"])&set(S[pat]))
     for r in rng.sample(pool,n): sel.append(("hook-bearing",pat,r))
-json.dump(sel,open(f"{D}/sample_sel.json","w"))
+json.dump(sel,open(f"{D}/sample_sel.json","w", encoding="utf-8"))
 for kind,pat,r in sel:
     ks=[k for k in files if k[0]==r and A.text(files[k]) and pat in A.classify(A.text(files[k]))[0]]
     k=sorted(ks)[0]; t=A.text(files[k]); h=H2F[pat]

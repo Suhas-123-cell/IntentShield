@@ -53,11 +53,11 @@ def self_disclosure(row: dict[str, Any]) -> bool:
 
 def load_cases(path: Path) -> list[dict[str, Any]]:
     """The MSB case grid as msb.cases builds it, stored one case per line."""
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def check_manifest(root: Path) -> list[str]:
-    manifest = json.loads((root / "MANIFEST.json").read_text())
+    manifest = json.loads((root / "MANIFEST.json").read_text(encoding="utf-8"))
     problems = []
     for rel, entry in manifest["files"].items():
         path = root / rel

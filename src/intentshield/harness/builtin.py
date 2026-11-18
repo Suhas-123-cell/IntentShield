@@ -97,14 +97,22 @@ def _builtin_local(kind: str, target: str) -> bool:
     return kind == "read" or (kind == "shell" and not shell.parse(target).remote)
 
 
+def _linked_risk(path: str, cwd: str) -> bool:
+    """The path is a link (or goes through one) to a file the path rules look at: a patch that names ``notes.txt`` writes the
+    key it points at."""
+    real = dangerous.links.real_path(path, cwd)
+    return real is not None and dangerous.path_risk(real)
+
+
 def _patch_verdict(guard: HarnessGuard, session: str, label: str, patch: str) -> Verdict:
     """The verdict on a patch: every file it names is a write of what the patch adds."""
     added = "\n".join(line[1:] for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
     paths = [(a or b).strip() for a, b in _PATCH_FILE.findall(patch)] or [""]
     # One database read per file would make a huge patch slow: the path rules are plain patterns, so only the
     # files they fire on, and one of the rest (for what the patch adds), go to the guard.
-    special = [p for p in dict.fromkeys(paths) if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p)
-               or dangerous.path_risk(p)]
+    special = [p for p in dict.fromkeys(paths)
+               if _PERSISTENT.search(p.replace("\\", "/")) or shell.SECRET.search(p) or dangerous.path_risk(p)
+               or _linked_risk(p, guard.cwd)]
     verdicts = [guard.file(session, label, path, added, write=True) for path in special[:8] + paths[:1]]
     for path in special[8:]:  # past the eight the guard reads one by one, the rules still read each file
         hit = dangerous.assess_file(path, added, write=True, cwd=guard.cwd, homes=guard.homes)

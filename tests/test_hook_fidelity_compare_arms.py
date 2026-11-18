@@ -47,14 +47,14 @@ def test_every_wrapped_and_allow_arm_has_its_bytes(tmp_path):
             path = compare.stub_ask_path(tmp_path)
         else:
             path = compare.replay_for(guard, case["cell"] if case["cell"] not in ("slowB", "dead") else "deny", tmp_path)
-        assert isinstance(json.loads(path.read_text())["exit_code"], int)
+        assert isinstance(json.loads(path.read_text(encoding="utf-8"))["exit_code"], int)
 
 
 def test_allow_replays_are_captured_allows_with_the_stated_shape():
     index = {e["id"]: e for e in compare._index()}
     for (kind, harness), rid in compare.ALLOW_REPLAYS.items():
         assert index[rid]["intent"] == "ALLOW"
-        record = json.loads((compare.GUARDS_DIR / "replay" / f"{rid}.json").read_text())
+        record = json.loads((compare.GUARDS_DIR / "replay" / f"{rid}.json").read_text(encoding="utf-8"))
         import base64
         out = base64.b64decode(record["stdout_b64"]).decode().strip()
         assert record["exit_code"] == 0 and (out == "" if kind == "silent" else out == "{}"), (kind, harness)
@@ -159,11 +159,11 @@ def test_committed_round7_rows_regenerate_the_numbers():
     rows_path = RESULTS / "runs.jsonl"
     if not rows_path.exists():
         pytest.skip("no committed rows")
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
+    rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     r7 = [r for r in rows if r.get("lane") == "r7-wrap"]
     if not r7:
         pytest.skip("no round 7 rows")
-    summary = json.loads((RESULTS / "summary.json").read_text())
+    summary = json.loads((RESULTS / "summary.json").read_text(encoding="utf-8"))
     assert summary["round7"] == json.loads(json.dumps(compare.round7(compare.cell_matrix(rows)), default=str))
     assert len(r7) == 169 and not any(r["outcome"] == "INVALID" for r in r7)
     assert all(r["shim_invoked"] for r in r7 if "+wrap" in r["arm"])

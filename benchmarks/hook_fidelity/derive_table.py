@@ -61,7 +61,7 @@ def with_supplement(features: dict) -> dict:
     the fit and held-out split, and the frozen fit-only table, are made from the round 3 features alone."""
     merged = {h: {f: dict(c) for f, c in by.items()} for h, by in features.items()}
     if SUPPLEMENT.exists():
-        for harness, by_feature in json.loads(SUPPLEMENT.read_text()).items():
+        for harness, by_feature in json.loads(SUPPLEMENT.read_text(encoding="utf-8")).items():
             if harness.startswith("_"):
                 continue
             for feature, classes in by_feature.items():
@@ -84,7 +84,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--all", action="store_true", help="derive from every release, not only the fit set")
     args = parser.parse_args()
-    print(json.dumps(derive_all(json.loads(FEATURES.read_text()), args.all), indent=1))
+    print(json.dumps(derive_all(json.loads(FEATURES.read_text(encoding="utf-8")), args.all), indent=1))
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ def _cells(line: str) -> list[str]:
 
 
 def _row_counts() -> dict[str, Counter]:
-    text = DOC.read_text().split("### Table counts")[0]
+    text = DOC.read_text(encoding="utf-8").split("### Table counts")[0]
     counts: dict[str, Counter] = defaultdict(Counter)
     for line in text.splitlines():
         match = re.match(r"\| (PX|JG|HK|RP)\d+ \|", line)
@@ -27,7 +27,7 @@ def _row_counts() -> dict[str, Counter]:
 
 
 def _table() -> dict[str, list[int]]:
-    block = DOC.read_text().split("### Table counts")[1].split("\n\n")
+    block = DOC.read_text(encoding="utf-8").split("### Table counts")[1].split("\n\n")
     lines = next(b for b in block if b.startswith("| Area")).splitlines()
     assert tuple(_cells(lines[0])[2:]) == COLUMNS
     return {_cells(line)[0]: [int(re.match(r"\d+", c).group()) for c in _cells(line)[2:]] for line in lines[2:]}

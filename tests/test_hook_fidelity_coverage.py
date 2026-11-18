@@ -37,7 +37,7 @@ def test_stub_logs_marker_hits(tmp_path):
                            "messages": [{"role": "user", "content": "hi"}]})
         conn.request("POST", "/v1/messages", body, {"content-type": "application/json"})
         conn.getresponse().read()
-    row = json.loads((tmp_path / "log.jsonl").read_text().splitlines()[0])
+    row = json.loads((tmp_path / "log.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert row["marker_hits"] == {"ISC-DESC-a": ["tools"]}
 
 
@@ -46,7 +46,7 @@ def run_hook(tmp_path, event: dict) -> dict:
     done = subprocess.run([sys.executable, str(HOOK), "claude", str(log)], input=json.dumps(event), text=True,
                           capture_output=True)
     assert done.returncode == 0 and done.stdout == "" and done.stderr == ""  # never changes a decision
-    return json.loads(log.read_text().splitlines()[-1])
+    return json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
 
 
 def test_hook_records_markers_paths_and_model_written_input(tmp_path):
@@ -62,7 +62,7 @@ def test_hook_survives_garbage_stdin(tmp_path):
     log = tmp_path / "h.jsonl"
     done = subprocess.run([sys.executable, str(HOOK), "codex", str(log)], input="not json", text=True, capture_output=True)
     assert done.returncode == 0
-    assert json.loads(log.read_text())["markers"] == []
+    assert json.loads(log.read_text(encoding="utf-8"))["markers"] == []
 
 
 def test_markers_are_unique_per_tag_and_surface():

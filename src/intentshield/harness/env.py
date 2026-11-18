@@ -12,7 +12,7 @@ def load_env_file(path: Path | None = None) -> None:
     the hook imports only the standard library. ``ENV_FILE`` is read at call time so a test
     or an operator can point it elsewhere."""
     try:
-        lines = (path or ENV_FILE).read_text(errors="replace").splitlines()
+        lines = (path or ENV_FILE).read_text(errors="replace", encoding="utf-8").splitlines()
     except OSError:
         return
     for line in lines:

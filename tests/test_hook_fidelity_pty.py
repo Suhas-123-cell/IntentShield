@@ -93,7 +93,7 @@ def test_classify(args, expected):
 
 def test_run_refuses_a_wrong_go_count_and_the_cap(tmp_path, monkeypatch, capsys):
     plan_path = tmp_path / "plan.json"
-    plan_path.write_text(json.dumps(pl.plan(("claude",))))
+    plan_path.write_text(json.dumps(pl.plan(("claude",))), encoding="utf-8")
     args = pl.argparse.Namespace(plan=plan_path, out=tmp_path / "out", where="", unplanned=False, attempt=0, round=6)
     monkeypatch.delenv("HOOK_FIDELITY_GO", raising=False)
     assert pl.cmd_run(args) == 2
@@ -101,7 +101,7 @@ def test_run_refuses_a_wrong_go_count_and_the_cap(tmp_path, monkeypatch, capsys)
     assert pl.cmd_run(args) == 2
     assert "must equal the 9 launches" in capsys.readouterr().err
     (tmp_path / "out").mkdir()
-    (tmp_path / "out" / "ledger.jsonl").write_text("".join(json.dumps({"i": i}) + "\n" for i in range(35)))
+    (tmp_path / "out" / "ledger.jsonl").write_text("".join(json.dumps({"i": i}) + "\n" for i in range(35)), encoding="utf-8")
     monkeypatch.setenv("HOOK_FIDELITY_GO", "9")
     assert pl.cmd_run(args) == 2
     assert "pass the cap of 40" in capsys.readouterr().err
@@ -127,13 +127,13 @@ def fake_release(monkeypatch, tmp_path):
     rel = tmp_path / "releases"
     base = rel / "claude-code" / "2.1.316" / "node_modules" / "@anthropic-ai" / "claude-code-darwin-arm64"
     base.mkdir(parents=True)
-    (base / "claude").write_text("#!/bin/sh\n")
+    (base / "claude").write_text("#!/bin/sh\n", encoding="utf-8")
     codex = rel / "codex" / "0.166.0" / "node_modules" / "@openai" / "codex-darwin-arm64" / "bin"
     codex.mkdir(parents=True)
-    (codex / "codex").write_text("#!/bin/sh\n")
+    (codex / "codex").write_text("#!/bin/sh\n", encoding="utf-8")
     gem = rel / "gemini-cli" / "0.66.0" / "node_modules" / ".bin"
     gem.mkdir(parents=True)
-    (gem / "gemini").write_text("#!/bin/sh\n")
+    (gem / "gemini").write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(pl.me, "RELEASES", rel)
     return rel
 
@@ -164,40 +164,45 @@ def test_native_policy_is_preapproved_only_where_a_hook_is_installed(fake_releas
     r = _build("claude", "r0", tmp_path / "r")
     assert "--allowedTools" in a[0] and "--allowedTools" not in r[0]
     assert "pre-approved" in a[3]["native_policy"] and "prompts" in r[3]["native_policy"]
-    settings = json.loads((tmp_path / "r" / "settings.json").read_text())
+    settings = json.loads((tmp_path / "r" / "settings.json").read_text(encoding="utf-8"))
     assert settings["hooks"] == {}
     g = (
-        json.loads((tmp_path / "a" / "home" / ".gemini" / "settings.json").read_text())
+        json.loads((tmp_path / "a" / "home" / ".gemini" / "settings.json").read_text(encoding="utf-8"))
         if (tmp_path / "a" / "home" / ".gemini").exists()
         else None
     )
     assert g is None  # the claude build wrote no gemini settings
     ga = _build("gemini", "ask-on", tmp_path / "ga")
     gr = _build("gemini", "r0", tmp_path / "gr")
-    assert json.loads((tmp_path / "ga" / "home" / ".gemini" / "settings.json").read_text())["tools"]["allowed"] == [
+    assert json.loads((tmp_path / "ga" / "home" / ".gemini" / "settings.json").read_text(
+        encoding="utf-8"))["tools"]["allowed"] == [
         "run_shell_command"
     ]
-    assert "tools" not in json.loads((tmp_path / "gr" / "home" / ".gemini" / "settings.json").read_text())
+    assert "tools" not in json.loads((tmp_path / "gr" / "home" / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     assert ga[3]["native_policy"] != gr[3]["native_policy"]
     cx = _build("codex", "ask-on", tmp_path / "cx")
     cr = _build("codex", "r0", tmp_path / "cr")
-    assert 'approval_policy = "never"' in (tmp_path / "cx" / "home" / "codex-home" / "config.toml").read_text()
-    assert 'approval_policy = "on-request"' in (tmp_path / "cr" / "home" / "codex-home" / "config.toml").read_text()
+    assert 'approval_policy = "never"' in (tmp_path / "cx" / "home" / "codex-home" / "config.toml").read_text(encoding="utf-8")
+    assert 'approval_policy = "on-request"' in (tmp_path / "cr" / "home" / "codex-home" / "config.toml").read_text(
+        encoding="utf-8")
     assert "--dangerously-bypass-hook-trust" in cx[0] and "--dangerously-bypass-hook-trust" not in cr[0]
 
 
 def test_hook_commands_per_arm(fake_release, tmp_path):
     on = _build("claude", "ask-on", tmp_path / "on")
     off = _build("claude", "ask-off", tmp_path / "off")
-    on_cmd = json.loads((tmp_path / "on" / "settings.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    off_cmd = json.loads((tmp_path / "off" / "settings.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    on_cmd = json.loads((tmp_path / "on" / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    off_cmd = json.loads((tmp_path / "off" / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert "--deadline 30" in on_cmd and "|| {" in on_cmd and "--eval-translate on" in on_cmd and "--eval-verdict ask" in on_cmd
     assert "--deadline" not in off_cmd and "|| {" not in off_cmd and "--eval-translate off" in off_cmd
     assert "--pty-log" in on_cmd and "--pty-log" in off_cmd
     deny = _build("claude", "deny-on", tmp_path / "deny")
     assert (
         "--eval-verdict deny"
-        in json.loads((tmp_path / "deny" / "settings.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        in json.loads((tmp_path / "deny" / "settings.json").read_text(
+            encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     )
     assert on and off and deny
 
@@ -205,10 +210,12 @@ def test_hook_commands_per_arm(fake_release, tmp_path):
 def test_gemini_ask_flag_is_set_for_ask_cells_only(fake_release, tmp_path):
     _build("gemini", "ask-on", tmp_path / "a")
     _build("gemini", "deny-on", tmp_path / "d")
-    a = json.loads((tmp_path / "a" / "home" / ".gemini" / "settings.json").read_text())["hooks"]["BeforeTool"][0]["hooks"][0][
+    a = json.loads((tmp_path / "a" / "home" / ".gemini" / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["BeforeTool"][0]["hooks"][0][
         "command"
     ]
-    d = json.loads((tmp_path / "d" / "home" / ".gemini" / "settings.json").read_text())["hooks"]["BeforeTool"][0]["hooks"][0][
+    d = json.loads((tmp_path / "d" / "home" / ".gemini" / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["BeforeTool"][0]["hooks"][0][
         "command"
     ]
     assert "--gemini-ask" in a and "--gemini-ask" not in d
@@ -216,7 +223,8 @@ def test_gemini_ask_flag_is_set_for_ask_cells_only(fake_release, tmp_path):
 
 def test_version_record_uses_the_real_path(fake_release, tmp_path):
     _build("claude", "ask-on", tmp_path / "v")
-    record = json.loads((tmp_path / "v" / "home" / ".intentshield" / "harness-versions.json").read_text())["claude"]
+    record = json.loads((tmp_path / "v" / "home" / ".intentshield" / "harness-versions.json").read_text(
+        encoding="utf-8"))["claude"]
     assert record["version"] == "2.1.316" and record["binary"] == os.path.realpath(record["path"])
 
 
@@ -285,7 +293,7 @@ FAKE_TUI = textwrap.dedent("""
 
 def _drive_fake(tmp_path, mode, prompt_wait=2.0):
     script = tmp_path / "fake_tui.py"
-    script.write_text(FAKE_TUI)
+    script.write_text(FAKE_TUI, encoding="utf-8")
     marker = tmp_path / "ran.txt"
     log = tmp_path / "requests.jsonl"
     env = {**os.environ, "FAKE_MODE": mode, "MARKER": str(marker), "MARKER_DIR": str(tmp_path)}
@@ -335,7 +343,7 @@ def test_driver_proceeds_by_quiet_when_the_input_box_is_unrecognised(tmp_path):
         ready=r"NEVER MATCHES", permission=r"Do you want to proceed\?", onboarding=list(pl.RULES["claude"].onboarding)
     )
     script = tmp_path / "fake_tui.py"
-    script.write_text(FAKE_TUI)
+    script.write_text(FAKE_TUI, encoding="utf-8")
     env = {**os.environ, "FAKE_MODE": "prompt", "MARKER": str(tmp_path / "m"), "MARKER_DIR": str(tmp_path)}
     proc, master = pl.spawn([sys.executable, str(script)], env, tmp_path)
     try:
@@ -367,7 +375,8 @@ def _run_fake_harness(tmp_path, tty: bool) -> dict:
     harness.parent.mkdir()
     log = tmp_path / "pty-hooks.jsonl"
     harness.write_text(
-        FAKE_HARNESS.format(python=sys.executable, hook=str(BENCH / "pty_hook.py"), log=str(log), db=str(tmp_path / "h.db"))
+        FAKE_HARNESS.format(python=sys.executable, hook=str(BENCH / "pty_hook.py"), log=str(log), db=str(tmp_path / "h.db")),
+            encoding="utf-8"
     )
     harness.chmod(0o755)
     env = {**os.environ}
@@ -395,7 +404,7 @@ def _run_fake_harness(tmp_path, tty: bool) -> dict:
     else:
         done = subprocess.run([str(harness), "--model", "m"], env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=40)
         out = done.stdout
-    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     return {
         "start": next(r for r in rows if r["phase"] == "start"),
         "end": next(r for r in rows if r["phase"] == "end"),
@@ -474,7 +483,7 @@ def test_ps_relay_returns_real_ps_output_and_refuses_other_shapes(tmp_path):
     relay = pl.PsRelay(sock).start()
     try:
         shim = tmp_path / "ps"
-        shim.write_text(pl.ps_shim_text(sock))
+        shim.write_text(pl.ps_shim_text(sock), encoding="utf-8")
         shim.chmod(0o755)
         args = ["-o", "ppid=,tty=,command=", "-p", str(os.getpid())]
         real = subprocess.run(["/bin/ps", *args], capture_output=True, text=True).stdout
@@ -536,7 +545,7 @@ def test_table_separates_rows_without_a_working_ps_and_lists_attempts():
 def test_pinned_claude_permission_mode_and_seeded_state(fake_release, tmp_path):
     argv, env, work, facts = _build("claude", "r0", tmp_path)
     assert argv[argv.index("--permission-mode") + 1] == "default"
-    state = json.loads((tmp_path / "home" / "claude" / ".claude.json").read_text())
+    state = json.loads((tmp_path / "home" / "claude" / ".claude.json").read_text(encoding="utf-8"))
     assert state["hasCompletedOnboarding"] is True and "customApiKeyResponses" in state
     assert "hasCompletedOnboarding" in facts["seeded"]
 

@@ -169,7 +169,7 @@ def replay(runs: str, model: str, version: str, attack: str) -> dict:
             base = os.path.join(runs, model, suite_name, user_id)
             benign = os.path.join(base, "none", "none.json")
             if os.path.exists(benign):
-                d = json.load(open(benign))
+                d = json.load(open(benign, encoding="utf-8"))
                 rows.append({"suite": suite_name, "user": user_id, "injection": None, "utility": d["utility"],
                              "security": None, "mutations": len(_mutations(d["messages"], suite_name)),
                              "harmful": 0, "first_harm_at": None})
@@ -177,7 +177,7 @@ def replay(runs: str, model: str, version: str, attack: str) -> dict:
                 path = os.path.join(base, attack, f"{inj_id}.json")
                 if not os.path.exists(path):
                     continue
-                d = json.load(open(path))
+                d = json.load(open(path, encoding="utf-8"))
                 muts = _mutations(d["messages"], suite_name)
                 sig = signatures[(suite_name, user_id, inj_id)]
                 flags = [_harmful(c, sig) for c in muts]
@@ -260,13 +260,13 @@ def main() -> None:
             print(json.dumps(table, indent=1))
             result[model] = {"table": table, "rows": rep["rows"]}
         if args.out:
-            with open(args.out, "w") as f:
+            with open(args.out, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=1)
     elif args.cmd == "static":
         report = static(args.version)
         summarize(report)
         if args.out:
-            with open(args.out, "w") as f:
+            with open(args.out, "w", encoding="utf-8") as f:
                 json.dump(report, f, indent=1)
 
 

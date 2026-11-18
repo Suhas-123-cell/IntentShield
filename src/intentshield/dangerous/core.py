@@ -75,5 +75,7 @@ class _Stage:
 
 
 def _bin(word: str) -> str:
+    if word == ".":   # the shell's ``source``
+        return "."
     name = PurePosixPath(word).name.lower()
     return re.sub(r"^(python|perl|ruby|php)[\d.]+$", r"\1", name)

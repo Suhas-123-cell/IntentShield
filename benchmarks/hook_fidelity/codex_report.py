@@ -95,15 +95,15 @@ def pilot_tables(pilot_rows: list[dict], bundled_rows: list[dict]) -> str:
 
 
 def read(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def main(argv: list[str]) -> int:
     if argv and argv[0] == "--pilot" and len(argv) == 4:
-        Path(argv[3]).write_text(pilot_tables(read(Path(argv[1])), read(Path(argv[2]))))
+        Path(argv[3]).write_text(pilot_tables(read(Path(argv[1])), read(Path(argv[2]))), encoding="utf-8")
         return 0
     if len(argv) == 2:
-        Path(argv[1]).write_text(by_version(read(Path(argv[0]))) + "\n")
+        Path(argv[1]).write_text(by_version(read(Path(argv[0]))) + "\n", encoding="utf-8")
         return 0
     print(__doc__)
     return 2

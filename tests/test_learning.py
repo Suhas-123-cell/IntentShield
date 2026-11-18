@@ -118,7 +118,8 @@ def _proxy(tmp_path: Path, monkeypatch, upstream: Fixture, **overrides):
     index = _index()
     index.save(tmp_path / "idx")
     regression = tmp_path / "regression.jsonl"
-    regression.write_text("\n".join(json.dumps({"text": t, "label": "data", "split": "validation"}) for t in BENIGN))
+    regression.write_text("\n".join(json.dumps({"text": t, "label": "data", "split": "validation"}) for t in BENIGN),
+        encoding="utf-8")
     return runtime(tmp_path, upstream, exemplar_index_dir=str(tmp_path / "idx"), embedder_dir="unused",
                    learning_regression=[str(regression)], **overrides)
 

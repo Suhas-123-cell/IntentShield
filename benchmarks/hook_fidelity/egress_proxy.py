@@ -24,7 +24,7 @@ class Handler(socketserver.StreamRequestHandler):
             line = self.rfile.readline(4096).decode("latin1").strip()
         except OSError:
             return
-        with open(LOG, "a") as handle:
+        with open(LOG, "a", encoding="utf-8") as handle:
             handle.write(json.dumps({"ts": time.time(), "line": line[:300]}) + "\n")
         try:
             self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")

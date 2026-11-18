@@ -8,6 +8,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from intentshield.storage import Migration, add_column, migrate
+
 from .text import _private_dir, _window
 
 SESSION_TTL = 7 * 86_400  # seconds an idle session's prompts are kept; every hook event of it renews them
@@ -17,12 +19,47 @@ FLAGGED_TTL = 30 * 86_400  # a session with taint or a flag is forgotten only af
 SOFT_JUDGE, SOFT_UNREAD = 1, 2
 
 
+def _schema_1(db: sqlite3.Connection) -> None:
+    """The schema of 0.4.4 and earlier: the tables, and the ``sessions`` columns added since the first release."""
+    db.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, intent TEXT NOT NULL, "
+               "taint TEXT NOT NULL, updated REAL NOT NULL)")
+    # Result scans in progress. Hook processes run in parallel, so a clean scan must never
+    # restore a flag another process is setting: the counter is monotonic per scan.
+    add_column(db, "sessions", "inflight", "INTEGER NOT NULL DEFAULT 0")
+    # Whether any output of the session tried to instruct the agent, even one that named no
+    # value to taint ("delete the repository now").
+    add_column(db, "sessions", "flagged", "INTEGER NOT NULL DEFAULT 0")
+    # An output only the LLM judge thought was an instruction: state-changing calls ask, but nothing
+    # is tainted and no credential is denied, since the judge is wrong a few percent of the time.
+    add_column(db, "sessions", "soft", "INTEGER NOT NULL DEFAULT 0")
+    # Calls refused since the user's last prompt: an agent that cannot be asked retries a refused call,
+    # Gemini CLI up to 75 times in the live runs, so the hook ends its turn after a few.
+    add_column(db, "sessions", "refused", "INTEGER NOT NULL DEFAULT 0")
+    # Recipients, URLs, accounts and paths seen in any tool output of the session.
+    db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
+               "PRIMARY KEY (session, value))")
+    # When each harness last ran a hook: `intentshield doctor` tells hooks that never run from quiet ones.
+    db.execute("CREATE TABLE IF NOT EXISTS harness_events (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
+    # Events that reached the hook from a process that is not the harness (a person piping one in by hand): kept apart, so
+    # `intentshield doctor` does not take them for proof that the harness runs the hooks.
+    db.execute("CREATE TABLE IF NOT EXISTS harness_piped (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
+    # ... and in which working directories: a project's settings file is only run for sessions inside it.
+    db.execute("CREATE TABLE IF NOT EXISTS harness_dirs (harness TEXT NOT NULL, cwd TEXT NOT NULL, "
+               "last REAL NOT NULL, PRIMARY KEY (harness, cwd))")
+
+
+# The version of the database is kept in ``PRAGMA user_version`` (see ``storage.migrate``).
+MIGRATIONS: tuple[Migration, ...] = (_schema_1,)
+SCHEMA_VERSION = len(MIGRATIONS)
+
+
 class SessionStore:
     """The part of a guard that keeps state between hook processes. ``HarnessGuard`` sets ``cwd`` and ``from_harness``."""
 
     db: sqlite3.Connection
     cwd: str
     from_harness: bool | None
+    schema_version: int  # what ``PRAGMA user_version`` said when the database was opened
 
     def _open_db(self, path: str | Path) -> None:
         _private_dir(Path(path).parent)
@@ -30,51 +67,20 @@ class SessionStore:
             Path(path).touch(mode=0o600)
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, intent TEXT NOT NULL, "
-                        "taint TEXT NOT NULL, updated REAL NOT NULL)")
-        # Result scans in progress. Hook processes run in parallel, so a clean scan must never
-        # restore a flag another process is setting: the counter is monotonic per scan.
-        self._add_column("inflight INTEGER NOT NULL DEFAULT 0")
-        # Whether any output of the session tried to instruct the agent, even one that named no
-        # value to taint ("delete the repository now").
-        self._add_column("flagged INTEGER NOT NULL DEFAULT 0")
-        # An output only the LLM judge thought was an instruction: state-changing calls ask, but nothing
-        # is tainted and no credential is denied, since the judge is wrong a few percent of the time.
-        self._add_column("soft INTEGER NOT NULL DEFAULT 0")
-        # Calls refused since the user's last prompt: an agent that cannot be asked retries a refused call,
-        # Gemini CLI up to 75 times in the live runs, so the hook ends its turn after a few.
-        self._add_column("refused INTEGER NOT NULL DEFAULT 0")
-        # Recipients, URLs, accounts and paths seen in any tool output of the session.
-        self.db.execute("CREATE TABLE IF NOT EXISTS observed (session TEXT NOT NULL, value TEXT NOT NULL, "
-                        "PRIMARY KEY (session, value))")
-        # When each harness last ran a hook: `intentshield doctor` tells hooks that never run from quiet ones.
-        self.db.execute("CREATE TABLE IF NOT EXISTS harness_events (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
-        # Events that reached the hook from a process that is not the harness (a person piping one in by hand): kept apart, so
-        # `intentshield doctor` does not take them for proof that the harness runs the hooks.
-        self.db.execute("CREATE TABLE IF NOT EXISTS harness_piped (harness TEXT PRIMARY KEY, last REAL NOT NULL)")
-        # ... and in which working directories: a project's settings file is only run for sessions inside it.
-        self.db.execute("CREATE TABLE IF NOT EXISTS harness_dirs (harness TEXT NOT NULL, cwd TEXT NOT NULL, "
-                        "last REAL NOT NULL, PRIMARY KEY (harness, cwd))")
+        self.schema_version = migrate(self.db, MIGRATIONS, ('sessions', 'observed', 'harness_events'))
         # Prompts are the user's words: keep them only while a session can still be live. Every hook event
         # renews a session (``touch``), and one that holds taint or a flag outlives a clean one: forgetting
         # it would let a resumed session act as if nothing had happened.
         now = time.time()
-        self.db.execute("DELETE FROM sessions WHERE (updated < ? AND taint = '[]' AND flagged = 0 AND soft = 0 "
-                        "AND inflight = 0) OR updated < ?", (now - SESSION_TTL, now - FLAGGED_TTL))
-        self.db.execute("DELETE FROM observed WHERE session NOT IN (SELECT id FROM sessions)")
-        self.db.execute("DELETE FROM harness_dirs WHERE last < ?", (now - FLAGGED_TTL,))
-
-    def _add_column(self, definition: str) -> None:
-        """Adds a sessions column an older hooks.db lacks. Only a concurrent hook adding it first is
-        expected; any other error (a locked or corrupt database) propagates and the hook fails closed."""
-        name = definition.split()[0]
-        if name in {row[1] for row in self.db.execute("PRAGMA table_info(sessions)")}:
-            return
         try:
-            self.db.execute(f"ALTER TABLE sessions ADD COLUMN {definition}")
-        except sqlite3.OperationalError as exc:
-            if "duplicate column" not in str(exc):
-                raise
+            self.db.execute("DELETE FROM sessions WHERE (updated < ? AND taint = '[]' AND flagged = 0 AND soft = 0 "
+                            "AND inflight = 0) OR updated < ?", (now - SESSION_TTL, now - FLAGGED_TTL))
+            self.db.execute("DELETE FROM observed WHERE session NOT IN (SELECT id FROM sessions)")
+            self.db.execute("DELETE FROM harness_dirs WHERE last < ?", (now - FLAGGED_TTL,))
+        except sqlite3.Error:
+            if self.schema_version <= SCHEMA_VERSION:
+                raise  # a locked or corrupt database: the hook fails closed
+            # Written by a newer release, which may have changed what this tidying reads: the old rows stay, the hook goes on.
 
     @contextmanager
     def _tx(self) -> Iterator[None]:

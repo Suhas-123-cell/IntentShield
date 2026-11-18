@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--out", type=Path, default=Path("artifacts/adaptive"))
     args = parser.parse_args(argv)
 
-    raw = json.loads((args.data / "response_all.json").read_text())
+    raw = json.loads((args.data / "response_all.json").read_text(encoding="utf-8"))
     caught = []
     for sv in raw["servers"].values():
         for inst in sv["malicious_instance"]:
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
         report[transform] = {"still_flagged": flagged / len(caught), "n": len(caught),
                              "ci95": wilson(flagged, len(caught))}
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "report.json").write_text(json.dumps(report, indent=2))
+    (args.out / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

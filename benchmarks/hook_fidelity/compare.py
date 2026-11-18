@@ -247,7 +247,7 @@ def arm_key(guard: Guard) -> str:
 
 # ---------------------------------------------------------------------------------------------------- replays
 def _index() -> list[dict]:
-    return json.loads((GUARDS_DIR / "replay" / "index.json").read_text())
+    return json.loads((GUARDS_DIR / "replay" / "index.json").read_text(encoding="utf-8"))
 
 
 def replay_path(guard: Guard, intent: str) -> Path:
@@ -271,9 +271,9 @@ def variant_path(out: Path, name: str, base: Path) -> Path:
     if path.exists():
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
-    record = json.loads(base.read_text())
+    record = json.loads(base.read_text(encoding="utf-8"))
     record["stderr_b64"] = ""
-    path.write_text(json.dumps(record))
+    path.write_text(json.dumps(record), encoding="utf-8")
     return path
 
 
@@ -293,7 +293,7 @@ def stub_ask_path(out: Path) -> Path:
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         body = stubhook.verdict("gemini", "ask", "stub ask (synthetic, Gemini shape)")
-        path.write_text(json.dumps({"exit_code": 0, "stdout_b64": base64.b64encode(body.encode()).decode(), "stderr_b64": ""}))
+        path.write_text(json.dumps({"exit_code": 0, "stdout_b64": base64.b64encode(body.encode()).decode(), "stderr_b64": ""}), encoding="utf-8")
     return path
 
 
@@ -306,7 +306,7 @@ def malformed_path(out: Path) -> Path:
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         body = '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDec'
-        path.write_text(json.dumps({"exit_code": 0, "stdout_b64": base64.b64encode(body.encode()).decode(), "stderr_b64": ""}))
+        path.write_text(json.dumps({"exit_code": 0, "stdout_b64": base64.b64encode(body.encode()).decode(), "stderr_b64": ""}), encoding="utf-8")
     return path
 
 
@@ -315,7 +315,7 @@ def replay_for(guard: Guard, cell: str, out: Path) -> Path:
         return replay_path(guard, "ASK")
     if cell == "exit2empty":
         base = replay_path(guard, "BLOCK")
-        if json.loads(base.read_text()).get("exit_code") != 2:
+        if json.loads(base.read_text(encoding="utf-8")).get("exit_code") != 2:
             raise LookupError(f"{guard.name}: the {guard.shape} deny capture is not an exit-2 reply")
         return variant_path(out, f"exit2empty-{guard.name}-{guard.shape}", base)
     return replay_path(guard, "BLOCK")  # deny, slow, slowB, dead (a dead hook never delivers it)
@@ -542,7 +542,7 @@ def trust_cache_path() -> Path:
 
 def trust_cached(case: dict) -> bool:
     try:
-        return codex_arm_key(case) in json.loads(trust_cache_path().read_text())
+        return codex_arm_key(case) in json.loads(trust_cache_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
 
@@ -617,18 +617,18 @@ wrap_hook.main()
 
 def write_program(root: Path, case: dict, cell_cfg: dict) -> Path:
     interp = me.DEAD_INTERPRETER if case["cell"] == "dead" else me.VENV_PYTHON
-    (root / "cell.json").write_text(json.dumps(cell_cfg))
+    (root / "cell.json").write_text(json.dumps(cell_cfg), encoding="utf-8")
     path = root / "hookbin" / "hook"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         WRAPPER.format(
             interp=interp, cell_json=str(root / "cell.json"), call_events=CALL_EVENTS, here=str(HERE), src=str(ROOT / "src")
-        )
+        ), encoding="utf-8"
     )
     path.chmod(0o755)
     if uses_shim(case["arm"]):   # the shim itself always has a live interpreter: a dead cell kills the GUARD it runs
         shim = path.parent / "wrap"
-        shim.write_text(WRAP_SCRIPT.format(interp=me.VENV_PYTHON, src=str(ROOT / "src"), log=str(root / "shim.jsonl")))
+        shim.write_text(WRAP_SCRIPT.format(interp=me.VENV_PYTHON, src=str(ROOT / "src"), log=str(root / "shim.jsonl")), encoding="utf-8")
         shim.chmod(0o755)
     return path
 
@@ -737,7 +737,7 @@ def build_run(
     work, home, shim = root / "work", root / "home", root / "shim"
     for d in (work, home, shim):
         d.mkdir(parents=True, exist_ok=True)
-    (shim / "touch").write_text(configs.shim_script(nonce, attestation))
+    (shim / "touch").write_text(configs.shim_script(nonce, attestation), encoding="utf-8")
     (shim / "touch").chmod(0o755)
     cfg = cell_config(case, root, out, nonce)
     program = write_program(root, case, cfg)
@@ -765,8 +765,8 @@ def build_run(
     )
     model = configs.STUB_MODELS[h]
     if h == "claude":
-        (root / "settings.json").write_text(json.dumps({"hooks": entries}))
-        (root / "mcp.json").write_text(json.dumps({"mcpServers": {}}))
+        (root / "settings.json").write_text(json.dumps({"hooks": entries}), encoding="utf-8")
+        (root / "mcp.json").write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
         argv = [
             *binary,
             "-p",
@@ -808,7 +808,7 @@ def build_run(
             f'[model_providers.stub]\nname = "stub"\nbase_url = "{stub_url}/v1"\nenv_key = "STUB_API_KEY"\n'
             'wire_api = "responses"\nrequest_max_retries = 0\nstream_max_retries = 0\n\n'
         ) + me.codex_toml(entries)
-        (codex_home / "config.toml").write_text(toml)
+        (codex_home / "config.toml").write_text(toml, encoding="utf-8")
         argv = [*binary, "exec", "--skip-git-repo-check", "--sandbox", "danger-full-access", "--json", prompt]
         env.update(CODEX_HOME=str(codex_home), STUB_API_KEY=configs.STUB_KEY)
     else:
@@ -825,8 +825,8 @@ def build_run(
             "privacy": {"usageStatisticsEnabled": False},
             "hooks": entries,
         }
-        (gemini / "settings.json").write_text(json.dumps(settings))
-        (gemini / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}))
+        (gemini / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        (gemini / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}), encoding="utf-8")
         argv = [*binary, "-p", prompt, "-m", model, "-o", "stream-json"]
         argv += ["--approval-mode", "yolo"] if b.gem == "yolo" else ["--allowed-tools=run_shell_command"]
         env.update(GOOGLE_GEMINI_BASE_URL=stub_url, GEMINI_API_KEY=configs.STUB_KEY, GEMINI_CLI_HOME=str(home))
@@ -891,7 +891,7 @@ def stub_script_for(case: dict, nonce: str, shim: Path) -> dict:
 
 
 def append(path: Path, row: dict) -> None:
-    with path.open("a") as handle:
+    with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row) + "\n")
 
 
@@ -926,7 +926,7 @@ def ensure_trust(case: dict, root: Path, binary: list[str], env: dict, work: Pat
     key = codex_arm_key(case)
     with _TRUST_FILE_LOCK:
         try:
-            cache = json.loads(trust_cache_path().read_text())
+            cache = json.loads(trust_cache_path().read_text(encoding="utf-8"))
         except (OSError, ValueError):
             cache = {}
     text = cache.get(key)
@@ -945,12 +945,12 @@ def ensure_trust(case: dict, root: Path, binary: list[str], env: dict, work: Pat
             raise RuntimeError(f"the vendor loader (hooks/list) returned no hook to trust for {key}")
         text = codex_trust.trust_toml(entries)
         with _TRUST_FILE_LOCK:
-            cache = json.loads(trust_cache_path().read_text()) if trust_cache_path().exists() else {}
+            cache = json.loads(trust_cache_path().read_text(encoding="utf-8")) if trust_cache_path().exists() else {}
             cache[key] = text
             trust_cache_path().parent.mkdir(parents=True, exist_ok=True)
-            trust_cache_path().write_text(json.dumps(cache))
+            trust_cache_path().write_text(json.dumps(cache), encoding="utf-8")
     config = Path(env["CODEX_HOME"]) / "config.toml"
-    config.write_text(config.read_text() + text)
+    config.write_text(config.read_text(encoding="utf-8") + text, encoding="utf-8")
 
 
 def classify(row_in: dict) -> tuple[str, str]:
@@ -1005,7 +1005,7 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
             argv = ["sandbox-exec", "-f", str(hf_run.LOOPBACK_PROFILE), *argv]
             cap = CAPS[b.harness]
             so, se = root / "stdout.txt", root / "stderr.txt"
-            with so.open("w") as fo, se.open("w") as fe:
+            with so.open("w", encoding="utf-8") as fo, se.open("w", encoding="utf-8") as fe:
                 proc = subprocess.Popen(
                     argv, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=fo, stderr=fe, start_new_session=True
                 )
@@ -1019,10 +1019,10 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
         wall = time.monotonic() - t0
         summary = hf_run.stub_summary(root / "requests.jsonl")
         marker = work / f"ran-{nonce}.txt"
-        attested = marker.exists() and attestation in marker.read_text()
+        attested = marker.exists() and attestation in marker.read_text(encoding="utf-8")
         hooks = _jsonl(root / "hooks.jsonl")
         call_events = [x for x in hooks if nonce in (x.get("input") or "")]
-        stderr_text = se.read_text(errors="replace")
+        stderr_text = se.read_text(errors="replace", encoding="utf-8")
         completed = _jsonl(root / "hooks3p.jsonl")
         outcome, why = classify(
             {
@@ -1099,7 +1099,7 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
 
 def _jsonl(path: Path) -> list[dict]:
     try:
-        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     except (OSError, ValueError):
         return []
 
@@ -1570,7 +1570,7 @@ def cmd_summarize(args: argparse.Namespace) -> int:
             },
             indent=1,
             default=str,
-        )
+        ), encoding="utf-8"
     )
     builds = list(BUILDS)
     lines = [
@@ -1677,7 +1677,7 @@ def cmd_summarize(args: argparse.Namespace) -> int:
     ]
     for r in sorted((r for r in rows if r["cell"] == "real"), key=lambda r: r["build"]):
         lines.append(f"| {r['build']} | {r['outcome']} | {(r.get('tool_result_text') or [''])[0][:240]} |")
-    (out / "table.md").write_text("\n".join(lines) + "\n")
+    (out / "table.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if (out / "runs-r8.jsonl").exists():   # round 8 rows live in their own file: the committed round 6 and 7 numbers above do not move
         import r8_summary
 

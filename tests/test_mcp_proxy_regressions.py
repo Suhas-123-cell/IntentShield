@@ -84,7 +84,7 @@ def events(shield: MCPProxyRuntime, kind: str) -> list[dict[str, Any]]:
 
 def test_a_server_ttl_cannot_hide_a_changed_listing(tmp_path: Path):
     script = tmp_path / "ttl_server.py"
-    script.write_text(TTL_SERVER)
+    script.write_text(TTL_SERVER, encoding="utf-8")
     config = MCPProxyConfig(
         upstream=MCPUpstreamConfig(server_id="ttl", transport="stdio", command=sys.executable, args=[str(script)]),
         database_path=str(tmp_path / "ttl.db"), allowed_tools=["ttl:*"], read_only_tools=["ttl:read_page"],

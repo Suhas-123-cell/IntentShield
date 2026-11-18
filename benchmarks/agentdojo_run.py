@@ -241,10 +241,10 @@ def main(argv: list[str] | None = None) -> None:
     }
     if isinstance(executor, GuardedToolsExecutor):
         (args.out / f"decisions-{tag}.jsonl").write_text(
-            "\n".join(json.dumps(d) for d in executor.decisions)
+            "\n".join(json.dumps(d) for d in executor.decisions), encoding="utf-8"
         )
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2))
+    (args.out / f"report-{tag}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

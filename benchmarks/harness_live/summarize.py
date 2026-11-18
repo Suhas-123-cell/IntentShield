@@ -68,10 +68,10 @@ def main() -> None:
     parser.add_argument("--runs", type=Path, default=ROOT / "artifacts/harness-live-haiku55/runs.jsonl")
     parser.add_argument("--out", type=Path, default=ROOT / "results/harness-live-haiku55/summary.json")
     args = parser.parse_args()
-    rows = [json.loads(line) for line in args.runs.read_text().splitlines()]
+    rows = [json.loads(line) for line in args.runs.read_text(encoding="utf-8").splitlines()]
     summary = summarize(rows)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(summary, indent=1))
+    args.out.write_text(json.dumps(summary, indent=1), encoding="utf-8")
     print(table(summary))
     print(f"\n{summary['runs']} runs, ${summary['total_cost_usd']:.4f}; isolation: {summary['isolation']}")
 

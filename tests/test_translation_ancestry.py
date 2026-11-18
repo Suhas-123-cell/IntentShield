@@ -30,7 +30,7 @@ def _fake_proc(root: Path, pid: int, ppid: int, comm: str, cmdline: list[str], t
     d = root / str(pid)
     d.mkdir(parents=True)
     # pid (comm) state ppid pgrp session tty_nr ...: a comm may hold spaces and parentheses, so only the LAST ")" ends it
-    (d / "stat").write_text(f"{pid} ({comm}) S {ppid} {pid} {pid} {tty_nr} 0 4194304 100 0 0 0\n")
+    (d / "stat").write_text(f"{pid} ({comm}) S {ppid} {pid} {pid} {tty_nr} 0 4194304 100 0 0 0\n", encoding="utf-8")
     (d / "cmdline").write_bytes(b"\0".join(a.encode() for a in cmdline) + (b"\0" if cmdline else b""))
 
 
@@ -51,7 +51,7 @@ def test_the_proc_reader_survives_a_comm_with_parentheses_and_a_zombie(tmp_path)
 def test_the_proc_reader_returns_none_for_a_missing_or_garbled_process(tmp_path):
     assert translation._read_proc(99, str(tmp_path)) is None
     (tmp_path / "98").mkdir()
-    (tmp_path / "98" / "stat").write_text("98 no parenthesis here")
+    (tmp_path / "98" / "stat").write_text("98 no parenthesis here", encoding="utf-8")
     assert translation._read_proc(98, str(tmp_path)) is None
 
 

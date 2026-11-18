@@ -66,15 +66,15 @@ def test_install_owns_only_its_own_handler(tmp_path: Path):
     mention = {"type": "command", "command": "echo checking intentshield-hook later"}
     stale = {"type": "command", "command": "/old/venv/bin/intentshield-hook claude", "onFailure": "block"}
     path.write_text(json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [mention]},
-                                                          {"matcher": "mcp__.*", "hooks": [audit, stale]}]}}))
+                                                          {"matcher": "mcp__.*", "hooks": [audit, stale]}]}}), encoding="utf-8")
     install.install("claude", "user", hook="/new/bin/intentshield-hook", home=home, translate=False)
-    pre = json.loads(path.read_text())["hooks"]["PreToolUse"]
+    pre = json.loads(path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
     commands = [h["command"] for g in pre for h in g["hooks"]]
     assert "/old/venv/bin/intentshield-hook claude" not in commands  # the stale path was repaired
     assert "/new/bin/intentshield-hook claude" in commands and audit["command"] in commands
     assert mention in pre[0]["hooks"]  # a command that merely mentions the name is not ours
     install.uninstall("claude", "user", home=home)
-    pre = json.loads(path.read_text())["hooks"]["PreToolUse"]
+    pre = json.loads(path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
     assert pre == [{"matcher": "Bash", "hooks": [mention]}, {"matcher": "mcp__.*", "hooks": [audit]}]
 
 
@@ -83,12 +83,12 @@ def test_codex_block_is_escaped_quoted_and_replaced(tmp_path: Path):
     import shlex
     windows = r"C:\\Users\\a\\Scripts\\intentshield-hook.exe"
     path = install.install("codex", "user", hook=windows, home=home, translate=False)
-    command = tomllib.loads(path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    command = tomllib.loads(path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert shlex.split(command) == [windows, "codex"]  # the TOML string and the shell quoting both round-trip
     install.install("codex", "user", hook="/opt/my tools/intentshield-hook", home=home, translate=False)
-    parsed = tomllib.loads(path.read_text())
+    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
     assert parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "'/opt/my tools/intentshield-hook' codex"
-    assert path.read_text().count(install._TOML_BEGIN) == 1
+    assert path.read_text(encoding="utf-8").count(install._TOML_BEGIN) == 1
     assert not list(path.parent.glob(".config.toml.*"))  # the atomic write left no temp file
 
 
@@ -99,19 +99,19 @@ def test_wrap_names_are_injective_and_the_threat_memory_is_shared_with_the_hooks
         f.parent.mkdir()
         f.write_text(json.dumps({"mcpServers": {"github": {"command": f"cmd-{f.parent.name}"},
                                                 "my server": {"command": "x"}, "my-server": {"command": "y"},
-                                                "my__server": {"command": "z"}}}))
+                                                "my__server": {"command": "z"}}}), encoding="utf-8")
     out = tmp_path / "proxies"
     assert len(install.wrap(a, out_dir=out, proxy="/p/intentshield-mcp")) == 4
     assert len(install.wrap(b, out_dir=out, proxy="/p/intentshield-mcp.exe")) == 4
     assert len(list(out.glob("*.json"))) == 8  # no file shared across names or across client files
     for f in (a, b):
-        for server in json.loads(f.read_text())["mcpServers"].values():
-            config = json.loads(Path(server["args"][2]).read_text())
+        for server in json.loads(f.read_text(encoding="utf-8"))["mcpServers"].values():
+            config = json.loads(Path(server["args"][2]).read_text(encoding="utf-8"))
             assert config["threat_memory_path"] == str(tmp_path / "threats.db")
             assert "__" not in config["upstreams"][0]["server_id"]
     assert install.wrap(b, out_dir=out, proxy="/p/intentshield-mcp.exe") == []  # .exe is still wrapped
     assert install.unwrap(a) == ["github", "my server", "my-server", "my__server"]
-    assert json.loads(a.read_text())["mcpServers"]["github"] == {"command": "cmd-a"}
+    assert json.loads(a.read_text(encoding="utf-8"))["mcpServers"]["github"] == {"command": "cmd-a"}
 
 
 def test_trusted_text_covers_only_the_users_own_sentence():
@@ -181,7 +181,8 @@ def test_hook_takes_the_operators_read_only_decision_from_the_proxy_catalog(tmp_
     catalog = tmp_path / "tools"
     catalog.mkdir()
     (catalog / "srv.json").write_text(json.dumps([{"name": "get_status", "description": "", "read_only": False},
-                                                   {"name": "purge_all", "description": "", "read_only": True}]))
+                                                   {"name": "purge_all", "description": "", "read_only": True}]),
+                                                       encoding="utf-8")
     g = HarnessGuard(tmp_path / "h.db", review="always", catalog=catalog)
     handle("claude", claude("UserPromptSubmit", prompt="check status"), g)
     # The server named a destructive tool get_status; the operator said it writes.
@@ -200,7 +201,8 @@ def test_wrapped_proxies_still_detect_cross_server_shadowing_through_the_catalog
 
     catalog = tmp_path / "tools"
     catalog.mkdir()
-    (catalog / "reports.json").write_text(json.dumps([{"name": "fetch_report", "description": "Fetches a report."}]))
+    (catalog / "reports.json").write_text(json.dumps([{"name": "fetch_report", "description": "Fetches a report."}]),
+        encoding="utf-8")
     upstream = Fixture({"read_page": "Works together with fetch_report.", "send_message": "Send a message."})
 
     async def exercise() -> None:
@@ -237,8 +239,8 @@ def test_install_with_a_hosted_judge_asks_for_the_key_once_and_the_hook_reads_it
                            ask=lambda prompt: asked.append(prompt) or "gsk_test_key")
     assert asked and "never printed" in asked[0]
     env = home / ".intentshield" / ".env"
-    assert env.read_text() == "GROQ_API_KEY=gsk_test_key\n" and (env.stat().st_mode & 0o777) == 0o600
-    command = json.loads(path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert env.read_text(encoding="utf-8") == "GROQ_API_KEY=gsk_test_key\n" and (env.stat().st_mode & 0o777) == 0o600
+    command = json.loads(path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     assert command == "intentshield-hook claude --judge groq"
     # A second install does not ask again; ollama never asks.
     install.install("claude", "user", hook="intentshield-hook", home=home, judge="groq", ask=lambda p: 1 / 0)

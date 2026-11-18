@@ -20,7 +20,7 @@ DEFAULT = Path(__file__).resolve().parents[2] / "results" / "hook-fidelity" / "m
 
 
 def load(out: Path) -> list[dict]:
-    return [json.loads(line) for line in (out / "runs.jsonl").read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in (out / "runs.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def native_gate(row: dict) -> bool:

@@ -17,8 +17,8 @@ def test_user_scope_servers_are_kept_when_the_cwd_has_a_project_entry(tmp_path: 
     cwd.mkdir()
     (home / ".claude.json").write_text(json.dumps({
         "mcpServers": {"usersrv": {"command": "x"}},
-        "projects": {str(cwd): {"mcpServers": {"localsrv": {"command": "y"}}, "allowedTools": []}}}))
-    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"reposrv": {"command": "z"}}}))
+        "projects": {str(cwd): {"mcpServers": {"localsrv": {"command": "y"}}, "allowedTools": []}}}), encoding="utf-8")
+    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"reposrv": {"command": "z"}}}), encoding="utf-8")
     found = {s.name: s.project for s in scan.discover(home, cwd)}
     assert found == {"usersrv": False, "localsrv": False, "reposrv": True}
 
@@ -28,7 +28,7 @@ def test_a_scan_that_started_nothing_does_not_exit_green(tmp_path: Path, capsys,
     home, cwd = tmp_path / "home", tmp_path / "repo"
     home.mkdir()
     cwd.mkdir()
-    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"reposrv": {"command": "z"}}}))
+    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"reposrv": {"command": "z"}}}), encoding="utf-8")
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.chdir(cwd)
     args = argparse.Namespace(files=None, no_connect=False, connect_project=False, format="text", timeout=1.0,
@@ -39,7 +39,7 @@ def test_a_scan_that_started_nothing_does_not_exit_green(tmp_path: Path, capsys,
 
 def _pin_run(monkeypatch, tmp_path: Path, tools_of: dict, *, update: bool = False, failing: tuple = ()) -> dict:
     cfg = tmp_path / "mcp.json"
-    cfg.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}, "b": {"command": "y"}}}))
+    cfg.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}, "b": {"command": "y"}}}), encoding="utf-8")
 
     async def fake_list(server, timeout):
         if server.name in failing:
@@ -52,7 +52,7 @@ def _pin_run(monkeypatch, tmp_path: Path, tools_of: dict, *, update: bool = Fals
     args = argparse.Namespace(files=[cfg], no_connect=False, connect_project=False, format="json", timeout=5.0,
                               pins=tmp_path / "pins.json", no_pins=False, update_pins=update)
     rc = scan.run(args)
-    return {"rc": rc, "pins": json.loads((tmp_path / "pins.json").read_text())}
+    return {"rc": rc, "pins": json.loads((tmp_path / "pins.json").read_text(encoding="utf-8"))}
 
 
 def test_update_pins_keeps_the_baseline_of_a_server_that_did_not_start(tmp_path: Path, monkeypatch):
@@ -82,7 +82,7 @@ def test_a_changed_annotation_is_a_rug_pull_and_an_old_text_pin_is_moved_not_rep
     # a pin an earlier version wrote (the text alone) is accepted once and upgraded, not reported
     pins = tmp_path / "pins.json"
     old = {k: hashlib.sha256(tool_text("Does a thing.", {"type": "object"}, None).encode()).hexdigest()
-           for k in json.loads(pins.read_text())}
-    pins.write_text(json.dumps(old))
+           for k in json.loads(pins.read_text(encoding="utf-8"))}
+    pins.write_text(json.dumps(old), encoding="utf-8")
     result = _pin_run(monkeypatch, tmp_path, {"a": [("t", ro)], "b": []})
     assert result["rc"] == 0 and all(v.startswith("v2:") for v in result["pins"].values())

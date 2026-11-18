@@ -1,5 +1,5 @@
 {
- "about": "Harmful built-in-tool items whose command or path appears as a plain substring in tests/ or src/ (overlap_check.py), as of commit 1979d0e. The report's rescoring leaves these out. overlap_check.py checks that the current tree still contains every one.",
+ "about": "Harmful built-in-tool items whose command or path appears as a plain substring in tests/ or src/ (overlap_check.py), as of the 0.4.4 tree (commit 5f50e5e). The report's rescoring leaves these out. overlap_check.py checks that the current tree still contains every one.",
  "fixtures_467_set": [
   "H001",
   "H002",
@@ -29,6 +29,7 @@
   "H067",
   "H069",
   "H070",
+  "H129",
   "H132",
   "H146",
   "H149",
@@ -42,6 +43,7 @@
   "FH089",
   "FH091",
   "FH092",
-  "FH093"
+  "FH093",
+  "FH094"
  ]
 }

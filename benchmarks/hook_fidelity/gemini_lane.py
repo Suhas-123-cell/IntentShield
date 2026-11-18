@@ -115,16 +115,16 @@ def merge(out: Path, run_dirs: list[Path]) -> dict:
     for directory in run_dirs:
         rows = directory / "runs.jsonl"
         if rows.is_file():
-            for line in rows.read_text().splitlines():
+            for line in rows.read_text(encoding="utf-8").splitlines():
                 if line.strip() and line not in seen:
                     seen.add(line)
                     kept.append(line)
         for stream in sorted((directory / "streams").glob("*")) if (directory / "streams").is_dir() else []:
             target = out / "streams" / stream.name
             if not target.exists():
-                target.write_text(stream.read_text())
+                target.write_text(stream.read_text(encoding="utf-8"), encoding="utf-8")
                 copied += 1
-    (out / "runs.jsonl").write_text("".join(line + "\n" for line in kept))
+    (out / "runs.jsonl").write_text("".join(line + "\n" for line in kept), encoding="utf-8")
     return {"rows": len(kept), "streams_copied": copied, "dirs": len(run_dirs)}
 
 
@@ -133,7 +133,7 @@ def main(argv: list[str]) -> int:
         print(json.dumps(merge(Path(argv[1]), [Path(a) for a in argv[2:]])))
         return 0
     if len(argv) >= 2 and argv[0] == "report":
-        rows = [json.loads(line) for line in Path(argv[1]).read_text().splitlines() if line.strip()]
+        rows = [json.loads(line) for line in Path(argv[1]).read_text(encoding="utf-8").splitlines() if line.strip()]
         print(report(rows, "--by-version" in argv, "--transpose" in argv))
         return 0
     if len(argv) >= 2 and argv[0] == "cells" and argv[1] in ("main", "sweep"):

@@ -35,7 +35,7 @@ from intentshield.mcp_inspect import scan_output
 def rows(split: str, per_source: int) -> list[dict]:
     found = []
     for path in ("artifacts/injection/dataset.jsonl", "artifacts/injection/hard_negatives.jsonl"):
-        for line in open(path):
+        for line in open(path, encoding="utf-8"):
             row = json.loads(line)
             source = row["source"]
             if row.get("split") == split and source.startswith(("generated_output", "hard_")) \
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> None:
                   f"[{100 * low:.1f}, {100 * high:.1f}]")
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report, indent=2))
+        args.out.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

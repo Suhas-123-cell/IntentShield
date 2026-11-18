@@ -20,8 +20,8 @@ def get(i):
         except Exception as e:
             err=str(e)
             if "404" in err: open(p,"wb").write(b"");return
-    open(p+".err","w").write("fail")
+    open(p+".err","w", encoding="utf-8").write("fail")
 for n in sys.argv[1:]:
-    d=json.load(open(f"{D}/E_{n}.json"))
+    d=json.load(open(f"{D}/E_{n}.json", encoding="utf-8"))
     with ThreadPoolExecutor(12) as ex: list(ex.map(get,d["items"]))
     print("fetched",n,len(d["items"]),flush=True)

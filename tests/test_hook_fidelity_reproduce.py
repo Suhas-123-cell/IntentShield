@@ -60,7 +60,7 @@ def test_running_a_guard_without_its_clone_names_the_fetch_script(tmp_path):
 
 # --------------------------------------------------------------------------------------------------------------- fetch plan
 def test_fetch_plan_covers_every_pinned_guard(tmp_path):
-    corpus = json.loads(fc.CORPUS.read_text())["guards"]
+    corpus = json.loads(fc.CORPUS.read_text(encoding="utf-8"))["guards"]
     items = fc.plan(scratch=tmp_path)
     assert len(items) == len(corpus) == 26
     assert [i["id"] for i in items] == [g["id"] for g in corpus]
@@ -102,6 +102,6 @@ def test_generated_scripts_use_the_running_interpreter_when_the_repo_has_no_venv
     assert me.pick_python(tmp_path) == sys.executable
     venv_python = tmp_path / ".venv" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
-    venv_python.write_text("")
+    venv_python.write_text("", encoding="utf-8")
     assert me.pick_python(tmp_path) == str(venv_python)
     assert me.VENV_PYTHON == me.pick_python(ROOT)

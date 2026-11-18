@@ -61,7 +61,7 @@ def version_key(version: str) -> tuple[int, ...]:
 
 
 def load(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def cells(rows: list[dict]) -> tuple[dict, list[dict]]:
@@ -147,7 +147,7 @@ def main(argv: list[str]) -> int:
     cs, invalid = cells(rows)
     ledger = load(out / "ledger.jsonl") if (out / "ledger.jsonl").exists() else []
     (out / "cells.json").write_text(json.dumps(sorted(cs.values(), key=lambda c: (
-        c["harness"], version_key(c["version"]), c["variant"], c["surface"])), indent=1))
+        c["harness"], version_key(c["version"]), c["variant"], c["surface"])), indent=1), encoding="utf-8")
     md = ["# Coverage re-run: which MCP surfaces reach a hook, per harness build (no model)", "",
           "Every cell is k/n with a Wilson 95% interval in brackets (percent, computed here from k and n). n counts valid "
           "launches of one stub-model run; the stub model is deterministic, so n=3 shows run-to-run stability of the "
@@ -220,7 +220,7 @@ def main(argv: list[str]) -> int:
     md += ["## Launch ledger", "",
            f"Launches recorded in this directory's ledger: {launched} (rows: {len(rows)}). "
            "Preliminary and debug launches that are not rows here are listed in `launches.json`.", ""]
-    (out / "summary.md").write_text("\n".join(md))
+    (out / "summary.md").write_text("\n".join(md), encoding="utf-8")
     print("\n".join(md))
     return 0
 

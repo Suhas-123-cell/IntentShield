@@ -73,9 +73,9 @@ BENIGN_CATEGORIES = ["ordinary-dev", "near-miss"]
 
 
 def load_fixtures() -> list[dict]:
-    text = (FRESH / "fixtures.jsonl").read_text()
+    text = (FRESH / "fixtures.jsonl").read_text(encoding="utf-8")
     digest = hashlib.sha256(text.encode()).hexdigest()
-    prov = (FRESH / "provenance.md").read_text()
+    prov = (FRESH / "provenance.md").read_text(encoding="utf-8")
     if f"`{digest}`" not in prov:
         raise SystemExit("fresh fixtures.jsonl does not match provenance.md; refusing to score")
     return [json.loads(line) for line in text.splitlines()]
@@ -258,13 +258,13 @@ def main(argv: list[str] | None = None) -> int:
                              "every other guard keeps its committed decisions")
     args = parser.parse_args(argv)
     rows = load_fixtures()
-    decisions = [json.loads(line) for line in (FRESH / "decisions.jsonl").read_text().splitlines()]
+    decisions = [json.loads(line) for line in (FRESH / "decisions.jsonl").read_text(encoding="utf-8").splitlines()]
     if args.current_rules:
         now = decide_intentshield(rows, "intentshield")
         for decision in now:
             decision["guard"] = IS
         decisions = [d for d in decisions if d["guard"] != IS] + now
-    delivery = json.loads((ROOT / "results/hook-fidelity/detect/r8fix/delivery.json").read_text())
+    delivery = json.loads((ROOT / "results/hook-fidelity/detect/r8fix/delivery.json").read_text(encoding="utf-8"))
     label = GUARD_LABEL[IS]
     if args.current_rules:
         GUARD_LABEL[IS] = "IntentShield, the rules in this checkout (not the study's)"
@@ -273,8 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         GUARD_LABEL[IS] = label
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "table.md").write_text("\n".join(lines) + "\n")
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
+    (args.out / "table.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (args.out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote table.md and summary.json to {args.out}")
     return 0
 

@@ -362,23 +362,23 @@ def public_pool() -> list[tuple[str, str, str, str]]:
             continue
         raw: list[tuple[str, str, str]] = []
         for f in sorted((repo / ".github" / "workflows").glob("*.y*ml")) if (repo / ".github" / "workflows").is_dir() else []:
-            for line in f.read_text(errors="replace").splitlines():
+            for line in f.read_text(errors="replace", encoding="utf-8").splitlines():
                 m = re.match(r"\s*-?\s*run:\s*(\S.*)$", line)
                 if m and not m.group(1).startswith(("|", ">")):
                     raw.append(("workflow", str(f.relative_to(repo)), m.group(1).strip()))
         for f in [repo / "Makefile", repo / "makefile"]:
             if f.exists():
-                raw += [("makefile", f.name, ln.strip().lstrip("@-")) for ln in f.read_text(errors="replace").splitlines() if ln.startswith("\t")]
+                raw += [("makefile", f.name, ln.strip().lstrip("@-")) for ln in f.read_text(errors="replace", encoding="utf-8").splitlines() if ln.startswith("\t")]
         pj = repo / "package.json"
         if pj.exists():
             try:
-                raw += [("package.json", f"package.json#{k}", v) for k, v in json.loads(pj.read_text()).get("scripts", {}).items()]
+                raw += [("package.json", f"package.json#{k}", v) for k, v in json.loads(pj.read_text(encoding="utf-8")).get("scripts", {}).items()]
             except ValueError:
                 pass
         if repo_dir.name not in GUARD_DOC_REPOS:
             for f in [repo / "README.md", repo / "CONTRIBUTING.md"]:
                 if f.exists():
-                    for blk in re.findall(r"```(?:bash|sh|shell|console)\n(.*?)```", f.read_text(errors="replace"), re.S):
+                    for blk in re.findall(r"```(?:bash|sh|shell|console)\n(.*?)```", f.read_text(errors="replace", encoding="utf-8"), re.S):
                         for line in blk.splitlines():
                             line = line.strip()
                             line = line[2:] if line.startswith("$ ") else line
@@ -411,7 +411,7 @@ def pick_public(pool, n=60, per_repo=5):
 
 # -------------------------------------------------------------------------------------------------------------- the items
 def agentdojo_rows() -> dict[tuple[str, str], str]:
-    rows = [json.loads(line) for line in (ROOT / "results/injection/agentdojo-strings.jsonl").read_text().splitlines()]
+    rows = [json.loads(line) for line in (ROOT / "results/injection/agentdojo-strings.jsonl").read_text(encoding="utf-8").splitlines()]
     return {(r["source"], r["group"]): r["text"] for r in rows if r["label"] == "instruction"}
 
 
@@ -453,7 +453,7 @@ def items() -> list[dict]:
                             tuned=fam == TUNED_FAMILY, group=goal, ref=goal,
                             note="injection text from the committed AgentDojo strings with e-mail addresses and URLs replaced by canaries"))
     for case_id, server, tool, args in MSB_CASES:
-        goal = next(json.loads(line) for line in (ROOT / "results/msb/cases.jsonl").read_text().splitlines()
+        goal = next(json.loads(line) for line in (ROOT / "results/msb/cases.jsonl").read_text(encoding="utf-8").splitlines()
                     if json.loads(line)["id"] == case_id)["implementation"]
         for wrap in MSB_WRAPPERS:
             n += 1
@@ -536,7 +536,7 @@ def _haystack() -> str:
             for f in files:
                 if f.name in ("fixtures.jsonl", "detect_fixtures.py") or "hook-fidelity" in str(f) or "detect" in f.name or f.stat().st_size > 5_000_000:
                     continue
-                parts.append(f.read_text(errors="replace"))
+                parts.append(f.read_text(errors="replace", encoding="utf-8"))
         _HAY.append("\n".join(parts))
     return _HAY[0]
 
@@ -589,7 +589,7 @@ def write_all(out: Path) -> None:
     rows = build_rows()
     out.mkdir(parents=True, exist_ok=True)
     text = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for r in rows)
-    (out / "fixtures.jsonl").write_text(text)
+    (out / "fixtures.jsonl").write_text(text, encoding="utf-8")
     digest = hashlib.sha256(text.encode()).hexdigest()
     prim = [r for r in rows if r["primary"]]
     from collections import Counter
@@ -632,14 +632,14 @@ def write_all(out: Path) -> None:
               "and are not independent (`group`). InjecAgent is not committed (the runner needs an external data path) and MCPTox poisons "
               "tool descriptions, which a PreToolUse hook never sees: neither is used.", "",
               "## Corpus clone pins used for public commands", ""] + [f"* {k}: `{v}`" for k, v in pins.items()]
-    (out / "provenance.md").write_text("\n".join(lines) + "\n")
+    (out / "provenance.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"{len(rows)} rows, sha256 {digest}")
 
 
 def verify(out: Path) -> int:
-    text = (out / "fixtures.jsonl").read_text()
+    text = (out / "fixtures.jsonl").read_text(encoding="utf-8")
     digest = hashlib.sha256(text.encode()).hexdigest()
-    ok = f"`{digest}`" in (out / "provenance.md").read_text()
+    ok = f"`{digest}`" in (out / "provenance.md").read_text(encoding="utf-8")
     print("fixtures.jsonl matches provenance.md" if ok else "MISMATCH: fixtures.jsonl changed after provenance.md was written")
     return 0 if ok else 1
 

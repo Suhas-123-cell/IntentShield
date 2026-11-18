@@ -96,7 +96,7 @@ def endpoint_is_local(url: str) -> bool:
 
 def ledger_count(out: Path) -> int:
     path = out / "launches.jsonl"
-    return sum(1 for line in path.read_text().splitlines() if line.strip()) if path.exists() else 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip()) if path.exists() else 0
 
 
 def check_budget(todo: int, ledger: int, go: str, cap: int = CAP) -> str:
@@ -179,17 +179,17 @@ def run_is(case: dict, out: Path, order: int) -> dict:
         cfg_files = [root / "settings.json", *(root / "home").rglob("config.toml")]
         for path in cfg_files:   # the model name of Codex's config, written by the held-out builder for the stub slug
             if path.exists():
-                path.write_text(path.read_text().replace('model = "stub-model"', f'model = "{MODEL}"'))
+                path.write_text(path.read_text(encoding="utf-8").replace('model = "stub-model"', f'model = "{MODEL}"'), encoding="utf-8")
         if case["harness"] == "claude":
             env.update(ANTHROPIC_SMALL_FAST_MODEL=MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL=MODEL)
         if case["harness"] == "codex" and "workspace-write" in argv:
             argv = ["danger-full-access" if a == "workspace-write" else a for a in argv]
         argv = ["sandbox-exec", "-f", str(PROFILE), *argv]
         so, se = root / "stdout.txt", root / "stderr.txt"
-        with (out / "launches.jsonl").open("a") as ledger:
+        with (out / "launches.jsonl").open("a", encoding="utf-8") as ledger:
             ledger.write(json.dumps({"run_id": rid, "key": f"is|{case['harness']}|{case['version']}|{case['cell']}|{case['rep']}",
                                      "attempt": 0, "ts": started}) + "\n")
-        with so.open("w") as fo, se.open("w") as fe:
+        with so.open("w", encoding="utf-8") as fo, se.open("w", encoding="utf-8") as fe:
             proc = subprocess.Popen(argv, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=fo, stderr=fe, start_new_session=True)
             capped, _, _ = hf_run.watch(proc, CAP_S, [so, se, root / "hooks.jsonl"])
             try:
@@ -198,15 +198,15 @@ def run_is(case: dict, out: Path, order: int) -> dict:
                 pass
         wall = time.monotonic() - t0
         marker = work / f"ran-{nonce}.txt"
-        attested = marker.exists() and attestation in marker.read_text()
+        attested = marker.exists() and attestation in marker.read_text(encoding="utf-8")
         hooks: list[dict] = []
         try:
-            hooks = [json.loads(line) for line in (root / "hooks.jsonl").read_text().splitlines() if line.strip()]
+            hooks = [json.loads(line) for line in (root / "hooks.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
         except (OSError, ValueError):
             pass
         calls = [h for h in hooks if nonce in (h.get("input") or "") and h.get("event") in ("PreToolUse", "BeforeTool")]
-        stream = so.read_text(errors="replace")
-        errors = se.read_text(errors="replace")
+        stream = so.read_text(errors="replace", encoding="utf-8")
+        errors = se.read_text(errors="replace", encoding="utf-8")
         if marker.exists() and not attested:
             outcome, why = "INVALID", "marker without the shim attestation"
         elif attested:
@@ -226,7 +226,7 @@ def run_is(case: dict, out: Path, order: int) -> dict:
             shutil.copytree(root, out / "runs" / rid, dirs_exist_ok=True,
                             ignore=shutil.ignore_patterns("node_modules", ".npm", ".cache"))
         (out / "streams").mkdir(exist_ok=True)
-        (out / "streams" / f"{rid}.stdout.txt").write_text(re.sub(r"/[^\s\"']*/(?:hf|r8m|mit)-[^\s\"'/]*", "<run>", stream))
+        (out / "streams" / f"{rid}.stdout.txt").write_text(re.sub(r"/[^\s\"']*/(?:hf|r8m|mit)-[^\s\"'/]*", "<run>", stream), encoding="utf-8")
     finally:
         shutil.rmtree(root, ignore_errors=True)
     return row
@@ -234,7 +234,7 @@ def run_is(case: dict, out: Path, order: int) -> dict:
 
 # ---------------------------------------------------------------------------------------------------------------- driver
 def append(path: Path, row: dict) -> None:
-    with path.open("a") as handle:
+    with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row) + "\n")
 
 
@@ -248,7 +248,7 @@ def select(todo: list[dict], where: str) -> list[dict]:
 def cmd_plan(args: argparse.Namespace) -> int:
     cases = plan(args.n, args.n_is, args.n_control)
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "plan.json").write_text(json.dumps(cases, indent=1))
+    (args.out / "plan.json").write_text(json.dumps(cases, indent=1), encoding="utf-8")
     counts = collections.Counter((c["arm_kind"], c["harness"], c["cell"]) for c in cases)
     for key, n in sorted(counts.items()):
         print(" ", *key, n)
@@ -257,7 +257,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_ids(args: argparse.Namespace) -> int:
-    cases = json.loads((args.out / "plan.json").read_text())
+    cases = json.loads((args.out / "plan.json").read_text(encoding="utf-8"))
     by_key = {f"{c['arm_kind']}|{c['harness']}|{c['cell']}|{c['rep']}": case_id(c) for c in cases}
     print(",".join(by_key[k] for k in args.keys))
     return 0
@@ -265,9 +265,9 @@ def cmd_ids(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     out = args.out
-    cases = json.loads((out / "plan.json").read_text())
+    cases = json.loads((out / "plan.json").read_text(encoding="utf-8"))
     rows_path = out / "runs.jsonl"
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()] if rows_path.exists() else []
+    rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines() if line.strip()] if rows_path.exists() else []
     done = {r["run_id"] for r in rows}
     todo = [c for c in select(cases, args.where) if case_id(c) not in done]
     if args.ids:
@@ -331,7 +331,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 # ------------------------------------------------------------------------------------------------------------- summarize
 def _jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()] if path.exists() else []
 
 
 def stub_baseline(case_key: tuple[str, str, str], root: Path = RESULTS) -> dict[str, int]:
@@ -417,8 +417,8 @@ def render(summary: dict) -> str:
 def cmd_summarize(args: argparse.Namespace) -> int:
     rows = _jsonl(args.out / "runs.jsonl")
     summary = summarize(rows)
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=1))
-    (args.out / "table.md").write_text(render(summary))
+    (args.out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
+    (args.out / "table.md").write_text(render(summary), encoding="utf-8")
     print(render(summary))
     return 0
 

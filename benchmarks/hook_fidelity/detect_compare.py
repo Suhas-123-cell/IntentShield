@@ -191,7 +191,7 @@ def specs(strict: bool = False) -> list[Guard]:
     repo = CLONES / "cc-safe-setup" / "repo"
     hooks_file = repo / "hooks" / "hooks.json"
     if hooks_file.exists():
-        hooks = json.loads(hooks_file.read_text())["hooks"]["PreToolUse"]
+        hooks = json.loads(hooks_file.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
     elif strict:
         raise FileNotFoundError(f"{hooks_file} is missing: the guard corpus clones are needed to run a guard "
                                 "(benchmarks/hook_fidelity/fetch_corpus.py clones the pinned commits into HF_SCRATCH)")
@@ -302,9 +302,9 @@ POST_HOC_NOT_HELD_OUT = {"agentdojo:agentdojo_ignore_previous": "the override ru
 
 def load_fixtures(path: Path | None = None, corrected: bool = True) -> list[dict]:
     path = path or DETECT / "fixtures.jsonl"
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     digest = hashlib.sha256(text.encode()).hexdigest()
-    prov = (path.parent / "provenance.md").read_text()
+    prov = (path.parent / "provenance.md").read_text(encoding="utf-8")
     if f"`{digest}`" not in prov:
         raise SystemExit("fixtures.jsonl does not match the hash in provenance.md: it was changed after it was declared; refusing to score")
     rows = [json.loads(line) for line in text.splitlines()]
@@ -326,7 +326,7 @@ def run_entry(entry: Entry, row: dict, scratch_root: Path, tag: str) -> dict:
         shutil.rmtree(run_scratch)
     (run_scratch / "work").mkdir(parents=True)
     (run_scratch / "home" / ".claude").mkdir(parents=True)
-    (run_scratch / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n")
+    (run_scratch / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n", encoding="utf-8")
     stdin = json.dumps(_swap_cwd(row["payload"], run_scratch / "work")).encode()
     path_dirs = [str(NODE_DIR / "bin")] if entry.node else []
     env = gc.clean_env(run_scratch, entry.env, path_dirs)
@@ -422,7 +422,7 @@ def decide_intentshield(rows: list[dict], variant: str) -> list[dict]:
         with tempfile.TemporaryDirectory(prefix="hf-detect-") as tmp:
             tmp_p = Path(tmp)
             (tmp_p / "work").mkdir()
-            (tmp_p / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n")
+            (tmp_p / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n", encoding="utf-8")
             guard = HarnessGuard(tmp_p / "hooks.db", threats=tmp_p / "threats.db", builtin_tools=cfg["builtin_tools"],
                                  review=cfg.get("review", "tainted"))
             guard.translation = _PassThrough()
@@ -462,7 +462,7 @@ def derive_delivery(compare_runs: Path | None = None, interactive_runs: Path | N
     them, no wrapper, no translation). The ``ask`` cell leaves out Codex's IS-OFF arm, which maps an ask to a deny by hand."""
     compare_runs = compare_runs or ROOT / "results/hook-fidelity/compare/runs.jsonl"
     interactive_runs = interactive_runs or ROOT / "results/hook-fidelity/interactive/runs.jsonl"
-    rows = [json.loads(line) for line in compare_runs.read_text().splitlines()]
+    rows = [json.loads(line) for line in compare_runs.read_text(encoding="utf-8").splitlines()]
     matrix: dict[str, dict[str, dict]] = {}
     for build in BUILDS:
         if build.endswith("interactive"):
@@ -477,7 +477,7 @@ def derive_delivery(compare_runs: Path | None = None, interactive_runs: Path | N
             matrix[build][cls] = _cell(counts, sorted({r["arm"] for r in sel}), "compare/runs.jsonl")
         matrix[build]["allow"] = {"outcome": "RAN", "counts": {}, "arms": [], "source": "an allow lets the call run"}
     # interactive Claude Code 2.1.316 (the scripted pty cells): deny blocks, ask prompts, an allow runs; no failure cell was run
-    irows = [json.loads(line) for line in interactive_runs.read_text().splitlines()]
+    irows = [json.loads(line) for line in interactive_runs.read_text(encoding="utf-8").splitlines()]
     def _delivered(r: dict) -> bool:  # an ask counts only where the hook's ask went out as an ask (translation off, or the detector read interactive)
         det = r.get("detector") or [{}]
         return r.get("translation") == "off" or det[0].get("probe_mode") == "interactive"
@@ -881,15 +881,15 @@ def render_table(summary: dict, rows: list[dict], matrix: dict, deciders: list[D
 
 def cmd_report(args) -> int:
     rows = load_fixtures()
-    decisions = [json.loads(line) for line in Path(args.decisions).read_text().splitlines()]
+    decisions = [json.loads(line) for line in Path(args.decisions).read_text(encoding="utf-8").splitlines()]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     matrix = derive_delivery()
-    (out / "delivery.json").write_text(json.dumps(matrix, indent=1, sort_keys=True) + "\n")
+    (out / "delivery.json").write_text(json.dumps(matrix, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     summary = summarize(rows, decisions, matrix)
     deciders = build_deciders(rows, decisions)
-    (out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
-    (out / "table.md").write_text(render_table(summary, rows, matrix, deciders))
+    (out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    (out / "table.md").write_text(render_table(summary, rows, matrix, deciders), encoding="utf-8")
     print(f"wrote summary.json, table.md and delivery.json to {out}")
     return 0
 
@@ -919,7 +919,7 @@ def cmd_decide(args) -> int:
         results += res
         print(f"{v}: {len(res)} rows in {time.monotonic() - t0:.0f}s {dict(Counter(r['class'] for r in res))}", flush=True)
     mode = "a" if wanted and out.exists() else "w"
-    with out.open(mode) as fh:
+    with out.open(mode, encoding="utf-8") as fh:
         for r in results:
             fh.write(json.dumps(r, sort_keys=True) + "\n")
     return 0
@@ -927,7 +927,7 @@ def cmd_decide(args) -> int:
 
 def cmd_matrix(args) -> int:
     m = derive_delivery()
-    Path(args.out).write_text(json.dumps(m, indent=1, sort_keys=True) + "\n")
+    Path(args.out).write_text(json.dumps(m, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     for build, cells in m.items():
         print(build, {c: v["outcome"] for c, v in cells.items()})
     return 0
@@ -964,10 +964,10 @@ def breakdown(rows: list[dict], decisions: list[dict]) -> dict:
 
 def cmd_breakdown(args) -> int:
     rows = load_fixtures()
-    decisions = [json.loads(line) for line in Path(args.decisions).read_text().splitlines()]
+    decisions = [json.loads(line) for line in Path(args.decisions).read_text(encoding="utf-8").splitlines()]
     out = Path(args.out)
     result = breakdown(rows, decisions)
-    (out / "breakdown.json").write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
+    (out / "breakdown.json").write_text(json.dumps(result, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     lines = ["# Breakdown of the corrected held-out set (derived by `detect_compare.py breakdown`)", "",
              f"Primary rendering mix (each item once, round-robin over the shapes that fit): harmful {result['primary_mix']['harmful']}, benign {result['primary_mix']['benign']}.", "",
              "## Benign false-deny and false-ask, near-miss items apart from ordinary development items (claimed view)", "",
@@ -982,7 +982,7 @@ def cmd_breakdown(args) -> int:
             h, b = e.get("harmful"), e.get("benign")
             if h and b:
                 lines.append(f"| {gid} | {harness} | {h['n']} | {h['allow']} | {h['ask']} | {h['deny']} | {b['n']} | {b['allow']} | {b['ask']} | {b['deny']} |")
-    (out / "breakdown.md").write_text("\n".join(lines) + "\n")
+    (out / "breakdown.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote breakdown.json and breakdown.md to {out}")
     return 0
 

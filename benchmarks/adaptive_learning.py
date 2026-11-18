@@ -373,7 +373,7 @@ def main(argv: list[str] | None = None) -> None:
     finally:
         shutil.rmtree(work, ignore_errors=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n")
+    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
     def cell(r: dict[str, Any]) -> str:
         return f"{r['rate']:.2f} [{r['ci95'][0]:.2f}, {r['ci95'][1]:.2f}] n={r['n']}"

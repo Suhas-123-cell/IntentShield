@@ -60,7 +60,7 @@ def replay_reply(path: str) -> tuple[str, str, int, float]:
     """(stdout, stderr, exit code, 0.0) of a captured guard reply. Bytes are decoded as UTF-8 with replacement (the captured
     guards write text); a capture that timed out or has no exit code is refused rather than guessed."""
     import base64
-    record = json.loads(open(path).read())
+    record = json.loads(open(path, encoding="utf-8").read())
     code = record.get("exit_code")
     if not isinstance(code, int):
         raise ValueError(f"replay file {path} has no integer exit code (a timed-out capture cannot be replayed)")
@@ -99,7 +99,7 @@ def planned(harness: str, reply: str, delay: float = 30.0, replay_file: str = ""
 
 def _append(path: str, line: str) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "a") as handle:
+    with open(path, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")
         handle.flush()
         os.fsync(handle.fileno())

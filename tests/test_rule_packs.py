@@ -32,7 +32,7 @@ def pack(**extra) -> dict:
 
 def write(path: Path, data: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     return path
 
 
@@ -158,7 +158,7 @@ def test_a_tampered_pack_is_refused_and_the_last_good_one_stays_loaded(tmp_path)
     assert "does not verify" in packs.status()["errors"]["test.json"]
     restarted = PackSet(directory, TRUST)  # a restart starts from the last good copy
     assert ThreatMemory(tmp_path / "t.db", packs=restarted).check_text(WIRE) == ["pack:quarterly_wire_redirect"]
-    (directory / "test.json").write_text("{not json")
+    (directory / "test.json").write_text("{not json", encoding="utf-8")
     assert memory.check_text(WIRE) == ["pack:quarterly_wire_redirect"]
     assert "JSONDecodeError" in packs.status()["errors"]["test.json"]
 
@@ -280,7 +280,7 @@ def test_a_hostile_file_is_reported_and_never_raises_out_of_load_or_refresh(tmp_
     with pytest.raises(PackError, match="does not verify"):
         verify(odd, TRUST)
     write(directory / "odd.json", odd)
-    (directory / "deep.json").write_text("[" * 200_000)  # RecursionError in json.loads
+    (directory / "deep.json").write_text("[" * 200_000, encoding="utf-8")  # RecursionError in json.loads
     assert memory.check_text(WIRE) == ["pack:quarterly_wire_redirect"]
     assert memory.check_values({"a@b.invalid"}) is None
     errors = packs.status()["errors"]

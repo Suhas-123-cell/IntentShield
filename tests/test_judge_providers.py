@@ -84,7 +84,7 @@ def test_install_stores_a_custom_judges_key_and_url(tmp_path: Path, monkeypatch)
         install.ensure_judge_key("custom:m", tmp_path, api_key="c-key", judge_url="http://llm.example/v1")
     assert not env.exists()
     install.ensure_judge_key("custom:m", tmp_path, api_key="c-key", judge_url="https://llm.example/v1/chat/completions")
-    lines = env.read_text().splitlines()
+    lines = env.read_text(encoding="utf-8").splitlines()
     assert "INTENTSHIELD_JUDGE_URL=https://llm.example/v1/chat/completions" in lines
     assert "INTENTSHIELD_JUDGE_API_KEY=c-key" in lines
     assert env.stat().st_mode & 0o777 == 0o600

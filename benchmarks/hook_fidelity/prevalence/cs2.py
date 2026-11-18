@@ -60,13 +60,13 @@ def enum(name,q):
     seen={};
     for i in acc: seen[(i["repo"],i["path"])]=i
     res={"name":name,"query":q,"utc_start":t0,"utc_end":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),"total_count_unsharded":total,"incomplete_unsharded":top.get("incomplete_results"),"n_items_unique":len(seen),"n_repos":len({k[0] for k in seen}),"requests":NREQ-n0,"log":log,"items":list(seen.values())}
-    json.dump(res,open(f"{D}/E_{name}.json","w"))
+    json.dump(res,open(f"{D}/E_{name}.json","w", encoding="utf-8"))
     print(name,total,res["n_items_unique"],res["n_repos"],"req",res["requests"],flush=True)
 def count(name,q):
     d=call(q)
     res={"name":name,"query":q,"utc":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),"total_count":d.get("total_count"),"incomplete":d.get("incomplete_results"),"error":d.get("error")}
-    json.dump(res,open(f"{D}/C_{name}.json","w")); print("count",name,res["total_count"],flush=True)
+    json.dump(res,open(f"{D}/C_{name}.json","w", encoding="utf-8")); print("count",name,res["total_count"],flush=True)
 if __name__=="__main__":
-    spec=json.load(open(sys.argv[1]))
+    spec=json.load(open(sys.argv[1], encoding="utf-8"))
     for s in spec:
         (enum if s["mode"]=="enum" else count)(s["name"],s["q"])

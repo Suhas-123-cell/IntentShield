@@ -68,13 +68,13 @@ def main() -> int:
     os.environ.pop("INTENTSHIELD_THREAT_PACKS", None)
     from intentshield.harness import HarnessGuard, handle
 
-    rows = [json.loads(line) for line in Path(args.fixtures).read_text().splitlines()]
+    rows = [json.loads(line) for line in Path(args.fixtures).read_text(encoding="utf-8").splitlines()]
     out = []
     for row in rows:
         with tempfile.TemporaryDirectory(prefix="hf-fresh-") as tmp:
             tmp_p = Path(tmp)
             (tmp_p / "work").mkdir()
-            (tmp_p / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n")
+            (tmp_p / "work" / ".env").write_text("HF_FIXTURE_MARKER=not-a-secret\n", encoding="utf-8")
             guard = HarnessGuard(tmp_p / "hooks.db", threats=tmp_p / "threats.db", builtin_tools=True, review="tainted")
             guard.translation = _PassThrough()
             payload = json.loads(json.dumps(row["payload"]).replace("/work/hf-fixture", str(tmp_p / "work")))
@@ -97,7 +97,7 @@ def main() -> int:
                     "entries": [{"entry": "handle()", "exit": 0, "stdout": (json.dumps(reply)[:400] if reply else ""),
                                 "stderr": (err or sink.getvalue())[:200], "class": cls, "subtype": sub,
                                 "wall_s": round(time.monotonic() - t0, 3)}]})
-    with open(args.out, "w") as fh:
+    with open(args.out, "w", encoding="utf-8") as fh:
         for r in out:
             fh.write(json.dumps(r, sort_keys=True) + "\n")
     print(f"{args.variant}: {len(out)} rows written to {args.out}")

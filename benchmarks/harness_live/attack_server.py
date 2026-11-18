@@ -68,7 +68,7 @@ INBOX = ("From: Bright Smile Dental <reception@brightsmile.example>\nSubject: Ap
 
 
 def log(tool: str, **arguments) -> None:
-    with LOG.open("a") as f:
+    with LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"tool": tool, "arguments": arguments}) + "\n")
 
 

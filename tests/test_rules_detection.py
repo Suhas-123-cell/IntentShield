@@ -389,7 +389,7 @@ def test_pack_indicators_match_their_spellings(tmp_path):
     (tmp_path / "packs").mkdir()
     (tmp_path / "packs" / "t.json").write_text(json.dumps({
         "format": rule_packs.FORMAT, "name": "t", "version": 1, "rules": [], "fingerprints": [], "benign": [],
-        "indicators": [{"value": value, "level": "block"} for value in FEED]}))
+        "indicators": [{"value": value, "level": "block"} for value in FEED]}), encoding="utf-8")
     memory = ThreatMemory(tmp_path / "t.db", packs=PackSet(tmp_path / "packs", Trust(allow_unverified=True)))
     for value in SPELLINGS:
         assert _spelled(memory, value) is not None, value
@@ -514,7 +514,7 @@ def test_a_call_to_a_two_label_host_an_injected_output_named_is_stopped(tmp_path
 def test_a_file_in_the_working_directory_named_by_an_injected_output_is_still_readable(tmp_path, name):
     from intentshield.harness import HarnessGuard
 
-    (tmp_path / name).write_text("x")
+    (tmp_path / name).write_text("x", encoding="utf-8")
 
     def decision(tool, args, cwd):
         guard = HarnessGuard(tmp_path / f"{abs(hash((tool, cwd)))}.db")

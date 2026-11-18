@@ -132,5 +132,5 @@ def test_chat_provider_sends_instructions_as_system_counts_requests_and_stops_wh
     assert ask(prompt) is None and ask(prompt) is None  # failures so far: not yet a stop
     with pytest.raises(aa.ProviderDown):
         ask(prompt)
-    state = json.loads(usage.read_text())
+    state = json.loads(usage.read_text(encoding="utf-8"))
     assert state["requests"] == 5 and state["failed"] == 3 and state["unparsed"] == 1 and "per day" in state["last_error"]

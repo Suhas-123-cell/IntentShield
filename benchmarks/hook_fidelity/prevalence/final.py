@@ -3,10 +3,10 @@ sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import analyze as A
 D=A.D
 H2F={"claude_cli":"claude","claude_action":"claude","codex_cli":"codex","codex_action":"codex","gemini_cli":"gemini","gemini_action":"gemini","cursor_cli":"cursor"}
-cache=json.load(open(f"{D}/hookcache.json"))
+cache=json.load(open(f"{D}/hookcache.json", encoding="utf-8"))
 files={}  # (repo,path)->(hits,inlinehook,item)
 for f in sorted(glob.glob(f"{D}/E_h_*.json")):
-    for i in json.load(open(f))["items"]:
+    for i in json.load(open(f, encoding="utf-8"))["items"]:
         k=(i["repo"],i["path"])
         if k in files: continue
         t=A.text(i)
@@ -65,14 +65,14 @@ for h,rs in W.items():
         for x in e: evc[x]+=1
     res[h]={"repos":n,"config_present":pres,"any_hook":anyh,"guard_capable_event":g,"unparsable":unparse}
     print(h,res[h],dict(evc.most_common(8)))
-    json.dump({"hook":hookrepos,"guard":grepos},open(f"{D}/hookrepos_{h}.json","w"))
+    json.dump({"hook":hookrepos,"guard":grepos},open(f"{D}/hookrepos_{h}.json","w", encoding="utf-8"))
 # search-side cross check
 K={"claude":["k_claude_PreToolUse"],"codex":["k_codex_hooks_json_Pre","k_codex_config_Pre"],"gemini":["k_gemini_BeforeTool"],"cursor":["k_cursor_beforeShell","k_cursor_preToolUse","k_cursor_beforeMCP"]}
 for h,ks in K.items():
     hs=set()
     for k in ks:
-        for i in json.load(open(f"{D}/E_{k}.json"))["items"]:
+        for i in json.load(open(f"{D}/E_{k}.json", encoding="utf-8"))["items"]:
             if i["path"] in (".claude/settings.json",".codex/hooks.json",".codex/config.toml",".gemini/settings.json",".cursor/hooks.json"): hs.add(i["repo"])
     inter=hs&W[h]
     print("search cross-check",h,"hook-config repos (search, root path)",len(hs),"∩ headless repos",len(inter))
-    json.dump(sorted(inter),open(f"{D}/inter_search_{h}.json","w"))
+    json.dump(sorted(inter),open(f"{D}/inter_search_{h}.json","w", encoding="utf-8"))

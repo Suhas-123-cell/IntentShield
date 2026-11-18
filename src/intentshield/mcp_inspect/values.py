@@ -436,13 +436,20 @@ def _url_root(value: str) -> tuple[str, str] | None:
 def on_tainted_hosts(values: Iterable[str], tainted: Iterable[str], user: Iterable[str] = ()) -> set[str]:
     """Addresses among ``values`` on the host of a tainted address, whatever their path: a file that is written
     with an address from an output that tried to instruct the agent, even another path on that host, is the
-    attacker's. A popular site or a host the user named does not count."""
+    attacker's. So is an address on a subdomain of that host, or on the domain it is a subdomain of (``a.x.test`` and ``x.test``),
+    which one owner runs. A popular site or a host the user named does not count."""
     def host_of(value: str) -> str:
         kind, host, _ = _parse(value)
         return host if kind in ("url", "host") and host and not _common_host(host) else ""
     user_hosts = {host_of(v) for v in user} - {""}
     bad = {host_of(v) for v in tainted} - {""} - user_hosts
-    return {v for v in values if host_of(v) in bad} if bad else set()
+    if not bad:
+        return set()
+
+    def tainted_host(host: str) -> bool:
+        return bool(host) and host not in user_hosts and (
+            host in bad or any(_under_host(host, b) or _under_host(b, host) for b in bad))
+    return {v for v in values if tainted_host(host_of(v))}
 
 
 def traced_urls(values: set[str], tainted: Iterable[str], user: Iterable[str] = ()) -> dict[str, str]:

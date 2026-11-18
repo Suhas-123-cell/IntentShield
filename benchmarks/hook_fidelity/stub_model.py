@@ -115,7 +115,7 @@ class Script:
 
     @classmethod
     def load(cls, path: Path) -> "Script":
-        return cls.from_obj(json.loads(path.read_text()))
+        return cls.from_obj(json.loads(path.read_text(encoding="utf-8")))
 
     def text(self) -> str:
         return _subst(self.final_text, self.nonce)
@@ -648,7 +648,7 @@ def _make_handler(server: StubServer):
             if server.dump_dir and raw:
                 text = scrub_text(raw.decode("utf-8", "replace"))
                 (server.dump_dir / f"req-{seq:04d}.json").write_text(
-                    json.dumps({"record": record, "body": text}, ensure_ascii=False))
+                    json.dumps({"record": record, "body": text}, ensure_ascii=False), encoding="utf-8")
             self._send(status, body, ctype)
 
         def _respond(self, record, api, kind, model, raw, problem, query, seq):
@@ -741,7 +741,7 @@ def main(argv: list[str] | None = None) -> int:
     stub = StubServer(script, args.log, args.dump_dir, args.port, args.max_calls,
                       [m for m in args.markers.split(",") if m])
     if args.port_file:
-        args.port_file.write_text(str(stub.port))
+        args.port_file.write_text(str(stub.port), encoding="utf-8")
     print(json.dumps({"host": HOST, "port": stub.port, "url": stub.url}), flush=True)
     try:
         stub.serve_forever()

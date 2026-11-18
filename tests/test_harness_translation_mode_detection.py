@@ -41,7 +41,7 @@ def test_an_oversized_version_in_the_environment_does_not_stop_the_hook(monkeypa
 # ------------------------------------------------------------------------------------------------ the version record
 def _binary(tmp_path: Path, name: str, body: str = "x") -> Path:
     path = tmp_path / name
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
     return path
 
 
@@ -50,7 +50,7 @@ def test_the_record_is_written_atomically_and_keeps_other_harnesses(tmp_path):
     translation.record_version("claude", "2.1.316", str(build), tmp_path)
     translation.record_version("gemini", "0.66.0", str(build), tmp_path)
     cache = tmp_path / ".intentshield" / translation.CACHE_NAME
-    assert set(json.loads(cache.read_text())) == {"claude", "gemini"}
+    assert set(json.loads(cache.read_text(encoding="utf-8"))) == {"claude", "gemini"}
     assert not [p for p in cache.parent.iterdir() if p.name.endswith(".tmp")]
 
 

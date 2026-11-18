@@ -200,7 +200,7 @@ def test_read_arm_takes_the_latest_row_and_separates_errors(tmp_path):
     f.parent.mkdir()
     f.write_text("\n".join(json.dumps(r) for r in
                            [{"id": "c0001", "error": "boom"}, good("c0001"), good("c0002"), good("c0003"),
-                            {"id": "c0003", "error": "later"}]))
+                            {"id": "c0003", "error": "later"}]), encoding="utf-8")
     rows, errors = msb_compare.read_arm(f, grid)
     assert sorted(rows) == ["c0001", "c0002"] and errors == {"c0003"}
     assert msb_compare.arm_label(f) == "msb-x/hooks"
@@ -288,9 +288,9 @@ def test_paper_numbers_manifest_flags_missing_changed_and_unlisted_files(tmp_pat
 
     (tmp_path / "m").mkdir()
     for name in ("none", "baseline", "extra"):
-        (tmp_path / "m" / f"{name}.jsonl").write_text(name)
+        (tmp_path / "m" / f"{name}.jsonl").write_text(name, encoding="utf-8")
     files = {"m/none.jsonl": {"sha256": hashlib.sha256(b"none").hexdigest()},
              "m/baseline.jsonl": {"sha256": "0" * 64}, "m/gone.jsonl": {"sha256": "0" * 64}}
-    (tmp_path / "MANIFEST.json").write_text(json.dumps({"files": files}))
+    (tmp_path / "MANIFEST.json").write_text(json.dumps({"files": files}), encoding="utf-8")
     assert paper_numbers.check_manifest(tmp_path) == [
         "sha256 mismatch m/baseline.jsonl", "missing m/gone.jsonl", "not in manifest m/extra.jsonl"]

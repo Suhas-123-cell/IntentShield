@@ -206,7 +206,7 @@ CURSOR_ASK = json.dumps({"permission": "ask", "user_message": "confirm this?"})
 
 def _wrap_cursor(tmp_path, event: dict):
     path = tmp_path / "g.py"
-    path.write_text(f"import sys\nsys.stdin.read()\nsys.stdout.write({CURSOR_ASK!r})\n")
+    path.write_text(f"import sys\nsys.stdin.read()\nsys.stdout.write({CURSOR_ASK!r})\n", encoding="utf-8")
     out, err = io.StringIO(), io.StringIO()
     wrap_hook.wrap("cursor", [sys.executable, str(path)], json.dumps(event), mode="interactive", version="1.0.0", stdout=out,
                    stderr=err)
@@ -230,11 +230,11 @@ def test_a_wrapped_guards_ask_on_a_cursor_mcp_event_is_refused(tmp_path):
 def test_a_version_file_of_the_wrong_shape_is_treated_as_absent(tmp_path, content):
     home = tmp_path / "home"
     (home / ".intentshield").mkdir(parents=True)
-    (home / ".intentshield" / translation.CACHE_NAME).write_text(content)
+    (home / ".intentshield" / translation.CACHE_NAME).write_text(content, encoding="utf-8")
     assert translation.recorded_version("claude", home)[0] is None
     translation.record_version("claude", "2.1.316", "/bin/sh", home)
     assert translation.recorded_version("claude", home)[0] == (2, 1, 316)
-    (home / ".intentshield" / translation.CACHE_NAME).write_text(content)
+    (home / ".intentshield" / translation.CACHE_NAME).write_text(content, encoding="utf-8")
     doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db")   # does not raise
 
 

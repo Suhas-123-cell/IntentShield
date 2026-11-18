@@ -25,7 +25,7 @@ def home(tmp_path: Path, monkeypatch) -> Path:
 def _hook(tmp_path: Path) -> str:
     exe = tmp_path / "bin" / "intentshield-hook"
     exe.parent.mkdir(parents=True, exist_ok=True)
-    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     exe.chmod(0o755)
     return str(exe)
 
@@ -60,7 +60,7 @@ def test_install_says_the_version_it_found(tmp_path, home, capsys, monkeypatch):
 def test_install_and_doctor_warn_when_codex_config_switches_hooks_off(tmp_path, home, capsys, flag):
     config = home / ".codex" / "config.toml"
     config.parent.mkdir(parents=True)
-    config.write_text(f"[features]\n{flag} = false   # mine\n")
+    config.write_text(f"[features]\n{flag} = false   # mine\n", encoding="utf-8")
     install.install("codex", hook=_hook(tmp_path), home=home)
     out = capsys.readouterr().out
     assert f"`{flag} = false` under [features]" in out and "can switch Codex's hooks off" in out
@@ -73,7 +73,7 @@ def test_install_and_doctor_warn_when_codex_config_switches_hooks_off(tmp_path, 
 def test_install_and_doctor_say_nothing_about_flags_that_leave_hooks_on(tmp_path, home, capsys, features):
     config = home / ".codex" / "config.toml"
     config.parent.mkdir(parents=True)
-    config.write_text(features)
+    config.write_text(features, encoding="utf-8")
     install.install("codex", hook=_hook(tmp_path), home=home)
     assert "switch Codex's hooks off" not in capsys.readouterr().out
     assert "switch Codex's hooks off" not in _doctor(home, capsys)
@@ -81,7 +81,7 @@ def test_install_and_doctor_say_nothing_about_flags_that_leave_hooks_on(tmp_path
 
 def test_a_config_that_is_not_toml_is_not_a_reason_to_warn(tmp_path):
     bad = tmp_path / "config.toml"
-    bad.write_text("[features\ncodex_hooks = false")
+    bad.write_text("[features\ncodex_hooks = false", encoding="utf-8")
     assert install.codex_hooks_switched_off(bad) == ""
     assert install.codex_hooks_switched_off(tmp_path / "missing.toml") == ""
 

@@ -30,7 +30,7 @@ state = {"lookup_v_calls": 0}
 
 
 def log(method: str, **detail: object) -> None:
-    with LOG.open("a") as handle:
+    with LOG.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({"t": time.time(), "method": method, **detail}, default=str) + "\n")
 
 

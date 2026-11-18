@@ -20,7 +20,7 @@ LOG: Path | None = None
 
 def log(tool: str, **arguments) -> None:
     if LOG is not None:
-        with LOG.open("a") as handle:
+        with LOG.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"tool": tool, "arguments": arguments, "ts_ns": time.time_ns()}) + "\n")
 
 

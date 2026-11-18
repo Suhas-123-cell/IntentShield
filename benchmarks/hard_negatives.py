@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     cache_path = args.out.with_name(args.out.stem + "-generations.jsonl")
     cache = {json.loads(line)["key"]: json.loads(line)["value"]
-             for line in cache_path.read_text().splitlines() if line} if cache_path.exists() else {}
+             for line in cache_path.read_text(encoding="utf-8").splitlines() if line} if cache_path.exists() else {}
     client = httpx.Client(base_url=args.host, timeout=300)
 
     def cached(key: str, text: str) -> Any:
@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> None:
             except (httpx.HTTPError, json.JSONDecodeError) as exc:
                 print(f"skipped {key}: {exc}", file=sys.stderr)
                 return None
-            with cache_path.open("a") as handle:
+            with cache_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"key": key, "value": cache[key]}) + "\n")
         return cache[key]
 
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> None:
             add(made["text"], f"{row['source']}_{language.lower()}", row["group"])
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+    args.out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
     counts: dict[str, int] = {}
     for row in rows:
         counts[f"{row['split']}:{row['source']}"] = counts.get(f"{row['split']}:{row['source']}", 0) + 1

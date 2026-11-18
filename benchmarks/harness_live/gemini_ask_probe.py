@@ -31,7 +31,7 @@ def hook(log: str) -> int:
     reply = {}
     if event.get("hook_event_name") == "BeforeTool" and event.get("tool_name") == "run_shell_command":
         reply = {"decision": "ask", "reason": "stub ask from the probe", "systemMessage": "PROBE: confirm this command?"}
-    with open(log, "a") as handle:
+    with open(log, "a", encoding="utf-8") as handle:
         handle.write(json.dumps({"event": event.get("hook_event_name"), "tool": event.get("tool_name"),
                                  "reply": reply}) + "\n")
     print(json.dumps(reply))
@@ -43,7 +43,7 @@ def tap(log: str, command: list[str]) -> int:
     event = sys.stdin.read()
     done = subprocess.run(command, input=event, capture_output=True, text=True)
     reply = json.loads(done.stdout) if done.stdout.strip() else {}
-    with open(log, "a") as handle:
+    with open(log, "a", encoding="utf-8") as handle:
         handle.write(json.dumps({"event": json.loads(event).get("hook_event_name"),
                                  "tool": json.loads(event).get("tool_name"), "reply": reply}) + "\n")
     sys.stdout.write(done.stdout)
@@ -67,8 +67,8 @@ def setup(out: Path) -> tuple[Path, dict]:
         {"security": {"auth": {"selectedType": "gemini-api-key"}},
          "general": {"disableAutoUpdate": True, "disableUpdateNag": True, "enableAutoUpdate": False,
                      "enableAutoUpdateNotification": False},
-         "hooks": hooks}))
-    (home / ".gemini" / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}))
+         "hooks": hooks}), encoding="utf-8")
+    (home / ".gemini" / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}), encoding="utf-8")
     env = {**os.environ, "HOME": str(home), "GEMINI_API_KEY": dotenv_values(ROOT / ".env").get("GEMINI_API_KEY") or ""}
     return work, env
 
@@ -78,8 +78,8 @@ def headless(out: Path, approval: str) -> None:
     done = subprocess.run(["gemini", "-p", PROMPT, "-m", "gemini-3.1-flash-lite", "--approval-mode", approval,
                            "-o", "json"], cwd=work, env=env, capture_output=True, text=True, timeout=300,
                           stdin=subprocess.DEVNULL)
-    (out / "stdout.txt").write_text(done.stdout)
-    (out / "stderr.txt").write_text(done.stderr[-20000:])
+    (out / "stdout.txt").write_text(done.stdout, encoding="utf-8")
+    (out / "stderr.txt").write_text(done.stderr[-20000:], encoding="utf-8")
 
 
 def interactive(out: Path, approval: str) -> None:
@@ -106,8 +106,8 @@ def interactive(out: Path, approval: str) -> None:
             break
     os.write(fd, b"\x03\x03")
     time.sleep(1)
-    (out / "screen.txt").write_text(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", screen).decode("utf-8", "replace"))
-    (out / "answered.txt").write_text(str(answered))
+    (out / "screen.txt").write_text(re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", screen).decode("utf-8", "replace"), encoding="utf-8")
+    (out / "answered.txt").write_text(str(answered), encoding="utf-8")
 
 
 def main() -> int:
@@ -121,7 +121,7 @@ def main() -> int:
     else:
         headless(out, mode)
     ran = (out / "work" / "ran.txt").exists()
-    events = [json.loads(line) for line in (out / "hook.jsonl").read_text().splitlines()] \
+    events = [json.loads(line) for line in (out / "hook.jsonl").read_text(encoding="utf-8").splitlines()] \
         if (out / "hook.jsonl").exists() else []
     asks = sum(1 for e in events if (e["reply"] or {}).get("decision") == "ask")
     print(f"{mode}: ran.txt created = {ran}; hook asked {asks} time(s)")

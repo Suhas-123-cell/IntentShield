@@ -89,6 +89,8 @@ def _verdict_word(obj: dict[str, Any]) -> tuple[str | None, str, str]:
     hso = obj.get("hookSpecificOutput")
     if isinstance(hso, dict):
         spots.insert(0, hso)
+    elif "hookSpecificOutput" in obj:   # a verdict put where it cannot be read is not "no opinion"
+        return None, _reason_of(obj), f"hookSpecificOutput is not an object ({type(hso).__name__})"
     named: list[tuple[str, dict[str, Any]]] = []
     for spot in spots:
         for key in _VERDICT_KEYS:

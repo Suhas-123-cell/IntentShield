@@ -54,7 +54,7 @@ def load(raw: Path) -> tuple[list[str], dict[tuple[str, str], dict], list[str]]:
     rows: dict[tuple[str, str], dict] = {}
     scenarios: list[str] = []
     for version in versions:
-        for line in (raw / f"{version}.jsonl").read_text().splitlines():
+        for line in (raw / f"{version}.jsonl").read_text(encoding="utf-8").splitlines():
             record = json.loads(line)
             rows[(version, record["scenario"])] = record
             if record["scenario"] not in scenarios:
@@ -147,7 +147,7 @@ def manifest(versions: list[str], rows: dict, sweep: Path | None, registry: dict
         if sweep:
             lock = sweep / version / "package-lock.json"
             try:
-                packages = json.loads(lock.read_text()).get("packages", {})
+                packages = json.loads(lock.read_text(encoding="utf-8")).get("packages", {})
                 entry["integrity"] = packages.get("node_modules/@google/gemini-cli-core", {}).get("integrity")
             except (OSError, ValueError):
                 pass
@@ -271,15 +271,17 @@ def main(argv: list[str]) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "raw").mkdir(exist_ok=True)
     for version in versions:  # the committed copy of the raw rows, scrubbed of local paths
-        (out / "raw" / f"{version}.jsonl").write_text(scrub((raw / f"{version}.jsonl").read_text()))
-    (out / "table-per-version.txt").write_text(per_version(versions, rows, scenarios) + "\n")
-    (out / "table.md").write_text(grouped(versions, rows, scenarios) + "\n")
+        (out / "raw" / f"{version}.jsonl").write_text(scrub((raw / f"{version}.jsonl").read_text(encoding="utf-8")),
+            encoding="utf-8")
+    (out / "table-per-version.txt").write_text(per_version(versions, rows, scenarios) + "\n", encoding="utf-8")
+    (out / "table.md").write_text(grouped(versions, rows, scenarios) + "\n", encoding="utf-8")
     registry = None
     try:
-        registry = json.loads((out / "registry-integrity.json").read_text())
+        registry = json.loads((out / "registry-integrity.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         pass
-    (out / "manifest.json").write_text(json.dumps(manifest(versions, rows, sweep, registry), indent=1, sort_keys=True) + "\n")
+    (out / "manifest.json").write_text(json.dumps(manifest(versions, rows, sweep, registry), indent=1, sort_keys=True) + "\n",
+        encoding="utf-8")
     for sub, name, cellfn, title, note in (
             ("layerc", "table-layer-c.md", cell_c,
              "Layer C: the real HookSystem built from a settings-shaped hooks.BeforeTool config",
@@ -297,16 +299,18 @@ def main(argv: list[str]) -> int:
         if extra_versions:
             (out / "raw" / sub).mkdir(exist_ok=True)
             for version in extra_versions:
-                (out / "raw" / sub / f"{version}.jsonl").write_text(scrub((raw / sub / f"{version}.jsonl").read_text()))
-            (out / name).write_text(grouped_generic(extra_versions, extra_rows, extra_scenarios, cellfn, title, note) + "\n")
+                (out / "raw" / sub / f"{version}.jsonl").write_text(scrub((raw / sub / f"{version}.jsonl").read_text(
+                    encoding="utf-8")), encoding="utf-8")
+            (out / name).write_text(grouped_generic(extra_versions, extra_rows, extra_scenarios, cellfn, title, note) + "\n",
+                encoding="utf-8")
     boundary_src = raw.parent / "boundary-raw.jsonl"
     if not boundary_src.is_file():
         boundary_src = out / "boundary-raw.jsonl"
     if boundary_src.is_file():
-        brows = [json.loads(line) for line in boundary_src.read_text().splitlines() if line.strip()]
-        (out / "boundary.md").write_text(boundary_report(brows) + "\n")
+        brows = [json.loads(line) for line in boundary_src.read_text(encoding="utf-8").splitlines() if line.strip()]
+        (out / "boundary.md").write_text(boundary_report(brows) + "\n", encoding="utf-8")
         if boundary_src.parent != out:
-            (out / "boundary-raw.jsonl").write_text(boundary_src.read_text())
+            (out / "boundary-raw.jsonl").write_text(boundary_src.read_text(encoding="utf-8"), encoding="utf-8")
     bad = sum(1 for r in rows.values() if "driverError" in r)
     print(f"{len(versions)} versions, {len(scenarios)} scenarios, {bad} driver errors; wrote {out}")
     return 1 if bad else 0

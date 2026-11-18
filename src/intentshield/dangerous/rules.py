@@ -12,6 +12,7 @@ from .paths import (
     _cred_level,
     _default_target,
     _device,
+    _ends_in_glob,
     _is_empty_var_target,
     _norm,
     _protected,
@@ -162,8 +163,17 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
     if sub == "restore" and (any(_is_opt(a, "--staged") for a in flags) or "-S" in args) and not (
             any(_is_opt(a, "--worktree") for a in flags) or any(a[:1] == "-" and a[1:2] != "-" and "W" in a for a in flags)):
         return None  # only unstages
+    return _discard_hit(sub, args, flags)
+
+
+def _discard_hit(sub: str, args: list[str], flags: list[str]) -> Hit | None:
+    """``git checkout .``, ``git restore .`` and ``git checkout -f`` or ``git switch -f`` (``--force``, ``--discard-changes``):
+    the uncommitted changes of the tree, or of the files the switch replaces, are thrown away."""
     if sub == "checkout" and args and args[-1] in (".", "--") or sub == "restore" and "." in args:
         return Hit(ASK, "this discards every uncommitted change in the tree.")
+    if sub in ("checkout", "switch") and any(
+            _is_opt(a, "--force", "--discard-changes") or (a[:1] == "-" and a[1:2] != "-" and "f" in a[1:]) for a in flags):
+        return Hit(ASK, f"git {sub} -f throws away the uncommitted changes of the files it replaces.")
     return None
 
 
@@ -181,6 +191,12 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
     force = any(_is_opt(a, "--force") or (not a.startswith("--") and "f" in a[1:]) for a in flags)
     if any(_is_opt(a, "--no-preserve-root") for a in flags) and any(_norm(t) == "/" for t in targets):
         return Hit(DENY, "rm --no-preserve-root on /.", "/")
+    if not recursive:   # every file of a root, home or system directory, by a glob: ``rm ~/*``, ``rm -f ~/*`` and ``rm -rf ~/*``
+        for t in targets:
+            if _protected(t) and _ends_in_glob(t):
+                if _norm(t) in ("/", "~"):
+                    return Hit(DENY, f"rm {t} deletes every file in {_norm(t)}, the root or home directory.", t)
+                return Hit(ASK, f"rm {t} deletes every file in {_norm(t)}, a protected directory; confirm it.", t)
     if not recursive and not (force and len(targets) > 0 and any(_norm(t) in ("/", "~") for t in targets)):
         return None
     small_system = None
@@ -353,7 +369,7 @@ def _mode_hit(name: str, argv: list[str], sudo: bool) -> Hit | None:
             and all(_norm(t) in _BREW_DIRS for t in prot)):
         # Homebrew's own advice: `sudo chown -R $(whoami) /usr/local/...`. One ask, not a refusal.
         return Hit(ASK, f"recursive {name} of {prot[0]} to the current user{note}.", prot[0])
-    if recursive and prot and (_norm(prot[0]) != "~" or sudo) and any(_norm(t) != "~" for t in prot):
+    if recursive and prot and (name == "chattr" or sudo or any(_norm(t) != "~" for t in prot)):
         return Hit(DENY, f"recursive {name} on {prot[0]}{note}.", prot[0])
     if recursive and prot:
         return Hit(ASK, f"recursive {name} on the home directory{note}.", prot[0])

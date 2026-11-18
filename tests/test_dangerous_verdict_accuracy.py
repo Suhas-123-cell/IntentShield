@@ -186,10 +186,18 @@ def test_a_recursive_chmod_or_chown_of_root_or_a_system_directory_is_denied_what
 
 @pytest.mark.parametrize("command", [
     "chmod -R 755 ~", "chmod -R u+rwX ~/Documents", "sudo chown -R $(whoami) /usr/local", "sudo chown -R $USER /usr/local/lib",
-    "chown -R $(whoami) /usr/local/share", "chmod -R 755 /usr/local/bin", "sudo chown -R me ~", "chmod -R 700 ~/.ssh",
+    "chown -R $(whoami) /usr/local/share", "chmod -R 755 /usr/local/bin", "chown -R me ~", "chgrp -R staff ~", "chmod -R 700 ~/.ssh",
 ])
 def test_the_home_directory_and_homebrews_own_chown_are_asks(command):
     assert verdict(command) == "ask"
+
+
+@pytest.mark.parametrize("command", [
+    "sudo chown -R me ~", "sudo chown -R me ~/", "sudo chgrp -R staff ~", "sudo chmod -R 755 ~", "chown -R me ~ /etc",
+    "chattr -R +i ~", "chattr -R +i ~/", "chattr -R -i ~", "sudo chattr -R +i ~", "chattr -R +i /", "chattr -R +i /etc",
+])
+def test_a_recursive_chown_with_sudo_or_chattr_of_the_home_directory_is_denied_like_chmod_and_chattr_of_root(command):
+    assert verdict(command) == "deny"
 
 
 @pytest.mark.parametrize("command", ["chmod -R 755 ./build", "chmod -R u+w ~/proj", "chown -R me ./data", "chmod 644 /etc/hosts.bak",

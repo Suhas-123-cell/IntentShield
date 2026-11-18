@@ -29,7 +29,7 @@ def home(tmp_path: Path, monkeypatch) -> Path:
 def _hook(tmp_path: Path) -> str:
     exe = tmp_path / "bin" / "intentshield-hook"
     exe.parent.mkdir(exist_ok=True)
-    exe.write_text("#!/bin/sh\n")
+    exe.write_text("#!/bin/sh\n", encoding="utf-8")
     exe.chmod(0o755)
     return str(exe)
 
@@ -68,7 +68,7 @@ def test_a_settings_file_that_loosens_the_hook_is_a_warning(tmp_path, home, caps
     (cwd / ".claude").mkdir(parents=True)
     path = install.install("claude", home=home, cwd=cwd, hook=_hook(tmp_path))
     (cwd / ".claude" / "settings.local.json").write_text(json.dumps({"env": {"INTENTSHIELD_HOOK_REVIEW": "never",
-                                                                            "EDITOR": "vim"}}))
+                                                                            "EDITOR": "vim"}}), encoding="utf-8")
     capsys.readouterr()
     assert doctor.doctor(home, cwd, home / ".intentshield" / "hooks.db") == 0
     out = capsys.readouterr().out
@@ -194,7 +194,7 @@ def test_a_result_under_the_limit_is_scanned_as_it_was(tmp_path):
 
 def test_wrap_ends_with_the_next_step_and_exits_zero_when_every_server_was_wrapped(tmp_path, home, capsys, monkeypatch):
     mcp = tmp_path / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server", "args": ["--port", "1"]}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server", "args": ["--port", "1"]}}}), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as stop:
         cli.main(["wrap", str(mcp)])
@@ -207,7 +207,7 @@ def test_wrap_of_a_file_doctor_does_not_read_names_scan_as_the_check(tmp_path, h
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     mcp = tmp_path / "user-mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server"}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server"}}}), encoding="utf-8")
     monkeypatch.chdir(elsewhere)
     install.wrap(mcp, out_dir=tmp_path / "proxies")
     out = capsys.readouterr().out
@@ -220,7 +220,7 @@ def test_wrap_of_a_user_file_doctor_reads_names_doctor_as_the_check(tmp_path, ho
     elsewhere.mkdir()
     mcp = home / ".cursor" / "mcp.json"
     mcp.parent.mkdir(parents=True)
-    mcp.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server"}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server"}}}), encoding="utf-8")
     monkeypatch.chdir(elsewhere)
     install.wrap(mcp, out_dir=tmp_path / "proxies")
     out = capsys.readouterr().out
@@ -229,7 +229,8 @@ def test_wrap_of_a_user_file_doctor_reads_names_doctor_as_the_check(tmp_path, ho
 
 def test_wrap_exits_nonzero_when_a_server_was_skipped_for_its_entry(tmp_path, home, capsys, monkeypatch):
     mcp = tmp_path / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"a": {"command": ["x", "y"]}, "b": {"command": "srv", "args": "y z"}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"a": {"command": ["x", "y"]}, "b": {"command": "srv", "args": "y z"}}}),
+        encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as stop:
         cli.main(["wrap", str(mcp)])
@@ -241,7 +242,7 @@ def test_wrap_exits_nonzero_when_a_server_was_skipped_for_its_entry(tmp_path, ho
 def test_a_server_that_is_not_stdio_is_not_a_failure_to_wrap(tmp_path, home, capsys, monkeypatch):
     mcp = tmp_path / ".mcp.json"
     mcp.write_text(json.dumps({"mcpServers": {"remote": {"url": "https://mcp.example.com/sse"},
-                                              "ok": {"command": "plain-server"}}}))
+                                              "ok": {"command": "plain-server"}}}), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     assert install.wrap(mcp, out_dir=tmp_path / "proxies").skipped is False
 
@@ -251,7 +252,7 @@ def test_a_server_that_is_not_stdio_is_not_a_failure_to_wrap(tmp_path, home, cap
 def test_a_codex_config_that_is_not_toml_is_named_with_what_to_do(tmp_path, home, capsys):
     path = home / ".codex" / "config.toml"
     path.parent.mkdir()
-    path.write_text("not toml [[\n")
+    path.write_text("not toml [[\n", encoding="utf-8")
     with pytest.raises(SystemExit) as stop:
         cli.main(["install", "codex"])
     assert stop.value.code == 1
@@ -277,23 +278,24 @@ def _old_project_install(tmp_path: Path, home: Path) -> Path:
     """A project install as 0.4.3 made it: the hooks in the shared settings.json."""
     local = install.install("claude", "project", home=home, cwd=tmp_path, hook=_hook(tmp_path))
     shared = tmp_path / ".claude" / "settings.json"
-    shared.write_text(local.read_text())
+    shared.write_text(local.read_text(encoding="utf-8"), encoding="utf-8")
     local.unlink()
     return shared
 
 
 def test_a_new_project_install_takes_the_hooks_out_of_the_shared_file(tmp_path, home, capsys):
     shared = _old_project_install(tmp_path, home)
-    shared.write_text(json.dumps({**json.loads(shared.read_text()), "model": "sonnet"}))
+    shared.write_text(json.dumps({**json.loads(shared.read_text(encoding="utf-8")), "model": "sonnet"}), encoding="utf-8")
     install.install("claude", "project", home=home, cwd=tmp_path, hook=_hook(tmp_path))
-    assert "hooks" not in json.loads(shared.read_text()) and json.loads(shared.read_text())["model"] == "sonnet"
-    assert "hooks" in json.loads((tmp_path / ".claude" / "settings.local.json").read_text())
+    assert "hooks" not in json.loads(shared.read_text(encoding="utf-8")) and json.loads(shared.read_text(
+        encoding="utf-8"))["model"] == "sonnet"
+    assert "hooks" in json.loads((tmp_path / ".claude" / "settings.local.json").read_text(encoding="utf-8"))
 
 
 def test_uninstall_of_a_project_reads_both_files(tmp_path, home, capsys):
     shared = _old_project_install(tmp_path, home)
     install.uninstall("claude", "project", home=home, cwd=tmp_path)
-    assert not shared.exists() or "hooks" not in json.loads(shared.read_text())
+    assert not shared.exists() or "hooks" not in json.loads(shared.read_text(encoding="utf-8"))
 
 
 def test_doctor_checks_the_shared_file_where_an_earlier_version_put_the_hooks(tmp_path, home, capsys):
@@ -362,7 +364,7 @@ def test_the_packaged_demo_proxy_config_differs_from_the_repository_one_only_in_
     configs = Path(__file__).parents[1] / "configs"
 
     def without_the_command(name: str) -> dict:
-        data = json.loads((configs / name).read_text())
+        data = json.loads((configs / name).read_text(encoding="utf-8"))
         data["upstreams"] = [{k: v for k, v in up.items() if k not in ("command", "args")} for up in data["upstreams"]]
         return data
 

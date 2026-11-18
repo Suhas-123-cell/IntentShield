@@ -32,7 +32,7 @@ def test_every_guard_arm_has_the_bytes_it_needs(tmp_path):
             continue
         guard = compare.arm_guard(case["build"], case["arm"])
         path = compare.replay_for(guard, case["cell"] if case["cell"] not in ("slowB", "dead") else "deny", tmp_path)
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         assert isinstance(record["exit_code"], int)
         if case["cell"] == "exit2empty":
             assert record["exit_code"] == 2 and record["stderr_b64"] == ""
@@ -127,7 +127,7 @@ def test_wrapper_replays_exit_code_and_logs_first(tmp_path):
     event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "x"}}
     done = subprocess.run([str(program)], input=json.dumps(event), capture_output=True, text=True)
     assert done.returncode == 2 and done.stderr == "" and guard.shape == "claude"
-    assert "PreToolUse" in (tmp_path / "hooks.jsonl").read_text()
+    assert "PreToolUse" in (tmp_path / "hooks.jsonl").read_text(encoding="utf-8")
     crash = {**case, "cell": "crash"}
     program = compare.write_program(tmp_path, crash, compare.cell_config(crash, tmp_path, tmp_path, "nzt"))
     done = subprocess.run([str(program)], input=json.dumps(event), capture_output=True, text=True)
@@ -138,8 +138,8 @@ def test_committed_rows_regenerate_the_summary():
     rows_path = RESULTS / "runs.jsonl"
     if not rows_path.exists():
         pytest.skip("no committed rows")
-    all_rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
-    summary = json.loads((RESULTS / "summary.json").read_text())
+    all_rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    summary = json.loads((RESULTS / "summary.json").read_text(encoding="utf-8"))
     assert summary["runs"] == len(all_rows)
     rows = [r for r in all_rows if r.get("lane", "r6") == "r6"]   # lane r7-wrap rows: test_hook_fidelity_compare_arms
     assert len(rows) == 195

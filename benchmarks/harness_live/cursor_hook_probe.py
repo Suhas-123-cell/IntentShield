@@ -32,7 +32,7 @@ def hook(log: str, reply: str) -> int:
     event = json.loads(sys.stdin.read() or "{}")
     name = event.get("hook_event_name") or ""
     out = REPLIES[reply] if name in ("beforeShellExecution", "beforeMCPExecution") else {}
-    with open(log, "a") as handle:
+    with open(log, "a", encoding="utf-8") as handle:
         handle.write(json.dumps({"event": name, "reply": out}) + "\n")
     print(json.dumps(out))
     return 0
@@ -46,14 +46,16 @@ def run_one(out: Path, kind: str, reply: str, allowlisted: bool) -> dict:
     (work / ".cursor").mkdir()
     command = f"{sys.executable} {Path(__file__).resolve()} hook {rundir / 'hook.jsonl'} {reply}"
     event = "beforeShellExecution" if kind == "shell" else "beforeMCPExecution"
-    (work / ".cursor" / "hooks.json").write_text(json.dumps({"version": 1, "hooks": {event: [{"command": command}]}}))
+    (work / ".cursor" / "hooks.json").write_text(json.dumps({"version": 1, "hooks": {event: [{"command": command}]}}),
+        encoding="utf-8")
     allow = (["Shell(touch)"] if kind == "shell" else ["Mcp(notes:*)"]) if allowlisted else []
     (work / ".cursor" / "cli.json").write_text(json.dumps({"permissions": {
-        "allow": allow, "deny": [f"Read({Path.home()}/**)", f"Write({Path.home()}/**)"]}}))
+        "allow": allow, "deny": [f"Read({Path.home()}/**)", f"Write({Path.home()}/**)"]}}), encoding="utf-8")
     if kind == "mcp":
         calls = rundir / "calls.jsonl"
         (work / ".cursor" / "mcp.json").write_text(json.dumps({"mcpServers": {"notes": {
-            "command": sys.executable, "args": [str(HERE / "attack_server.py")], "env": {"CALLS_LOG": str(calls)}}}}))
+            "command": sys.executable, "args": [str(HERE / "attack_server.py")], "env": {"CALLS_LOG": str(calls)}}}}),
+                encoding="utf-8")
     try:
         done = subprocess.run([AGENT, "-p", "--output-format", "text", "--model", "auto", "--trust", "--approve-mcps",
                                "--workspace", str(work), PROMPTS[kind]], cwd=work, capture_output=True, text=True,
@@ -61,17 +63,17 @@ def run_one(out: Path, kind: str, reply: str, allowlisted: bool) -> dict:
         text, error = done.stdout, "" if done.returncode == 0 else f"exit {done.returncode}"
     except subprocess.TimeoutExpired:
         text, error = "", "timeout"
-    (rundir / "stdout.txt").write_text(text)
-    events = [json.loads(line) for line in (rundir / "hook.jsonl").read_text().splitlines()] \
+    (rundir / "stdout.txt").write_text(text, encoding="utf-8")
+    events = [json.loads(line) for line in (rundir / "hook.jsonl").read_text(encoding="utf-8").splitlines()] \
         if (rundir / "hook.jsonl").exists() else []
     if kind == "shell":
         ran = (work / "ran.txt").exists()
     else:
         log = rundir / "calls.jsonl"
-        ran = log.exists() and any("search_notes" in line for line in log.read_text().splitlines())
+        ran = log.exists() and any("search_notes" in line for line in log.read_text(encoding="utf-8").splitlines())
     row = {"run": name, "kind": kind, "reply": reply, "allowlisted": allowlisted, "hook_ran": bool(events),
            "ran": ran, "error": error, "answer": text.strip()[:300]}
-    with (out / "runs.jsonl").open("a") as handle:
+    with (out / "runs.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row) + "\n")
     return row
 

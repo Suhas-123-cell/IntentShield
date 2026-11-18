@@ -17,7 +17,7 @@ try:
 except ValueError:
     event = {}
 context = event.get("mcp_context") or {}
-with Path(sys.argv[2]).open("a") as handle:
+with Path(sys.argv[2]).open("a", encoding="utf-8") as handle:
     handle.write(json.dumps({
         "t": time.time(), "harness": sys.argv[1], "event": event.get("hook_event_name"),
         "tool": event.get("tool_name"), "server": event.get("mcp_server") or context.get("server_name"),

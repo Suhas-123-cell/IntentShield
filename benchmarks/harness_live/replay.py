@@ -42,11 +42,11 @@ ORDER = [s.name for s in sorted(SCENARIOS, key=lambda s: s.order)]  # campaign.p
 
 
 def export(runs: Path) -> None:
-    rows = [json.loads(line) for line in (runs / "runs.jsonl").read_text().splitlines() if line.strip()]
+    rows = [json.loads(line) for line in (runs / "runs.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     out = []
     for row in rows:
         events, session = [], row["key"]
-        for line in (runs / "runs" / row["key"].replace("/", "-") / "transcript.jsonl").read_text().splitlines():
+        for line in (runs / "runs" / row["key"].replace("/", "-") / "transcript.jsonl").read_text(encoding="utf-8").splitlines():
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> None:
     report = score()
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report, indent=2) + "\n")
+        args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(table(report))
 
 

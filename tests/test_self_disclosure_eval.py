@@ -19,7 +19,7 @@ def test_scan_counts_stripped_parameters_by_role_and_harm_through_them(tmp_path:
     rows = [{"id": "c1", "task": "t", "tools": {"filesystem": [{"name": "read_file", "input_schema": clean}],
                                                 "pub-attk": [{"name": "search", "input_schema": leak}]}, "outputs": []},
             {"id": "c2", "task": "t", "tools": {"pub-task": [{"name": "search", "input_schema": clean}]}, "outputs": []}]
-    with gzip.open(recorded / "none.jsonl.gz", "wt") as handle:
+    with gzip.open(recorded / "none.jsonl.gz", "wt", encoding="utf-8") as handle:
         handle.write("\n".join(json.dumps(r) for r in rows) + "\n")
     roles = {"c1": {"filesystem": "filesystem", "pub-attk": "attack"}, "c2": {"pub-task": "task"}}
     result = sde.scan_traces(tmp_path, roles)
@@ -30,7 +30,7 @@ def test_scan_counts_stripped_parameters_by_role_and_harm_through_them(tmp_path:
               {"id": "c2", "harm_executed": True, "trace": [
                    {"tool": "pub-task:search", "arguments": {"path": "/x"}, "executed": True}]},
               {"id": "c3", "harm_executed": False, "trace": []}]
-    (results / "none.jsonl").write_text("\n".join(json.dumps(r) for r in traces) + "\n")
+    (results / "none.jsonl").write_text("\n".join(json.dumps(r) for r in traces) + "\n", encoding="utf-8")
     grid = {"c1": {}, "c2": {}, "c3": {}}
     result.update(sde.harm_through_stripped(tmp_path / "results", result.pop("catalogs"), grid,
                                             harmful=lambda case, step: True))

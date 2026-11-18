@@ -23,7 +23,7 @@ def test_denied_and_asked_attack_sends_are_counted_apart():
 
 def test_committed_runs_hold_7_denies_and_23_asks_in_every_configuration():
     for name in ("qwen2.5-7b", "gemini-flash-lite", "deepseek-flash"):
-        data = json.loads((ROOT / "results" / "judge" / f"jailbreaks-{name}.json").read_text())
+        data = json.loads((ROOT / "results" / "judge" / f"jailbreaks-{name}.json").read_text(encoding="utf-8"))
         configs = [k for k, v in data["summary"].items() if isinstance(v, dict)]
         recomputed = jj.summarize(data["rows"], configs)
         for config in configs:

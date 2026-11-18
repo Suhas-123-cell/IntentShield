@@ -46,7 +46,7 @@ def test_an_empty_override_is_still_the_override():
 
 def test_update_pins_keeps_the_baseline_of_a_server_whose_name_extends_a_started_one(tmp_path: Path, monkeypatch):
     cfg = tmp_path / "mcp.json"
-    cfg.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}, "a|x": {"command": "y"}}}))
+    cfg.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}, "a|x": {"command": "y"}}}), encoding="utf-8")
     failing: list[str] = []
 
     async def fake_list(server, timeout):
@@ -62,7 +62,7 @@ def test_update_pins_keeps_the_baseline_of_a_server_whose_name_extends_a_started
         args = argparse.Namespace(files=[cfg], no_connect=False, connect_project=False, format="json", timeout=5.0,
                                   pins=tmp_path / "pins.json", no_pins=False, update_pins=update)
         scan.run(args)
-        return json.loads((tmp_path / "pins.json").read_text())
+        return json.loads((tmp_path / "pins.json").read_text(encoding="utf-8"))
 
     first = run(False)
     assert len(first) == 2

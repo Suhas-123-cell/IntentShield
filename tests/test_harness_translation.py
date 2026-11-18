@@ -35,7 +35,7 @@ PINNED_TO_ALL_RELEASES = True    # the shipped table is the refit on every relea
 
 def test_the_table_is_pinned_to_the_derivation_from_the_lane_outcomes():
     derive = _load("derive_table")
-    features = json.loads(derive.FEATURES.read_text())
+    features = json.loads(derive.FEATURES.read_text(encoding="utf-8"))
     derived = derive.derive_all(features, use_all=PINNED_TO_ALL_RELEASES)
     for harness_name, by_feature in translation.RANGES.items():
         for feature, spans in by_feature.items():
@@ -45,8 +45,8 @@ def test_the_table_is_pinned_to_the_derivation_from_the_lane_outcomes():
 def test_the_fit_only_table_is_kept_and_reproducible():
     """The table the held-out check ran against, derived from every other release only."""
     derive = _load("derive_table")
-    features = json.loads(derive.FEATURES.read_text())
-    frozen = json.loads((RESULTS / "ranges-fit-only.json").read_text())
+    features = json.loads(derive.FEATURES.read_text(encoding="utf-8"))
+    frozen = json.loads((RESULTS / "ranges-fit-only.json").read_text(encoding="utf-8"))
     assert derive.derive_all(features) == frozen
     for harness_name, entry in frozen.items():
         assert not set(entry["fit"]) & set(entry["held_out"])
@@ -208,15 +208,36 @@ def test_mode_needs_positive_evidence_of_a_person():
 
 def test_the_recorded_version_is_ignored_once_the_binary_changes(tmp_path):
     binary = tmp_path / "claude"
-    binary.write_text("v1")
+    binary.write_text("v1", encoding="utf-8")
     translation.record_version("claude", "2.1.200", str(binary), tmp_path)
     assert translation.recorded_version("claude", tmp_path) == ((2, 1, 200), "")
-    binary.write_text("version two, longer")
+    binary.write_text("version two, longer", encoding="utf-8")
     version, why = translation.recorded_version("claude", tmp_path)
     assert version is None and "changed" in why
     binary.unlink()
     assert translation.recorded_version("claude", tmp_path)[0] is None
     assert translation.recorded_version("codex", tmp_path)[1].startswith("no version recorded")
+
+
+def test_a_home_that_cannot_be_written_leaves_the_version_unrecorded_and_does_not_raise(tmp_path):
+    blocked = tmp_path / "a-file-where-the-home-should-be"
+    blocked.write_text("x", encoding="utf-8")   # a directory cannot be made under a file, whoever runs the test
+    binary = tmp_path / "claude"
+    binary.write_text("v1", encoding="utf-8")
+    assert translation.record_version("claude", "2.1.200", str(binary), blocked) is False
+    assert translation.record_version("claude", "2.1.200", str(binary), tmp_path / "home") is True
+    assert translation.recorded_version("claude", tmp_path / "home") == ((2, 1, 200), "")
+    assert translation.recorded_version("claude", blocked)[0] is None
+
+
+def test_an_ask_is_still_answered_when_the_version_cannot_be_recorded(monkeypatch, tmp_path):
+    blocked = tmp_path / "file"
+    blocked.write_text("x", encoding="utf-8")
+    program = tmp_path / "claude"
+    program.write_text("#!/bin/sh\necho 2.1.316\n", encoding="utf-8")
+    program.chmod(0o755)
+    monkeypatch.undo()   # the autouse fixture stubs probe_and_record out; this test is about the real one
+    assert translation.probe_and_record("claude", blocked, program=str(program)) == (2, 1, 316)
 
 
 def test_the_environment_can_state_the_version(monkeypatch, tmp_path):
@@ -231,11 +252,11 @@ def _sh(command: str) -> subprocess.CompletedProcess:
 
 def test_the_launcher_turns_every_failure_into_exit_2_with_a_reason(tmp_path):
     ok = tmp_path / "ok"
-    ok.write_text("#!/bin/sh\necho '{\"ok\": 1}'\n")
+    ok.write_text("#!/bin/sh\necho '{\"ok\": 1}'\n", encoding="utf-8")
     dead = tmp_path / "dead"
-    dead.write_text("#!/nonexistent/interpreter\n")
+    dead.write_text("#!/nonexistent/interpreter\n", encoding="utf-8")
     refuses = tmp_path / "refuses"
-    refuses.write_text("#!/bin/sh\necho 'because' >&2\nexit 2\n")
+    refuses.write_text("#!/bin/sh\necho 'because' >&2\nexit 2\n", encoding="utf-8")
     for path in (ok, dead, refuses):
         path.chmod(0o755)
     passed = _sh(translation.launcher(str(ok)))
@@ -334,17 +355,17 @@ def test_installed_commands_are_still_recognised_as_ours(tmp_path):
 def test_install_translate_default_and_opt_out(tmp_path):
     home = tmp_path / "home"
     path = install.install("claude", "user", hook="/opt/bin/intentshield-hook", home=home)
-    on = path.read_text()
+    on = path.read_text(encoding="utf-8")
     assert "--deadline 30" in on and translation.LAUNCHER.split(";")[0] in on
     install.uninstall("claude", "user", home=home)
     path = install.install("claude", "user", hook="/opt/bin/intentshield-hook", home=home, translate=False)
-    assert "--deadline" not in path.read_text()
+    assert "--deadline" not in path.read_text(encoding="utf-8")
 
 
 def test_the_translated_hook_still_runs_under_a_posix_shell_when_the_guard_breaks(tmp_path):
     """The hook the installer writes, run the way a harness runs it, with the interpreter gone."""
     dead = tmp_path / "intentshield-hook"
-    dead.write_text("#!/nonexistent/python\n")
+    dead.write_text("#!/nonexistent/python\n", encoding="utf-8")
     dead.chmod(0o755)
     entries = install.hook_entries("claude", install.hook_command("claude", str(dead), deadline=30))
     command = entries["PreToolUse"][0]["hooks"][0]["command"]
@@ -357,15 +378,15 @@ def _hook_file(harness_name, tmp_path, command, translate=True):
     path = install.settings_path(harness_name, "user", home, tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if harness_name == "codex":
-        path.write_text(install.codex_toml(command, False, translate))
+        path.write_text(install.codex_toml(command, False, translate), encoding="utf-8")
     else:
-        path.write_text(json.dumps({"hooks": install.hook_entries(harness_name, command, translate=translate)}))
+        path.write_text(json.dumps({"hooks": install.hook_entries(harness_name, command, translate=translate)}), encoding="utf-8")
     return home
 
 
 def _dead_hook(tmp_path):
     dead = tmp_path / "intentshield-hook"
-    dead.write_text("#!/nonexistent/python\n")
+    dead.write_text("#!/nonexistent/python\n", encoding="utf-8")
     dead.chmod(0o755)
     return dead
 
@@ -393,7 +414,7 @@ def test_doctor_says_the_launcher_makes_a_dead_interpreter_a_refusal(tmp_path, c
 
 def test_doctor_flags_a_hook_installed_without_the_translation(tmp_path, capsys):
     ok = tmp_path / "intentshield-hook"
-    ok.write_text("#!/bin/sh\n")
+    ok.write_text("#!/bin/sh\n", encoding="utf-8")
     ok.chmod(0o755)
     home = _hook_file("codex", tmp_path, install.hook_command("codex", str(ok)), translate=False)
     doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db", verbose=True)

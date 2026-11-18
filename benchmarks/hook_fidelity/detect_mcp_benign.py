@@ -133,22 +133,22 @@ def cmd_run(args) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     text = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for r in rows)
-    (out / "items.jsonl").write_text(text)
+    (out / "items.jsonl").write_text(text, encoding="utf-8")
     decisions: list[dict] = []
     for v in VARIANTS:
         decisions += dc.decide_intentshield(rows, v)
-    (out / "decisions.jsonl").write_text("".join(json.dumps(d, sort_keys=True, ensure_ascii=False) + "\n" for d in decisions))
+    (out / "decisions.jsonl").write_text("".join(json.dumps(d, sort_keys=True, ensure_ascii=False) + "\n" for d in decisions), encoding="utf-8")
     summary = summarize(rows, decisions)
     summary["items_sha256"] = hashlib.sha256(text.encode()).hexdigest()
-    (out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
+    (out / "summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(summary["variants"], indent=1))
     return 0
 
 
 def cmd_report(args) -> int:
     out = Path(args.out)
-    rows = [json.loads(line) for line in (out / "items.jsonl").read_text().splitlines()]
-    decisions = [json.loads(line) for line in (out / "decisions.jsonl").read_text().splitlines()]
+    rows = [json.loads(line) for line in (out / "items.jsonl").read_text(encoding="utf-8").splitlines()]
+    decisions = [json.loads(line) for line in (out / "decisions.jsonl").read_text(encoding="utf-8").splitlines()]
     print(json.dumps(summarize(rows, decisions), indent=1, sort_keys=True))
     return 0
 

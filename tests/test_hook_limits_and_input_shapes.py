@@ -130,7 +130,7 @@ def _run_hook(monkeypatch, db: Path, event: dict) -> None:
 
 def test_a_database_that_is_not_one_is_refused_with_its_name_and_a_way_out(tmp_path, monkeypatch, capsys):
     db = tmp_path / "hooks.db"
-    db.write_text("not a database")
+    db.write_text("not a database", encoding="utf-8")
     _run_hook(monkeypatch, db, {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash", "tool_input": {"command": "ls"}})
     err = capsys.readouterr().err
     assert "hook failed" in err and str(db) in err and f"mv {db} {db}.old" in err and "session state only" in err

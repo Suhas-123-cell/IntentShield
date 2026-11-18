@@ -73,7 +73,7 @@ def allow_fraction() -> dict:
     """Over the BENIGN-scenario captures of ``guards/captures.jsonl`` (a guard's own entry point on a benign payload, run in a no-network
     sandbox in round 3): what each reply is, and what the shim's ``classify`` does with it under ``--on-empty deny`` and ``allow``. Pure
     function over bytes: no guard code runs here."""
-    caps = [json.loads(line) for line in (GUARDS / "captures.jsonl").read_text().splitlines() if line.strip()]
+    caps = [json.loads(line) for line in (GUARDS / "captures.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     benign = [c for c in caps if c.get("scenario") == "benign"]
     items = []
     for c in benign:
@@ -382,9 +382,9 @@ def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     out = Path(args[0]).resolve()
     s = summarize(out)
-    (out / "summary-r8.json").write_text(json.dumps(s, indent=1, default=str))
-    (out / "r8-allow-fraction.json").write_text(json.dumps(s["allow_fraction"], indent=1))
-    (out / "table-r8.md").write_text(table(s))
+    (out / "summary-r8.json").write_text(json.dumps(s, indent=1, default=str), encoding="utf-8")
+    (out / "r8-allow-fraction.json").write_text(json.dumps(s["allow_fraction"], indent=1), encoding="utf-8")
+    (out / "table-r8.md").write_text(table(s), encoding="utf-8")
     print(
         json.dumps(
             {

@@ -34,7 +34,7 @@ ROOT = HERE.parents[1]
 DETECT = ROOT / "results" / "hook-fidelity" / "detect"
 TOOL_KINDS = ("shell", "read", "write", "edit")
 MIN_LENGTH = 6   # shorter strings match anything
-PINNED = json.loads((HERE / "overlap_items.json").read_text())
+PINNED = json.loads((HERE / "overlap_items.json").read_text(encoding="utf-8"))
 
 
 def defining_string(row: dict) -> str | None:
@@ -83,8 +83,8 @@ def harmful_item_count(rows: list[dict]) -> int:
 def rescored(excluded: set[str]) -> dict:
     """The 214-call set's headline figures without the items in ``excluded``."""
     rows = [r for r in fr.load_fixtures() if r["item_id"] not in excluded]
-    decisions = [json.loads(line) for line in (fr.FRESH / "decisions.jsonl").read_text().splitlines()]
-    delivery = json.loads((DETECT / "r8fix" / "delivery.json").read_text())
+    decisions = [json.loads(line) for line in (fr.FRESH / "decisions.jsonl").read_text(encoding="utf-8").splitlines()]
+    delivery = json.loads((DETECT / "r8fix" / "delivery.json").read_text(encoding="utf-8"))
     _, summary = fr.build_report(rows, decisions, delivery)
     out: dict = {"n_harmful": summary["n_harmful"], "n_benign": summary["n_benign"]}
     harmful = summary["by_guard"][fr.IS]["harmful"]["all_run"]
@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     text = repository_text(args.roots)
     result: dict = {"roots": args.roots}
     for name, path in (("fresh_214_call_set", fr.FRESH / "fixtures.jsonl"), ("fixtures_467_set", DETECT / "fixtures.jsonl")):
-        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
         found = overlapping_items(rows, text)
         result[name] = {"harmful_items": harmful_item_count(rows), "overlapping": len(found), "items": found}
     excluded = set(result["fresh_214_call_set"]["items"])

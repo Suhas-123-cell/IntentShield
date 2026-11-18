@@ -136,7 +136,7 @@ def test_a_pack_indicator_with_a_port_matches_calls_to_its_host(tmp_path):
     (tmp_path / "packs").mkdir()
     (tmp_path / "packs" / "t.json").write_text(json.dumps({
         "format": rule_packs.FORMAT, "name": "t", "version": 1, "rules": [], "fingerprints": [], "benign": [],
-        "indicators": [{"value": value, "level": "block"} for value in PORTED]}))
+        "indicators": [{"value": value, "level": "block"} for value in PORTED]}), encoding="utf-8")
     memory = ThreatMemory(tmp_path / "t.db", packs=PackSet(tmp_path / "packs", Trust(allow_unverified=True)))
     for value in PORTED_CALLS:
         assert _hit(memory, value) is not None, value

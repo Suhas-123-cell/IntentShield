@@ -24,41 +24,41 @@ def test_uninstall_puts_back_a_commented_gemini_file_with_an_empty_hooks_object_
     original = '{ // keep this note\n  "theme": "dark", /* and this */\n  "hooks": {}\n}\n'
     path = tmp_path / "home" / ".gemini" / "settings.json"
     path.parent.mkdir(parents=True)
-    path.write_text(original)
+    path.write_text(original, encoding="utf-8")
     install.install("gemini", "user", hook="/opt/is/bin/intentshield-hook", home=tmp_path / "home")
-    assert "hooks" in json.loads(install.strip_json_comments(path.read_text()))
+    assert "hooks" in json.loads(install.strip_json_comments(path.read_text(encoding="utf-8")))
     assert "its original text is saved" in capsys.readouterr().err
     install.uninstall("gemini", "user", home=tmp_path / "home")
-    assert path.read_text() == original
+    assert path.read_text(encoding="utf-8") == original
 
 
 def test_a_commented_gemini_file_with_no_hooks_key_comes_back_too(tmp_path):
     original = '{\n  // c\n  "theme": "dark"\n}\n'
     path = tmp_path / "home" / ".gemini" / "settings.json"
     path.parent.mkdir(parents=True)
-    path.write_text(original)
+    path.write_text(original, encoding="utf-8")
     install.install("gemini", "user", hook="/opt/is/bin/intentshield-hook", home=tmp_path / "home")
     install.uninstall("gemini", "user", home=tmp_path / "home")
-    assert path.read_text() == original
+    assert path.read_text(encoding="utf-8") == original
 
 
 def test_an_edit_made_after_install_is_kept_and_the_original_text_is_not_forced_back(tmp_path):
     path = tmp_path / "home" / ".gemini" / "settings.json"
     path.parent.mkdir(parents=True)
-    path.write_text('{ // c\n "hooks": {} }\n')
+    path.write_text('{ // c\n "hooks": {} }\n', encoding="utf-8")
     install.install("gemini", "user", hook="/opt/is/bin/intentshield-hook", home=tmp_path / "home")
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["theme"] = "light"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     install.uninstall("gemini", "user", home=tmp_path / "home")
-    assert json.loads(path.read_text()) == {"theme": "light"}
+    assert json.loads(path.read_text(encoding="utf-8")) == {"theme": "light"}
 
 
 # --- wrap: one bad entry, proxy configs, unwrap warning ---------------------------------------------------------------------------
 
 def _mcp(tmp_path: Path, servers: dict) -> Path:
     path = tmp_path / ".mcp.json"
-    path.write_text(json.dumps({"mcpServers": servers}))
+    path.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
     return path
 
 
@@ -71,7 +71,7 @@ def test_wrap_skips_an_entry_the_proxy_cannot_take_and_wraps_the_rest_without_a_
     said = capsys.readouterr().out
     assert "skipped bad: command must be a string" in said and "skipped badargs: args must be a list of strings" in said
     assert "skipped badenv: env must be an object" in said
-    data = json.loads(mcp.read_text())["mcpServers"]
+    data = json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]
     assert data["bad"] == {"command": 5, "args": "x"} and data["good"]["command"] == "/opt/is/bin/intentshield-mcp"
     assert len(list(out.glob("*.json"))) == 2
 
@@ -89,7 +89,7 @@ def test_wrap_leaves_no_proxy_config_behind_when_the_client_file_cannot_be_writt
     with pytest.raises(install.ChangedMeanwhile):
         install.wrap(mcp, out_dir=out, proxy="/opt/is/bin/intentshield-mcp")
     assert list(out.glob("*.json")) == []
-    assert json.loads(mcp.read_text())["mcpServers"]["a"] == {"command": "npx"}
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["a"] == {"command": "npx"}
 
 
 def test_wrap_writes_nothing_when_every_entry_is_refused(tmp_path):
@@ -103,13 +103,13 @@ def test_unwrap_says_so_when_the_wrapped_entry_was_edited_and_drops_the_edit(tmp
     mcp = _mcp(tmp_path, {"fs": {"command": "npx", "args": ["-y", "srv"]}})
     install.wrap(mcp, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp")
     capsys.readouterr()
-    data = json.loads(mcp.read_text())
+    data = json.loads(mcp.read_text(encoding="utf-8"))
     data["mcpServers"]["fs"]["args"].append("--extra")
-    mcp.write_text(json.dumps(data))
+    mcp.write_text(json.dumps(data), encoding="utf-8")
     install.unwrap(mcp)
     err = capsys.readouterr().err
     assert "fs has other arguments than the ones wrap wrote" in err and "--extra" in err
-    assert json.loads(mcp.read_text())["mcpServers"]["fs"] == {"command": "npx", "args": ["-y", "srv"]}
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["fs"] == {"command": "npx", "args": ["-y", "srv"]}
 
 
 def test_unwrap_of_an_untouched_entry_prints_no_warning(tmp_path, capsys):
@@ -135,7 +135,7 @@ def test_a_dry_run_only_warns_and_allow_ephemeral_installs_anyway(tmp_path, caps
     install.install("claude", "user", hook=CACHE_HOOK, home=tmp_path, dry_run=True)
     assert "archive-v0" in capsys.readouterr().err
     install.install("claude", "user", hook=CACHE_HOOK, home=tmp_path, allow_ephemeral=True)
-    assert CACHE_HOOK in (tmp_path / ".claude" / "settings.json").read_text()
+    assert CACHE_HOOK in (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("path,ephemeral", [
@@ -152,7 +152,7 @@ def test_wrap_refuses_a_proxy_in_the_uvx_cache(tmp_path):
     mcp = _mcp(tmp_path, {"fs": {"command": "npx"}})
     with pytest.raises(ValueError, match="run-once launcher"):
         install.wrap(mcp, out_dir=tmp_path / "p", proxy="/Users/x/.cache/uv/archive-v0/h/bin/intentshield-mcp")
-    assert json.loads(mcp.read_text())["mcpServers"]["fs"] == {"command": "npx"}
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["fs"] == {"command": "npx"}
 
 
 # --- install arguments are checked in a dry run too, errors name their file ---------------------------------------------------------
@@ -182,10 +182,10 @@ def test_a_judge_url_without_a_custom_judge_is_refused(tmp_path):
 def test_a_hooks_value_that_is_not_an_object_is_reported_with_its_file(tmp_path, capsys):
     path = tmp_path / ".claude" / "settings.local.json"
     path.parent.mkdir()
-    path.write_text('{"hooks": "x"}')
+    path.write_text('{"hooks": "x"}', encoding="utf-8")
     with pytest.raises(ValueError, match="settings.local.json: 'hooks' is not an object"):
         install.install("claude", "project", hook="/opt/is/bin/intentshield-hook", cwd=tmp_path)
-    path.write_text('{"hooks": {"PreToolUse": 5}}')
+    path.write_text('{"hooks": {"PreToolUse": 5}}', encoding="utf-8")
     with pytest.raises(ValueError, match="settings.local.json: hooks.PreToolUse is not a list"):
         install.install("claude", "project", hook="/opt/is/bin/intentshield-hook", cwd=tmp_path)
 
@@ -193,7 +193,7 @@ def test_a_hooks_value_that_is_not_an_object_is_reported_with_its_file(tmp_path,
 def test_the_command_line_says_which_file_for_a_bad_hooks_value(tmp_path, monkeypatch, capsys):
     path = tmp_path / ".claude" / "settings.local.json"
     path.parent.mkdir()
-    path.write_text('{"hooks": "x"}')
+    path.write_text('{"hooks": "x"}', encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as stop:
         cli.main(["install", "claude", "--scope", "project"])
@@ -262,7 +262,7 @@ def test_the_scan_help_and_docs_state_the_exit_codes():
 
 
 def test_a_scan_of_one_unstartable_project_server_exits_2(tmp_path, monkeypatch, capsys):
-    (tmp_path / ".mcp.json").write_text(json.dumps({"mcpServers": {"s": {"command": "x"}}}))
+    (tmp_path / ".mcp.json").write_text(json.dumps({"mcpServers": {"s": {"command": "x"}}}), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "h"))
     with pytest.raises(SystemExit) as stop:
@@ -274,7 +274,7 @@ def test_a_scan_of_one_unstartable_project_server_exits_2(tmp_path, monkeypatch,
 
 def _crash(tmp_path) -> list[str]:
     path = tmp_path / "g.py"
-    path.write_text("import sys\nsys.stdin.read()\nsys.stderr.write('Traceback: boom')\nsys.exit(1)\n")
+    path.write_text("import sys\nsys.stdin.read()\nsys.stderr.write('Traceback: boom')\nsys.exit(1)\n", encoding="utf-8")
     return [sys.executable, str(path)]
 
 

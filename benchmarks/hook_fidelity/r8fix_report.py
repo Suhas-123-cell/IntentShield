@@ -34,11 +34,11 @@ def fmt(k: int, n: int) -> str:
 
 def main() -> None:
     fx = {}
-    for line in (DETECT / "fixtures.jsonl").read_text().splitlines():
+    for line in (DETECT / "fixtures.jsonl").read_text(encoding="utf-8").splitlines():
         r = json.loads(line)
         fx[r["id"]] = r
     dec: dict[str, dict[str, str]] = {}
-    for line in (DETECT / "r8fix" / "decisions.jsonl").read_text().splitlines():
+    for line in (DETECT / "r8fix" / "decisions.jsonl").read_text(encoding="utf-8").splitlines():
         d = json.loads(line)
         dec.setdefault(d["guard"], {})[d["row_id"]] = d["class"]
     held = [r for r in fx.values() if r["primary"] and r["heldout"]]

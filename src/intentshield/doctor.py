@@ -111,7 +111,7 @@ def _hooks(harness: str, path: Path) -> dict[str, list[dict[str, Any]]]:
 
 def _stored_keys(home: Path) -> set[str]:
     try:
-        lines = (home / ".intentshield" / ".env").read_text().splitlines()
+        lines = (home / ".intentshield" / ".env").read_text(encoding="utf-8").splitlines()
     except OSError:
         return set()
     return {line.partition("=")[0].strip() for line in lines if "=" in line and line.partition("=")[2].strip()}
@@ -467,7 +467,8 @@ def _upstream_command(config: str) -> str:
         return ""
 
 
-def _check_servers(report: Report, path: Path, connect: list[tuple[Path, str, dict[str, Any]]] | None = None) -> int:
+def _check_servers(report: Report, path: Path, connect: list[tuple[Path, str, dict[str, Any]]] | None = None,
+                   project: bool = False) -> int:
     """Checks the MCP servers of one client file; returns how many are behind the transparent proxy. Each wrapped server whose
     proxy config and command were found is added to ``connect`` when that list is given."""
     try:
@@ -513,7 +514,7 @@ def _check_servers(report: Report, path: Path, connect: list[tuple[Path, str, di
         report.line("ok", str(path),
                     f"{len(found_ok)} server(s) behind the proxy ({', '.join(sorted(found_ok))}): the proxy config "
                                      "exists and the server's command was found. This does not start the proxy; "
-                                     "`intentshield doctor --connect` does")
+                                     f"`intentshield doctor {'--connect-project' if project else '--connect'}` does")
     if bare:
         report.line("warn", str(path), f"{len(bare)} stdio server(s) not behind the transparent proxy, so their tool "
                                        f"descriptions go unchecked: {', '.join(sorted(bare))}. ",
@@ -551,12 +552,27 @@ def _connect(report: Report, targets: list[tuple[Path, str, dict[str, Any]]], ti
             report.line("ok", str(path), f"{label}: started through the proxy and listed {len(names)} tool(s)")
 
 
+def _check_database_versions(report: Report, db: Path) -> None:
+    """A warning for a database written by a newer release than this one: the hooks keep working on the columns they know."""
+    from . import storage
+    from .harness.store import SCHEMA_VERSION as HOOKS_SCHEMA
+    from .threat_memory import SCHEMA_VERSION as THREATS_SCHEMA
+
+    for database, known in ((db, HOOKS_SCHEMA), (db.with_name("threats.db"), THREATS_SCHEMA)):
+        if (newer := storage.newer_schema(database, known)) is not None:
+            report.line("warn", str(database),
+                        f"was written by a newer IntentShield (database version {newer}; this one reads version {known}). "
+                        "The hooks keep working on the columns they know. Upgrade intentshield-mcp so that every hook and "
+                        "proxy process is the same version.")
+
+
 def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = None, connect: bool = False,
            connect_project: bool = False, verbose: bool = False) -> int:
     home, cwd = home or Path.home(), cwd or Path.cwd()
     db = db or Path(os.getenv("INTENTSHIELD_HOOK_DB") or home / ".intentshield" / "hooks.db")
     report = Report(home, verbose)
     runs = _last_runs(db)
+    _check_database_versions(report, db)
     guarded = []
     for harness in install.HARNESSES:
         paths = [install.settings_path(harness, "user", home, cwd)]
@@ -579,7 +595,7 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
     for path in (*user_files, *project_files):
         if path.exists():
             targets: list[tuple[Path, str, dict[str, Any]]] = []
-            proxied += _check_servers(report, path, targets if connect else None)
+            proxied += _check_servers(report, path, targets if connect else None, path in project_files)
             if path in project_files and not connect_project:
                 unstarted += [path] if targets else []  # a server a repository's own file names is code the repository chose
             else:

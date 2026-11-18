@@ -67,7 +67,7 @@ def server_entry(mode: str, out: Path) -> dict:
         return probe
     (out / "proxy.json").write_text(json.dumps({
         "upstreams": [{"server_id": "probe", "transport": "stdio", **probe}],
-        "database_path": str(out / "proxy.db")}))
+        "database_path": str(out / "proxy.db")}), encoding="utf-8")
     return {"command": PY, "args": ["-m", "intentshield.mcp_server", "--transparent", "--config", str(out / "proxy.json")],
             "env": {"PYTHONPATH": str(ROOT / "src")}}
 
@@ -84,8 +84,8 @@ def run_claude(out: Path, mode: str, model: str, name: str, prompt: str) -> str:
     entry = {"hooks": [{"type": "command", "command": hook}]}
     settings = {"hooks": {event: [{"matcher": "*", **entry} if "Tool" in event or event.startswith("Permission")
                                   else entry] for event in CLAUDE_EVENTS}}
-    (out / "settings.json").write_text(json.dumps(settings))
-    (out / "mcp.json").write_text(json.dumps({"mcpServers": {"probe": server_entry(mode, out)}}))
+    (out / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    (out / "mcp.json").write_text(json.dumps({"mcpServers": {"probe": server_entry(mode, out)}}), encoding="utf-8")
     project = project_dir(out, name)
     result = subprocess.run(
         ["claude", "-p", prompt, "--model", model, "--setting-sources", "project", "--strict-mcp-config",
@@ -93,7 +93,7 @@ def run_claude(out: Path, mode: str, model: str, name: str, prompt: str) -> str:
          "--allowedTools", "mcp__probe__lookup", "mcp__probe__lookup_v", "mcp__probe__subscribe", "ListMcpResourcesTool",
          "ReadMcpResourceTool"],
         cwd=project, capture_output=True, text=True, timeout=600)
-    (out / f"answer-{name}.json").write_text(result.stdout or result.stderr)
+    (out / f"answer-{name}.json").write_text(result.stdout or result.stderr, encoding="utf-8")
     try:
         return json.loads(result.stdout).get("result", "")
     except ValueError:
@@ -111,12 +111,12 @@ def run_gemini(out: Path, mode: str, model: str, name: str, prompt: str) -> str:
         "hooks": {event: [{"matcher": "*", **entry} if event in ("BeforeTool", "AfterTool") else entry]
                   for event in GEMINI_EVENTS},
     }
-    (home / ".gemini" / "settings.json").write_text(json.dumps(settings))
+    (home / ".gemini" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
     project = project_dir(out, name)
     env = {**os.environ, "HOME": str(home), "GEMINI_API_KEY": dotenv_values(ROOT / ".env").get("GEMINI_API_KEY", "")}
     result = subprocess.run(["gemini", "-p", prompt, "-m", model, "--approval-mode", "yolo", "-o", "json"],
                             cwd=project, env=env, capture_output=True, text=True, timeout=600)
-    (out / f"answer-{name}.json").write_text(result.stdout + "\n--- stderr ---\n" + result.stderr[-3000:])
+    (out / f"answer-{name}.json").write_text(result.stdout + "\n--- stderr ---\n" + result.stderr[-3000:], encoding="utf-8")
     try:
         return json.loads(result.stdout).get("response", "")
     except ValueError:
@@ -189,13 +189,13 @@ def server_initiated(requests: list[dict]) -> dict[str, dict]:
 
 def summarize(out: Path, answers: dict[str, str], mode: str = "direct") -> dict:
     def lines(path: Path) -> list[dict]:
-        return [json.loads(x) for x in path.read_text().splitlines() if x] if path.exists() else []
+        return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x] if path.exists() else []
 
     requests, hooks = lines(out / "probe.jsonl"), lines(out / "hooks.jsonl")
     transcripts = {h["transcript"] for h in hooks if h.get("transcript")}
-    context = "".join(Path(t).read_text(errors="replace") for t in transcripts if Path(t).exists())
+    context = "".join(Path(t).read_text(encoding="utf-8", errors="replace") for t in transcripts if Path(t).exists())
     for home in out.glob("home*"):  # Gemini keeps its chat logs under the temporary home
-        context += "".join(p.read_text(errors="replace") for p in home.rglob("*")
+        context += "".join(p.read_text(errors="replace", encoding="utf-8") for p in home.rglob("*")
                            if p.is_file() and p.suffix in (".json", ".jsonl") and p.name != "settings.json")
     answer_text = "\n".join(answers.values())
     cwds = [h["cwd"] for h in hooks if h["event"] == "SessionStart" and h.get("cwd")]
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> None:
         answers[name] = runner(out, args.mode, model, name, prompt)
         print(f"{name}: {answers[name][:200]!r}", file=sys.stderr, flush=True)
     summary = {"harness": args.harness, "mode": args.mode, "model": model, **summarize(out, answers, args.mode)}
-    (out / "summary.json").write_text(json.dumps(summary, indent=2))
+    (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
 
 

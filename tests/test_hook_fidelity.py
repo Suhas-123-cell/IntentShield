@@ -25,7 +25,7 @@ STUB = BENCH / "hook_fidelity" / "stubhook.py"
 
 # ---------------------------------------------------------------- stub hook
 def test_stub_does_not_import_intentshield():
-    tree = ast.parse(STUB.read_text())
+    tree = ast.parse(STUB.read_text(encoding="utf-8"))
     names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     names |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     assert not names & {"intentshield", "harness", "hook_fidelity"}
@@ -74,14 +74,14 @@ def test_stub_logs_before_reply_to_both_channels(tmp_path):
                       "--witness", str(witness)], event)
     assert done.returncode == 2 and "blocked" in done.stderr and done.stdout == ""
     for path in (log, witness):
-        entry = json.loads(path.read_text())
+        entry = json.loads(path.read_text(encoding="utf-8"))
         assert entry["run_id"] == "r1" and entry["reply"] == "R7" and entry["exit_code"] == 2 and entry["tool"] == "Bash"
         assert entry["decision_event"] is True and entry["pid"] and entry["ts_ns"]
 
 
 def test_stub_neutral_on_other_events_and_survives_log_failure(tmp_path):
     blocker = tmp_path / "file"
-    blocker.write_text("x")
+    blocker.write_text("x", encoding="utf-8")
     done = _run_stub(["--harness", "gemini", "--reply", "R4", "--run-id", "r", "--log", str(blocker / "sub" / "l.jsonl")],
                      {"hook_event_name": "AfterTool", "tool_name": "x"})
     assert done.returncode == 0 and done.stdout == "{}" and "could not write" in done.stderr
@@ -95,7 +95,7 @@ def test_stub_delay_and_latency(tmp_path):
     log = str(tmp_path / "l.jsonl")
     done = _run_stub(["--harness", "cursor", "--reply", "R9", "--run-id", "r", "--log", log, "--delay", "0.2"], event)
     assert done.returncode == 0 and json.loads(done.stdout) == {}
-    lines = [json.loads(line) for line in (tmp_path / "l.jsonl").read_text().splitlines()]
+    lines = [json.loads(line) for line in (tmp_path / "l.jsonl").read_text(encoding="utf-8").splitlines()]
     assert lines[0]["sleep"] == 0.2 and lines[0]["decision_event"] is True
     assert lines[1]["phase"] == "completed" and lines[1]["decision_event"] is False and lines[1]["ts_ns"] > lines[0]["ts_ns"]
     done = _run_stub(["--harness", "cursor", "--reply", "R4", "--run-id", "r", "--log", log, "--latency", "0.1",
@@ -147,7 +147,7 @@ def test_run_directory_must_be_outside_repo_and_home(monkeypatch, tmp_path):
 
 def test_claude_settings_carry_the_hook_and_failure_setting(tmp_path):
     paths, spec = _build(tmp_path, _cell("claude", "R4"))
-    settings = json.loads((paths.root / "settings.json").read_text())
+    settings = json.loads((paths.root / "settings.json").read_text(encoding="utf-8"))
     entry = settings["hooks"]["PreToolUse"][0]
     assert entry["matcher"] == "mcp__notes__search_notes"
     handler = entry["hooks"][0]
@@ -157,7 +157,8 @@ def test_claude_settings_carry_the_hook_and_failure_setting(tmp_path):
     assert "--no-session-persistence" in spec.argv
     assert spec.argv[spec.argv.index("--tools") + 1] == ""  # an MCP cell gets no built-in tools
     paths2, _ = _build(tmp_path / "b", _cell("claude", "R5", failcfg="block"))
-    assert json.loads((paths2.root / "settings.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
+    assert json.loads((paths2.root / "settings.json").read_text(
+        encoding="utf-8"))["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
     _, bypass = _build(tmp_path / "c", _cell("claude", "R4", mode="M2"))
     assert "--dangerously-skip-permissions" in bypass.argv and "--allowedTools" not in bypass.argv
 
@@ -166,13 +167,13 @@ def test_no_hook_control_has_no_hooks(tmp_path):
     for harness in cells.HARNESSES:
         root = tmp_path / harness
         paths, spec = _build(root, _cell(harness, "R0"))
-        text = "".join(p.read_text() for p in paths.written)
+        text = "".join(p.read_text(encoding="utf-8") for p in paths.written)
         assert "stubhook" not in text and spec.hook_command == ""
 
 
 def test_codex_toml_trust_flag_and_home(tmp_path):
     paths, spec = _build(tmp_path, _cell("codex", "R4", state="trusted-bypass"))
-    config = tomllib.loads((paths.home / "codex-home" / "config.toml").read_text())
+    config = tomllib.loads((paths.home / "codex-home" / "config.toml").read_text(encoding="utf-8"))
     hook = config["hooks"]["PreToolUse"][0]
     assert hook["matcher"] == "mcp__notes__search_notes" and "--reply R4" in hook["hooks"][0]["command"]
     assert "--dangerously-bypass-hook-trust" in spec.argv
@@ -185,12 +186,12 @@ def test_codex_toml_trust_flag_and_home(tmp_path):
 
 def test_gemini_settings_trust_and_timeout_units(tmp_path):
     paths, spec = _build(tmp_path, _cell("gemini", "R3", state="trust", version="0.66.0"))
-    settings = json.loads((paths.home / ".gemini" / "settings.json").read_text())
+    settings = json.loads((paths.home / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     assert settings["mcpServers"]["notes"]["trust"] is True
     assert settings["general"]["disableAutoUpdate"] is True
     hook = settings["hooks"]["BeforeTool"][0]["hooks"][0]
     assert hook["timeout"] == configs.HOOK_TIMEOUT_S * 1000
-    assert json.loads((paths.home / ".gemini" / "trustedFolders.json").read_text())
+    assert json.loads((paths.home / ".gemini" / "trustedFolders.json").read_text(encoding="utf-8"))
     _, untrusted = _build(tmp_path / "n", _cell("gemini", "R3", state="notrust", version="0.66.0"))
     assert spec.env["HOME"] == str(paths.home)
     assert untrusted.cwd.name == "work"
@@ -199,16 +200,16 @@ def test_gemini_settings_trust_and_timeout_units(tmp_path):
 def test_cursor_files_are_project_level_and_failclosed_is_explicit(tmp_path):
     paths, spec = _build(tmp_path, _cell("cursor", "R3", state="listed"))
     cursor = paths.work / ".cursor"
-    hooks = json.loads((cursor / "hooks.json").read_text())
+    hooks = json.loads((cursor / "hooks.json").read_text(encoding="utf-8"))
     handler = hooks["hooks"]["beforeMCPExecution"][0]
     assert "failClosed" not in handler and handler["timeout"] == configs.HOOK_TIMEOUT_S
-    assert json.loads((cursor / "cli.json").read_text())["permissions"]["allow"] == ["Mcp(notes:*)"]
+    assert json.loads((cursor / "cli.json").read_text(encoding="utf-8"))["permissions"]["allow"] == ["Mcp(notes:*)"]
     assert "--force" not in spec.argv and spec.env["HOME"] == str(paths.home)  # isolated, never the real HOME
     paths2, _ = _build(tmp_path / "b", _cell("cursor", "R5", state="listed", failcfg="closed", kind="shell"))
-    handler = json.loads((paths2.work / ".cursor" / "hooks.json").read_text())["hooks"]["beforeShellExecution"][0]
+    handler = json.loads((paths2.work / ".cursor" / "hooks.json").read_text(encoding="utf-8"))["hooks"]["beforeShellExecution"][0]
     assert handler["failClosed"] is True
     paths3, spec3 = _build(tmp_path / "c", _cell("cursor", "R3", state="unlisted"))
-    assert json.loads((paths3.work / ".cursor" / "cli.json").read_text())["permissions"]["allow"] == []
+    assert json.loads((paths3.work / ".cursor" / "cli.json").read_text(encoding="utf-8"))["permissions"]["allow"] == []
     _, force = _build(tmp_path / "d", _cell("cursor", "R3", mode="M2", state="-"))
     assert "--force" in force.argv
 
@@ -216,7 +217,8 @@ def test_cursor_files_are_project_level_and_failclosed_is_explicit(tmp_path):
 def test_file_level_replies_build_the_broken_hook_file(tmp_path):
     paths, spec = _build(tmp_path, _cell("claude", "R10b"))
     hook = Path(spec.hook_command)
-    assert hook.read_text().startswith(f"#!{configs.DEAD_INTERPRETER}") and not Path(configs.DEAD_INTERPRETER).exists()
+    assert hook.read_text(encoding="utf-8").startswith(f"#!{configs.DEAD_INTERPRETER}")
+    assert not Path(configs.DEAD_INTERPRETER).exists()
     assert os.access(hook, os.X_OK)
     _, spec_a = _build(tmp_path / "a", _cell("claude", "R10a"))
     assert Path(spec_a.hook_command).exists() and not os.access(spec_a.hook_command, os.X_OK)
@@ -297,7 +299,7 @@ def test_tool_matching():
 def test_oracle_counts_only_this_runs_nonce(tmp_path):
     work, calls = tmp_path / "work", tmp_path / "calls.jsonl"
     work.mkdir()
-    (work / "ran-nzAAA.txt").write_text("shim-attested at123 pid=1\n")
+    (work / "ran-nzAAA.txt").write_text("shim-attested at123 pid=1\n", encoding="utf-8")
     assert scoring.oracle_hits("shell", work, calls, "nzAAA", "at123") == 1
     assert scoring.oracle_hits("shell", work, calls, "nzAAA") == 0          # no attestation known: never RAN
     assert scoring.oracle_hits("shell", work, calls, "nzAAA", "atOTHER") == 0
@@ -305,20 +307,20 @@ def test_oracle_counts_only_this_runs_nonce(tmp_path):
     calls.write_text("\n".join(json.dumps(e) for e in [
         {"tool": "search_notes", "arguments": {"query": "nzAAA"}},
         {"tool": "search_notes", "arguments": {"query": "other"}},
-        {"tool": "send_email", "arguments": {"query": "nzAAA"}}]) + "\nnot json\n")
+        {"tool": "send_email", "arguments": {"query": "nzAAA"}}]) + "\nnot json\n", encoding="utf-8")
     assert scoring.oracle_hits("mcp", work, calls, "nzAAA") == 1
     assert scoring.oracle_hits("mcp", work, calls, "nzCCC") == 0
-    (work / "written-nzAAA.txt").write_text("ok")
+    (work / "written-nzAAA.txt").write_text("ok", encoding="utf-8")
     assert scoring.oracle_hits("write", work, calls, "nzAAA") == 1
-    calls.write_text(json.dumps({"tool": "resources/read", "arguments": {"uri": "notes://plan"}}) + "\n")
+    calls.write_text(json.dumps({"tool": "resources/read", "arguments": {"uri": "notes://plan"}}) + "\n", encoding="utf-8")
     assert scoring.oracle_hits("resource", work, calls, "nz") == 1
 
 
 def test_read_events_merges_channels_and_filters_run(tmp_path):
     a, b = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
     line = json.dumps(_event(run_id="r1", ts_ns=5, pid=9))
-    a.write_text(line + "\n" + json.dumps(_event(run_id="r2", ts_ns=6, pid=9)) + "\n")
-    b.write_text(line + "\nnot json\n")
+    a.write_text(line + "\n" + json.dumps(_event(run_id="r2", ts_ns=6, pid=9)) + "\n", encoding="utf-8")
+    b.write_text(line + "\nnot json\n", encoding="utf-8")
     events = scoring.read_events(a, b, tmp_path / "missing.jsonl", run_id="r1")
     assert len(events) == 1 and events[0]["run_id"] == "r1"
 
@@ -362,7 +364,7 @@ def test_rows_need_every_field(tmp_path):
         scoring.append_row(path, bad)
     with pytest.raises(ValueError):
         scoring.append_row(path, _row(outcome="MAYBE"))
-    assert len(path.read_text().splitlines()) == 1
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 1
 
 
 # ---------------------------------------------------------------- taxonomy
@@ -810,7 +812,7 @@ def test_transcript_evidence_must_be_the_hooked_tool_kind():
 def test_shell_marker_made_by_another_tool_is_unattested_and_invalid(tmp_path):
     work = tmp_path / "work"
     work.mkdir()
-    (work / f"ran-{NONCE}.txt").write_text("")                          # what a file-edit tool would leave
+    (work / f"ran-{NONCE}.txt").write_text("", encoding="utf-8")                          # what a file-edit tool would leave
     assert scoring.oracle_hits("shell", work, tmp_path / "c", NONCE, "atX") == 0
     assert scoring.unattested_hits("shell", work, NONCE, "atX") == 1
     row = scoring.score(_evidence(unattested_hits=1))
@@ -840,7 +842,7 @@ def test_the_shim_attests_a_real_touch_and_only_a_shim_touch(tmp_path):
     cell = _cell("cursor", "R1", kind="shell", state="listed")
     spec = configs.build(paths=paths, cell=cell, run_id="00001-abcd", binary=["bin"])
     shim = paths.shim_dir / "touch"
-    assert shim.exists() and os.access(shim, os.X_OK) and spec.attestation in shim.read_text()
+    assert shim.exists() and os.access(shim, os.X_OK) and spec.attestation in shim.read_text(encoding="utf-8")
     assert spec.env["PATH"].split(os.pathsep)[0] == str(paths.shim_dir)
     assert spec.attestation not in spec.prompt and spec.nonce in spec.prompt           # the model never sees the token
     done = subprocess.run([str(shim), f"ran-{spec.nonce}.txt"], cwd=paths.work, capture_output=True, text=True, timeout=30)
@@ -850,7 +852,7 @@ def test_the_shim_attests_a_real_touch_and_only_a_shim_touch(tmp_path):
     assert scoring.oracle_hits("shell", paths.work, paths.calls_log, spec.nonce, spec.attestation) == 1
     plain = paths.work / f"ran-{spec.nonce}-other.txt"
     subprocess.run(["/usr/bin/touch", str(plain)], timeout=30)
-    assert plain.exists() and spec.attestation not in plain.read_text()
+    assert plain.exists() and spec.attestation not in plain.read_text(encoding="utf-8")
     assert "shim" not in " ".join(configs.build(_cell("claude", "R1", kind="mcp"), configs.make_paths(tmp_path / "m"),
                                                 "00001-abcd", ["bin"]).env["PATH"].split(os.pathsep)[:1])
 
@@ -858,7 +860,7 @@ def test_the_shim_attests_a_real_touch_and_only_a_shim_touch(tmp_path):
 def test_file_level_replies_get_a_witness_hook_so_blocked_has_evidence(tmp_path):
     paths, spec = _build(tmp_path, _cell("gemini", "R10b", kind="shell", mode="M2", version="0.66.0", arm="S"))
     assert spec.witness_command and "--reply R1" in spec.witness_command and str(paths.attempt_log) in spec.witness_command
-    settings = json.loads((paths.home / ".gemini" / "settings.json").read_text())
+    settings = json.loads((paths.home / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     commands = [h["command"] for g in settings["hooks"]["BeforeTool"] for h in g["hooks"]]
     assert commands == [spec.hook_command, spec.witness_command]
     assert "--stream" not in spec.argv and spec.argv[-2:] == ["-o", "stream-json"]
@@ -898,14 +900,14 @@ def test_user_level_hook_and_mcp_config_is_detected(tmp_path):
     assert configs.user_level_leaks("cursor", paths, spec.env, system_files=()) == []
     leak = paths.home / ".cursor" / "hooks.json"
     leak.parent.mkdir(parents=True)
-    leak.write_text("{}")
+    leak.write_text("{}", encoding="utf-8")
     found = configs.user_level_leaks("cursor", paths, spec.env, system_files=())
     assert any("user-level config .cursor/hooks.json" in p for p in found)
     assert any("HOME is" in p for p in configs.user_level_leaks("cursor", paths, {**spec.env, "HOME": "/elsewhere"}, ()))
     assert any("CLAUDE_CONFIG_DIR" in p for p in configs.user_level_leaks(
         "claude", paths, {**spec.env, "CLAUDE_CONFIG_DIR": str(tmp_path / "real")}, ()))
     managed = tmp_path / "managed-settings.json"
-    managed.write_text("{}")
+    managed.write_text("{}", encoding="utf-8")
     assert any("system-level" in p for p in configs.user_level_leaks("claude", paths, spec.env, system_files=(str(managed),)))
     # a file the run itself wrote under HOME is not a leak (Gemini keeps its settings there)
     g_paths, g_spec = _build(tmp_path / "g", _cell("gemini", "R4", version="0.66.0", mode="M2", arm="S"))
@@ -923,7 +925,7 @@ def test_execute_one_refuses_a_leaking_run_and_launches_nothing(monkeypatch, tmp
         spec = real_build(*args, **kwargs)
         stray = args[1].home / leaking[0]
         stray.parent.mkdir(parents=True, exist_ok=True)
-        stray.write_text("[hooks]\n")
+        stray.write_text("[hooks]\n", encoding="utf-8")
         return spec
     monkeypatch.setattr(configs, "build", build_with_leak)
     monkeypatch.setattr(configs, "SYSTEM_CONFIG_FILES", {h: () for h in cells.HARNESSES})
@@ -952,12 +954,12 @@ def test_generated_hook_configs_pass_the_structural_lint(tmp_path, harness):
 def test_lint_catches_a_wrong_timeout_matcher_and_missing_program(tmp_path):
     paths, spec = _build(tmp_path, _cell("gemini", "R4", version="0.66.0", mode="M2", arm="S"))
     path = paths.home / ".gemini" / "settings.json"
-    settings = json.loads(path.read_text())
+    settings = json.loads(path.read_text(encoding="utf-8"))
     group = settings["hooks"]["BeforeTool"][0]
     group["hooks"][0]["timeout"] = 3          # seconds where Gemini wants milliseconds
     group["matcher"] = "("
     group["hooks"][0]["command"] = "/nonexistent/stub --x"
-    path.write_text(json.dumps(settings))
+    path.write_text(json.dumps(settings), encoding="utf-8")
     problems = "; ".join(configs.lint_config(_cell("gemini", "R4", version="0.66.0", mode="M2", arm="S"), paths, spec))
     assert "timeout 3" in problems and "does not compile" in problems and "does not exist" in problems
     assert configs.lint_config(_cell("claude", "R0"), paths, spec) == []     # no hook, nothing to lint
@@ -1181,10 +1183,11 @@ def _sign_all(path: Path, skip: tuple[str, ...] = ()) -> Path:
     import hashlib
     archive = path.parent / "archive" / "doc.html"
     archive.parent.mkdir(parents=True, exist_ok=True)
-    archive.write_text("<html>archived vendor page</html>")
+    archive.write_text("<html>archived vendor page</html>", encoding="utf-8")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    path.write_text(json.dumps({i: {"reader": "second reader", "archive": "archive/doc.html", "sha256": digest,
-                                    "retrieved": "2026-11-01"} for i, _ in configs.unverified_items() if i not in skip}))
+    rows = {i: {"reader": "second reader", "archive": "archive/doc.html", "sha256": digest, "retrieved": "2026-11-01"}
+            for i, _ in configs.unverified_items() if i not in skip}
+    path.write_text(json.dumps(rows), encoding="utf-8")
     return path
 
 
@@ -1206,9 +1209,9 @@ def test_unverified_items_gate_execution_until_signed_off(tmp_path):
     assert _gaps(selection, _sign_all(tmp_path / "all.json")) == []
     partial = _sign_all(tmp_path / "p.json", skip=("codex:hooks-table",))
     assert [g.split(":")[0] + ":" + g.split(":")[1] for g in _gaps(selection, partial)] == ["codex:hooks-table"]
-    incomplete = json.loads(partial.read_text())
+    incomplete = json.loads(partial.read_text(encoding="utf-8"))
     incomplete["codex:hooks-table"] = {"reader": "", "archive": "x", "retrieved": "y"}
-    partial.write_text(json.dumps(incomplete))
+    partial.write_text(json.dumps(incomplete), encoding="utf-8")
     assert _gaps(selection, partial)                                  # a sign-off needs reader, archive and date
     only_mcp = [c for c in selection if c.kind == "mcp"]
     assert not any(g.startswith("matcher:codex:shell") for g in _gaps(only_mcp, tmp_path / "missing.json"))
@@ -1216,7 +1219,7 @@ def test_unverified_items_gate_execution_until_signed_off(tmp_path):
 
 def test_signoff_must_be_checkable_not_just_present(tmp_path):
     import hashlib
-    good = json.loads(_sign_all(tmp_path / "g.json").read_text())["codex:hooks-table"]
+    good = json.loads(_sign_all(tmp_path / "g.json").read_text(encoding="utf-8"))["codex:hooks-table"]
     check = lambda entry, who=COMMITTER: run.signoff_problems(entry, who, tmp_path)
     assert check(good) == []
     assert check({"reader": "x", "archive": "x", "retrieved": "x"})                                    # the old ceremonial entry
@@ -1268,7 +1271,7 @@ def test_cumulative_cap_counts_runs_already_launched(monkeypatch, capsys, tmp_pa
     monkeypatch.setitem(cells.CAPS, "codex", 3)
     out = tmp_path / "out"
     out.mkdir()
-    (out / "cap-ledger.json").write_text(json.dumps({"codex": 2}))
+    (out / "cap-ledger.json").write_text(json.dumps({"codex": 2}), encoding="utf-8")
     assert run.main(_args(tmp_path)) == 2                            # 2 already launched + 2 planned > 3
     assert "counting runs already launched" in capsys.readouterr().err
 
@@ -1291,7 +1294,7 @@ def test_execute_loop_records_rows_reruns_invalid_and_keeps_a_cumulative_ledger(
     assert run.main(_args(tmp_path)) == 0
     assert sorted(calls) == [("R1", 0, 0), ("R4", 0, 0), ("R4", 0, 1)]   # the INVALID R4 was rerun once, nothing else
     out = tmp_path / "out"
-    assert json.loads((out / "cap-ledger.json").read_text()) == {"codex": 3}
+    assert json.loads((out / "cap-ledger.json").read_text(encoding="utf-8")) == {"codex": 3}
     rows = scoring.read_rows(out / "runs.jsonl")
     assert len(rows) == 3 and {r["version_reported"] for r in rows} == {"codex-cli 0.165.0"}
     calls.clear()
@@ -1517,7 +1520,8 @@ def test_shim_smoke_attests_through_sh_and_reports_a_login_shell_that_reorders_p
 # (g) activity polling for HUNG
 def test_watch_reports_the_last_growth_and_the_cap(tmp_path):
     log = tmp_path / "out.txt"
-    quick = subprocess.Popen([sys.executable, "-c", "import sys; print('x'); sys.stdout.flush()"], stdout=log.open("w"))
+    quick = subprocess.Popen([sys.executable, "-c", "import sys; print('x'); sys.stdout.flush()"], stdout=log.open("w",
+        encoding="utf-8"))
     capped, kill_ns, last_ns = run.watch(quick, 20, [log], poll=0.05)
     assert capped is False and kill_ns >= last_ns
     sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], stdout=subprocess.DEVNULL)
@@ -1534,13 +1538,13 @@ def test_lint_rejects_a_matcher_that_matches_no_known_tool_or_too_many(tmp_path)
     cell = _cell("claude", "R4", kind="shell", arm="S")
     paths, spec = _build(tmp_path, cell)
     path = paths.root / "settings.json"
-    base = json.loads(path.read_text())
+    base = json.loads(path.read_text(encoding="utf-8"))
     for matcher, fragment in (("NoSuchTool", "matches none of the known"), (".*", "too broad")):
         bad = json.loads(json.dumps(base))
         bad["hooks"]["PreToolUse"][0]["matcher"] = matcher
-        path.write_text(json.dumps(bad))
+        path.write_text(json.dumps(bad), encoding="utf-8")
         assert fragment in "; ".join(configs.lint_config(cell, paths, spec)), matcher
-    path.write_text(json.dumps(base))
+    path.write_text(json.dumps(base), encoding="utf-8")
     assert configs.lint_config(cell, paths, spec) == []
 
 
@@ -1567,7 +1571,7 @@ CORPUS_DIR = Path(__file__).resolve().parents[1]
 
 
 def _corpus():
-    return json.loads((CORPUS_DIR / "results" / "hook-fidelity" / "corpus.json").read_text())
+    return json.loads((CORPUS_DIR / "results" / "hook-fidelity" / "corpus.json").read_text(encoding="utf-8"))
 
 
 def test_corpus_summary_is_derived_from_the_records():
@@ -1621,7 +1625,7 @@ def test_pilot_script_points_only_at_the_loopback_stub_with_a_fake_key_and_launc
         patched.setattr(subprocess, "Popen", boom)
         patched.setattr(subprocess, "run", boom)
         path = run.pilot_script(harness, tmp_path / "pilot", 18080, {})
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert text.count("# run ") == 10 and text.count("stub_model.py") == 10 and "--max-calls 1" in text
     assert "env -i" in text and "sk-stub-not-a-real-key" in text and "HF_STUB_URL=http://127.0.0.1:18080" in text
     urls = set(re.findall(r"https?://[^\s'\"/]+", text))
@@ -1643,13 +1647,13 @@ def test_pilot_commands_per_harness_follow_the_feasibility_note(tmp_path):
     claude_env = specs["claude"].env
     assert claude_env["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:18080" and claude_env["ENABLE_TOOL_SEARCH"] == "false"
     assert "ANTHROPIC_AUTH_TOKEN" not in specs["claude"].env
-    toml = tomllib.loads((Path(specs["codex"].env["CODEX_HOME"]) / "config.toml").read_text())
+    toml = tomllib.loads((Path(specs["codex"].env["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8"))
     provider = toml["model_providers"]["stub"]
     assert toml["model_provider"] == "stub" and provider["wire_api"] == "responses"
     assert provider["base_url"].endswith("/v1")
     assert toml["analytics"]["enabled"] is False and "OPENAI_API_KEY" not in specs["codex"].env
     gemini_home = Path(specs["gemini"].env["GEMINI_CLI_HOME"])
-    gemini_settings = json.loads((gemini_home / ".gemini" / "settings.json").read_text())
+    gemini_settings = json.loads((gemini_home / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     assert gemini_settings["security"]["auth"]["selectedType"] == "gemini-api-key"      # else the GATEWAY auth path
     assert gemini_settings["privacy"]["usageStatisticsEnabled"] is False
     with pytest.raises(NotImplementedError):
@@ -1686,11 +1690,12 @@ def _sweep():
 def test_sweep_table_is_reproducible_from_the_committed_raw_rows_and_has_no_driver_errors():
     table, versions, rows, scenarios = _sweep()
     assert len(versions) == 25 and len(scenarios) == 34 and not any("driverError" in r for r in rows.values())
-    assert (GEMINI_CORE / "table.md").read_text().strip() == table.grouped(versions, rows, scenarios).strip()
-    assert (GEMINI_CORE / "table-per-version.txt").read_text().strip() == table.per_version(versions, rows, scenarios).strip()
-    manifest = json.loads((GEMINI_CORE / "manifest.json").read_text())
+    assert (GEMINI_CORE / "table.md").read_text(encoding="utf-8").strip() == table.grouped(versions, rows, scenarios).strip()
+    assert (GEMINI_CORE / "table-per-version.txt").read_text(
+        encoding="utf-8").strip() == table.per_version(versions, rows, scenarios).strip()
+    manifest = json.loads((GEMINI_CORE / "manifest.json").read_text(encoding="utf-8"))
     assert set(manifest) == set(versions) and all(v["integrity"].startswith("sha512-") for v in manifest.values())
-    assert "/Users/" not in "".join(f.read_text() for f in (GEMINI_CORE / "raw").glob("*.jsonl"))
+    assert "/Users/" not in "".join(f.read_text(encoding="utf-8") for f in (GEMINI_CORE / "raw").glob("*.jsonl"))
 
 
 def test_sweep_boundaries_and_the_claims_the_study_makes_from_them():
@@ -1711,7 +1716,7 @@ def test_sweep_boundaries_and_the_claims_the_study_makes_from_them():
     assert {cellof(v, "multi_deny_plus_allow") for v in versions} == {"deny/no"}
     assert {cellof(v, "timeout_grandchild_holds_pipe") for v in versions} == {"no-return/hang"}
     # the study's wording must not say the table is a statement about prompting
-    assert "ask/prompt" not in (GEMINI_CORE / "table.md").read_text()
+    assert "ask/prompt" not in (GEMINI_CORE / "table.md").read_text(encoding="utf-8")
     groups = table.groups(versions, rows, scenarios)
     assert [g[0] for g in groups] == ["0.20.2", "0.26.0", "0.30.0", "0.36.0"]
 
@@ -1746,7 +1751,7 @@ def test_codex_stub_config_turns_off_the_features_that_phone_home_and_parses(tmp
     cell = cells.Cell("codex", "0.165.0", "M1", "shell", "R4", "trusted-bypass", arm="S")
     paths = configs.make_paths(tmp_path / "run")
     spec = configs.build(cell, paths, "rid", ["codex"], stub_url="http://127.0.0.1:1234")
-    data = tomllib.loads((Path(spec.env["CODEX_HOME"]) / "config.toml").read_text())
+    data = tomllib.loads((Path(spec.env["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8"))
     assert data["features"] == {"apps": False, "plugins": False}
     assert data["model_providers"]["stub"]["base_url"] == "http://127.0.0.1:1234/v1" and data["model_provider"] == "stub"
     assert data["hooks"]["PreToolUse"][0]["matcher"] == "Bash" and "--dangerously-bypass-hook-trust" in spec.argv
@@ -1759,7 +1764,7 @@ def test_stub_summary_and_stream_events(tmp_path):
             {"decision": "text:after-tool-result", "tool_results": [{"text": "blocked by hook"}],
              "offered_tools": ["exec_command"]},
             {"decision": "text:no-tools-offered", "side_call_head": "title"}]
-    log.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n")
+    log.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n", encoding="utf-8")
     summary = run.stub_summary(log)
     assert summary["requests"] == 3 and summary["tool_calls_issued"] == 1
     assert summary["scripted_tool_offered"] is True
@@ -1773,7 +1778,7 @@ def test_stub_summary_and_stream_events(tmp_path):
 def test_egress_lines_counts_what_the_proxy_logged(tmp_path):
     assert run.egress_lines(None) == [] and run.egress_lines(tmp_path / "none") == []
     log = tmp_path / "egress.jsonl"
-    log.write_text('{"ts": 1, "line": "CONNECT chatgpt.com:443 HTTP/1.1"}\n\n')
+    log.write_text('{"ts": 1, "line": "CONNECT chatgpt.com:443 HTTP/1.1"}\n\n', encoding="utf-8")
     assert run.egress_lines(log) == ['{"ts": 1, "line": "CONNECT chatgpt.com:443 HTTP/1.1"}']
 
 
@@ -1792,7 +1797,8 @@ def test_codex_matrices_stay_inside_the_launch_budget_and_the_live_set_is_part_o
 def test_codex_manifest_binaries_skip_releases_that_hang(tmp_path):
     manifest = tmp_path / "m.json"
     manifest.write_text(json.dumps({"versions": [{"version": "0.105.0", "version_ok": False, "binary_path": "/x"},
-                                                  {"version": "0.165.0", "version_ok": True, "binary_path": "/y"}]}))
+                                                  {"version": "0.165.0", "version_ok": True, "binary_path": "/y"}]}),
+                                                      encoding="utf-8")
     assert codex_matrix.manifest_binaries(manifest) == {"codex:0.165.0": "/y"}
 
 
@@ -1813,7 +1819,7 @@ def test_codex_dead_under_bypass_list_matches_the_committed_live_rows():
     rows_file = Path(__file__).resolve().parents[1] / "results" / "hook-fidelity" / "codex" / "runs.jsonl"
     if not rows_file.exists():
         pytest.skip("no committed Codex rows")
-    rows = [json.loads(line) for line in rows_file.read_text().splitlines()]
+    rows = [json.loads(line) for line in rows_file.read_text(encoding="utf-8").splitlines()]
     seen: dict[str, list] = {}
     for r in rows:
         if r["reply"] == "R1" and r["kind"] == "shell" and r["state"] == "trusted-bypass" and r["outcome"] != "INVALID":

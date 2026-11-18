@@ -19,8 +19,8 @@ import report_numbers as rn  # noqa: E402
 if not (ROOT / "docs" / "hook-fidelity-report.md").is_file():
     pytest.skip("needs the repository's docs/ and results/ (a full clone, not an installed package)", allow_module_level=True)
 
-REPORT = (ROOT / "docs" / "hook-fidelity-report.md").read_text()
-APPENDIX = (ROOT / "docs" / "hook-fidelity-report-appendix.md").read_text()
+REPORT = (ROOT / "docs" / "hook-fidelity-report.md").read_text(encoding="utf-8")
+APPENDIX = (ROOT / "docs" / "hook-fidelity-report-appendix.md").read_text(encoding="utf-8")
 BOTH = REPORT + "\n" + APPENDIX
 
 
@@ -30,7 +30,7 @@ def _flat(text: str) -> str:
 
 
 FLAT = _flat(REPORT)
-CONTRIBUTION = (ROOT / "docs" / "contribution.md").read_text()
+CONTRIBUTION = (ROOT / "docs" / "contribution.md").read_text(encoding="utf-8")
 
 
 def _script_output() -> str:
@@ -65,9 +65,9 @@ def test_one_build_count_per_harness_in_every_document_that_states_it():
     assert (x["installed"], x["scored"], x["excluded"]) == (19, 14, 5)
     assert (g["installed"], g["scored"], g["excluded"]) == (28, 28, 0)
     sentence = f"Claude Code ({c['scored']} scored builds), Codex CLI ({x['scored']}) and Gemini CLI ({g['scored']})"
-    readme = (ROOT / "README.md").read_text()
-    results = (ROOT / "results" / "hook-fidelity" / "README.md").read_text()
-    for name, text in (("README.md", readme), ("contribution.md", CONTRIBUTION), ("results/hook-fidelity/README.md", results)):
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    results = (ROOT / "results" / "hook-fidelity" / "README.md").read_text(encoding="utf-8")
+    for name, text in (("contribution.md", CONTRIBUTION), ("results/hook-fidelity/README.md", results)):
         assert sentence in text.replace("\n", " "), name
     for name, text in (("README.md", readme), ("contribution.md", CONTRIBUTION), ("report", REPORT), ("appendix", APPENDIX)):
         flat = text.replace("\n", " ")
@@ -133,22 +133,22 @@ def test_the_benign_line_is_not_listed_as_a_place_where_intentshield_is_ahead():
 def test_the_467_set_is_also_rescored_without_the_items_now_in_the_rules_tests():
     line = rn.guards()["rules_without_overlap"]
     for needle in (
-        "without the 33 items",
-        "133 items that stayed held out, 104/133 ",
-        " before, 6/133 ",
-        "123 built-in tool calls, 104/123 ",
+        "without the 34 items",
+        "132 items that stayed held out, 103/132 ",
+        " before, 6/132 ",
+        "122 built-in tool calls, 103/122 ",
     ):
         assert needle in line, needle
-    for figure in ("104/133 [70.4, 84.4]%", "6/133 [2.1, 9.5]%"):
+    for figure in ("103/132 [70.2, 84.2]%", "6/132 [2.1, 9.6]%"):
         assert figure in FLAT and figure in _flat(APPENDIX), figure
     import overlap_check
 
-    pinned = json.loads((BENCH / "overlap_items.json").read_text())
+    pinned = json.loads((BENCH / "overlap_items.json").read_text(encoding="utf-8"))
     live = overlap_check.overlapping_items(
-        [json.loads(x) for x in (ROOT / "results/hook-fidelity/detect/fixtures.jsonl").read_text().splitlines()],
+        [json.loads(x) for x in (ROOT / "results/hook-fidelity/detect/fixtures.jsonl").read_text(encoding="utf-8").splitlines()],
         overlap_check.repository_text(["tests", "src"]),
     )
-    assert len(pinned["fixtures_467_set"]) == 33 and set(pinned["fixtures_467_set"]) <= set(live)
+    assert len(pinned["fixtures_467_set"]) == 34 and set(pinned["fixtures_467_set"]) == set(live)
 
 
 def test_the_claude_ask_flip_is_stated_with_the_pre_approval_and_the_one_unconfounded_build():
@@ -179,8 +179,9 @@ def test_the_denies_alone_figure_is_scoped_to_the_rules_it_was_scored_with_and_t
     assert "with the rules as they were when scored: safety-net 41/85, IntentShield 24/85" in flat
     assert "fresh_report.py --current-rules" in flat and "that comparison was not made" in flat
     assert "In unattended runs, where an ask is not a stop," in flat
-    readme = _flat((ROOT / "README.md").read_text())
-    assert "as they were when scored, IntentShield denied 24 of 85" in readme and "--current-rules" in readme
+    contribution = _flat(CONTRIBUTION)
+    assert "24 of 85 against 41 of 85 with the rules as they were when scored" in contribution
+    assert "29 of 85 with the rules in the repository now" in contribution
 
 
 def test_the_kill_criterion_in_the_report_carries_its_qualifications():
@@ -197,7 +198,8 @@ def test_report_has_no_process_vocabulary():
 
 def test_the_main_text_stays_short_and_links_to_its_appendix():
     words = [w for w in REPORT.split() if not set(w) <= set("|-")]
-    assert len(words) <= 2650, len(words)    # 2,450 before the sign-test caveat, the build counts and the timeout value went in
+    # 2,450 before the sign-test caveat, the build counts and the timeout value; 2,650 before the clustered counts and the table
+    assert len(words) <= 2950, len(words)
     assert "(hook-fidelity-report-appendix.md)" in REPORT and "(hook-fidelity-report.md)" in APPENDIX
     assert "#reproduce-in-full" in REPORT
 
@@ -208,7 +210,7 @@ def test_the_order_of_writing_is_stated_as_the_authors_word_everywhere():
     files += [ROOT / "results" / "hook-fidelity" / "README.md"]
     files += sorted(BENCH.glob("*.py"))
     for path in files:
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if path.name == "test_hook_fidelity_report.py":
                 continue
             if "Read \"registered in advance\" as" in line:
@@ -253,9 +255,10 @@ def test_the_rules_are_compared_before_and_after_on_one_denominator():
         assert needle in line, needle
     assert "22 of 22" in g["rules_mcp_items"]
     assert "6 of 178" not in REPORT and "137/166 [76.0, 87.6]%, asks on 29" in REPORT
-    fixtures = [json.loads(x) for x in (ROOT / "results/hook-fidelity/detect/fixtures.jsonl").read_text().splitlines()]
+    fixtures = [json.loads(x) for x in (ROOT / "results/hook-fidelity/detect/fixtures.jsonl").read_text(
+        encoding="utf-8").splitlines()]
     declared = [f for f in fixtures if f["primary"] and f["label"] == "harmful" and f["heldout"]]
-    decisions = json.loads((ROOT / "results/hook-fidelity/detect/summary.json").read_text())["decisions"]
+    decisions = json.loads((ROOT / "results/hook-fidelity/detect/summary.json").read_text(encoding="utf-8"))["decisions"]
     summary = decisions["intentshield"]["claimed"]["heldout"]
     assert len(declared) == 178 and summary["n_harmful"] == 166 and summary["false_allow"] == 137
 
@@ -307,7 +310,7 @@ def test_no_percentage_in_the_study_documents_disagrees_with_its_k_over_n():
     files = sorted(docs.glob("hook-fidelity-*.md")) + [docs / "contribution.md", docs / "coverage-study.md"]
     files += [ROOT / "results" / "README.md"]
     files += [p for p in sorted((ROOT / "results" / "hook-fidelity").rglob("README.md")) if "vendor-archive" not in p.parts]
-    bad = {path.name: percentage_mismatches(path.read_text()) for path in files}
+    bad = {path.name: percentage_mismatches(path.read_text(encoding="utf-8")) for path in files}
     assert not {name: found for name, found in bad.items() if found}
 
 

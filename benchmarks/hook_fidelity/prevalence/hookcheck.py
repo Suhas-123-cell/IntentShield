@@ -5,7 +5,7 @@ sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import analyze as A
 D=A.D
 CACHE=f"{D}/hookcache.json"
-cache=json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+cache=json.load(open(CACHE, encoding="utf-8")) if os.path.exists(CACHE) else {}
 FILES={"claude":[".claude/settings.json"],"codex":[".codex/hooks.json",".codex/config.toml"],"gemini":[".gemini/settings.json"],"cursor":[".cursor/hooks.json"]}
 H2F={"claude_cli":"claude","claude_action":"claude","codex_cli":"codex","codex_action":"codex","gemini_cli":"gemini","gemini_action":"gemini","cursor_cli":"cursor"}
 def fetch(args):
@@ -22,7 +22,7 @@ def fetch(args):
     cache[k]="__ERR__"
 W=collections.defaultdict(set)   # harness -> repos
 for f in glob.glob(f"{D}/E_h_*.json"):
-    d=json.load(open(f))
+    d=json.load(open(f, encoding="utf-8"))
     for i in d["items"]:
         t=A.text(i)
         if not t: continue
@@ -30,6 +30,6 @@ for f in glob.glob(f"{D}/E_h_*.json"):
         for h in hits: W[H2F[h]].add(i["repo"])
 jobs=[(r,p) for h,rs in W.items() for r in rs for p in FILES[h]]
 with ThreadPoolExecutor(14) as ex: list(ex.map(fetch,jobs))
-json.dump(cache,open(CACHE,"w"))
-json.dump({h:sorted(r) for h,r in W.items()},open(f"{D}/W_repos.json","w"))
+json.dump(cache,open(CACHE,"w", encoding="utf-8"))
+json.dump({h:sorted(r) for h,r in W.items()},open(f"{D}/W_repos.json","w", encoding="utf-8"))
 print({h:len(r) for h,r in W.items()},"jobs",len(jobs))

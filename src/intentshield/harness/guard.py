@@ -138,7 +138,7 @@ class HarnessGuard(SessionStore):
         decisions: dict[tuple[str, str], bool] = {}
         for path in sorted(self.catalog.glob("*.json")) if self.catalog and self.catalog.is_dir() else ():
             try:
-                for t in json.loads(path.read_text()):
+                for t in json.loads(path.read_text(encoding="utf-8")):
                     if "read_only" not in t:
                         continue
                     name, server = str(t["name"]), str(t.get("server") or "")
@@ -187,7 +187,7 @@ class HarnessGuard(SessionStore):
             try:
                 # Upstream servers pick the names, and the hint goes into the model's context,
                 # so a name that reads as an instruction is dropped.
-                tools += [(str(t["name"]), str(t.get("description", ""))) for t in json.loads(path.read_text())
+                tools += [(str(t["name"]), str(t.get("description", ""))) for t in json.loads(path.read_text(encoding="utf-8"))
                           if _TOOL_NAME.fullmatch(str(t["name"]))]
             except (OSError, ValueError, TypeError, KeyError):
                 continue  # a broken catalog only costs the hint
@@ -351,7 +351,7 @@ class HarnessGuard(SessionStore):
         if self._judge_pause is None:
             return False
         try:
-            until = float(self._judge_pause.read_text())
+            until = float(self._judge_pause.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
         return time.time() < until <= time.time() + JUDGE_PAUSE
@@ -361,7 +361,7 @@ class HarnessGuard(SessionStore):
         if self._judge_pause is None or self.judge is None or not _JUDGE_OFFLINE.search(self.judge.last_error or ""):
             return ""
         try:
-            self._judge_pause.write_text(str(time.time() + JUDGE_PAUSE))
+            self._judge_pause.write_text(str(time.time() + JUDGE_PAUSE), encoding="utf-8")
         except OSError:  # the pause saves time only; the rules decide either way
             return ""
         return f", and the judge is skipped for {JUDGE_PAUSE // 60} minutes"
@@ -469,6 +469,11 @@ class HarnessGuard(SessionStore):
         if untrusted:
             return Verdict("deny", "The address came from a tool output that contained injected instructions, not "
                                    f"from the user: {', '.join(_show(v) for v in sorted(untrusted)[:3])}.")
+        if self.review != "never" and (related := on_tainted_hosts(destinations, taint, user)):
+            # another page of the site that output named (or a subdomain, or its parent domain): a browse is allowed on a site
+            # the user or a popular host owns, but not on one that only an injected output pointed to
+            return Verdict("ask", "The address is on a host that a tool output containing injected instructions named, though "
+                                  f"not the address itself: {', '.join(_show(v) for v in sorted(related)[:3])}. Confirm it.")
         leaving = {c: kind for c, kind in credentials.find(target).items() if not _given(c, intent)}
         if leaving and self.review != "never":
             shown = ", ".join(credentials.masked(c, kind) for c, kind in sorted(leaving.items())[:3])

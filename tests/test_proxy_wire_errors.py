@@ -20,9 +20,9 @@ SRC = str(Path(__file__).resolve().parents[1] / "src")
 
 def converse(tmp_path: Path, lines: list[str], answers: int, timeout: float = 60) -> list[dict]:
     config = tmp_path / "proxy.json"
-    demo = json.loads((Path(SRC).parent / "configs" / "mcp-proxy.demo.json").read_text())
+    demo = json.loads((Path(SRC).parent / "configs" / "mcp-proxy.demo.json").read_text(encoding="utf-8"))
     demo["upstreams"][0].update(command=sys.executable, args=["-m", "intentshield.demo_mcp_server"])
-    config.write_text(json.dumps({**demo, "database_path": str(tmp_path / "proxy.db")}))
+    config.write_text(json.dumps({**demo, "database_path": str(tmp_path / "proxy.db")}), encoding="utf-8")
     env = {**os.environ, "PYTHONPATH": SRC, "HOME": str(tmp_path), "INTENTSHIELD_INTENT_MODEL_DIR": "/nonexistent",
            "INTENTSHIELD_PROXY_CONFIG": "", "INTENTSHIELD_CONTROL_TOKEN": ""}
     command = [sys.executable, "-c", "from intentshield.mcp_server import main; main()", "--transparent", "--config", str(config)]

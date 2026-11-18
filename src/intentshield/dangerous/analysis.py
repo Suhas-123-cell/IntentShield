@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import posixpath
 import re
+import shlex
 from dataclasses import replace
 from typing import Any
 
 from intentshield import shell
 
+from . import links
 from .core import (
     _EVENT_HOMES,
     _MAX,
@@ -39,12 +41,13 @@ from .paths import (
     _from_workdir,
     _in_order,
     _named_secret,
-    _norm,
     _protected,
     overwrite_level,
     persistence_path,
+    search_root,
 )
 from .powershell import _POWERSHELLS, _ps_command_text, _ps_posix
+from .reach import find_reader_hit, link_hit, search_hit
 from .rules import (
     _EXEC_SOCKET,
     _FETCH_LONG,
@@ -65,8 +68,9 @@ from .rules import (
     _remote_hosts,
     _rm_hit,
     _wipe_hit,
+    shlex_args,
 )
-from .runners import _stdin_of, _unwrap
+from .runners import _ADDED_WRAPPERS, AS_IN_0_4_4, _stdin_of, _unwrap
 from .selfguard import _erase_hit, _guard_hit, _guard_text, guard_surface
 from .variables import _EXPANDED, _braces, _expand_vars, _moved_stages, _track
 from .writes import _placeholder, _run_by_find
@@ -91,6 +95,9 @@ _FD_RUNS = frozenset({"-x", "-X", "--exec", "--exec-batch"})
 _SSH_OPTIONS = frozenset({"-b", "-c", "-D", "-E", "-e", "-F", "-I", "-i", "-J", "-L", "-l", "-m", "-O", "-o", "-p", "-Q", "-R",
                           "-S",
                          "-W", "-w"})
+# Clients that hand the words after the host to a remote shell, as ``ssh host`` does. Their options are not read, but a word
+# ``;`` ends a command for that shell, so what follows it is read as a command.
+_REMOTE_SHELLS = frozenset({"autossh", "rsh", "rexec", "remsh", "slogin", "plink", "mosh", "tsh", "gcloud"})
 
 
 def _run_by_fd(argv: list[str]) -> list[list[str]]:
@@ -125,7 +132,7 @@ def _bare_redirect_hits(redirects: list[tuple[str, str]]) -> list[Hit]:
     """A command line that is only redirects (``> file``, ``$(< file)``): what it overwrites or reads."""
     out: list[Hit] = []
     for op, target in redirects:
-        if op.startswith(">"):
+        if op.startswith((">", "&>")):   # ``&>`` and ``&>>`` write the output (and the errors) as ``>`` does
             if _device(target):
                 out.append(Hit(DENY, f"redirect into the block device {target}.", target))
             elif (p := persistence_path(target) or guard_surface(target) or overwrite_level(target)):
@@ -171,7 +178,7 @@ def _redirect_hits(name: str, argv: list[str], redirects: list[tuple[str, str]],
     """What the redirects of a command do: into a block device, a here-string a shell runs, a credential file fed to a program."""
     out: list[Hit] = []
     for op, target in redirects:
-        if op.startswith(">"):
+        if op.startswith((">", "&>")):   # ``&>`` and ``&>>`` write the output (and the errors) as ``>`` does
             if _device(target):
                 out.append(Hit(DENY, f"redirect into the block device {target}.", target))
         elif op == "<<<" and name in _SHELLS and depth < _MAX_DEPTH and not any(not a.startswith("-") or "c" in a[1:]
@@ -196,7 +203,7 @@ def _destruction_hits(name: str, argv: list[str], bare: _Stage, intent: str, dep
         if hit:
             out.append(hit)
     elif name == "find":
-        hit = _find_hit(argv)
+        hit = _find_hit(argv) or find_reader_hit(argv, _run_by_find(argv), state.get("cwd"))
         if hit:
             out.append(hit)
         for words in _run_by_find(argv):
@@ -212,6 +219,10 @@ def _destruction_hits(name: str, argv: list[str], bare: _Stage, intent: str, dep
         remote = _remote_command(argv)
         if remote.strip():
             out.extend(_inner_hits([("code", remote + _stdin_of(bare))], intent, depth, state, sudo))
+    elif name in _REMOTE_SHELLS and ";" in argv and (name not in ("tsh", "gcloud") or "ssh" in argv):
+        rest = argv[argv.index(";") + 1:]
+        out.extend(_inner_hits([("code", " ".join(shlex.quote(a) if re.search(r"\s", a) else a for a in rest))], intent, depth,
+                               state, sudo))
     elif name == "mv" and any(_protected(a) for a in argv[1:-1] if not a.startswith("-")):
         out.append(Hit(DENY, "mv moves a root, home or system directory away.", argv[1]))
     elif name == "git":
@@ -222,10 +233,24 @@ def _destruction_hits(name: str, argv: list[str], bare: _Stage, intent: str, dep
         hit = _mode_hit(name, argv, sudo)
         if hit:
             out.append(hit)
-    for hit in (_disk_hit(name, argv, sudo), _wipe_hit(name, argv), _erase_hit(name, argv), _guard_hit(name, argv, bare)):
+    for hit in (_disk_hit(name, argv, sudo), _wipe_hit(name, argv), _erase_hit(name, argv), _guard_hit(name, argv, bare),
+                link_hit(name, argv), search_hit(name, argv, state.get("cwd"), bare.piped)):
         if hit:
             out.append(hit)
     return out
+
+
+# Modules of the standard library that print or pass on the files they are given, run as ``python3 -m MODULE FILE``.
+_MODULE_READERS = frozenset({"json.tool", "base64", "gzip", "tokenize", "zipfile", "tarfile", "uu", "quopri", "pprint",
+                             "py_compile", "calendar"})
+
+
+def _module_files(argv: list[str]) -> list[str] | None:
+    """The words after ``-m MODULE`` of an interpreter run for a module that reads the files it is given, else None."""
+    for k, a in enumerate(argv[1:-1], 1):
+        if a == "-m" and argv[k + 1] in _MODULE_READERS:
+            return [w for w in argv[k + 2:] if not w.startswith("-")]
+    return None
 
 
 def _credential_read_hits(name: str, argv: list[str], state: dict[str, Any]) -> list[Hit]:
@@ -239,6 +264,8 @@ def _credential_read_hits(name: str, argv: list[str], state: dict[str, Any]) -> 
             m = _CRED_TEXT.search(_clean_path(" ".join(argv[1:])))   # ``.ssh//./id_rsa`` in the code is ``.ssh/id_rsa``
             if m:
                 cred = (DENY, "a credential store", m[0])
+            elif (module := _module_files(argv)) is not None:   # python3 -m json.tool FILE shows the file as cat does
+                cred = _cred_args(["cat", *module])
         if name == "find" and cred and "-exec" not in argv:
             cred = None
         if name in ("ln", "install") and cred:
@@ -268,13 +295,40 @@ def _stage_hits(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -
     """The hits of one command as it is written, and then of the same command with its relative paths read from the directory it
     runs in (``state["cwd"]``, where a ``cd`` before it has taken the call), so that a path the rules read gets the verdict of the
     absolute path it names whichever program takes it."""
+    found = _stage_hits_once(stage, intent, depth, state)
+    if not AS_IN_0_4_4.get() and any(_bin(w) in _ADDED_WRAPPERS for w in stage.argv):
+        # a program that is read as a wrapper since 0.4.4 is also read as the ordinary program it was, so that a verdict is never
+        # weaker because of it (``xterm ~/.ssh/id_rsa`` is still a program given a key)
+        token = AS_IN_0_4_4.set(True)
+        try:
+            found.extend(h for h in _stage_hits_once(stage, intent, depth, dict(state)) if h not in found)
+        finally:
+            AS_IN_0_4_4.reset(token)
+    return found
+
+
+def _stage_hits_once(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
     found = _stage_hits_as_written(stage, intent, depth, state)
     cwd = state.get("cwd")
     if cwd:
         for moved in _moved_stages(stage, cwd):
             extra = _stage_hits_as_written(moved, intent, depth, dict(state))
             found = [*found, *(h for h in extra if h not in found)]
+    bare, _ = _unwrap(stage)
+    for linked in _moved_stages(stage, cwd or "", follow=True):   # a word that names a path through a symbolic link
+        note = _link_note(bare, linked)
+        for hit in _stage_hits_as_written(linked, intent, depth, dict(state)):
+            if hit not in found:
+                found.append(replace(hit, reason=hit.reason.rstrip(".") + note + ".") if note else hit)
     return found
+
+
+def _link_note(bare: _Stage, linked: _Stage) -> str:
+    """`` (cat h/x leads through the link h to ...)``: the first word or redirect target of the stage that a link took somewhere
+    else, so that a verdict on the real path says why a path that looked harmless was read."""
+    words = list(zip(bare.argv, linked.argv)) + [(a, b) for (_, a), (_, b) in zip(bare.redirects, linked.redirects)]
+    first = next(((a, b) for a, b in words if a != b), None)
+    return f" ({first[0]} is a symbolic link that leads to {first[1]})" if first else ""
 
 
 def _stage_hits_as_written(stage: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
@@ -331,6 +385,19 @@ def _writes(argv: list[str]) -> bool:
     return False
 
 
+def _fetches_inside(bare: _Stage, extras: list[tuple[str, str]]) -> str | None:
+    """The downloader that a wrapper's shell text runs (``sudo -s curl URL``, ``ssh host curl URL``): what the stage prints is a
+    download, as if ``curl`` stood in its place."""
+    texts = [text for kind, text in extras if kind == "code"]
+    if bare.argv and _bin(bare.argv[0]) == "ssh":
+        texts.append(_remote_command(bare.argv))
+    for text in texts:
+        found = re.search(r"(?:^|[\s;&|(])(" + "|".join(sorted(map(re.escape, _FETCHERS))) + r")(?=\s)", text)
+        if found and not _writes(shlex_args(text[found.start(1):])):   # one that saves to a file prints nothing
+            return found[1]
+    return None
+
+
 def _pipe_hits(stages: list[_Stage], intent: str) -> list[Hit]:
     """Downloads run as code, and sensitive data on the way to the network."""
     out: list[Hit] = []
@@ -341,7 +408,9 @@ def _pipe_hits(stages: list[_Stage], intent: str) -> list[Hit]:
         fetched: str | None = None
         secret: str | None = None  # DENY after a key or cloud credential, ASK after an .env or kube config
         for st in chain:
-            bare, _ = _unwrap(st)
+            bare, extras = _unwrap(st)
+            if inside := _fetches_inside(bare, extras):
+                fetched = inside
             if not bare.argv:
                 continue
             name = _bin(bare.argv[0])
@@ -440,6 +509,16 @@ def _piped_text(prev: _Stage, st: _Stage, intent: str, depth: int, sudo: bool) -
     return _analyse(" ".join(words), intent, depth + 1, {}, sudo or shell_stage.sudo)
 
 
+def _piped_find(prev: _Stage, st: _Stage, state: dict[str, Any]) -> list[Hit]:
+    """``find ~ -name 'id_*' | xargs cat``: the files ``find`` lists are the arguments of the reader xargs runs."""
+    lister, _ = _unwrap(prev)
+    bare, _ = _unwrap(st)
+    if not bare.xargs or not bare.argv or not lister.argv or _bin(lister.argv[0]) != "find":
+        return []
+    hit = find_reader_hit(lister.argv, [bare.argv], state.get("cwd"))
+    return [hit] if hit else []
+
+
 def _piped_xargs(prev: _Stage, st: _Stage, intent: str, depth: int, state: dict[str, Any]) -> list[Hit]:
     """``echo / | xargs rm -rf``: the words that echo or printf print are the last arguments of the program xargs runs."""
     maker, _ = _unwrap(prev)
@@ -499,6 +578,7 @@ def _walk_stages(stages: list[_Stage], intent: str, depth: int, state: dict[str,
         if st.piped and k and depth < _MAX_DEPTH:  # echo 'rm -rf /' | sh: the text is the program
             hits.extend(_piped_text(stages[k - 1], st, intent, depth, sudo))
             hits.extend(_piped_xargs(stages[k - 1], st, intent, depth, {**state, "cwd": where["cwd"]}))
+            hits.extend(_piped_find(stages[k - 1], st, {**state, "cwd": where["cwd"]}))
         elif st.piped and k and _piped_text(stages[k - 1], st, intent, 0, sudo):
             hits.append(Hit(ASK, _TOO_DEEP))
         local = dict(state)
@@ -588,12 +668,15 @@ def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: 
     names, besides those of the running user (see ``paths._homes``)."""
     if not command or not command.strip():
         return None
-    token, home_token = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes))
+    token, home_token, seen = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes)), links.start()
     try:
         hits = _analyse(command, intent, 0, {})
         if powershell:
             hits.extend(_ps_hits(command, intent, 0, {}, False))
+        if links.over_budget():
+            hits.append(Hit(ASK, links.TOO_MANY_LINKS))
     finally:
+        links.finish(seen)
         _EVENT_HOMES.reset(home_token)
         _WORKDIR.reset(token)
     if len(command) > _MAX and not any(h.decision == DENY for h in hits):  # the rest was not read: do not pass it as safe
@@ -608,10 +691,14 @@ def assess_file(path: str, content: Any = None, write: bool = False, intent: str
                 homes: tuple[str, ...] = ()) -> Hit | None:
     """The verdict on a file read or write by a built-in tool. ``cwd``: the directory a relative ``path`` is read from.
     ``homes``: as for ``assess_shell``."""
-    token, home_token = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes))
+    token, home_token, seen = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes)), links.start()
     try:
-        return _assess_file(path, content, write, intent)
+        hit = _assess_file(path, content, write, intent)
+        if links.over_budget() and (hit is None or hit.decision != DENY):
+            return Hit(ASK, links.TOO_MANY_LINKS, path)
+        return hit
     finally:
+        links.finish(seen)
         _EVENT_HOMES.reset(home_token)
         _WORKDIR.reset(token)
 
@@ -619,12 +706,20 @@ def assess_file(path: str, content: Any = None, write: bool = False, intent: str
 def _assess_file(path: str, content: Any, write: bool, intent: str) -> Hit | None:
     """The verdict on ``path`` as it is written and, when it is relative, on the path it names from the working directory: the
     worse of the two."""
+    if not path.strip() and not write and (cwd := _WORKDIR.get()).startswith("/"):
+        # a search with no path starts at the working directory
+        why = search_root(cwd)
+        return _worst([Hit(ASK, f"searching the working directory {cwd}, {why}.", cwd)], intent) if why else None
     hit = _assess_file_as_written(path, content, write, intent)
     resolved = _from_workdir(path) if path else None
-    if resolved is None or resolved == path:
-        return hit
-    other = _assess_file_as_written(resolved, content, write, intent)
-    return other if other and (not hit or other.decision == DENY and hit.decision != DENY) else hit
+    if resolved is not None and resolved != path:
+        other = _assess_file_as_written(resolved, content, write, intent)
+        hit = other if other and (not hit or other.decision == DENY and hit.decision != DENY) else hit
+    real = links.real_path(path, _WORKDIR.get()) if path else None   # a link on the way takes it somewhere else
+    if real is not None and (other := _assess_file_as_written(real, content, write, intent)):
+        if not hit or other.decision == DENY and hit.decision != DENY:
+            hit = replace(other, reason=f"{other.reason.rstrip('.')} ({path} is a symbolic link that leads to {real}).")
+    return hit
 
 
 def _assess_file_as_written(path: str, content: Any, write: bool, intent: str) -> Hit | None:
@@ -637,10 +732,9 @@ def _assess_file_as_written(path: str, content: Any, write: bool, intent: str) -
         if cred:
             hit = Hit(cred[0], f"reading {path}, {cred[1]}.", path)
             return _worst([hit], intent)
-        if _norm(path) == "~" or (resolved := _from_workdir(path)) is not None and _norm(resolved) == "~":
-            # a search of the whole home directory reaches ~/.ssh and ~/.aws as well
-            return _worst([Hit(ASK, f"reading {path}, the whole home directory, which holds ~/.ssh and ~/.aws.", path)], intent)
-        return None
+        # a search of the whole home directory (or of a directory above it) reaches ~/.ssh and ~/.aws as well
+        why = search_root(path) or (search_root(resolved) if (resolved := _from_workdir(path)) is not None else None)
+        return _worst([Hit(ASK, f"reading {path}, {why}.", path)], intent) if why else None
     pers = persistence_path(path)
     text = _text(content)[:_MAX]
     hits: list[Hit] = []

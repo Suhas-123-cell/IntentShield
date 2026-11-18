@@ -1,7 +1,7 @@
 """Figures that the front-door documents state, checked against the committed data or the scripts that print them.
 
-The README line budget, the reading path's word counts, the injection table, the upper bounds printed beside 0.0% cells and the
-baseline outputs in CONTRIBUTING.md.
+The README line budget and order, the reading path's word counts, the injection table, the upper bounds printed beside 0.0% cells
+and the baseline outputs in CONTRIBUTING.md.
 """
 from __future__ import annotations
 
@@ -48,31 +48,16 @@ def test_the_reading_path_word_counts_are_wc_counts():
     parts = [v for k, v in stated.items() if k != "all three"]
     assert abs(total_words - sum(w for w, _ in parts)) <= 10
     assert abs(total_minutes - total_words / 250) <= 1 and abs(total_minutes - sum(m for _, m in parts)) <= 1
+    first_two = re.search(r"The first two steps alone take (\d+) minutes", " ".join(text.split()))
+    assert first_two and abs(int(first_two.group(1)) - sum(m for _, m in parts[:2])) <= 1
 
 
-def _words(paths) -> int:
-    return sum(len(path.read_text(encoding="utf-8", errors="replace").split()) for path in paths)
-
-
-def test_the_stated_size_of_each_group_of_documents_is_a_wc_count():
-    """docs/README.md says how many words the product documentation and the research write-ups hold."""
+def test_docs_readme_keeps_no_hand_counted_size_of_a_group_of_documents():
+    """A total such as "about 71,400 words in all" drifts with every edit. The reading path's counts are checked above against
+    `wc -w`; no other word count of a group of files is kept in docs/README.md."""
     text = " ".join(READ("docs/README.md").split())
-    product = [ROOT / name for name in ("README.md", "docs/guide.md", "docs/layers.md", "docs/gateway.md", "docs/detectors.md",
-                                         "docs/benchmarks.md", "docs/security-review.md", "docs/architecture-and-testing.md",
-                                         "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md")]
-    research = [ROOT / "docs" / name for name in ("contribution.md", "hook-fidelity-report.md",
-                                                   "hook-fidelity-report-appendix.md", "related-work.md", "coverage-study.md")]
-    user = [ROOT / "README.md", ROOT / "docs" / "guide.md"]
-    stated = {
-        "product": (r"\*\*Product documentation\*\*[^.]*?about ([\d,]+) words in all", product),
-        "user": (r"needs only the README and the guide, about ([\d,]+) words", user),
-        "research": (r"\*\*Research write-ups\*\*[^:]*?about ([\d,]+) words", research),
-    }
-    for name, (pattern, files) in stated.items():
-        match = re.search(pattern, text)
-        assert match, name
-        count = int(match.group(1).replace(",", ""))
-        assert abs(count - _words(files)) <= 0.03 * _words(files), (name, count, _words(files))
+    assert not re.search(r"about [\d,]+ words", text), re.findall(r"about [\d,]+ words", text)
+    assert not re.search(r"\([\d,]+ words\)", text)
 
 
 def _injection_rows() -> dict[str, list[tuple[int, int]]]:
@@ -117,8 +102,9 @@ def _rules_column() -> dict[str, tuple[int, int]]:
 def test_the_injection_table_in_benchmarks_matches_the_rules_and_the_committed_table():
     """The table of docs/benchmarks.md was measured on 2026-11-12 with the exemplar index, which is not committed.
 
-    The rules' column for every family that does not need InjecAgent is recomputed here, the sums are checked, and the exemplar
-    column is checked against the committed table of 2026-10-21 for the families whose figure did not change."""
+    The rules' column for every family that does not need InjecAgent is recomputed here, the sums are checked, and the whole
+    table is checked against the committed one (``results/injection/table.txt``, written from ``rows.jsonl`` with the rules of
+    0.4.4)."""
     mine = _rules_column()
     assert mine["generated"] == (11, 346) and mine["agentdojo_direct"] == (0, 27)
     assert mine["agentdojo_ignore_previous"] == (27, 27) and mine["agentdojo_tuned"] == (81, 81) and mine["mcptox"] == (313, 370)
@@ -126,10 +112,10 @@ def test_the_injection_table_in_benchmarks_matches_the_rules_and_the_committed_t
     old = _injection_rows()
     rules, rules_exemplars = 0, 3     # column positions in the committed table
     generated = [f for f in old if f.startswith("instruction:generated_output_")]
-    assert sum(old[f][rules_exemplars][0] for f in generated) == 228 and sum(old[f][rules][0] for f in generated) == 13
+    assert sum(old[f][rules_exemplars][0] for f in generated) == 228 and sum(old[f][rules][0] for f in generated) == 11
     assert old["instruction:agentdojo_direct"][rules_exemplars][0] == 1
     ignore_previous = old["instruction:agentdojo_ignore_previous"]
-    assert ignore_previous[rules] == (0, 27) and ignore_previous[rules_exemplars] == (11, 27)
+    assert ignore_previous[rules] == (27, 27) and ignore_previous[rules_exemplars] == (27, 27)
     dh_base, ds_base = old["instruction:injecagent_dh_base"], old["instruction:injecagent_ds_base"]
     assert dh_base[rules][0] + ds_base[rules][0] == 17
     assert dh_base[rules_exemplars][0] + ds_base[rules_exemplars][0] == 23
@@ -188,18 +174,50 @@ def test_contributings_baseline_outputs_are_what_the_scripts_print(tmp_path):
     assert write and f"`write: {write.group(1)}`" in text, write and write.group(1)
 
 
-def test_the_readme_puts_what_it_stops_the_install_and_local_storage_before_the_results():
+def test_the_readme_puts_the_quick_start_before_the_threat_model_and_the_documents_before_the_results():
     headings = re.findall(r"^## (.+)$", READ("README.md"), re.M)
     results, study = headings.index("Results"), headings.index("The hook study")
-    for early in ("Install", "What it stops and does not stop", "What is stored locally", "Upgrading and removing"):
-        assert headings.index(early) < results < study, early
+    assert results + 1 == study == len(headings) - 1, headings
+    assert headings.index("Quick start") < headings.index("Threat model")
+    for early in ("Quick start", "Threat model", "What it stops and does not stop", "Documentation", "What is stored locally",
+                  "Upgrading and removing"):
+        assert headings.index(early) < results, early
+
+
+def test_the_readme_opens_with_what_the_tool_does_and_what_the_study_found():
+    """The first two paragraphs after the badges are a headline a non-specialist can repeat, then the quick start."""
+    text = READ("README.md")
+    before_quick_start = " ".join(text.split("\n## Quick start")[0].split())
+    assert "checks what your AI coding agent does with MCP (Model Context Protocol) tools" in before_quick_start
+    assert "A study of Claude Code, Codex CLI and Gemini CLI found" in before_quick_start
+    assert "default hook install runs rules" in before_quick_start
+    quick = text.split("\n## Quick start\n")[1].split("\n```\n")[0]
+    assert quick.count("\nintentshield ") + quick.count("\nuv tool ") == 3, quick
+
+
+def test_the_readme_says_what_install_runs_and_what_scan_and_doctor_skip():
+    flat = " ".join(READ("README.md").split())
+    assert "`install` runs `<harness> --version` once to record the build" in flat
+    assert "`scan` and `doctor --connect` do not start servers named by a config in the current directory" in flat
+    assert "`--connect-project`" in flat
+
+
+def _section(heading: str) -> str:
+    return READ("README.md").split(f"\n## {heading}\n")[1].split("\n## ")[0]
 
 
 def test_the_readme_results_summary_is_short_and_leads_with_the_weak_numbers():
-    section = READ("README.md").split("\n## Results\n")[1].split("\n## ")[0]
+    section = _section("Results")
     lines = [line for line in section.splitlines() if line.strip()]
     assert len(lines) <= 9, len(lines)      # the lead-in line and at most eight lines of summary
     assert lines[1].startswith("- **Injection text the rules were not written for")
+    assert len(section.split()) <= 150, len(section.split())
+
+
+def test_the_readme_hook_study_summary_is_short_and_leaves_the_detail_to_the_report():
+    section = _section("The hook study")
+    assert len(section.split()) <= 150, len(section.split())
+    assert "p = " not in section and "current-rules" not in section and "--current-rules" not in section
 
 
 def test_the_msb_tables_say_how_a_held_call_is_counted():

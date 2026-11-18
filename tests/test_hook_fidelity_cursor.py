@@ -37,7 +37,7 @@ def test_keychain_mode_uses_real_home_with_config_dir_and_sandbox(tmp_path, keyc
     assert spec.argv[:3] == [configs.SANDBOX_EXEC, "-f", str(paths.root / "cursor-deny.sb")]
     assert configs.home_refusal("cursor", ()) == ""
     assert configs.user_level_leaks("cursor", paths, spec.env, system_files=(), argv=spec.argv) == []
-    profile = (paths.root / "cursor-deny.sb").read_text()
+    profile = (paths.root / "cursor-deny.sb").read_text(encoding="utf-8")
     for name in (".cursor", ".claude", ".codex", ".gemini", ".config", ".ssh"):
         assert f'(subpath "{Path.home()}/{name}")' in profile
     assert "private-var-folders-" in profile and "(allow default)" in profile
@@ -53,7 +53,7 @@ def test_keychain_mode_flags_a_run_that_is_not_wrapped_or_not_relocated(tmp_path
         "cursor", paths, {**spec.env, "HOME": str(paths.home)}, system_files=(), argv=spec.argv))
     hooks = Path(spec.env["CURSOR_CONFIG_DIR"]) / "hooks.json"
     hooks.parent.mkdir(parents=True, exist_ok=True)
-    hooks.write_text("{}")
+    hooks.write_text("{}", encoding="utf-8")
     assert any("hooks.json" in p for p in configs.user_level_leaks("cursor", paths, spec.env, (), argv=spec.argv))
 
 
@@ -61,7 +61,7 @@ def test_shell_cell_puts_the_touch_shim_first_in_every_zsh_start_file(tmp_path, 
     cell, paths, spec = _build(tmp_path, "C3")
     zdot = Path(spec.env["ZDOTDIR"])
     for name in (".zshenv", ".zprofile", ".zshrc"):
-        assert str(paths.shim_dir) in (zdot / name).read_text()
+        assert str(paths.shim_dir) in (zdot / name).read_text(encoding="utf-8")
     assert (paths.shim_dir / "touch").is_file()
     mcp = _build(tmp_path / "m", "C1")[2]
     assert "ZDOTDIR" not in mcp.env

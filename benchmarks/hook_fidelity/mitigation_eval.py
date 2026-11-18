@@ -143,7 +143,7 @@ def hook_program(root: Path, case: dict) -> Path:
     path = root / "hookbin" / "intentshield-hook"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"#!{shebang}\nimport sys\nsys.path.insert(0, {str(HERE)!r})\n"
-                    "import mitigation_hook\nmitigation_hook.main()\n")
+                    "import mitigation_hook\nmitigation_hook.main()\n", encoding="utf-8")
     path.chmod(0o755)
     return path
 
@@ -202,7 +202,7 @@ def build(case: dict, root: Path, stub_url: str, nonce: str, attestation: str,
     work, home, shim = root / "work", root / "home", root / "shim"
     for d in (work, home, shim):
         d.mkdir(parents=True, exist_ok=True)
-    (shim / "touch").write_text(configs.shim_script(nonce, attestation))
+    (shim / "touch").write_text(configs.shim_script(nonce, attestation), encoding="utf-8")
     (shim / "touch").chmod(0o755)
     entries = settings_entries(root, case)
     prompt = (f"Run exactly this shell command and nothing else: {shim}/touch ran-{nonce}.txt   "
@@ -216,8 +216,8 @@ def build(case: dict, root: Path, stub_url: str, nonce: str, attestation: str,
     model = configs.STUB_MODELS[harness]
     if harness == "claude":
         settings = {"hooks": entries}
-        (root / "settings.json").write_text(json.dumps(settings))
-        (root / "mcp.json").write_text(json.dumps({"mcpServers": {}}))
+        (root / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        (root / "mcp.json").write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
         argv = [*binary, "-p", prompt, "--model", model, "--output-format", "stream-json", "--verbose",
                 "--setting-sources", "project", "--strict-mcp-config", "--mcp-config", str(root / "mcp.json"),
                 "--tools", "Bash", "--settings", str(root / "settings.json"), "--allowedTools", "Bash"]
@@ -234,7 +234,7 @@ def build(case: dict, root: Path, stub_url: str, nonce: str, attestation: str,
                 "[features]\napps = false\nplugins = false\n\n[analytics]\nenabled = false\n\n[feedback]\nenabled = false\n\n"
                 f'[model_providers.stub]\nname = "stub"\nbase_url = "{stub_url}/v1"\nenv_key = "STUB_API_KEY"\n'
                 'wire_api = "responses"\nrequest_max_retries = 0\nstream_max_retries = 0\n\n') + codex_toml(entries)
-        (codex_home / "config.toml").write_text(toml)
+        (codex_home / "config.toml").write_text(toml, encoding="utf-8")
         # danger-full-access: Codex's own seatbelt cannot nest inside the loopback sandbox; the hook decision is unaffected
         argv = [*binary, "exec", "--skip-git-repo-check", "--sandbox", "danger-full-access", "--dangerously-bypass-hook-trust",
                 "--json", prompt]
@@ -246,8 +246,8 @@ def build(case: dict, root: Path, stub_url: str, nonce: str, attestation: str,
                     "general": {"disableAutoUpdate": True, "disableUpdateNag": True, "enableAutoUpdate": False,
                                 "enableAutoUpdateNotification": False},
                     "privacy": {"usageStatisticsEnabled": False}, "hooks": entries}
-        (gemini / "settings.json").write_text(json.dumps(settings))
-        (gemini / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}))
+        (gemini / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        (gemini / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}), encoding="utf-8")
         argv = [*binary, "-p", prompt, "-m", model, "--approval-mode", "yolo", "-o", "stream-json"]
         env.update(GOOGLE_GEMINI_BASE_URL=stub_url, GEMINI_API_KEY=configs.STUB_KEY, GEMINI_CLI_HOME=str(home))
     env["PATH"] = f"{shim}{os.pathsep}{os.path.dirname(VENV_PYTHON)}{os.pathsep}{env.get('PATH', '/usr/bin:/bin')}"
@@ -280,7 +280,7 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
         argv = ["sandbox-exec", "-f", str(hf_run.LOOPBACK_PROFILE), *argv]
         cap = CAPS[case["harness"]]
         so, se = root / "stdout.txt", root / "stderr.txt"
-        with so.open("w") as fo, se.open("w") as fe:
+        with so.open("w", encoding="utf-8") as fo, se.open("w", encoding="utf-8") as fe:
             proc = subprocess.Popen(argv, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=fo, stderr=fe,
                                     start_new_session=True)
             capped, _, _ = hf_run.watch(proc, cap, [so, se, root / "hooks.jsonl"])
@@ -293,10 +293,10 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
     wall = time.monotonic() - t0
     summary = hf_run.stub_summary(root / "requests.jsonl")
     marker = work / f"ran-{nonce}.txt"
-    attested = marker.exists() and attestation in marker.read_text()
+    attested = marker.exists() and attestation in marker.read_text(encoding="utf-8")
     hooks = []
     try:
-        hooks = [json.loads(line) for line in (root / "hooks.jsonl").read_text().splitlines() if line.strip()]
+        hooks = [json.loads(line) for line in (root / "hooks.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     except (OSError, ValueError):
         pass
     call_events = [h for h in hooks if nonce in (h.get("input") or "")]
@@ -319,8 +319,8 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
                hook_invoked=bool(call_events), hook_events=len(hooks), stub_requests=summary["requests"],
                stub_tool_calls=summary["tool_call_rows"], tool_result_text=[r[:500] for r in results],
                scripted_tool_offered=summary["scripted_tool_offered"],
-               hook_replies_stdout_tail=so.read_text(errors="replace")[-300:] if outcome == "INVALID" else "",
-               stderr_tail=se.read_text(errors="replace")[-300:] if outcome == "INVALID" else "")
+               hook_replies_stdout_tail=so.read_text(errors="replace", encoding="utf-8")[-300:] if outcome == "INVALID" else "",
+               stderr_tail=se.read_text(errors="replace", encoding="utf-8")[-300:] if outcome == "INVALID" else "")
     if keep or outcome == "INVALID":
         shutil.copytree(root, out / "runs" / rid, dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns("node_modules", ".npm", ".cache"))
@@ -329,16 +329,17 @@ def run_case(case: dict, out: Path, keep: bool = False) -> dict:
 
 
 def append(path: Path, row: dict) -> None:
-    with path.open("a") as handle:
+    with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row) + "\n")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    plan = json.loads(Path(args.plan).read_text())
+    plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
     go = os.environ.get("HOOK_FIDELITY_GO", "")
     out = Path(args.out)
     rows_path = out / "runs.jsonl"
-    done = {json.loads(line)["run_id"] for line in rows_path.read_text().splitlines()} if rows_path.exists() else set()
+    done = {json.loads(line)["run_id"] for line in rows_path.read_text(
+        encoding="utf-8").splitlines()} if rows_path.exists() else set()
     todo = [c for c in plan if case_id(c) not in done]
     for item in filter(None, (args.where or "").split(",")):   # --where harness=claude,version=2.1.47|2.1.89,rep=0
         field, _, wanted = item.partition("=")
@@ -382,10 +383,10 @@ def cmd_probe(args: argparse.Namespace) -> int:
         configs_written = [*(root / "home").rglob("settings.json"), root / "settings.json", *(root / "home").rglob("config.toml")]
         for path in configs_written:
             if path.exists():
-                text = path.read_text().replace("--eval-verdict ask", "--eval-verdict probe")
-                path.write_text(text)
+                text = path.read_text(encoding="utf-8").replace("--eval-verdict ask", "--eval-verdict probe")
+                path.write_text(text, encoding="utf-8")
         argv = ["sandbox-exec", "-f", str(hf_run.LOOPBACK_PROFILE), *argv]
-        with (root / "so").open("w") as fo, (root / "se").open("w") as fe:
+        with (root / "so").open("w", encoding="utf-8") as fo, (root / "se").open("w", encoding="utf-8") as fe:
             proc = subprocess.Popen(argv, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=fo, stderr=fe,
                                     start_new_session=True)
             hf_run.watch(proc, CAPS[args.harness], [root / "so", root / "se", root / "hooks.jsonl"])
@@ -423,13 +424,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "plan-r4":
         plan = plan_r4()
         args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / "plan.json").write_text(json.dumps(plan, indent=1))
+        (args.out / "plan.json").write_text(json.dumps(plan, indent=1), encoding="utf-8")
         print(f"{len(plan)} runs -> {args.out / 'plan.json'}")
         return 0
     if args.command == "plan":
         plan = make_plan(reps=args.reps)
         args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / "plan.json").write_text(json.dumps(plan, indent=1))
+        (args.out / "plan.json").write_text(json.dumps(plan, indent=1), encoding="utf-8")
         print(f"{len(plan)} runs -> {args.out / 'plan.json'}")
         return 0
     if args.command == "probe":

@@ -71,7 +71,7 @@ def sse_events(payload: bytes) -> list[tuple[str | None, dict]]:
 
 
 def log_records(server) -> list[dict]:
-    return [json.loads(line) for line in server.log_path.read_text().splitlines()]
+    return [json.loads(line) for line in server.log_path.read_text(encoding="utf-8").splitlines()]
 
 
 # ---------------------------------------------------------------- Anthropic Messages
@@ -312,7 +312,7 @@ def test_log_redacts_credentials_in_headers_query_and_dumps(tmp_path):
         body = {**ANTHROPIC_TURN1, "stream": False,
                 "messages": [{"role": "user", "content": f"my key is {FAKE_KEY}"}]}
         post(server, f"/v1/messages?key={FAKE_GOOGLE_KEY}&alt=sse", body, headers)
-        text = server.log_path.read_text() + "".join(p.read_text() for p in dump.iterdir())
+        text = server.log_path.read_text(encoding="utf-8") + "".join(p.read_text(encoding="utf-8") for p in dump.iterdir())
     for secret in (FAKE_KEY, FAKE_GOOGLE_KEY, "session=abc"):
         assert secret not in text
     record = json.loads(text.splitlines()[0])
@@ -394,7 +394,7 @@ def test_text_only_script_never_calls_a_tool(tmp_path):
 
 # ---------------------------------------------------------------- module properties and the command line
 def test_stub_imports_only_the_standard_library():
-    tree = ast.parse(STUB_FILE.read_text())
+    tree = ast.parse(STUB_FILE.read_text(encoding="utf-8"))
     names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     names |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     assert names <= set(sys.stdlib_module_names) | {"compression"}, names - set(sys.stdlib_module_names)
@@ -402,7 +402,7 @@ def test_stub_imports_only_the_standard_library():
 
 
 def test_stub_has_no_way_to_reach_out_or_run_code():
-    tree = ast.parse(STUB_FILE.read_text())
+    tree = ast.parse(STUB_FILE.read_text(encoding="utf-8"))
     imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     imported |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     assert not imported & {"subprocess", "socket", "urllib.request", "http.client", "os", "shutil"}
@@ -411,20 +411,20 @@ def test_stub_has_no_way_to_reach_out_or_run_code():
 
 def test_command_line_serves_and_writes_the_port_file(tmp_path):
     script = tmp_path / "script.json"
-    script.write_text(json.dumps(SCRIPT))
+    script.write_text(json.dumps(SCRIPT), encoding="utf-8")
     port_file, log = tmp_path / "port", tmp_path / "requests.jsonl"
     proc = subprocess.Popen([sys.executable, "-I", str(STUB_FILE), "--script", str(script), "--log", str(log),
                              "--port-file", str(port_file)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         banner = json.loads(proc.stdout.readline())
         assert banner["host"] == "127.0.0.1" and banner["url"] == f"http://127.0.0.1:{banner['port']}"
-        assert int(port_file.read_text()) == banner["port"]
+        assert int(port_file.read_text(encoding="utf-8")) == banner["port"]
         conn = http.client.HTTPConnection("127.0.0.1", banner["port"], timeout=10)
         conn.request("POST", "/v1/messages", body=json.dumps({**ANTHROPIC_TURN1, "stream": False}),
                      headers={"Content-Type": "application/json"})
         assert json.loads(conn.getresponse().read())["stop_reason"] == "tool_use"
         conn.close()
-        assert json.loads(log.read_text().splitlines()[0])["decision"] == "tool_call"
+        assert json.loads(log.read_text(encoding="utf-8").splitlines()[0])["decision"] == "tool_call"
     finally:
         proc.terminate()
         proc.communicate(timeout=10)
@@ -432,7 +432,7 @@ def test_command_line_serves_and_writes_the_port_file(tmp_path):
 
 def test_command_line_rejects_a_bad_script(tmp_path):
     script = tmp_path / "script.json"
-    script.write_text(json.dumps({"call": {"name": "Bash", "args": []}}))
+    script.write_text(json.dumps({"call": {"name": "Bash", "args": []}}), encoding="utf-8")
     done = subprocess.run([sys.executable, "-I", str(STUB_FILE), "--script", str(script),
                            "--log", str(tmp_path / "r.jsonl")], capture_output=True, text=True, timeout=30)
     assert done.returncode == 2 and "bad script" in done.stderr
@@ -484,7 +484,7 @@ def test_call_index_is_assigned_under_the_lock_and_distinct_under_concurrency(tm
 
 def test_command_line_default_issues_one_tool_call_only(tmp_path):
     script = tmp_path / "script.json"
-    script.write_text(json.dumps(SCRIPT))
+    script.write_text(json.dumps(SCRIPT), encoding="utf-8")
     log = tmp_path / "requests.jsonl"
     proc = subprocess.Popen([sys.executable, "-I", str(STUB_FILE), "--script", str(script), "--log", str(log)],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -510,7 +510,7 @@ def test_scrub_text_removes_email_and_home_path_and_dump_dir_is_restricted(tmp_p
     assert stub_model.dump_dir_allowed(Path("/work/repo/artifacts/dumps"))
     assert not stub_model.dump_dir_allowed(Path("/work/repo/results/dumps"))
     script = tmp_path / "script.json"
-    script.write_text(json.dumps(SCRIPT))
+    script.write_text(json.dumps(SCRIPT), encoding="utf-8")
     done = subprocess.run([sys.executable, "-I", str(STUB_FILE), "--script", str(script), "--log",
                            str(tmp_path / "r.jsonl"), "--dump-dir", "/work/repo/results/dumps"],
                           capture_output=True, text=True, timeout=30)

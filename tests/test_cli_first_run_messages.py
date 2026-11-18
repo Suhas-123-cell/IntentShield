@@ -4,6 +4,7 @@ machine with nothing installed, a wrapped server whose command is gone, and the 
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -33,27 +34,27 @@ def test_a_gemini_settings_file_with_a_trailing_comma_and_comments_is_read_and_r
     original = '{\n  // my model\n  "model": {"name": "x",},\n}\n'
     path = home / ".gemini" / "settings.json"
     path.parent.mkdir()
-    path.write_text(original)
+    path.write_text(original, encoding="utf-8")
     install.install("gemini", home=home, hook=HOOK)
     err = capsys.readouterr().err
     assert "comments or trailing commas" in err and "puts it back" in err
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert data["model"] == {"name": "x"} and "BeforeTool" in data["hooks"]
     install.uninstall("gemini", home=home)
-    assert path.read_text() == original
+    assert path.read_text(encoding="utf-8") == original
 
 
 def test_a_claude_settings_file_that_is_not_json_says_what_to_do_and_is_left_alone(home, capsys):
     path = home / ".claude" / "settings.json"
     path.parent.mkdir()
-    path.write_text('{\n  // note\n  "theme": "dark"\n}\n')
+    path.write_text('{\n  // note\n  "theme": "dark"\n}\n', encoding="utf-8")
     code = cli.install.run(type("A", (), {"command": "install", "harness": "claude", "scope": "user", "review": None, "dry_run": False,
                                           "judge": None, "api_key": None, "judge_url": None, "judge_outputs": False,
                                           "builtin_tools": False, "gemini_ask": False, "no_translate": False,
                                           "allow_ephemeral": True})())
     err = capsys.readouterr().err
     assert code == 1 and "remove its comments and trailing commas" in err and "install <harness> --dry-run" in err
-    assert path.read_text() == '{\n  // note\n  "theme": "dark"\n}\n'
+    assert path.read_text(encoding="utf-8") == '{\n  // note\n  "theme": "dark"\n}\n'
 
 
 # --- install notes ----------------------------------------------------------------------------------------------------------
@@ -82,13 +83,13 @@ def test_a_dry_run_of_a_project_install_prints_no_note(home, tmp_path, capsys):
 def test_wrap_warns_when_the_file_lies_in_a_git_working_tree(tmp_path, capsys):
     (tmp_path / ".git").mkdir()
     path = tmp_path / ".mcp.json"
-    path.write_text(json.dumps({"mcpServers": {"s": {"command": sys.executable, "args": ["-c", "pass"]}}}))
+    path.write_text(json.dumps({"mcpServers": {"s": {"command": sys.executable, "args": ["-c", "pass"]}}}), encoding="utf-8")
     install.wrap(path, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
     assert "do not commit it" in capsys.readouterr().out
 
 
 def test_the_next_step_and_the_readme_give_the_same_instruction():
-    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     assert "send any prompt" in readme and "send any prompt" in install.NEXT_STEP
 
 
@@ -135,7 +136,7 @@ def test_doctor_fails_a_wrapped_server_whose_command_does_not_exist(home, tmp_pa
     project = tmp_path / "project"
     project.mkdir()
     mcp = project / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"gone": {"command": "/no/such/binary", "args": ["--x"]}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"gone": {"command": "/no/such/binary", "args": ["--x"]}}}), encoding="utf-8")
     install.wrap(mcp, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
     capsys.readouterr()
     code = doctor.doctor(home=home, cwd=project, db=home / "hooks.db")
@@ -149,7 +150,7 @@ def test_doctor_fails_a_wrapped_server_whose_command_is_not_on_path(home, tmp_pa
     project = tmp_path / "project"
     project.mkdir()
     mcp = project / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"gone": {"command": "no-such-program-xyz"}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"gone": {"command": "no-such-program-xyz"}}}), encoding="utf-8")
     install.wrap(mcp, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
     capsys.readouterr()
     assert doctor.doctor(home=home, cwd=project, db=home / "hooks.db") == 1
@@ -160,7 +161,7 @@ def test_doctor_passes_a_wrapped_server_whose_command_exists(home, tmp_path, cap
     project = tmp_path / "project"
     project.mkdir()
     mcp = project / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"fine": {"command": sys.executable, "args": ["-c", "pass"]}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"fine": {"command": sys.executable, "args": ["-c", "pass"]}}}), encoding="utf-8")
     install.wrap(mcp, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
     capsys.readouterr()
     assert doctor.doctor(home=home, cwd=project, db=home / "hooks.db") == 0
@@ -172,7 +173,7 @@ def test_doctor_passes_a_wrapped_server_whose_command_exists(home, tmp_path, cap
 
 def test_scan_names_the_cause_when_a_server_cannot_be_started(tmp_path):
     path = tmp_path / "mcp.json"
-    path.write_text(json.dumps({"mcpServers": {"nope": {"command": "/no/such/binary"}}}))
+    path.write_text(json.dumps({"mcpServers": {"nope": {"command": "/no/such/binary"}}}), encoding="utf-8")
     servers = scan.discover(tmp_path, tmp_path, [path])
     scan.scan(servers, connect=True, timeout=10, pins={})
     assert servers[0].error and "'/no/such/binary' does not exist" in servers[0].error
@@ -243,7 +244,7 @@ def test_the_demo_is_listed_in_the_help(capsys):
 
 def test_wrap_points_a_remote_server_to_a_url_not_to_a_path_only_a_clone_has(tmp_path, capsys):
     mcp = tmp_path / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"remote": {"url": "https://mcp.example.org/sse"}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"remote": {"url": "https://mcp.example.org/sse"}}}), encoding="utf-8")
     install.wrap(mcp, out_dir=tmp_path / "proxies", proxy="/opt/is/bin/intentshield-mcp", allow_ephemeral=True)
     said = capsys.readouterr().out
     assert "skipped remote: not a stdio server" in said
@@ -257,14 +258,14 @@ def _proxy(tmp_path: Path, body: str = "exit 3") -> str:
     """A program named like the proxy, so that ``wrap`` and ``doctor`` take an entry that runs it for a wrapped one."""
     script = tmp_path / "bin" / "intentshield-mcp"
     script.parent.mkdir(exist_ok=True)
-    script.write_text(f"#!/bin/sh\n{body}\n")
+    script.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
     script.chmod(0o755)
     return str(script)
 
 
 def _wrapped(tmp_path: Path, home: Path, entry: dict, name: str = ".mcp.json") -> Path:
     path = tmp_path / name
-    path.write_text(json.dumps({"mcpServers": {"demo": entry}}))
+    path.write_text(json.dumps({"mcpServers": {"demo": entry}}), encoding="utf-8")
     install.wrap(path, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path))
     return path
 
@@ -275,6 +276,37 @@ def test_doctor_prints_an_ok_line_for_each_wrapped_file_it_checked(tmp_path, hom
     out = capsys.readouterr().out
     assert f"ok   {path}: 1 server(s) behind the proxy (demo)" in out
     assert "does not start the proxy" in out and "--connect" in out
+
+
+def test_the_ok_line_names_connect_project_for_a_file_in_the_working_directory_and_connect_for_one_in_the_home(
+        tmp_path, home, capsys):
+    project = _wrapped(tmp_path, home, {"command": sys.executable, "args": ["-m", "x"]})
+    user_file = home / ".cursor" / "mcp.json"
+    user_file.parent.mkdir(parents=True)
+    user_file.write_text(json.dumps({"mcpServers": {"mine": {"command": sys.executable, "args": ["-m", "y"]}}}), encoding="utf-8")
+    install.wrap(user_file, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path))
+    capsys.readouterr()
+    assert doctor.doctor(home, tmp_path, home / "hooks.db") == 0
+    lines = {"project" if "(demo)" in line else "user": line for line in capsys.readouterr().out.splitlines()
+             if "behind the proxy" in line}
+    assert "`intentshield doctor --connect-project` does" in lines["project"]
+    assert "`intentshield doctor --connect` does" in lines["user"]
+    assert project.exists()
+
+
+def test_doctor_warns_about_a_database_written_by_a_newer_release(tmp_path, home, capsys):
+    from intentshield.harness.store import SCHEMA_VERSION
+    db = home / ".intentshield" / "hooks.db"
+    assert doctor.doctor(home, tmp_path, db) == 0
+    assert "newer IntentShield" not in capsys.readouterr().out
+    db.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db) as conn:
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    conn.close()
+    assert doctor.doctor(home, tmp_path, db) == 0
+    out = capsys.readouterr().out
+    assert f"~/.intentshield/hooks.db: was written by a newer IntentShield (database version {SCHEMA_VERSION + 1};" in out
+    assert f"this one reads version {SCHEMA_VERSION})" in out
 
 
 def test_doctor_prints_no_ok_line_for_a_server_whose_command_is_gone(tmp_path, home, capsys):
@@ -296,11 +328,11 @@ def test_doctor_says_what_it_checks_and_what_it_does_not_start(capsys):
 def test_doctor_reads_codex_toml_and_vscode_files_too(tmp_path, home, capsys):
     toml = home / ".codex" / "config.toml"
     toml.parent.mkdir(parents=True)
-    toml.write_text(f'[mcp_servers.demo]\ncommand = "{sys.executable}"\nargs = ["-m", "x"]\n')
+    toml.write_text(f'[mcp_servers.demo]\ncommand = "{sys.executable}"\nargs = ["-m", "x"]\n', encoding="utf-8")
     install.wrap(toml, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path))
     vscode = tmp_path / ".vscode" / "mcp.json"
     vscode.parent.mkdir()
-    vscode.write_text(json.dumps({"servers": {"demo": {"command": sys.executable, "args": ["-m", "x"]}}}))
+    vscode.write_text(json.dumps({"servers": {"demo": {"command": sys.executable, "args": ["-m", "x"]}}}), encoding="utf-8")
     install.wrap(vscode, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path))
     doctor.doctor(home, tmp_path, home / "hooks.db")
     out = capsys.readouterr().out
@@ -315,14 +347,14 @@ def test_doctor_connect_starts_a_wrapped_server_through_its_proxy_and_lists_its_
         pytest.skip("the intentshield-mcp program is not installed in this environment")
     path = tmp_path / "mcp.json"
     path.write_text(json.dumps({"mcpServers": {"demo": {"command": sys.executable, "args": ["-m",
-        "intentshield.demo_mcp_server"]}}}))
+        "intentshield.demo_mcp_server"]}}}), encoding="utf-8")
     install.wrap(path, out_dir=home / ".intentshield" / "proxies", proxy=proxy)
     monkey_cwd = tmp_path / "elsewhere"
     monkey_cwd.mkdir()
     # the file is outside the working directory and the home: it is read through a home-level path
     user_file = home / ".cursor" / "mcp.json"
     user_file.parent.mkdir(parents=True)
-    user_file.write_text(path.read_text())
+    user_file.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     assert doctor.doctor(home, monkey_cwd, home / "hooks.db", connect=True) == 0
     out = capsys.readouterr().out
     assert "demo: started through the proxy and listed" in out and "tool(s)" in out
@@ -332,9 +364,9 @@ def test_doctor_connect_reports_a_server_that_does_not_start_and_still_checks_th
     user_file = home / ".cursor" / "mcp.json"
     user_file.parent.mkdir(parents=True)
     script = tmp_path / "dies.sh"
-    script.write_text("#!/bin/sh\nexit 3\n")
+    script.write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
     script.chmod(0o755)
-    user_file.write_text(json.dumps({"mcpServers": {"dead": {"command": str(script), "args": []}}}))
+    user_file.write_text(json.dumps({"mcpServers": {"dead": {"command": str(script), "args": []}}}), encoding="utf-8")
     install.wrap(user_file, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path))
     assert doctor.doctor(home, tmp_path / "x", home / "hooks.db", connect=True) == 1
     assert "dead: the proxy did not answer tools/list" in capsys.readouterr().out
@@ -343,10 +375,10 @@ def test_doctor_connect_reports_a_server_that_does_not_start_and_still_checks_th
 def test_doctor_connect_does_not_start_a_server_named_by_a_file_in_the_working_directory(tmp_path, home, capsys):
     marker = tmp_path / "started"
     script = tmp_path / "server.sh"
-    script.write_text(f"#!/bin/sh\ntouch {marker}\nexit 3\n")
+    script.write_text(f"#!/bin/sh\ntouch {marker}\nexit 3\n", encoding="utf-8")
     script.chmod(0o755)
     path = tmp_path / ".mcp.json"
-    path.write_text(json.dumps({"mcpServers": {"repo": {"command": str(script), "args": []}}}))
+    path.write_text(json.dumps({"mcpServers": {"repo": {"command": str(script), "args": []}}}), encoding="utf-8")
     install.wrap(path, out_dir=home / ".intentshield" / "proxies", proxy=_proxy(tmp_path, f"touch {marker}"))
     doctor.doctor(home, tmp_path, home / "hooks.db", connect=True)
     assert not marker.exists() and "not started" in capsys.readouterr().out

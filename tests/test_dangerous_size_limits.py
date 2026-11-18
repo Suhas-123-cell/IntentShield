@@ -6,7 +6,7 @@ nothing is run."""
 from __future__ import annotations
 
 import pytest
-from timelimits import limit
+from timelimits import limit, within
 
 from intentshield import dangerous
 from intentshield.dangerous import assess_file, assess_shell
@@ -290,3 +290,15 @@ def test_the_session_rules_cuts_that_have_no_name_are_covered_too():
     is still read for the address."""
     assert _session(nested(SEND, 6))
     assert _session("flock /tmp/lock " + "-x " * 45 + SEND)
+
+
+# --- ~name words: one lookup of the user database for each name ---------------------------------------------------------------
+
+def test_a_command_of_thousands_of_tilde_words_costs_linear_time():
+    """``~a`` is the home of the user ``a``, which is a lookup in the user database (a directory service may take a round trip for
+    each). The lookup is made once for each name, so a command of 20,000 words that repeat one name, or one that gives 2,000
+    names, is read at once. Without it 20,000 words took 3 seconds."""
+    for words in (5000, 10000, 20000):
+        within(1.0, assess_shell, "~a " * words)
+    within(2.0, assess_shell, "cat " + " ".join(f"~user{i}/x" for i in range(2000)))
+    assert verdict("cat ~a ~b ~c") == "allow" and verdict("cat ~a/../.ssh/id_rsa ~b") == "deny"

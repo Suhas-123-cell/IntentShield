@@ -32,7 +32,7 @@ def classify(t):
     return hit, bool(HOOKRX.search("\n".join(ls)))
 if __name__=="__main__":
     for n in sys.argv[1:]:
-        d=json.load(open(f"{D}/E_{n}.json")); c=collections.Counter(); repos=collections.defaultdict(set); hk=collections.defaultdict(set); miss=0; lock=0
+        d=json.load(open(f"{D}/E_{n}.json", encoding="utf-8")); c=collections.Counter(); repos=collections.defaultdict(set); hk=collections.defaultdict(set); miss=0; lock=0
         for i in d["items"]:
             t=text(i)
             if not t: miss+=1; continue

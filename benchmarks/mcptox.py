@@ -62,7 +62,7 @@ _STOP = {"the", "and", "for", "with", "this", "that", "you", "your", "all", "any
 # --- case loading ---------------------------------------------------------
 
 def load_cases(data: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    raw = json.loads((data / "response_all.json").read_text())
+    raw = json.loads((data / "response_all.json").read_text(encoding="utf-8"))
     cases = []
     for server, sv in raw["servers"].items():
         for inst in sv["malicious_instance"]:
@@ -253,7 +253,7 @@ def rate(successes: int, n: int) -> dict[str, Any]:
 
 def calibrate(data: Path) -> dict[str, Any]:
     """Agreement of ``attack_followed`` with MCPTox's labels on its published responses."""
-    raw = json.loads((data / "response_all.json").read_text())
+    raw = json.loads((data / "response_all.json").read_text(encoding="utf-8"))
     conf: collections.Counter = collections.Counter()
     by_paradigm: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for sv in raw["servers"].values():
@@ -288,7 +288,7 @@ def replay(data: Path, lenient_reads: bool = False) -> dict[str, Any]:
     ``full_proxy`` additionally counts a case as stopped when the proxy would have
     quarantined the poisoned tool, so the model would never have seen it.
     """
-    raw = json.loads((data / "response_all.json").read_text())
+    raw = json.loads((data / "response_all.json").read_text(encoding="utf-8"))
     modes = ("no_defense", "quarantine+provenance", "call_layer", "call_layer+provenance", "full_proxy")
     stats: dict[str, dict[str, collections.Counter]] = {}
     by_paradigm: dict[str, dict[str, collections.Counter]] = {}
@@ -388,7 +388,7 @@ def main(argv: list[str] | None = None) -> None:
         args.out.mkdir(parents=True, exist_ok=True)
         result = replay(args.data, args.lenient_reads)
         name = "report-replay-lenient.json" if args.lenient_reads else "report-replay.json"
-        (args.out / name).write_text(json.dumps(result, indent=2))
+        (args.out / name).write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(json.dumps(result["all_models"], indent=2))
         return
 
@@ -408,13 +408,13 @@ def main(argv: list[str] | None = None) -> None:
     cache_path = args.out / f"generations-{tag}.jsonl"
     cache: dict[tuple[str, str], dict[str, Any]] = {}
     if cache_path.exists():
-        for line in cache_path.read_text().splitlines():
+        for line in cache_path.read_text(encoding="utf-8").splitlines():
             row = json.loads(line)
             cache[(row["id"], row["variant"])] = row
 
     jobs = [(c["id"], v, c) for c in sample for v in ("poisoned", "withheld")]
     jobs += [(f"benign-{s}-{i}", "clean", {"server": s, "query": q}) for i, (s, q) in enumerate(benign)]
-    with httpx.Client(base_url=args.host) as client, cache_path.open("a") as sink:
+    with httpx.Client(base_url=args.host) as client, cache_path.open("a", encoding="utf-8") as sink:
         for n, (cid, variant, case) in enumerate(jobs, 1):
             if (cid, variant) in cache or args.score_only:
                 continue
@@ -498,7 +498,7 @@ def main(argv: list[str] | None = None) -> None:
             m: {"false_block_rate": rate(c["blocked"], c["n"]), "review_rate": rate(c["review"], c["n"])}
             for m, c in stats.items()}}
 
-    (args.out / f"report-{tag}-seed{args.seed}.json").write_text(json.dumps(report, indent=2))
+    (args.out / f"report-{tag}-seed{args.seed}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

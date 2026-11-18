@@ -28,7 +28,7 @@ def home(tmp_path: Path, monkeypatch) -> Path:
 def _exe(tmp_path: Path, shebang: str = "#!/bin/sh") -> str:
     exe = tmp_path / "bin" / "intentshield-hook"
     exe.parent.mkdir(exist_ok=True)
-    exe.write_text(shebang + "\n")
+    exe.write_text(shebang + "\n", encoding="utf-8")
     exe.chmod(0o755)
     return str(exe)
 
@@ -91,7 +91,7 @@ def test_doctor_fails_a_shell_wrapper_that_execs_a_missing_interpreter(tmp_path:
     cwd = tmp_path / "work"
     cwd.mkdir()
     exe = _exe(tmp_path)
-    Path(exe).write_text("#!/bin/sh\n" + body)
+    Path(exe).write_text("#!/bin/sh\n" + body, encoding="utf-8")
     install.install("claude", home=home, cwd=cwd, hook=exe, translate=False)
     _ran(_db(home), "claude", time.time() + 5)
     rc, out = _doctor(home, cwd, capsys)
@@ -103,7 +103,7 @@ def test_doctor_passes_a_shell_wrapper_that_execs_an_existing_interpreter(tmp_pa
     cwd = tmp_path / "work"
     cwd.mkdir()
     exe = _exe(tmp_path)
-    Path(exe).write_text('#!/bin/sh\n# exec /nonexistent/in-a-comment\nexec /bin/sh -c true "$@"\n')
+    Path(exe).write_text('#!/bin/sh\n# exec /nonexistent/in-a-comment\nexec /bin/sh -c true "$@"\n', encoding="utf-8")
     install.install("claude", home=home, cwd=cwd, hook=exe)
     _ran(_db(home), "claude", time.time() + 5)
     assert _doctor(home, cwd, capsys)[0] == 0
@@ -117,9 +117,9 @@ def test_an_unrelated_settings_edit_does_not_make_doctor_fail(tmp_path: Path, ho
     path = install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path))
     _ran(_db(home), "claude", time.time() + 5)
     assert _doctor(home, cwd, capsys)[0] == 0
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["model"] = "sonnet"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     os.utime(path, (time.time() + 60, time.time() + 60))  # the edit is newer than the last hook run
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 0 and "ok   claude" in out
@@ -147,9 +147,9 @@ def test_doctor_fails_hooks_that_claude_code_is_told_not_to_run(tmp_path: Path, 
     cwd.mkdir()
     path = install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path))
     _ran(_db(home), "claude", time.time() + 5)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["disableAllHooks"] = True
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     os.utime(path, (time.time() - 60, time.time() - 60))
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 1 and "disableAllHooks is true" in out
@@ -160,9 +160,9 @@ def test_doctor_fails_a_matcher_that_matches_no_mcp_tool(tmp_path: Path, home: P
     cwd.mkdir()
     path = install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path))
     _ran(_db(home), "claude", time.time() + 5)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["hooks"]["PreToolUse"][0]["matcher"] = "NoSuchTool"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     rc, out = _doctor(home, cwd, capsys)
     assert rc == 1 and "does not match MCP tools" in out
 
@@ -174,10 +174,10 @@ def test_wrap_leaves_a_server_alone_whose_command_line_uses_interpolation(tmp_pa
     servers = {"fs": {"command": "npx", "args": ["-y", "@mcp/server-filesystem", "${HOME}/data", "${workspaceFolder}"]},
                "tool": {"command": "${TOOLS}/bin/server"},
                "ok": {"command": "plain-server", "args": ["--port", "1"], "env": {"TOKEN": "${TOKEN}"}}}
-    mcp.write_text(json.dumps({"mcpServers": servers}))
+    mcp.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
     out_dir = tmp_path / "proxies"
     assert install.wrap(mcp, out_dir=out_dir) == ["ok"]
-    wrapped = json.loads(mcp.read_text())["mcpServers"]
+    wrapped = json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]
     assert wrapped["fs"] == servers["fs"] and wrapped["tool"] == servers["tool"]  # as they were: the client expands them
     assert wrapped["ok"]["env"] == {"TOKEN": "${TOKEN}"} and wrapped["ok"]["args"][0] == "--transparent"
     out = capsys.readouterr().out
@@ -189,9 +189,10 @@ def test_wrap_leaves_a_server_alone_whose_command_line_uses_interpolation(tmp_pa
 def test_wrap_leaves_a_server_alone_whose_args_use_a_bare_variable(tmp_path: Path, home: Path, capsys, arg):
     mcp = tmp_path / "settings.json"
     mcp.write_text(json.dumps({"mcpServers": {"fs": {"command": "npx", "args": ["-y", "srv", arg]},
-                                              "re": {"command": "srv", "args": ["--pattern", "^a.*$", "$(pwd)", "~/x"]}}}))
+                                              "re": {"command": "srv", "args": ["--pattern", "^a.*$", "$(pwd)", "~/x"]}}}),
+                                                  encoding="utf-8")
     assert install.wrap(mcp, out_dir=tmp_path / "proxies") == ["re"]
-    assert json.loads(mcp.read_text())["mcpServers"]["fs"]["args"] == ["-y", "srv", arg]
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["fs"]["args"] == ["-y", "srv", arg]
     assert "skipped fs" in capsys.readouterr().out
 
 
@@ -200,9 +201,9 @@ def test_doctor_accepts_a_matcher_the_user_narrowed_to_one_server(tmp_path: Path
     cwd.mkdir()
     path = install.install("claude", home=home, cwd=cwd, hook=_exe(tmp_path))
     _ran(_db(home), "claude", time.time() + 5)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["hooks"]["PreToolUse"][0]["matcher"] = "mcp__github__.*"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     assert _doctor(home, cwd, capsys)[0] == 0
 
 
@@ -211,7 +212,7 @@ def test_doctor_accepts_a_matcher_the_user_narrowed_to_one_server(tmp_path: Path
 def _wrapped(tmp_path: Path) -> tuple[Path, dict]:
     mcp = tmp_path / ".mcp.json"
     original = {"command": "demo-server", "args": ["--root", "/srv/data"], "env": {"A": "1"}}
-    mcp.write_text(json.dumps({"mcpServers": {"demo": original}}, indent=2))
+    mcp.write_text(json.dumps({"mcpServers": {"demo": original}}, indent=2), encoding="utf-8")
     install.wrap(mcp, out_dir=tmp_path / "proxies")
     return mcp, original
 
@@ -221,7 +222,7 @@ def test_unwrap_restores_the_entry_from_the_backup_when_the_generated_config_is_
     for config in (tmp_path / "proxies").glob("*.json"):
         config.unlink()
     assert install.unwrap(mcp) == ["demo"]
-    assert json.loads(mcp.read_text())["mcpServers"]["demo"] == original
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["demo"] == original
 
 
 def test_unwrap_says_what_is_missing_when_nothing_can_restore_the_entry(tmp_path: Path, home: Path, capsys):
@@ -230,10 +231,10 @@ def test_unwrap_says_what_is_missing_when_nothing_can_restore_the_entry(tmp_path
         config.unlink()
     for backup in (home / ".intentshield" / "backups").glob("*.json"):
         backup.unlink()
-    before = mcp.read_text()
+    before = mcp.read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="cannot restore demo .*proxy config .* missing.*Edit .* by hand"):
         install.unwrap(mcp)
-    assert mcp.read_text() == before
+    assert mcp.read_text(encoding="utf-8") == before
     cli = type("Args", (), {"command": "unwrap", "config": mcp, "servers": None, "dry_run": False})
     assert install.run(cli) == 1
 
@@ -251,21 +252,21 @@ def test_doctor_points_at_the_backup_when_the_proxy_config_is_gone(tmp_path: Pat
 
 def test_unwrap_restores_the_command_of_the_latest_wrap_not_of_the_first(tmp_path: Path, home: Path):
     mcp, _ = _wrapped(tmp_path)
-    data = json.loads(mcp.read_text())
+    data = json.loads(mcp.read_text(encoding="utf-8"))
     data["mcpServers"]["demo"] = {"command": "npx", "args": ["-y", "srv", "Y"]}  # the user replaced the server
-    mcp.write_text(json.dumps(data))
+    mcp.write_text(json.dumps(data), encoding="utf-8")
     install.wrap(mcp, out_dir=tmp_path / "proxies")
     for config in (tmp_path / "proxies").glob("*.json"):
         config.unlink()
     assert install.unwrap(mcp) == ["demo"]
-    assert json.loads(mcp.read_text())["mcpServers"]["demo"] == {"command": "npx", "args": ["-y", "srv", "Y"]}
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["demo"] == {"command": "npx", "args": ["-y", "srv", "Y"]}
 
 
 def test_doctor_does_not_promise_a_restore_the_backup_cannot_make(tmp_path: Path, home: Path, capsys):
     mcp, _ = _wrapped(tmp_path)
-    data = json.loads(mcp.read_text())
+    data = json.loads(mcp.read_text(encoding="utf-8"))
     data["mcpServers"]["renamed"] = data["mcpServers"].pop("demo")  # the backup knows no entry of this name
-    mcp.write_text(json.dumps(data))
+    mcp.write_text(json.dumps(data), encoding="utf-8")
     for config in (tmp_path / "proxies").glob("*.json"):
         config.unlink()
     out = _doctor(home, mcp.parent, capsys)[1]
@@ -287,20 +288,20 @@ def test_comments_are_stripped_outside_strings_only():
 def test_install_reads_a_commented_gemini_settings_file_and_uninstall_restores_it_exactly(tmp_path: Path, home: Path, capsys):
     path = home / ".gemini" / "settings.json"
     path.parent.mkdir()
-    path.write_text(COMMENTED)
+    path.write_text(COMMENTED, encoding="utf-8")
     install.install("gemini", home=home, hook=_exe(tmp_path))
     captured = capsys.readouterr()
-    assert "has comments" in captured.err and "BeforeTool" in path.read_text()
-    assert json.loads(path.read_text())["theme"] == "dark"
+    assert "has comments" in captured.err and "BeforeTool" in path.read_text(encoding="utf-8")
+    assert json.loads(path.read_text(encoding="utf-8"))["theme"] == "dark"
     install.uninstall("gemini", home=home)
-    assert path.read_text() == COMMENTED
+    assert path.read_text(encoding="utf-8") == COMMENTED
 
 
 def test_doctor_reads_a_commented_gemini_settings_file(tmp_path: Path, home: Path, capsys):
     path = home / ".gemini" / "settings.json"
     path.parent.mkdir()
     path.write_text("// installed by hand\n" + json.dumps({"hooks": {event: [{"matcher": ".*", "hooks": [
-        {"type": "command", "command": f"{_exe(tmp_path)} gemini"}]}] for event in doctor.REQUIRED["gemini"]}}))
+        {"type": "command", "command": f"{_exe(tmp_path)} gemini"}]}] for event in doctor.REQUIRED["gemini"]}}), encoding="utf-8")
     _ran(_db(home), "gemini", time.time() + 5)
     rc, out = _doctor(home, tmp_path, capsys)
     assert rc == 0 and "cannot read" not in out
@@ -309,7 +310,7 @@ def test_doctor_reads_a_commented_gemini_settings_file(tmp_path: Path, home: Pat
 def test_claude_settings_with_comments_are_still_refused(tmp_path: Path, home: Path):
     path = home / ".claude" / "settings.json"
     path.parent.mkdir()
-    path.write_text(COMMENTED)
+    path.write_text(COMMENTED, encoding="utf-8")
     with pytest.raises(ValueError, match="not valid JSON"):
         install.install("claude", home=home, hook=_exe(tmp_path))
 
@@ -319,7 +320,7 @@ def test_claude_settings_with_comments_are_still_refused(tmp_path: Path, home: P
 def test_a_key_only_in_the_installing_shell_is_stored_for_the_hooks(tmp_path: Path, home: Path, monkeypatch, capsys):
     monkeypatch.setenv("GROQ_API_KEY", "gsk_shell_only_value")
     path = install.ensure_judge_key("groq", home)
-    assert path == home / ".intentshield" / ".env" and "GROQ_API_KEY=gsk_shell_only_value" in path.read_text()
+    assert path == home / ".intentshield" / ".env" and "GROQ_API_KEY=gsk_shell_only_value" in path.read_text(encoding="utf-8")
     out = capsys.readouterr().out
     assert "set in this shell only" in out and "gsk_shell_only_value" not in out
 
@@ -345,7 +346,7 @@ def test_a_custom_judge_url_only_in_the_installing_shell_is_stored_and_checked(t
                                                                               monkeypatch, capsys):
     monkeypatch.setenv("INTENTSHIELD_JUDGE_URL", "https://judge.example/v1/chat/completions")
     path = install.ensure_judge_key("custom:m", home, api_key="k-1")
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert "INTENTSHIELD_JUDGE_URL=https://judge.example/v1/chat/completions" in text and "INTENTSHIELD_JUDGE_API_KEY=k-1" in text
     assert "INTENTSHIELD_JUDGE_URL is set in this shell only" in capsys.readouterr().out
     monkeypatch.setenv("INTENTSHIELD_JUDGE_URL", "http://attacker.example/v1")  # not https, not localhost
@@ -449,7 +450,7 @@ model = "gpt-5-mini"
 def _servers(path: Path) -> dict:
     import tomllib
 
-    return tomllib.loads(path.read_text()).get("mcp_servers", {})
+    return tomllib.loads(path.read_text(encoding="utf-8")).get("mcp_servers", {})
 
 
 @pytest.mark.parametrize("eol", ["\n", "\r\n"])
@@ -473,19 +474,20 @@ def test_wrap_and_unwrap_edit_codex_tables_and_restore_the_file_byte_for_byte(tm
 
 def test_unwrap_of_a_codex_table_the_user_edited_meanwhile_restores_the_command_and_keeps_the_edit(tmp_path: Path, home: Path):
     path = tmp_path / "config.toml"
-    path.write_text(CODEX_TOML)
+    path.write_text(CODEX_TOML, encoding="utf-8")
     install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
-    path.write_text(path.read_text().replace('model = "gpt-5"', 'model = "gpt-6"'))
+    path.write_text(path.read_text(encoding="utf-8").replace('model = "gpt-5"', 'model = "gpt-6"'), encoding="utf-8")
     install.unwrap(path)
     servers = _servers(path)
     assert servers["fs"]["command"] == "npx" and servers["fs"]["args"] == ["-y", "@mcp/fs", "/tmp"]
     assert "args" not in servers["plain"] and servers["plain"]["command"] == "uvx"
-    assert 'model = "gpt-6"' in path.read_text()
+    assert 'model = "gpt-6"' in path.read_text(encoding="utf-8")
 
 
 def test_a_codex_entry_that_is_not_a_table_of_its_own_is_skipped_with_what_to_do(tmp_path: Path, home: Path, capsys):
     path = tmp_path / "config.toml"
-    path.write_text('[mcp_servers]\nfs = { command = "npx", args = ["x"] }\n\n[mcp_servers.ok]\ncommand = "uvx"\n')
+    path.write_text('[mcp_servers]\nfs = { command = "npx", args = ["x"] }\n\n[mcp_servers.ok]\ncommand = "uvx"\n',
+        encoding="utf-8")
     assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["ok"]
     out = capsys.readouterr().out
     assert "skipped fs" in out and "[mcp_servers.NAME] table" in out and "--transparent" in out
@@ -494,7 +496,7 @@ def test_a_codex_entry_that_is_not_a_table_of_its_own_is_skipped_with_what_to_do
 
 def test_a_toml_file_with_no_codex_servers_names_the_formats_wrap_reads(tmp_path: Path, home: Path):
     path = tmp_path / "other.toml"
-    path.write_text('model = "x"\n')
+    path.write_text('model = "x"\n', encoding="utf-8")
     with pytest.raises(ValueError) as exc:
         install.wrap(path, out_dir=tmp_path / "proxies")
     message = str(exc.value)
@@ -505,10 +507,10 @@ def test_a_toml_file_with_no_codex_servers_names_the_formats_wrap_reads(tmp_path
 
 def test_a_toml_file_that_does_not_parse_is_refused_and_untouched(tmp_path: Path, home: Path):
     path = tmp_path / "config.toml"
-    path.write_text('[mcp_servers.fs\ncommand = "npx"\n')
+    path.write_text('[mcp_servers.fs\ncommand = "npx"\n', encoding="utf-8")
     with pytest.raises(ValueError, match="not valid TOML"):
         install.wrap(path, out_dir=tmp_path / "proxies")
-    assert path.read_text() == '[mcp_servers.fs\ncommand = "npx"\n'
+    assert path.read_text(encoding="utf-8") == '[mcp_servers.fs\ncommand = "npx"\n'
 
 
 VSCODE_JSON = '''// MCP servers of this workspace
@@ -525,38 +527,39 @@ VSCODE_JSON = '''// MCP servers of this workspace
 def test_wrap_and_unwrap_read_the_servers_key_of_a_vscode_file_and_restore_it_byte_for_byte(tmp_path: Path, home: Path):
     path = tmp_path / ".vscode" / "mcp.json"
     path.parent.mkdir()
-    path.write_text(VSCODE_JSON)
+    path.write_text(VSCODE_JSON, encoding="utf-8")
     assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["fs"]
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert data["servers"]["fs"]["command"] == "/bin/intentshield-mcp" and data["servers"]["fs"]["env"] == {"A": "${input:key}"}
     assert data["servers"]["remote"]["url"] == "https://mcp.example.org/mcp" and data["inputs"][0]["id"] == "key"
     assert install.unwrap(path) == ["fs"]
-    assert path.read_text() == VSCODE_JSON
+    assert path.read_text(encoding="utf-8") == VSCODE_JSON
 
 
 def test_wrap_reads_mcp_servers_of_a_vscode_settings_file(tmp_path: Path, home: Path):
     path = tmp_path / "settings.json"
     before = json.dumps({"editor.fontSize": 14, "mcp": {"servers": {"fs": {"command": "npx", "args": ["x"]}}}}, indent=2) + "\n"
-    path.write_text(before)
+    path.write_text(before, encoding="utf-8")
     assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["fs"]
-    assert json.loads(path.read_text())["mcp"]["servers"]["fs"]["command"] == "/bin/intentshield-mcp"
+    assert json.loads(path.read_text(encoding="utf-8"))["mcp"]["servers"]["fs"]["command"] == "/bin/intentshield-mcp"
     install.unwrap(path)
-    assert path.read_text() == before
+    assert path.read_text(encoding="utf-8") == before
 
 
 def test_a_file_with_both_keys_wraps_each_server_under_its_own_config(tmp_path: Path, home: Path):
     path = tmp_path / "mixed.json"
-    path.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}}, "servers": {"a": {"command": "y"}}}))
+    path.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}}, "servers": {"a": {"command": "y"}}}), encoding="utf-8")
     assert install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp") == ["a", "a [servers]"]
-    configs = {json.loads(path.read_text())[key]["a"]["args"][2] for key in ("mcpServers", "servers")}
+    configs = {json.loads(path.read_text(encoding="utf-8"))[key]["a"]["args"][2] for key in ("mcpServers", "servers")}
     assert len(configs) == 2
     install.unwrap(path)
-    assert json.loads(path.read_text()) == {"mcpServers": {"a": {"command": "x"}}, "servers": {"a": {"command": "y"}}}
+    assert json.loads(path.read_text(
+        encoding="utf-8")) == {"mcpServers": {"a": {"command": "x"}}, "servers": {"a": {"command": "y"}}}
 
 
 def test_a_json_file_with_no_servers_names_the_formats_wrap_reads(tmp_path: Path, home: Path):
     path = tmp_path / "x.json"
-    path.write_text('{"theme": "dark"}')
+    path.write_text('{"theme": "dark"}', encoding="utf-8")
     with pytest.raises(ValueError) as exc:
         install.wrap(path, out_dir=tmp_path / "proxies")
     assert "Codex CLI" in str(exc.value) and "VS Code" in str(exc.value) and "Windsurf" in str(exc.value)
@@ -569,9 +572,10 @@ def test_a_missing_file_points_at_the_claude_json_for_servers_added_by_the_cli(t
 
 def test_the_same_server_name_in_two_client_files_has_its_own_proxy_config_and_audit_database(tmp_path: Path, home: Path):
     for name, command in (("a.json", "serverA"), ("b.json", "serverB")):
-        (tmp_path / name).write_text(json.dumps({"mcpServers": {"github": {"command": command}}}))
+        (tmp_path / name).write_text(json.dumps({"mcpServers": {"github": {"command": command}}}), encoding="utf-8")
         install.wrap(tmp_path / name, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
-    configs = [json.loads(Path(json.loads((tmp_path / n).read_text())["mcpServers"]["github"]["args"][2]).read_text())
+    configs = [json.loads(Path(json.loads((tmp_path / n).read_text(
+        encoding="utf-8"))["mcpServers"]["github"]["args"][2]).read_text(encoding="utf-8"))
                for n in ("a.json", "b.json")]
     assert configs[0]["database_path"] != configs[1]["database_path"]
     assert {c["upstreams"][0]["server_id"] for c in configs} == {"github"}  # the hook finds the tool catalog by this name
@@ -622,12 +626,12 @@ def test_an_install_in_a_file_that_was_not_there_is_removed_again(tmp_path: Path
 def test_codex_hooks_and_wrapped_servers_in_one_file_come_back_exactly_in_either_order(tmp_path: Path, home: Path):
     path = home / ".codex" / "config.toml"
     path.parent.mkdir(parents=True)
-    path.write_text(CODEX_TOML)
+    path.write_text(CODEX_TOML, encoding="utf-8")
     install.install("codex", "user", hook="intentshield-hook", home=home)
     install.wrap(path, out_dir=tmp_path / "proxies", proxy="/bin/intentshield-mcp")
     install.uninstall("codex", "user", home=home)
     install.unwrap(path)
-    assert path.read_text() == CODEX_TOML
+    assert path.read_text(encoding="utf-8") == CODEX_TOML
 
 
 # --- what install says -------------------------------------------------------------------------------------------------------

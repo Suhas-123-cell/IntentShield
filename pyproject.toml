@@ -156,8 +156,13 @@ extend-exclude = ["artifacts", "results", "benchmarks/hook_fidelity/prevalence"]
 # logging calls, debugger statements, version checks, banned relative-import tricks, blanket noqa and type: ignore, __future__),
 # unused noqa comments (RUF100), URLs opened with any scheme (S310: the package sends its requests through ``outbound``) and a
 # ceiling on a function's complexity (C901, below).
-select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT", "RUF100", "C901", "S310"]
+select = ["E", "F", "W", "I", "B", "UP", "A", "G", "LOG", "RSE", "T10", "TID", "PGH", "YTT", "FA", "INT", "RUF100", "C901", "S310", "PLW1514"]
 ignore = ["E741", "E731", "B008", "B023", "B905", "UP035", "UP037"]
+
+# PLW1514 (a text-mode open() or Path read or write without encoding=) is a preview rule in this ruff. explicit-preview-rules
+# keeps every other preview rule off; the preview behaviour of the rules above is on, and the tree passes with it.
+preview = true
+explicit-preview-rules = true
 
 [tool.ruff.lint.mccabe]
 # A ceiling at the most complex function of the package today (25: dangerous.rules._git_hit, shell.heredocs._prepare). Five study

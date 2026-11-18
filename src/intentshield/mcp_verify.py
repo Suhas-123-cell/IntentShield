@@ -535,41 +535,61 @@ def _stdio_target(path: Path, config: MCPProxyConfig) -> StdioServerParameters:
     )
 
 
-async def verify_mcp(
-    config_path: str | Path,
-    *,
-    verification_mode: str = "in_process_preflight",
-    url: str | None = None,
-) -> dict[str, Any]:
-    """Connect a real MCP client and return a stable, JSON-safe report."""
-    if verification_mode not in _VERIFICATION_MODES:
-        raise ValueError("unsupported verification mode")
-    if verification_mode == "streamable_http_wire" and not url:
-        raise ValueError("streamable_http_wire requires a URL")
-    path = Path(config_path).expanduser().resolve()
-    config = MCPProxyConfig.from_file(path)
+def _verification_target(path: Path, config: MCPProxyConfig, verification_mode: str, url: str | None) -> Any:
+    """What the MCP client connects to: the proxy server in this process, a proxy started over stdio, or an HTTP endpoint."""
     if verification_mode == "in_process_preflight":
-        target: Any = create_proxy_mcp_server(config)
-    elif verification_mode == "stdio_wire":
-        target = _stdio_target(path, config)
-    else:
-        target = url
-    invoked_tools: list[str] = []
+        return create_proxy_mcp_server(config)
+    if verification_mode == "stdio_wire":
+        return _stdio_target(path, config)
+    return url
 
-    async with Client(target) as client:
-        downstream = await client.list_tools()
-        downstream_names = sorted(tool.name for tool in downstream.tools)
-        invoked_tools.append("intentshield_list_tools")
-        catalog_result = await client.call_tool("intentshield_list_tools", {})
-        if catalog_result.is_error:
-            raise RuntimeError("IntentShield catalog call returned an MCP tool error")
-        payload = catalog_result.structured_content
-        if not isinstance(payload, dict) or not isinstance(payload.get("tools"), list):
-            raise RuntimeError("IntentShield catalog response is missing structured tools")
-        catalog = sorted(payload["tools"], key=lambda tool: str(tool.get("name", "")))
 
-        behavioral_checks = await _behavior_checks(client, config, catalog, invoked_tools)
+async def _read_catalog(client: Any, invoked_tools: list[str]) -> tuple[list[str], list[Any]]:
+    """The tools the downstream client sees, and the guarded catalog the proxy reports (sorted by name)."""
+    downstream = await client.list_tools()
+    downstream_names = sorted(tool.name for tool in downstream.tools)
+    invoked_tools.append("intentshield_list_tools")
+    catalog_result = await client.call_tool("intentshield_list_tools", {})
+    if catalog_result.is_error:
+        raise RuntimeError("IntentShield catalog call returned an MCP tool error")
+    payload = catalog_result.structured_content
+    if not isinstance(payload, dict) or not isinstance(payload.get("tools"), list):
+        raise RuntimeError("IntentShield catalog response is missing structured tools")
+    return downstream_names, sorted(payload["tools"], key=lambda tool: str(tool.get("name", "")))
 
+
+def _catalog_integrity(catalog: list[Any]) -> tuple[list[str], dict[str, Any]]:
+    """The names of the malformed catalog entries, and the check that no entry is malformed, unavailable or drifted."""
+    malformed: list[str] = []
+    for item in catalog:
+        if not isinstance(item, dict):
+            malformed.append("<non-object-entry>")
+        elif (
+            not isinstance(item.get("name"), str)
+            or not isinstance(item.get("schema"), dict)
+            or not isinstance(item.get("schema_hash"), str)
+            or not isinstance(item.get("mutation"), bool)
+        ):
+            malformed.append(str(item.get("name", "<missing-name>")))
+    malformed.sort()
+    drifted = sorted(
+        str(item.get("name"))
+        for item in catalog
+        if isinstance(item, dict)
+        and (item.get("schema_drift") is True or item.get("available") is False)
+    )
+    return malformed, _check(
+        "catalog_integrity",
+        not malformed and not drifted,
+        "Every guarded catalog entry has a schema binding and is currently available."
+        if not malformed and not drifted
+        else "The guarded catalog contains malformed or unavailable entries.",
+        details={"malformed_tools": malformed, "unavailable_or_drifted_tools": drifted},
+    )
+
+
+def _structure_checks(config: MCPProxyConfig, downstream_names: list[str], catalog: list[Any]) -> list[dict[str, Any]]:
+    """The checks that read the configuration, the surface the client sees and the catalog, not what the proxy does."""
     checks: list[dict[str, Any]] = [
         _credential_policy_check(config),
         _check(
@@ -592,35 +612,8 @@ async def verify_mcp(
             details={"tool_count": len(catalog)},
         ),
     ]
-
-    malformed: list[str] = []
-    for item in catalog:
-        if not isinstance(item, dict):
-            malformed.append("<non-object-entry>")
-        elif (
-            not isinstance(item.get("name"), str)
-            or not isinstance(item.get("schema"), dict)
-            or not isinstance(item.get("schema_hash"), str)
-            or not isinstance(item.get("mutation"), bool)
-        ):
-            malformed.append(str(item.get("name", "<missing-name>")))
-    malformed.sort()
-    drifted = sorted(
-        str(item.get("name"))
-        for item in catalog
-        if isinstance(item, dict)
-        and (item.get("schema_drift") is True or item.get("available") is False)
-    )
-    checks.append(
-        _check(
-            "catalog_integrity",
-            not malformed and not drifted,
-            "Every guarded catalog entry has a schema binding and is currently available."
-            if not malformed and not drifted
-            else "The guarded catalog contains malformed or unavailable entries.",
-            details={"malformed_tools": malformed, "unavailable_or_drifted_tools": drifted},
-        )
-    )
+    malformed, integrity = _catalog_integrity(catalog)
+    checks.append(integrity)
     if not malformed:
         checks.extend(_policy_checks(config, catalog))
     else:
@@ -631,20 +624,10 @@ async def verify_mcp(
                 "Policy coverage cannot be evaluated for a malformed catalog.",
             )
         )
-    checks.extend(behavioral_checks)
-    checks.append(
-        _check(
-            "non_executing_verification",
-            all(name in _GATEWAY_TOOLS for name in invoked_tools),
-            "Verification invoked gateway policy operations but no guarded upstream tool executed.",
-            details={"invoked_gateway_tools": invoked_tools},
-        )
-    )
+    return checks
 
-    failed = sum(item["status"] == "FAIL" for item in checks)
-    warnings = sum(item["status"] == "WARN" for item in checks)
-    passed = sum(item["status"] == "PASS" for item in checks)
-    status = "PASS" if failed == 0 else "FAIL"
+
+def _next_actions(status: str, verification_mode: str) -> list[str]:
     next_actions = (
         [
             "Policy, behavioral guards, and MCP wiring verified; run the full adversarial harness before production use.",
@@ -661,7 +644,16 @@ async def verify_mcp(
             0,
             "This was an in-process preflight; rerun with --stdio or --url to verify a wire transport.",
         )
+    return next_actions
 
+
+def _report(path: Path, verification_mode: str, config: MCPProxyConfig, checks: list[dict[str, Any]],
+            downstream_names: list[str], catalog: list[Any]) -> dict[str, Any]:
+    """The stable report: the status and counts of the checks, what to do next, and what was verified."""
+    failed = sum(item["status"] == "FAIL" for item in checks)
+    warnings = sum(item["status"] == "WARN" for item in checks)
+    passed = sum(item["status"] == "PASS" for item in checks)
+    status = "PASS" if failed == 0 else "FAIL"
     return {
         "status": status,
         "summary": {
@@ -671,7 +663,7 @@ async def verify_mcp(
             "guarded_tools_discovered": len(catalog),
         },
         "checks": checks,
-        "next_actions": next_actions,
+        "next_actions": _next_actions(status, verification_mode),
         "artifacts": {
             "config": str(path),
             "verification_mode": verification_mode,
@@ -692,6 +684,39 @@ async def verify_mcp(
             ],
         },
     }
+
+
+async def verify_mcp(
+    config_path: str | Path,
+    *,
+    verification_mode: str = "in_process_preflight",
+    url: str | None = None,
+) -> dict[str, Any]:
+    """Connect a real MCP client and return a stable, JSON-safe report."""
+    if verification_mode not in _VERIFICATION_MODES:
+        raise ValueError("unsupported verification mode")
+    if verification_mode == "streamable_http_wire" and not url:
+        raise ValueError("streamable_http_wire requires a URL")
+    path = Path(config_path).expanduser().resolve()
+    config = MCPProxyConfig.from_file(path)
+    target = _verification_target(path, config, verification_mode, url)
+    invoked_tools: list[str] = []
+
+    async with Client(target) as client:
+        downstream_names, catalog = await _read_catalog(client, invoked_tools)
+        behavioral_checks = await _behavior_checks(client, config, catalog, invoked_tools)
+
+    checks = _structure_checks(config, downstream_names, catalog)
+    checks.extend(behavioral_checks)
+    checks.append(
+        _check(
+            "non_executing_verification",
+            all(name in _GATEWAY_TOOLS for name in invoked_tools),
+            "Verification invoked gateway policy operations but no guarded upstream tool executed.",
+            details={"invoked_gateway_tools": invoked_tools},
+        )
+    )
+    return _report(path, verification_mode, config, checks, downstream_names, catalog)
 
 
 def _failure_report(config_path: str | Path, exc: Exception) -> dict[str, Any]:
@@ -769,13 +794,13 @@ def demo_config(directory: Path) -> Path:
     """A copy of the demo config in ``directory`` that launches the bundled demo server with this
     interpreter, so it works wherever the package is installed and with no PATH set up, and keeps
     its database there too."""
-    config = json.loads(demo_config_path().read_text())
+    config = json.loads(demo_config_path().read_text(encoding="utf-8"))
     for upstream in config["upstreams"]:
         upstream["command"] = sys.executable
         upstream["args"] = ["-m", "intentshield.demo_mcp_server"]
     config["database_path"] = str(directory / "intentshield-demo.db")
     path = directory / "mcp-proxy.demo.json"
-    path.write_text(json.dumps(config, indent=2))
+    path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     return path
 
 

@@ -32,19 +32,20 @@ GITHUB = HERE / "corpus_build" / "github_meta.json"
 
 
 def derive_all() -> dict:
-    data = json.loads(CORPUS.read_text())
+    data = json.loads(CORPUS.read_text(encoding="utf-8"))
     out = {"summary": derive(data)}
     if (GUARDS / "summary.json").is_file():
-        captures = [json.loads(line) for line in (GUARDS / "captures.jsonl").read_text().splitlines() if line.strip()]
-        github = json.loads(GITHUB.read_text()) if GITHUB.is_file() else {}
-        out["measured"] = derive_measured(json.loads((GUARDS / "summary.json").read_text()), captures, github)
+        captures = [json.loads(line) for line in (GUARDS / "captures.jsonl").read_text(
+            encoding="utf-8").splitlines() if line.strip()]
+        github = json.loads(GITHUB.read_text(encoding="utf-8")) if GITHUB.is_file() else {}
+        out["measured"] = derive_measured(json.loads((GUARDS / "summary.json").read_text(encoding="utf-8")), captures, github)
     return out
 
 
 def check(doc: Path | None = None) -> list[str]:
     """Problems found in corpus.json and, when ``doc`` is given, in the document at that path (None: it is not compared)."""
     problems: list[str] = []
-    data = json.loads(CORPUS.read_text())
+    data = json.loads(CORPUS.read_text(encoding="utf-8"))
     derived = derive_all()
     if derived["summary"] != data.get("summary"):
         problems.append("corpus.json summary differs from the derived summary")
@@ -60,9 +61,10 @@ def check(doc: Path | None = None) -> list[str]:
         import build  # type: ignore[import-not-found]  # corpus_build/build.py (on sys.path above)
 
         rebuilt = build.markdown(data)
-        if rebuilt.strip() != doc.read_text().strip():
+        if rebuilt.strip() != doc.read_text(encoding="utf-8").strip():
             diff = list(
-                difflib.unified_diff(doc.read_text().splitlines(), rebuilt.splitlines(), "committed", "rebuilt", lineterm="", n=0)
+                difflib.unified_diff(doc.read_text(
+                    encoding="utf-8").splitlines(), rebuilt.splitlines(), "committed", "rebuilt", lineterm="", n=0)
             )
             problems.append(
                 "the document differs from the document rebuilt from corpus.json (first lines: " + " | ".join(diff[:6]) + ")"

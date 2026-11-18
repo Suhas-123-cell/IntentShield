@@ -55,12 +55,16 @@ def test_no_table_cell_in_the_guide_is_longer_than_300_characters():
     assert not _long_cells("docs/guide.md")
 
 
+def test_no_table_cell_in_the_rules_page_is_longer_than_300_characters():
+    assert not _long_cells("docs/rules.md")
+
+
 def test_the_checker_finds_a_long_cell_and_skips_an_excluded_section(tmp_path, monkeypatch):
     long = "x" * (MAX_CELL + 1)
     doc = tmp_path / "doc.md"
     table = f"|---|\n| {long} |\n"
     head = f"# Title\n\n| a | b |\n|---|---|\n| short | {long} |\n\n"
-    doc.write_text(f"{head}### Skipped\n\n| c |\n{table}\n## Next\n\n| d |\n{table}")
+    doc.write_text(f"{head}### Skipped\n\n| c |\n{table}\n## Next\n\n| d |\n{table}", encoding="utf-8")
     monkeypatch.setitem(EXCLUDED_SECTIONS, "doc.md", ("### Skipped",))
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
     found = _long_cells("doc.md")
@@ -102,6 +106,7 @@ PARAGRAPH_FILES = (
     "docs/contribution.md",
     "docs/hook-fidelity-report.md",
     "docs/guide.md",
+    "docs/rules.md",
 )
 # Sections that the paragraph test does not read, by file. None: every section of every file listed above is checked.
 PARAGRAPH_EXCLUDED_SECTIONS: dict[str, tuple[str, ...]] = {}
@@ -167,7 +172,7 @@ def test_no_paragraph_in_the_architecture_document_is_longer_than_500_characters
 def test_the_paragraph_checker_counts_a_wrapped_paragraph_and_a_list_item_separately(tmp_path):
     (tmp_path / "doc.md").write_text(
         "# Title\n\n" + "word " * 60 + "\nmore " * 60 + "\n\n- item one\n  continues\n- item two\n\n```\n" + "x" * 2000
-        + "\n```\n"
+        + "\n```\n", encoding="utf-8"
     )
     found = _long_paragraphs("doc.md", 500, tmp_path)
     assert len(found) == 1 and found[0].startswith("doc.md:3:")
@@ -176,7 +181,8 @@ def test_the_paragraph_checker_counts_a_wrapped_paragraph_and_a_list_item_separa
 
 def test_the_paragraph_checker_skips_a_named_section_and_the_guide_is_checked_whole(tmp_path, monkeypatch):
     long = "word " * 300
-    (tmp_path / "doc.md").write_text(f"# T\n\n## A\n\n### Skipped\n\n{long}\n\n#### Inside\n\n{long}\n\n## B\n\n{long}\n")
+    (tmp_path / "doc.md").write_text(f"# T\n\n## A\n\n### Skipped\n\n{long}\n\n#### Inside\n\n{long}\n\n## B\n\n{long}\n",
+        encoding="utf-8")
     monkeypatch.setitem(PARAGRAPH_EXCLUDED_SECTIONS, "doc.md", ("### Skipped",))
     assert [found.split(":")[1] for found in _long_paragraphs("doc.md", 900, tmp_path)] == ["15"]
     assert "docs/guide.md" in PARAGRAPH_FILES
@@ -184,7 +190,7 @@ def test_the_paragraph_checker_skips_a_named_section_and_the_guide_is_checked_wh
 
 
 def test_the_changelog_opens_with_an_unreleased_heading_and_closed_code_spans():
-    lines = (ROOT / "CHANGELOG.md").read_text().splitlines()
+    lines = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines()
     headings = [line for line in lines if line.startswith("## ")]
     assert headings[0] == "## Unreleased"
     for number, line in enumerate(lines[:12], 1):

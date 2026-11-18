@@ -55,11 +55,11 @@ def demo_proxy_config(tmp_path: Path) -> Path:
     """The committed demo proxy config with the interpreter and database made absolute, so the
     suite passes from any working directory."""
     source = Path(__file__).parents[1] / "configs" / "mcp-proxy.demo.json"
-    data = json.loads(source.read_text())
+    data = json.loads(source.read_text(encoding="utf-8"))
     data["upstreams"][0]["command"] = sys.executable
     data["database_path"] = str(tmp_path / "demo-proxy.db")
     path = tmp_path / "mcp-proxy.demo.json"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     return path
 
 
@@ -99,6 +99,39 @@ def pytest_sessionfinish(session, exitstatus):
 # installed package): `pytest -m "not study"` leaves them out.
 _STUDY_FILES = ("test_docs_", "test_hook_fidelity", "test_paper_numbers", "test_provenance", "test_security_review_counts",
                 "test_coverage_study")
+
+
+# An image built from the Dockerfile carries no docs/ or results/ (they are most of the repository, and only the study's
+# tests read them). There, a test that fails because one of those directories is missing, when it is collected or when it
+# runs, is skipped and not counted as a failure. In a full clone the directories exist and nothing here applies.
+_FULL_CLONE = all((Path(__file__).parents[1] / name).is_dir() for name in ("docs", "results"))
+_NEEDS_CLONE = "Skipped: reads docs/ or results/, which this tree does not have"
+
+
+def _missing_study_data(error: BaseException | None) -> bool:
+    return (isinstance(error, FileNotFoundError)
+            and any(f"/{name}/" in str(error.filename).replace("\\", "/") + "/" for name in ("docs", "results")))
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_make_collect_report(collector):
+    outcome = yield
+    report = outcome.get_result()
+    if _FULL_CLONE or not report.failed or not isinstance(collector, pytest.Module):
+        return
+    text = str(report.longrepr)
+    if "FileNotFoundError" in text and any(f"/{name}/" in text for name in ("docs", "results")):
+        report.outcome = "skipped"
+        report.longrepr = (str(collector.path), 0, _NEEDS_CLONE)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if not _FULL_CLONE and report.failed and call.excinfo is not None and _missing_study_data(call.excinfo.value):
+        report.outcome = "skipped"
+        report.longrepr = (str(item.path), item.location[1] or 0, _NEEDS_CLONE)
 
 
 def pytest_collection_modifyitems(items):

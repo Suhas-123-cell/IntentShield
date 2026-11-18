@@ -448,6 +448,7 @@ def test_concurrent_starts_on_an_old_database_do_not_race_the_migration(tmp_path
     Storage(path)
     with Storage(path).connect() as db:
         db.execute("ALTER TABLE approvals DROP COLUMN reasons_json")
+        db.execute("PRAGMA user_version = 0")  # a database from 0.4.4 or earlier carries no version
     with ThreadPoolExecutor(8) as pool:
         list(pool.map(lambda _: Storage(path), range(16)))
     with Storage(path).connect() as db:

@@ -70,7 +70,7 @@ def _ps_check() -> str:
 
 def _append(path: str, row: dict) -> None:
     if path:
-        with open(path, "a") as handle:
+        with open(path, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row) + "\n")
 
 

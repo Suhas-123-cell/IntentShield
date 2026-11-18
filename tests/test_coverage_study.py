@@ -78,8 +78,8 @@ def test_summarize_labels_proxy_requests_and_server_initiated_failures(tmp_path)
              {"method": "elicitation/error", "error": "NoBackChannelError(-32600, ...)"},
              {"method": "sampling/error", "error": "MCPError(-32601, 'Method not found', None)"}]
     hooks = [hook("SessionStart", cwd="/a"), hook("Stop", [DESC]), hook("SessionStart", cwd="/b")]
-    (tmp_path / "probe.jsonl").write_text("\n".join(map(json.dumps, probe)))
-    (tmp_path / "hooks.jsonl").write_text("\n".join(map(json.dumps, hooks)))
+    (tmp_path / "probe.jsonl").write_text("\n".join(map(json.dumps, probe)), encoding="utf-8")
+    (tmp_path / "hooks.jsonl").write_text("\n".join(map(json.dumps, hooks)), encoding="utf-8")
     summary = run.summarize(tmp_path, {"tools": f"I see {RESULT}"}, "proxy")
     assert summary["upstream_requests"]["tools/list"] == 2
     assert summary["upstream_requests_from"] == "proxy"
@@ -95,7 +95,7 @@ def test_summarize_labels_proxy_requests_and_server_initiated_failures(tmp_path)
 
 def test_summarize_flags_a_shared_working_directory(tmp_path):
     hooks = [hook("SessionStart", cwd="/p"), hook("SessionStart", cwd="/p")]
-    (tmp_path / "hooks.jsonl").write_text("\n".join(map(json.dumps, hooks)))
+    (tmp_path / "hooks.jsonl").write_text("\n".join(map(json.dumps, hooks)), encoding="utf-8")
     summary = run.summarize(tmp_path, {})
     assert summary["cwd_per_prompt"] is False
     assert summary["server_initiated"]["elicitation"]["status"] == "not_attempted"
@@ -104,11 +104,11 @@ def test_summarize_flags_a_shared_working_directory(tmp_path):
 def test_each_prompt_gets_its_own_project_directory(tmp_path):
     dirs = {run.project_dir(tmp_path, name) for name in run.PROMPTS}
     assert len(dirs) == len(run.PROMPTS) and all(d.is_dir() for d in dirs)
-    (run.project_dir(tmp_path, "tools") / "info.txt").write_text(RESULT)
+    (run.project_dir(tmp_path, "tools") / "info.txt").write_text(RESULT, encoding="utf-8")
     assert not list(run.project_dir(tmp_path, "resources").iterdir())
 
 
 def test_marker_sets_agree_across_the_study_files():
     def found(name):
-        return set(re.findall(r"ISC-[A-Z0-9]+-\d+", (COVERAGE / name).read_text()))
+        return set(re.findall(r"ISC-[A-Z0-9]+-\d+", (COVERAGE / name).read_text(encoding="utf-8")))
     assert found("run.py") == found("probe_server.py") == found("log_hook.py") == set(run.MARKERS.values())

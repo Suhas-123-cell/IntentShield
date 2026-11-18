@@ -358,7 +358,8 @@ def replay_file(case: dict) -> Path:
 def hook_program(root: Path) -> Path:
     path = root / "hookbin" / "intentshield-hook"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"#!{me.VENV_PYTHON}\nimport sys\nsys.path.insert(0, {str(HERE)!r})\nimport pty_hook\npty_hook.main()\n")
+    path.write_text(f"#!{me.VENV_PYTHON}\nimport sys\nsys.path.insert(0, {str(HERE)!r})\nimport pty_hook\npty_hook.main()\n",
+        encoding="utf-8")
     path.chmod(0o755)
     return path
 
@@ -424,7 +425,8 @@ def wrapper_program(root: Path) -> Path:
     more follows it), the way an alias, a version manager shim or an environment script starts it."""
     path = root / "wrapbin" / "launch.sh"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('#!/bin/sh\nexport LAUNCHED_BY_WRAPPER=1\n"$@"\nrc=$?\necho "wrapper: harness exited $rc" >&2\nexit "$rc"\n')
+    path.write_text('#!/bin/sh\nexport LAUNCHED_BY_WRAPPER=1\n"$@"\nrc=$?\necho "wrapper: harness exited $rc" >&2\nexit "$rc"\n',
+        encoding="utf-8")
     path.chmod(0o755)
     return path
 
@@ -440,10 +442,10 @@ def build(
     work, home, shim = root / "work", root / "home", root / "shim"
     for d in (work, home, shim):
         d.mkdir(parents=True, exist_ok=True)
-    (shim / "touch").write_text(configs.shim_script(nonce, attestation))
+    (shim / "touch").write_text(configs.shim_script(nonce, attestation), encoding="utf-8")
     (shim / "touch").chmod(0o755)
     if ps_sock:  # the hook's ancestor lookup (see "the ps relay")
-        (shim / "ps").write_text(ps_shim_text(ps_sock))
+        (shim / "ps").write_text(ps_shim_text(ps_sock), encoding="utf-8")
         (shim / "ps").chmod(0o755)
     entries = hook_entries(case, root) if traits["hook"] else {}
     if traits["source"] == "replay":  # a replay stub's own log lives in the run's directory
@@ -474,8 +476,8 @@ def build(
     headless = not traits["interactive"]
     preapprove = traits["hook"]
     if harness == "claude":
-        (root / "settings.json").write_text(json.dumps({"hooks": entries}))
-        (root / "mcp.json").write_text(json.dumps({"mcpServers": {}}))
+        (root / "settings.json").write_text(json.dumps({"hooks": entries}), encoding="utf-8")
+        (root / "mcp.json").write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
         argv = [
             *binary,
             "--model",
@@ -506,7 +508,7 @@ def build(
             state["projects"] = {str(work.resolve()): {"hasTrustDialogAccepted": True, "allowedTools": []}}
         if "api-key" in seeded:
             state["customApiKeyResponses"] = {"approved": [configs.STUB_KEY[-20:]], "rejected": []}
-        (home / "claude" / ".claude.json").write_text(json.dumps(state))
+        (home / "claude" / ".claude.json").write_text(json.dumps(state), encoding="utf-8")
         facts["seeded"] = ".claude.json: " + ", ".join(["hasCompletedOnboarding", *seeded])
         env.update(
             ANTHROPIC_BASE_URL=stub_url,
@@ -536,7 +538,7 @@ def build(
             f'[model_providers.stub]\nname = "stub"\nbase_url = "{stub_url}/v1"\nenv_key = "STUB_API_KEY"\n'
             'wire_api = "responses"\nrequest_max_retries = 0\nstream_max_retries = 0\n\n'
         ) + me.codex_toml(entries)
-        (codex_home / "config.toml").write_text(toml)
+        (codex_home / "config.toml").write_text(toml, encoding="utf-8")
         argv = [*binary]
         if not headless:
             # attempt 1 (ledger entry 29): the TUI starts a pid-managed background app-server and stops with "failed to read
@@ -583,8 +585,8 @@ def build(
         }
         if preapprove:
             settings["tools"] = {"allowed": ["run_shell_command"]}
-        (gemini / "settings.json").write_text(json.dumps(settings))
-        (gemini / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}))
+        (gemini / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        (gemini / "trustedFolders.json").write_text(json.dumps({str(work.resolve()): "TRUST_FOLDER"}), encoding="utf-8")
         argv = [*binary, "-m", model]
         if headless:
             argv = [*binary, "-p", prompt, "-m", model, "-o", "stream-json"]
@@ -743,7 +745,7 @@ def drive(
 
     def result_in_stub() -> bool:
         try:
-            for line in stub_log.read_text(errors="replace").splitlines():
+            for line in stub_log.read_text(encoding="utf-8", errors="replace").splitlines():
                 if '"tool_results"' in line and json.loads(line).get("tool_results"):
                     return True
         except (OSError, ValueError):
@@ -890,7 +892,7 @@ def classify(obs_prompt: bool, ran: bool, result: bool, typed: bool, issued: boo
 
 def read_jsonl(path: Path) -> list[dict]:
     try:
-        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     except (OSError, ValueError):
         return []
 
@@ -913,7 +915,7 @@ def ledger_count(out: Path, round_no: int = ROUND) -> int:
 
 
 def write_ledger(out: Path, entry: dict) -> None:
-    with ledger_path(out).open("a") as handle:
+    with ledger_path(out).open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry) + "\n")
 
 
@@ -981,7 +983,7 @@ def run_case(case: dict, out: Path, keep: bool = True, planned: bool = True, rou
             relay.stop()
     summary = hf_run.stub_summary(root / "requests.jsonl")
     marker = root / "work" / f"ran-{nonce}.txt"
-    ran = marker.exists() and attestation in marker.read_text(errors="replace")
+    ran = marker.exists() and attestation in marker.read_text(errors="replace", encoding="utf-8")
     typed = obs.prompt_typed_at is not None or not traits["interactive"]
     issued = summary["tool_call_rows"] >= 1
     outcome, why = classify(obs.permission_at is not None, ran, bool(summary["tool_results"]), typed, issued)
@@ -996,7 +998,7 @@ def run_case(case: dict, out: Path, keep: bool = True, planned: bool = True, rou
             h for h in read_jsonl(root / "hooks3p.jsonl") if h.get("decision_event") and nonce in (h.get("tool_input") or "")
         ]
         call_hooks, starts = stub_calls, stub_calls
-        sent = json.loads(replay_file(case).read_text())
+        sent = json.loads(replay_file(case).read_text(encoding="utf-8"))
         text = base64.b64decode(sent.get("stdout_b64", "")).decode("utf-8", "replace")
         ends = [{"exit_code": sent.get("exit_code"), "reply_stdout": text} for _ in stub_calls]
     row.update(
@@ -1053,22 +1055,23 @@ def run_case(case: dict, out: Path, keep: bool = True, planned: bool = True, rou
         target = out / "runs" / f"{case['harness']}-{case['cell']}-{case['rep']}-{rid}"
         target.mkdir(parents=True, exist_ok=True)
         text = scrub(clean.text, root)
-        (target / "screen-text.txt").write_text(text[-60000:])
+        (target / "screen-text.txt").write_text(text[-60000:], encoding="utf-8")
         (target / "transcript-head.bin").write_bytes(bytes(raw[:6000]))
         for name in ("pty-hooks.jsonl", "requests.jsonl", "hooks3p.jsonl", "notty-output.txt"):
             if (root / name).exists():
-                (target / name).write_text(scrub((root / name).read_text(errors="replace"), root))
+                (target / name).write_text(scrub((root / name).read_text(errors="replace", encoding="utf-8"), root),
+                    encoding="utf-8")
     shutil.rmtree(root, ignore_errors=True)
     return row
 
 
 def append(path: Path, row: dict) -> None:
-    with path.open("a") as handle:
+    with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row) + "\n")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    cases = json.loads(Path(args.plan).read_text())
+    cases = json.loads(Path(args.plan).read_text(encoding="utf-8"))
     if args.attempt:  # a new attempt at cells whose earlier rows stay in runs.jsonl (INVALID rows are never overwritten)
         cases = [{**c, "attempt": args.attempt} for c in cases]
     out = Path(args.out)
@@ -1150,7 +1153,7 @@ def hook_text_on_screen(row: dict, out: Path | None) -> bool | None:
         return None
     path = out / "runs" / f"{row['harness']}-{row['cell']}-{row['rep']}-{row['run_id']}" / "screen-text.txt"
     try:
-        return bool(HOOK_TEXTS.get(row["cell"], HOOK_TEXT).search(squash(path.read_text(errors="replace"))))
+        return bool(HOOK_TEXTS.get(row["cell"], HOOK_TEXT).search(squash(path.read_text(errors="replace", encoding="utf-8"))))
     except OSError:
         return None
 
@@ -1267,7 +1270,8 @@ def attempt_log(rows: list[dict]) -> str:
 def cmd_table(args: argparse.Namespace) -> int:
     rows = read_jsonl(Path(args.out) / "runs.jsonl")
     text = table(rows, Path(args.out))
-    (Path(args.out) / "table.md").write_text(text + "\n\nAttempt log (rows that are not data):\n\n" + attempt_log(rows) + "\n")
+    (Path(args.out) / "table.md").write_text(text + "\n\nAttempt log (rows that are not data):\n\n" + attempt_log(rows) + "\n",
+        encoding="utf-8")
     print(text)
     return 0
 
@@ -1295,7 +1299,7 @@ def main(argv: list[str] | None = None) -> int:
         cases = controls() if args.controls else plan_r7() if args.round == 7 else plan(tuple(args.harness), args.reps)
         name = "plan-controls.json" if args.controls else "plan-r7.json" if args.round == 7 else "plan.json"
         args.out.mkdir(parents=True, exist_ok=True)
-        (args.out / name).write_text(json.dumps(cases, indent=1))
+        (args.out / name).write_text(json.dumps(cases, indent=1), encoding="utf-8")
         print(f"{len(cases)} runs -> {args.out / name}")
         return 0
     if args.command == "table":

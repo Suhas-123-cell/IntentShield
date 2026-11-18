@@ -10,8 +10,33 @@ from pathlib import PurePosixPath
 from intentshield.mcp_inspect import _SENSITIVE, _parse
 
 # A template (.env.example) holds names, not values, and is committed on purpose.
-SECRET = re.compile(_SENSITIVE + r"|(?:^|[^\w.])\.env(?!\.(?:example|sample|template|dist)$)(?:\.[\w-]+)?$"
-                    r"|(?:^|/)\.git-credentials$", re.I)
+_SECRET = re.compile(_SENSITIVE + r"|(?:^|[^\w.])\.env(?!\.(?:example|sample|template|dist)$)(?:\.[\w-]+)?$"
+                     r"|(?:^|/)\.git-credentials$", re.I)
+# What follows ``.ssh`` or a key's name when it is a file of ``~/.ssh`` that holds no secret: the options file, the lists of
+# hosts, the allowed signers and a public key, each with the suffix of a backup. ``dangerous`` reads the same names
+# (``_SSH_PLAIN``).
+_SSH_PUBLIC = re.compile(r"/(?:config|known_hosts2?(?:\.[\w.-]{1,40}|~)?|authorized_keys2?|allowed_signers|[\w.-]{1,80}\.pub|"
+                         r"config\.d/[\w.-]{1,80})(?:\.(?:bak|old|orig|backup|save)|~)?(?![\w.-])(?!/\.\.)", re.I)
+_PUBLIC_KEY_SUFFIX = re.compile(r"\.pub(?![\w.-])", re.I)
+
+
+class _Secret:
+    """``SECRET.search(text)``: the first match of a sensitive path or name in ``text`` that is not a public file of ``~/.ssh``
+    (``ssh -F ~/.ssh/config``, ``UserKnownHostsFile=~/.ssh/known_hosts``, ``id_rsa.pub``): those are not secrets, as ``cat`` of
+    them is not asked about either."""
+
+    def search(self, text: str) -> re.Match[str] | None:
+        for match in _SECRET.finditer(text):
+            rest = text[match.end():]
+            if _PUBLIC_KEY_SUFFIX.match(rest):
+                continue
+            if match[0].lower().endswith(".ssh") and _SSH_PUBLIC.match(rest):
+                continue
+            return match
+        return None
+
+
+SECRET = _Secret()
 # Commands that print secrets with no file argument to match.
 _SECRET_COMMANDS = {("printenv",), ("gh", "auth", "token"), ("security", "find-generic-password"),
                     ("security", "find-internet-password"), ("aws", "configure", "export-credentials")}

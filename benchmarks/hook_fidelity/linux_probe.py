@@ -60,7 +60,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
         "ps_present": shutil.which("ps") is not None,
         "sources_env": os.environ.get(translation.ANCESTRY_ENV),
     }
-    Path(args.out).write_text(json.dumps(record))
+    Path(args.out).write_text(json.dumps(record), encoding="utf-8")
     return 0
 
 
@@ -85,7 +85,7 @@ def make_bins(directory: str = BIN) -> None:
     node = path / "node"
     node.mkdir(exist_ok=True)
     for name in ("claude", "codex", "gemini"):
-        (node / name).write_text(NODE_LIKE)
+        (node / name).write_text(NODE_LIKE, encoding="utf-8")
         (node / name).chmod(0o755)
 
 
@@ -164,7 +164,7 @@ def run_case(case: dict, workdir: Path) -> dict:
     row = {k: case[k] for k in ("id", "harness", "form", "headless_flag", "pty", "nested", "sources") if k in case}
     row["launcher_exit"] = proc.returncode
     try:
-        got = json.loads(Path(out).read_text())
+        got = json.loads(Path(out).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         row.update(error=f"no hook record: {type(exc).__name__}", agree=False)
         return row
@@ -206,7 +206,8 @@ def cmd_matrix(args: argparse.Namespace) -> int:
     work = Path("/tmp/probe")
     work.mkdir(exist_ok=True)
     rows = [run_case(case, work) for case in matrix_cases()]
-    Path(args.file).write_text("".join(json.dumps({**r, "round": ROUND, "group": "matrix"}) + "\n" for r in rows))
+    text = "".join(json.dumps({**r, "round": ROUND, "group": "matrix"}) + "\n" for r in rows)
+    Path(args.file).write_text(text, encoding="utf-8")
     print(f"{sum(r['agree'] for r in rows)}/{len(rows)} cases agree with construction")
     return 0
 
@@ -228,7 +229,7 @@ def cmd_hidepid(args: argparse.Namespace) -> int:
     }
     if mount.returncode != 0:
         row.update(error="could not remount /proc with hidepid=2", agree=False)
-        Path(args.file).write_text(json.dumps(row) + "\n")
+        Path(args.file).write_text(json.dumps(row) + "\n", encoding="utf-8")
         return 0
     out = str(work / "hook-hidepid.json")
     inner = f"setpriv --reuid 65534 --regid 65534 --clear-groups {HOOK} --harness claude --out {shlex.quote(out)}"
@@ -244,13 +245,13 @@ def cmd_hidepid(args: argparse.Namespace) -> int:
     }
     row.update({k: case[k] for k in ("id", "harness", "form", "headless_flag", "pty")}, launcher_exit=done.returncode)
     try:
-        got = json.loads(Path(out).read_text())
+        got = json.loads(Path(out).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         row.update(error=f"no hook record: {type(exc).__name__}: {done.stderr[-200:]}", agree=False)
     else:
         want_mode, want_how = expected(case)
         row.update(got, expected_mode=want_mode, expected_how=want_how, **_agree(got, want_mode, want_how))
-    Path(args.file).write_text(json.dumps(row) + "\n")
+    Path(args.file).write_text(json.dumps(row) + "\n", encoding="utf-8")
     return 0
 
 
@@ -381,7 +382,7 @@ def cmd_docker(args: argparse.Namespace) -> int:
                 argv = docker_base(work, deps, out, init=False, extra=["-t"] if tty else [])
                 done = run(name, [*argv, "python3", probe, "pid1", fn, form, headless])
                 try:
-                    got = json.loads((out / f"{name}.json").read_text())
+                    got = json.loads((out / f"{name}.json").read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     rows.append(
                         {
@@ -412,7 +413,7 @@ def cmd_docker(args: argparse.Namespace) -> int:
                     }
                 )
                 (out / f"{name}.json").unlink()
-    (out / "pid1.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (out / "pid1.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     # 4. the unit tests of the readers inside the container: with --init (pytest has a parent), and as PID 1 (it does not)
     tests = ["/work/tests/test_translation_ancestry.py", "/work/tests/test_wrap_hook.py"]
     pytest_cmd = [
@@ -428,12 +429,12 @@ def cmd_docker(args: argparse.Namespace) -> int:
         *tests,
     ]
     done = run("pytest-init", [*base, *pytest_cmd])
-    (out / "pytest-linux.txt").write_text(done.stdout + done.stderr)
+    (out / "pytest-linux.txt").write_text(done.stdout + done.stderr, encoding="utf-8")
     done = run("pytest-pid1", [*docker_base(work, deps, out, init=False), *pytest_cmd])
-    (out / "pytest-linux-pid1.txt").write_text(done.stdout + done.stderr)
+    (out / "pytest-linux-pid1.txt").write_text(done.stdout + done.stderr, encoding="utf-8")
     meta["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     meta["containers_started"] = DOCKER_RUNS["n"]  # every `docker run`, the metadata probes included
-    (out / "docker-meta.json").write_text(json.dumps(meta, indent=1))
+    (out / "docker-meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
     return cmd_summarize(argparse.Namespace(out_dir=str(out)))
 
 
@@ -442,14 +443,14 @@ def _rows(out: Path) -> list[dict]:
     for name in ("matrix", "hidepid", "pid1"):
         path = out / f"{name}.jsonl"
         if path.exists():
-            rows += [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+            rows += [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     return rows
 
 
 def cmd_summarize(args: argparse.Namespace) -> int:
     out = Path(args.out_dir)
     rows = _rows(out)
-    (out / "rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (out / "rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     lines = [
         "# Linux `/proc` reader in a container (derived by `linux_probe.py summarize` from "
         "`matrix.jsonl`, `hidepid.jsonl`, `pid1.jsonl`)",
@@ -480,8 +481,8 @@ def cmd_summarize(args: argparse.Namespace) -> int:
             "sources": sorted({r.get("source", "-") for r in sub}),
             "disagree": [r["id"] for r in sub if not r.get("agree")],
         }
-    (out / "summary.json").write_text(json.dumps(summary, indent=1))
-    (out / "table.md").write_text("\n".join(lines) + "\n")
+    (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
+    (out / "table.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(json.dumps(summary))
     return 0
 

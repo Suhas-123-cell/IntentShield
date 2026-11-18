@@ -169,7 +169,7 @@ def _installed(home: Path, minutes_ago: float = 0.0) -> Path:
     later than it, whatever the clock's step)."""
     hook = home.parent / "bin" / "intentshield-hook"   # a program that exists, named as the installer names it
     hook.parent.mkdir(parents=True, exist_ok=True)
-    hook.write_text("#!/bin/sh\nexit 0\n")
+    hook.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     hook.chmod(0o755)
     path = install.install("claude", "user", hook=str(hook), home=home)
     if minutes_ago:

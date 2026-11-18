@@ -2,11 +2,11 @@ import json,glob,collections,sys,os
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import analyze as A
 D=A.D
-G={h:json.load(open(f"{D}/hookrepos_{h}.json")) for h in ["claude","codex","gemini","cursor"]}
+G={h:json.load(open(f"{D}/hookrepos_{h}.json", encoding="utf-8")) for h in ["claude","codex","gemini","cursor"]}
 H2F={"claude_cli":"claude","claude_action":"claude","codex_cli":"codex","codex_action":"codex","gemini_cli":"gemini","gemini_action":"gemini","cursor_cli":"cursor"}
 S=collections.defaultdict(set); seen=set()
 for f in sorted(glob.glob(f"{D}/E_h_*.json")):
-    for i in json.load(open(f))["items"]:
+    for i in json.load(open(f, encoding="utf-8"))["items"]:
         k=(i["repo"],i["path"])
         if k in seen: continue
         seen.add(k); t=A.text(i)
@@ -23,4 +23,4 @@ for x,rs in sorted(S.items()):
 # claude both
 cl=S["claude_action"]|S["claude_cli"]; print("claude union",len(cl),len(cl&set(G["claude"]["guard"])))
 only_cli=S["claude_cli"]-S["claude_action"]; print("claude_cli only",len(only_cli),len(only_cli&set(G["claude"]["guard"])))
-json.dump({k:sorted(v) for k,v in S.items()},open(f"{D}/S_by_pattern.json","w"))
+json.dump({k:sorted(v) for k,v in S.items()},open(f"{D}/S_by_pattern.json","w", encoding="utf-8"))

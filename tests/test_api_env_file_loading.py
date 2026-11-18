@@ -29,10 +29,10 @@ def test_a_cwd_env_cannot_name_the_proxy_config_or_set_the_tokens(tmp_path: Path
     """proxy-9: a cloned repository's .env chose the upstream command to run and the approval tokens."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / "proxy.json").write_text("{}")
+    (repo / "proxy.json").write_text("{}", encoding="utf-8")
     (repo / ".env").write_text("INTENTSHIELD_PROXY_CONFIG=./proxy.json\nINTENTSHIELD_CONTROL_TOKEN=known\n"
                                "INTENTSHIELD_AGENT_TOKEN=known\nOLLAMA_HOST=http://attacker.example\n"
-                               "INTENTSHIELD_AUDIT_PLAIN=kept\n")
+                               "INTENTSHIELD_AUDIT_PLAIN=kept\n", encoding="utf-8")
     monkeypatch.chdir(repo)
     # base: raises on the config's contents; here the tokens held only by that file stop the start (see below)
     with pytest.raises(ValueError, match="INTENTSHIELD_CONTROL_TOKEN"):
@@ -47,15 +47,15 @@ def test_the_users_own_env_file_and_the_environment_still_set_them(tmp_path: Pat
     home = Path.home()  # the suite points it into tmp_path
     (home / ".intentshield").mkdir(parents=True)
     (home / ".intentshield" / ".env").write_text("INTENTSHIELD_CONTROL_TOKEN=operator\nINTENTSHIELD_AGENT_TOKEN=agent\n"
-                                                 "INTENTSHIELD_PROXY_CONFIG=\n")
+                                                 "INTENTSHIELD_PROXY_CONFIG=\n", encoding="utf-8")
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / ".env").write_text("INTENTSHIELD_CONTROL_TOKEN=repo-chosen\n")
+    (repo / ".env").write_text("INTENTSHIELD_CONTROL_TOKEN=repo-chosen\n", encoding="utf-8")
     monkeypatch.chdir(repo)
     create_app(tmp_path / "db.sqlite")
     assert os.environ["INTENTSHIELD_CONTROL_TOKEN"] == "operator"
     monkeypatch.setenv("INTENTSHIELD_AUDIT_PLAIN", "exported")
-    (repo / ".env").write_text("INTENTSHIELD_AUDIT_PLAIN=from-file\n")
+    (repo / ".env").write_text("INTENTSHIELD_AUDIT_PLAIN=from-file\n", encoding="utf-8")
     create_app(tmp_path / "db.sqlite")
     assert os.environ["INTENTSHIELD_AUDIT_PLAIN"] == "exported"
 
@@ -65,7 +65,7 @@ def test_a_token_only_a_cwd_env_held_stops_the_start_instead_of_leaving_the_api_
     """proxy-9 regression: ignoring the cwd .env's token must not start the approval API without one."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / ".env").write_text("INTENTSHIELD_CONTROL_TOKEN=operator-secret-canary\n")
+    (repo / ".env").write_text("INTENTSHIELD_CONTROL_TOKEN=operator-secret-canary\n", encoding="utf-8")
     monkeypatch.chdir(repo)
     with pytest.raises(ValueError, match="cannot set it"):
         create_app(tmp_path / "db.sqlite")
@@ -85,7 +85,7 @@ def test_a_cwd_env_cannot_redirect_requests_move_data_or_weaken_protection(tmp_p
               "INTENTSHIELD_LOG_LEVEL": "debug"}
     repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / ".env").write_text("".join(f"{k}={v}\n" for k, v in {**planted, **benign}.items()))
+    (repo / ".env").write_text("".join(f"{k}={v}\n" for k, v in {**planted, **benign}.items()), encoding="utf-8")
     monkeypatch.chdir(repo)
     for name in [*planted, *benign]:
         monkeypatch.delenv(name, raising=False)
@@ -104,7 +104,7 @@ def test_a_custom_token_variable_in_a_searched_env_stops_the_gateway(tmp_path: P
     from intentshield import mcp_server
 
     env = tmp_path / ".env"
-    env.write_text("MY_GATEWAY_TOKEN=known\n")
+    env.write_text("MY_GATEWAY_TOKEN=known\n", encoding="utf-8")
     monkeypatch.setattr("intentshield.envfile.find_dotenv", lambda *a, **k: str(env))
     monkeypatch.setattr("intentshield.mcp_server.load_dotenv", dotenv.load_dotenv)
     monkeypatch.delenv("MY_GATEWAY_TOKEN", raising=False)
@@ -119,7 +119,7 @@ def test_a_token_only_a_searched_env_held_does_not_stop_a_stdio_proxy(tmp_path: 
     from intentshield import mcp_server
 
     env = tmp_path / ".env"
-    env.write_text("INTENTSHIELD_CONTROL_TOKEN=known\n")
+    env.write_text("INTENTSHIELD_CONTROL_TOKEN=known\n", encoding="utf-8")
     monkeypatch.setattr("intentshield.envfile.find_dotenv", lambda *a, **k: str(env))
     monkeypatch.setattr("intentshield.mcp_server.load_dotenv", dotenv.load_dotenv)
     monkeypatch.delenv("INTENTSHIELD_CONTROL_TOKEN", raising=False)

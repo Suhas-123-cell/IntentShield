@@ -50,6 +50,19 @@ FORMS = {
     "choom": "choom -n 5 -- {c}", "screen": "screen -dmS x {c}", "valgrind": "valgrind --leak-check=full {c}",
          "gdb": "gdb --args {c}",
     "firejail": "firejail --quiet {c}", "bwrap": "bwrap --ro-bind / / {c}",
+    "tmux": "tmux new-session -d -s x {q}", "osascript": "osascript -e {a}",
+    "gosu": "gosu root {c}", "su-exec": "su-exec root {c}", "setuidgid": "setuidgid root {c}", "runcon": "runcon -t t_t {c}",
+    "chpst": "chpst -u nobody {c}", "dumb-init": "dumb-init {c}", "tini": "tini -- {c}", "watchexec": "watchexec -w src -- {c}",
+    "entr": "entr {c}", "dtach": "dtach -n /tmp/s {c}", "abduco": "abduco -n x {c}", "rlwrap": "rlwrap {c}",
+    "cgexec": "cgexec -g cpu:grp {c}", "xterm": "xterm -T t -e {c}", "uxterm": "uxterm -e {c}", "urxvt": "urxvt -e {c}",
+    "alacritty": "alacritty -e {c}", "konsole": "konsole -e {c}", "gnome-terminal": "gnome-terminal -- {c}",
+    "terminator": "terminator -x {c}",
+    # forms of the same programs where an option takes the place of an operand, or the command is given as one text
+    "runcon (context)": "runcon u:r:t_t:s0 {c}", "runcon (several options)": "runcon -u u -r r -t t_t -l s0 {c}",
+    "dtach -c": "dtach -c /tmp/s -r winch {c}", "dtach -n -z": "dtach -n /tmp/s -z {c}", "dtach -a": "dtach -A /tmp/s -e ^x {c}",
+    "cgexec --sticky": "cgexec --sticky -g cpu:grp {c}", "gnome-terminal -e": "gnome-terminal --title t -e {q}",
+    "terminator -e": "terminator -e {q}", "entr -s": "entr -r -s {q}",
+    "alacritty --config-file": "alacritty --config-file x -e {c}",
 }
 # Programs that take a subcommand first: ``uv run -- cmd``, ``bundle exec cmd``.
 SUBCOMMAND_FORMS = {
@@ -57,19 +70,27 @@ SUBCOMMAND_FORMS = {
     "rye": "rye run {c}", "conda": "conda run -n base {c}", "mamba": "mamba run -n base {c}", "micromamba": "micromamba run {c}",
     "bundle": "bundle exec {c}", "direnv": "direnv exec . {c}", "mise": "mise exec -- {c}", "asdf": "asdf exec {c}",
     "rbenv": "rbenv exec {c}", "pyenv": "pyenv exec {c}", "nodenv": "nodenv exec {c}", "npm": "npm exec -- {c}",
-    "pnpm": "pnpm exec {c}", "yarn": "yarn exec {c}",
+    "pnpm": "pnpm exec {c}", "yarn": "yarn exec {c}", "zellij": "zellij run -- {c}",
+    "zellij (options)": "zellij -l layout --session s run -n name --cwd /tmp -- {c}",
 }
 # Programs that hand the words after them to a shell as one text, or run a remote command.
 SHELL_TEXT_FORMS = {
     "flock -c": "flock -n /tmp/l -c {q}", "script -c": "script -qc {q} /dev/null", "watch (one word)": "watch -n 1 {q}",
     "ssh": "ssh -p 22 -i ~/.ssh/k host {q}", "ssh (words)": "ssh host {c}", "runuser -c": "runuser -l bob -c {q}",
     "su -c": "su -c {q} root", "sudo -s": "sudo -s {c}", "sudo -i": "sudo -i {c}",
+    "tmux run-shell": "tmux run-shell {q}", "tmux split-window": "tmux split-window -h {q}",
+    "tmux new-window": "tmux new-window -n w {q}", "tmux respawn-pane": "tmux respawn-pane -k {q}",
+    "tmux send-keys": "tmux send-keys -t 0 {q} Enter", "tmux display-popup": "tmux display-popup -E {q}",
+    "tmux if-shell": "tmux if-shell true {t}", "tmux bind-key": "tmux bind-key x run-shell {q}",
+    "tmux (second command)": "tmux list-sessions \\; new-window {q}", "tmux -c": "tmux -c {q}",
 }
 ALL_FORMS = {**FORMS, **SUBCOMMAND_FORMS, **SHELL_TEXT_FORMS}
 
 
 def wrapped(form: str, command: str) -> str:
-    return ALL_FORMS[form].format(c=command, q=shlex.quote(command))
+    script = 'do shell script "' + command.replace("\\", "\\\\").replace('"', '\\"') + '"'   # AppleScript text
+    tmux_command = shlex.quote("run-shell " + shlex.quote(command))   # a tmux command that carries a shell command
+    return ALL_FORMS[form].format(c=command, q=shlex.quote(command), a=shlex.quote(script), t=tmux_command)
 
 
 def test_every_wrapper_has_a_form():

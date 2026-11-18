@@ -75,7 +75,7 @@ def vkey(version: str) -> tuple[int, ...]:
 
 def read(*parts: str) -> list[dict]:
     path = RES.joinpath(*parts)
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def stub_rows() -> list[dict]:
@@ -308,7 +308,7 @@ def build_counts_md(counts: dict[str, dict[str, int]]) -> str:
 def guards() -> dict[str, str]:
     """The guard comparison. k and n come from the committed summaries; the intervals are recomputed here."""
     out: dict[str, str] = {}
-    fresh = json.loads((RES / "detect" / "fresh" / "summary.json").read_text())
+    fresh = json.loads((RES / "detect" / "fresh" / "summary.json").read_text(encoding="utf-8"))
     same = fresh["same_items"]
     sn, kx = same["safety-net"], same["knox"]
     sn_is, sn_g = sn["intentshield-r8fix"], sn["safety-net"]
@@ -358,7 +358,7 @@ def guards() -> dict[str, str]:
         f"{fmt(kx_g['false_ask']['k'] + kx_g['false_deny']['k'], kx_g['false_ask']['n'])}"
     )
     out.update(_fresh_discovery(fresh))
-    det = json.loads((RES / "detect" / "summary.json").read_text())["decisions"]
+    det = json.loads((RES / "detect" / "summary.json").read_text(encoding="utf-8"))["decisions"]
 
     def held(gid: str) -> dict:
         return det[gid]["claimed"]["heldout"]
@@ -380,7 +380,7 @@ def guards() -> dict[str, str]:
 
 def _detect_benign(det: dict) -> str:
     """The 467-fixture set's benign calls: IntentShield with the rules, safety-net and knox, each on its own scope."""
-    after = json.loads((RES / "detect" / "r8fix" / "summary.json").read_text())["decisions"]
+    after = json.loads((RES / "detect" / "r8fix" / "summary.json").read_text(encoding="utf-8"))["decisions"]
     i = after["intentshield-r8fix"]["claimed"]["heldout"]
     s = det["safety-net"]["claimed"]["heldout"]
     k = det["knox"]["claimed"]["heldout"]
@@ -394,7 +394,7 @@ def _detect_benign(det: dict) -> str:
 def _rules_without_overlap() -> str:
     """The 467-fixture set's before and after figures without the items whose command or path is in the repository's tests or
     source (overlap_items.json, found by overlap_check.py)."""
-    pinned = frozenset(json.loads((HERE / "overlap_items.json").read_text())["fixtures_467_set"])
+    pinned = frozenset(json.loads((HERE / "overlap_items.json").read_text(encoding="utf-8"))["fixtures_467_set"])
     r = rules_before_after(pinned)
 
     def pair(name: str) -> str:
@@ -420,10 +420,11 @@ def rules_before_after(exclude: frozenset[str] | set[str] = frozenset()) -> dict
     detect/fixtures.jsonl and the two guards' rows in detect/r8fix/decisions.jsonl. ``exclude`` is a set of item ids to leave
     out (overlap_check.py passes the items whose command or path is in the repository's tests or source). Each entry holds the
     number of items and how many of them IntentShield lets through before and after the rules."""
-    fixtures = [json.loads(line) for line in (RES / "detect" / "fixtures.jsonl").read_text().splitlines() if line.strip()]
+    fixtures = [json.loads(line) for line in (RES / "detect" / "fixtures.jsonl").read_text(
+        encoding="utf-8").splitlines() if line.strip()]
     declared = [f for f in fixtures if f["primary"] and f["label"] == "harmful" and f["heldout"] and f["item_id"] not in exclude]
     cls: dict[str, dict[str, str]] = {"intentshield": {}, "intentshield-r8fix": {}}
-    for line in (RES / "detect" / "r8fix" / "decisions.jsonl").read_text().splitlines():
+    for line in (RES / "detect" / "r8fix" / "decisions.jsonl").read_text(encoding="utf-8").splitlines():
         d = json.loads(line)
         if d["guard"] in cls:
             cls[d["guard"]][d["row_id"]] = d["class"]
@@ -475,12 +476,12 @@ DISCOVERY_ONLY = ("FH029", "FH030", "FH031", "FH032", "FH033", "FH036", "FH037",
 
 def _fresh_discovery(fresh: dict) -> dict[str, str]:
     """The fresh set's false-allow figures with and without the discovery-only items, from detect/fresh/decisions.jsonl."""
-    text = (RES / "detect" / "fresh" / "fixtures.jsonl").read_text()
+    text = (RES / "detect" / "fresh" / "fixtures.jsonl").read_text(encoding="utf-8")
     fixtures = [json.loads(line) for line in text.splitlines() if line.strip()]
     harmful = [f for f in fixtures if f["primary"] and f["label"] == "harmful"]
     assert {f["item_id"] for f in harmful} >= set(DISCOVERY_ONLY)
     got: dict[tuple[str, str], str] = {}
-    for line in (RES / "detect" / "fresh" / "decisions.jsonl").read_text().splitlines():
+    for line in (RES / "detect" / "fresh" / "decisions.jsonl").read_text(encoding="utf-8").splitlines():
         d = json.loads(line)
         if d.get("invoked", True):
             got[(d["guard"], d["row_id"])] = d["class"]

@@ -58,7 +58,7 @@ def test_block_mode_never_replaces_an_error_result(tmp_path: Path):
 def test_the_failure_event_is_registered_for_claude_code(tmp_path: Path):
     entries = install.hook_entries("claude", "intentshield-hook claude")
     assert entries["PostToolUseFailure"][0]["matcher"] == entries["PostToolUse"][0]["matcher"]
-    shipped = json.loads((Path(__file__).parents[1] / "configs/harness/claude-settings.json").read_text())
+    shipped = json.loads((Path(__file__).parents[1] / "configs/harness/claude-settings.json").read_text(encoding="utf-8"))
     assert "PostToolUseFailure" in shipped["hooks"]
 
 
@@ -123,9 +123,9 @@ def test_every_hook_event_renews_the_session(tmp_path: Path):
 def test_a_read_only_decision_is_the_servers_own(tmp_path: Path):
     cat = tmp_path / "tools"
     cat.mkdir()
-    (cat / "files.json").write_text(json.dumps([{"name": "get_file", "description": "", "read_only": True}]))
+    (cat / "files.json").write_text(json.dumps([{"name": "get_file", "description": "", "read_only": True}]), encoding="utf-8")
     (cat / "evil.json").write_text(json.dumps([{"name": "get_file", "description": "", "read_only": False},
-                                               {"name": "delete_x", "description": "", "read_only": True}]))
+                                               {"name": "delete_x", "description": "", "read_only": True}]), encoding="utf-8")
     g = guard(tmp_path, catalog=cat)
     assert g.mutates("files:get_file") is False
     assert g.mutates("evil:get_file") is True
@@ -140,9 +140,9 @@ def test_catalog_entries_name_their_server_by_field_or_prefix(tmp_path: Path):
     cat = tmp_path / "tools"
     cat.mkdir()
     (cat / "a-b.json").write_text(json.dumps([{"name": "a__get_x", "read_only": False},
-                                              {"name": "b__fetch_y", "read_only": True}]))
+                                              {"name": "b__fetch_y", "read_only": True}]), encoding="utf-8")
     (cat / "named.json").write_text(json.dumps([{"name": "fetch_z", "server": "svc", "tool": "fetch_z",
-                                                 "read_only": False}]))
+                                                 "read_only": False}]), encoding="utf-8")
     g = guard(tmp_path, catalog=cat)
     assert g.mutates("a:get_x") is True and g.mutates("b:fetch_y") is False
     assert g.mutates("svc:fetch_z") is True and g.mutates("named:fetch_z") is False
@@ -345,9 +345,9 @@ def test_servers_of_a_project_config_are_not_started_without_the_flag(monkeypatc
     home, cwd = tmp_path / "home", tmp_path / "repo"
     home.mkdir()
     cwd.mkdir()
-    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"evil": {"command": "sh", "args": ["-c", "x"]}}}))
+    (cwd / ".mcp.json").write_text(json.dumps({"mcpServers": {"evil": {"command": "sh", "args": ["-c", "x"]}}}), encoding="utf-8")
     (home / ".cursor").mkdir()
-    (home / ".cursor" / "mcp.json").write_text(json.dumps({"mcpServers": {"mine": {"command": "node"}}}))
+    (home / ".cursor" / "mcp.json").write_text(json.dumps({"mcpServers": {"mine": {"command": "node"}}}), encoding="utf-8")
     servers = scan.discover(home, cwd)
     assert {(s.name, s.project) for s in servers} == {("evil", True), ("mine", False)}
     started: list[str] = []
@@ -369,7 +369,7 @@ def test_servers_of_a_project_config_are_not_started_without_the_flag(monkeypatc
 
 def test_project_config_in_the_home_directory_is_the_users_own(tmp_path: Path):
     (tmp_path / ".cursor").mkdir()
-    (tmp_path / ".cursor" / "mcp.json").write_text(json.dumps({"mcpServers": {"mine": {"command": "node"}}}))
+    (tmp_path / ".cursor" / "mcp.json").write_text(json.dumps({"mcpServers": {"mine": {"command": "node"}}}), encoding="utf-8")
     [server] = scan.discover(tmp_path, tmp_path)
     assert server.project is False
 
@@ -377,12 +377,12 @@ def test_project_config_in_the_home_directory_is_the_users_own(tmp_path: Path):
 def test_pins_that_cannot_be_read_are_reported_and_kept(tmp_path: Path, capsys):
     pins = tmp_path / "pins.json"
     for bad in ('{"a": "b"', "[]", '{"a": 1}'):
-        pins.write_text(bad)
+        pins.write_text(bad, encoding="utf-8")
         assert scan.load_pins(pins) == {}
         err = capsys.readouterr().err
         assert "not a valid pins file" in err and "pins.json.bak" in err
-        assert (tmp_path / "pins.json.bak").read_text() == bad
-    pins.write_text('{"k": "h"}')
+        assert (tmp_path / "pins.json.bak").read_text(encoding="utf-8") == bad
+    pins.write_text('{"k": "h"}', encoding="utf-8")
     assert scan.load_pins(pins) == {"k": "h"}
     assert scan.load_pins(tmp_path / "missing.json") == {}
 
@@ -390,24 +390,24 @@ def test_pins_that_cannot_be_read_are_reported_and_kept(tmp_path: Path, capsys):
 def test_pins_are_saved_atomically_and_privately(tmp_path: Path):
     path = tmp_path / "d" / "pins.json"
     scan.save_pins(path, {"k": "h"})
-    assert json.loads(path.read_text()) == {"k": "h"} and path.stat().st_mode & 0o777 == 0o600
+    assert json.loads(path.read_text(encoding="utf-8")) == {"k": "h"} and path.stat().st_mode & 0o777 == 0o600
     assert [p.name for p in path.parent.iterdir()] == ["pins.json"]
 
 
 def test_guarded_reads_the_hooks_structure_not_the_text(tmp_path: Path):
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
-    settings.write_text(json.dumps({"note": "removed intentshield-hook last week", "hooks": {}}))
+    settings.write_text(json.dumps({"note": "removed intentshield-hook last week", "hooks": {}}), encoding="utf-8")
     assert scan.guarded("claude-code", tmp_path) is False
     settings.write_text(json.dumps({"hooks": {"PreToolUse": [{"matcher": "x", "hooks": [
-        {"type": "command", "command": "echo intentshield-hook"}]}]}}))
+        {"type": "command", "command": "echo intentshield-hook"}]}]}}), encoding="utf-8")
     assert scan.guarded("claude-code", tmp_path) is False
     settings.write_text(json.dumps({"hooks": {"PreToolUse": [{"matcher": "x", "hooks": [
-        {"type": "command", "command": "/opt/venv/bin/intentshield-hook claude --review always"}]}]}}))
+        {"type": "command", "command": "/opt/venv/bin/intentshield-hook claude --review always"}]}]}}), encoding="utf-8")
     assert scan.guarded("claude-code", tmp_path) is True
     (tmp_path / ".cursor").mkdir()
     (tmp_path / ".cursor" / "hooks.json").write_text(json.dumps({"hooks": {"beforeMCPExecution": [
-        {"command": "intentshield-hook cursor"}]}}))
+        {"command": "intentshield-hook cursor"}]}}), encoding="utf-8")
     assert scan.guarded("cursor", tmp_path) is True
 
 
@@ -426,11 +426,11 @@ def test_wrap_and_unwrap_cover_claude_code_local_scope_servers(tmp_path: Path):
                                "local": {"command": "npx", "args": ["b"]}, "web": {"url": "https://x.test/mcp"}}},
                                         "/work/other": {"mcpServers": {"local": {"command": "uvx", "args": ["c"]}}},
                                         "/work/none": {"history": []}}}, indent=2)
-    config.write_text(original)
+    config.write_text(original, encoding="utf-8")
     proxies = tmp_path / "proxies"
     wrapped = install.wrap(config, out_dir=proxies, proxy="/x/intentshield-mcp")
     assert wrapped == ["user-srv", "local [/work/app]", "local [/work/other]"]
-    data = json.loads(config.read_text())
+    data = json.loads(config.read_text(encoding="utf-8"))
     for entry in (data["mcpServers"]["user-srv"], data["projects"]["/work/app"]["mcpServers"]["local"],
                   data["projects"]["/work/other"]["mcpServers"]["local"]):
         assert entry["command"] == "/x/intentshield-mcp"
@@ -440,12 +440,12 @@ def test_wrap_and_unwrap_cover_claude_code_local_scope_servers(tmp_path: Path):
     assert len(list(proxies.glob("*.json"))) == 3
     assert install.wrap(config, out_dir=proxies, proxy="/x/intentshield-mcp") == []
     assert install.unwrap(config) == wrapped
-    assert config.read_text() == original  # byte for byte
+    assert config.read_text(encoding="utf-8") == original  # byte for byte
 
 
 def test_wrap_can_target_one_name_across_scopes(tmp_path: Path):
     config = tmp_path / ".claude.json"
-    config.write_text(json.dumps({"projects": {"/a": {"mcpServers": {"s": {"command": "x"}}}}}))
+    config.write_text(json.dumps({"projects": {"/a": {"mcpServers": {"s": {"command": "x"}}}}}), encoding="utf-8")
     assert install.wrap(config, ["s"], out_dir=tmp_path / "p", proxy="/x/intentshield-mcp") == ["s [/a]"]
     with pytest.raises(ValueError, match="no such server"):
         install.wrap(config, ["nope"], out_dir=tmp_path / "p", proxy="/x/intentshield-mcp")
@@ -456,25 +456,25 @@ def test_wrap_can_target_one_name_across_scopes(tmp_path: Path):
 def test_judge_key_storage_keeps_comments_and_other_lines_and_is_private(tmp_path: Path):
     env = tmp_path / ".intentshield" / ".env"
     env.parent.mkdir()
-    env.write_text("# my keys\nOTHER=1\n\nGROQ_API_KEY=old\n# end\n")
+    env.write_text("# my keys\nOTHER=1\n\nGROQ_API_KEY=old\n# end\n", encoding="utf-8")
     env.chmod(0o644)
     install.ensure_judge_key("groq", tmp_path, api_key="gsk_new")
-    assert env.read_text() == "# my keys\nOTHER=1\n\nGROQ_API_KEY=gsk_new\n# end\n"
+    assert env.read_text(encoding="utf-8") == "# my keys\nOTHER=1\n\nGROQ_API_KEY=gsk_new\n# end\n"
     assert env.stat().st_mode & 0o777 == 0o600
     install.ensure_judge_key("gemini", tmp_path, api_key="g-key")
-    assert env.read_text().endswith("# end\nGEMINI_API_KEY=g-key\n")
+    assert env.read_text(encoding="utf-8").endswith("# end\nGEMINI_API_KEY=g-key\n")
     assert [p.name for p in env.parent.iterdir()] == [".env"]
 
 
 def test_judge_key_storage_refuses_a_symlink(tmp_path: Path):
     target = tmp_path / "elsewhere"
-    target.write_text("keep\n")
+    target.write_text("keep\n", encoding="utf-8")
     env = tmp_path / ".intentshield" / ".env"
     env.parent.mkdir()
     env.symlink_to(target)
     with pytest.raises(ValueError, match="symbolic link"):
         install.ensure_judge_key("groq", tmp_path, api_key="gsk_new")
-    assert target.read_text() == "keep\n"
+    assert target.read_text(encoding="utf-8") == "keep\n"
 
 
 def test_damaged_codex_block_markers_are_refused_not_garbled(tmp_path: Path):
@@ -487,10 +487,10 @@ def test_damaged_codex_block_markers_are_refused_not_garbled(tmp_path: Path):
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
     path = home / ".codex" / "config.toml"
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError):
         install.install("codex", "user", hook="intentshield-hook", home=home)
-    assert path.read_text() == text
+    assert path.read_text(encoding="utf-8") == text
 
 
 # 6. credentials --------------------------------------------------------------------------------------------------
@@ -538,20 +538,20 @@ def test_a_credential_hidden_by_unicode_is_still_found():
 
 def test_wrap_does_not_overwrite_a_change_the_harness_made_meanwhile(tmp_path: Path, monkeypatch):
     path = tmp_path / ".claude.json"
-    path.write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}, "numStartups": 1}))
+    path.write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}, "numStartups": 1}), encoding="utf-8")
     real = install._json_text
 
     def harness_writes_meanwhile(data):
-        path.write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}, "numStartups": 2}))
+        path.write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}, "numStartups": 2}), encoding="utf-8")
         return real(data)
 
     monkeypatch.setattr(install, "_json_text", harness_writes_meanwhile)
     with pytest.raises(install.ChangedMeanwhile, match="changed while IntentShield was editing it"):
         install.wrap(path, out_dir=tmp_path / "proxies", proxy="/opt/bin/intentshield-mcp")
-    assert json.loads(path.read_text())["numStartups"] == 2  # the harness's write survived
+    assert json.loads(path.read_text(encoding="utf-8"))["numStartups"] == 2  # the harness's write survived
     monkeypatch.setattr(install, "_json_text", real)
     install.wrap(path, out_dir=tmp_path / "proxies", proxy="/opt/bin/intentshield-mcp")  # a rerun goes through
-    saved = json.loads(path.read_text())
+    saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["numStartups"] == 2 and saved["mcpServers"]["notes"]["command"] == "/opt/bin/intentshield-mcp"
 
 

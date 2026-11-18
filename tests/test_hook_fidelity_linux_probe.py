@@ -49,7 +49,7 @@ def test_the_hook_subcommand_reads_this_process_ancestry(tmp_path):
     done = subprocess.run([sys.executable, str(HF / "linux_probe.py"), "hook", "--harness", "claude", "--out", str(out)],
                           capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr
-    record = json.loads(out.read_text())
+    record = json.loads(out.read_text(encoding="utf-8"))
     assert record["mode"] in ("interactive", "headless", "yolo", "unknown") and record["how"]
     assert record["source"] in ("proc", "libproc", "ps", "none") and isinstance(record["chain"], list)
 
@@ -65,8 +65,8 @@ def test_committed_rows_regenerate_the_summary(sub, rnd):
     rows_path = LINUX / sub / "rows.jsonl"
     if not rows_path.exists():
         pytest.skip("no committed rows")
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
-    summary = json.loads((LINUX / sub / "summary.json").read_text())
+    rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    summary = json.loads((LINUX / sub / "summary.json").read_text(encoding="utf-8"))
     assert summary["rows"] == len(rows) and summary["agree"] == sum(bool(r.get("agree")) for r in rows)
     for group, got in summary["by_group"].items():
         sub = [r for r in rows if r.get("group") == group]
@@ -80,7 +80,7 @@ def test_the_r8fix_rerun_reads_a_harness_that_is_pid_1():
     path = LINUX / "r8fix" / "pid1.jsonl"
     if not path.exists():
         pytest.skip("no committed rows")
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 8 and all(r["agree"] and r["source"] == "proc" for r in rows)
     assert sum(r["mode"] == "interactive" for r in rows) == 2
     assert all("claude" in r["chain"][-1][1] for r in rows)        # the last process read is the harness, PID 1

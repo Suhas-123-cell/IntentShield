@@ -62,11 +62,11 @@ WRITE_VERBS = _WRITE_ACTIONS | {"execute", "run", "kill", "terminate", "select",
 
 
 def load(data: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], dict[str, str]]:
-    agents = [json.loads(line) for line in (data / "data/agent_task.jsonl").read_text().splitlines() if line]
-    attacks = [json.loads(line) for line in (data / "data/attack_task.jsonl").read_text().splitlines() if line]
-    types = json.loads((data / "data/attack_type.jsonl").read_text())["attack_type"]
+    agents = [json.loads(line) for line in (data / "data/agent_task.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    attacks = [json.loads(line) for line in (data / "data/attack_task.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    types = json.loads((data / "data/attack_type.jsonl").read_text(encoding="utf-8"))["attack_type"]
     ns: dict[str, Any] = {}
-    exec((data / "data/prompt_template.py").read_text(), ns)  # string constants only
+    exec((data / "data/prompt_template.py").read_text(encoding="utf-8"), ns)  # string constants only
     return agents, attacks, types, {k: v for k, v in ns.items() if k.isupper()}
 
 
@@ -79,7 +79,7 @@ def server_command(data: Path, tool: str, script_suffix: str = "", extra: tuple[
     """Command (inside the sandbox) for an MSB server, or None if it needs an account."""
     local = attack_dir(data, tool)
     if local is not None:
-        config = json.loads((local / "mcp_config.json").read_text())["mcpServers"]
+        config = json.loads((local / "mcp_config.json").read_text(encoding="utf-8"))["mcpServers"]
         script = next(iter(config.values()))["args"][3]
         if script_suffix:
             script = script.replace(".py", f"-{script_suffix}.py")
@@ -87,7 +87,7 @@ def server_command(data: Path, tool: str, script_suffix: str = "", extra: tuple[
     path = data / "data/tools/normal_tools" / f"{tool}.json"
     if script_suffix or not path.exists():
         return None
-    server = next(iter(json.loads(path.read_text())["mcpServers"].values()))
+    server = next(iter(json.loads(path.read_text(encoding="utf-8"))["mcpServers"].values()))
     args = server.get("args", [])
     if server.get("env") or "@smithery/cli@latest" in args or "mcp-remote" in args:
         return None
@@ -126,7 +126,7 @@ def server_name(data: Path, tool: str) -> str:
     """The server's own name in MSB's config (e.g. pubmed-mcp-server)."""
     local = attack_dir(data, tool)
     path = local / "mcp_config.json" if local is not None else data / "data/tools/normal_tools" / f"{tool}.json"
-    return re.sub(r"[^A-Za-z0-9.-]+", "-", next(iter(json.loads(path.read_text())["mcpServers"]))).strip("-")
+    return re.sub(r"[^A-Za-z0-9.-]+", "-", next(iter(json.loads(path.read_text(encoding="utf-8"))["mcpServers"]))).strip("-")
 
 
 def server_ids(data: Path, case: dict[str, Any], roles: list[str]) -> dict[str, str]:
@@ -632,11 +632,12 @@ def main(argv: list[str] | None = None) -> None:
         grid = cases(args.data)
         args.out.mkdir(parents=True, exist_ok=True)
         for path in sorted(args.rescore.glob("results-*.jsonl")):
-            rows = list({r["id"]: r for r in map(json.loads, path.read_text().splitlines())}.values())
+            rows = list({r["id"]: r for r in map(json.loads, path.read_text(encoding="utf-8").splitlines())}.values())
             scored = rescore(rows, grid)
             report = {"source": str(path), "cases": len(scored), "errors": len(rows) - len(scored),
                       "results": summarize(scored)}
-            (args.out / f"report-{path.stem.removeprefix('results-')}-rescored.json").write_text(json.dumps(report, indent=2))
+            (args.out / f"report-{path.stem.removeprefix('results-')}-rescored.json").write_text(json.dumps(report, indent=2),
+                encoding="utf-8")
             print(path.name, f"n={len(scored)}", {m: v["k"] for m, v in report["results"]["all"].items()})
         return
     load_dotenv(".env")  # GROQ_API_KEY / GEMINI_API_KEY for the judge and a cloud agent
@@ -664,13 +665,13 @@ def main(argv: list[str] | None = None) -> None:
         + (f"-pg_{args.prompt_guard.rsplit('-', 1)[-1]}" if args.prompt_guard else "")
     sink = args.out / f"results-{tag}.jsonl"
     # Rows that errored (a server failed to start) are retried; the latest row per case wins.
-    done = {r["id"] for r in map(json.loads, sink.read_text().splitlines()) if "error" not in r} \
+    done = {r["id"] for r in map(json.loads, sink.read_text(encoding="utf-8").splitlines()) if "error" not in r} \
         if sink.exists() else set()
     # One entry per invocation: a resumed run lists every commit it ran under.
     report_path = args.out / f"report-{tag}.json"
-    runs = json.loads(report_path.read_text()).get("provenance", []) if report_path.exists() and done else []
+    runs = json.loads(report_path.read_text(encoding="utf-8")).get("provenance", []) if report_path.exists() and done else []
     runs.append(provenance(args))
-    with tempfile.TemporaryDirectory() as tmp, sink.open("a") as out:
+    with tempfile.TemporaryDirectory() as tmp, sink.open("a", encoding="utf-8") as out:
         for n, case in enumerate(runnable, 1):
             if case["id"] in done:
                 continue
@@ -689,13 +690,13 @@ def main(argv: list[str] | None = None) -> None:
             out.flush()
             print(f"[{n}/{len(runnable)}] {case['id']} {case['attack_type']} {case['tool']} "
                   f"harm={row.get('harm_executed')} err={'error' in row}", flush=True)
-    rows = list({r["id"]: r for r in map(json.loads, sink.read_text().splitlines())}.values())
+    rows = list({r["id"]: r for r in map(json.loads, sink.read_text(encoding="utf-8").splitlines())}.values())
     scored = [r for r in rows if "error" not in r]
     report = {"model": args.model, "defense": args.defense, "expose_descriptions": args.expose_descriptions,
               "judge": args.judge, "prompt_guard": args.prompt_guard,
               "cases": len(scored), "errors": len(rows) - len(scored), "provenance": runs,
               "results": summarize(scored)}
-    report_path.write_text(json.dumps(report, indent=2))
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report["results"].get("all"), indent=2))
 
 

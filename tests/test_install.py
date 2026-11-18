@@ -32,23 +32,24 @@ def test_installed_hooks_match_the_shipped_examples(tmp_path: Path, harness: str
     path = install.install(harness, "user", hook="/opt/is/bin/intentshield-hook", home=home)
     assert path == home / {"claude": ".claude/settings.json", "cursor": ".cursor/hooks.json",
                            "gemini": ".gemini/settings.json"}[harness]
-    written = _normalize("/opt/is/bin/intentshield-hook", json.loads(path.read_text()))
-    assert written == json.loads((ROOT / "configs" / "harness" / example).read_text())
+    written = _normalize("/opt/is/bin/intentshield-hook", json.loads(path.read_text(encoding="utf-8")))
+    assert written == json.loads((ROOT / "configs" / "harness" / example).read_text(encoding="utf-8"))
 
 
 def test_codex_block_matches_the_shipped_example(tmp_path: Path):
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
-    (home / ".codex" / "config.toml").write_text('model = "o3"\n')
+    (home / ".codex" / "config.toml").write_text('model = "o3"\n', encoding="utf-8")
     path = install.install("codex", "user", hook="intentshield-hook", home=home)
-    parsed = tomllib.loads(path.read_text())
+    parsed = tomllib.loads(path.read_text(encoding="utf-8"))
     assert parsed["model"] == "o3"
-    assert parsed["hooks"] == tomllib.loads((ROOT / "configs" / "harness" / "codex-config.toml").read_text())["hooks"]
+    assert parsed["hooks"] == tomllib.loads((ROOT / "configs" / "harness" / "codex-config.toml").read_text(
+        encoding="utf-8"))["hooks"]
     # Idempotent, then reversible.
     install.install("codex", "user", hook="intentshield-hook", home=home)
-    assert path.read_text().count(install._TOML_BEGIN) == 1
+    assert path.read_text(encoding="utf-8").count(install._TOML_BEGIN) == 1
     install.uninstall("codex", "user", home=home)
-    assert tomllib.loads(path.read_text()) == {"model": "o3"}
+    assert tomllib.loads(path.read_text(encoding="utf-8")) == {"model": "o3"}
 
 
 def test_install_keeps_other_hooks_and_is_idempotent_and_reversible(tmp_path: Path):
@@ -57,10 +58,10 @@ def test_install_keeps_other_hooks_and_is_idempotent_and_reversible(tmp_path: Pa
     path.parent.mkdir(parents=True)
     theirs = {"type": "command", "command": "my-linter"}
     path.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]},
-                                "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [theirs]}]}}))
+                                "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [theirs]}]}}), encoding="utf-8")
     install.install("claude", "user", hook="intentshield-hook", review="always", home=home, translate=False)
     install.install("claude", "user", hook="intentshield-hook", review="always", home=home, translate=False)
-    settings = json.loads(path.read_text())
+    settings = json.loads(path.read_text(encoding="utf-8"))
     assert settings["permissions"] == {"allow": ["Bash(ls)"]}
     assert settings["hooks"]["PreToolUse"][0]["hooks"] == [theirs]
     ours = [g for g in settings["hooks"]["PreToolUse"] if any(install._ours(h) for h in g["hooks"])]
@@ -69,7 +70,7 @@ def test_install_keeps_other_hooks_and_is_idempotent_and_reversible(tmp_path: Pa
     assert ours[0]["hooks"][0]["onFailure"] == "block"
     assert len(settings["hooks"]["UserPromptSubmit"]) == 1
     install.uninstall("claude", "user", home=home)
-    assert json.loads(path.read_text()) == {"permissions": {"allow": ["Bash(ls)"]},
+    assert json.loads(path.read_text(encoding="utf-8")) == {"permissions": {"allow": ["Bash(ls)"]},
                                             "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [theirs]}]}}
 
 
@@ -77,7 +78,7 @@ def test_project_scope_and_codex_has_none(tmp_path: Path):
     cwd = tmp_path / "repo"
     path = install.install("gemini", "project", hook="intentshield-hook", cwd=cwd, home=tmp_path / "home")
     assert path == cwd / ".gemini" / "settings.json"
-    assert "BeforeTool" in json.loads(path.read_text())["hooks"]
+    assert "BeforeTool" in json.loads(path.read_text(encoding="utf-8"))["hooks"]
     with pytest.raises(ValueError, match="scope user"):
         install.install("codex", "project", hook="intentshield-hook", cwd=cwd, home=tmp_path / "home")
 
@@ -86,10 +87,10 @@ def test_install_refuses_a_settings_file_it_cannot_read(tmp_path: Path):
     home = tmp_path / "home"
     path = home / ".cursor" / "hooks.json"
     path.parent.mkdir(parents=True)
-    path.write_text("{not json")
+    path.write_text("{not json", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         install.install("cursor", "user", hook="intentshield-hook", home=home)
-    assert path.read_text() == "{not json"
+    assert path.read_text(encoding="utf-8") == "{not json"
 
 
 def test_dry_run_writes_nothing(tmp_path: Path, capsys):
@@ -107,15 +108,15 @@ def test_wrap_puts_the_proxy_in_front_of_stdio_servers_and_unwrap_restores_them(
                    "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_secret"}},
         "remote": {"url": "https://mcp.example.com/mcp"},
     }}
-    mcp.write_text(json.dumps(original))
+    mcp.write_text(json.dumps(original), encoding="utf-8")
     out = tmp_path / "proxies"
     assert install.wrap(mcp, out_dir=out, proxy="/opt/is/bin/intentshield-mcp") == ["filesystem", "github"]
-    data = json.loads(mcp.read_text())
+    data = json.loads(mcp.read_text(encoding="utf-8"))
     assert data["mcpServers"]["remote"] == {"url": "https://mcp.example.com/mcp"}
     fs = data["mcpServers"]["filesystem"]
     assert fs["command"] == "/opt/is/bin/intentshield-mcp"
     assert fs["args"][:2] == ["--transparent", "--config"]
-    config = json.loads(Path(fs["args"][2]).read_text())
+    config = json.loads(Path(fs["args"][2]).read_text(encoding="utf-8"))
     assert config["upstreams"] == [{"server_id": "filesystem", "transport": "stdio", "command": "npx",
                                     "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]}]
     # named like its config, which is per client file
@@ -123,7 +124,7 @@ def test_wrap_puts_the_proxy_in_front_of_stdio_servers_and_unwrap_restores_them(
     # The secret stays in the harness file (set on the proxy process) and is forwarded by name only.
     gh = data["mcpServers"]["github"]
     assert gh["env"] == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_secret"}
-    gh_config = Path(gh["args"][2]).read_text()
+    gh_config = Path(gh["args"][2]).read_text(encoding="utf-8")
     assert json.loads(gh_config)["upstreams"][0]["env_from_env"] == {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "GITHUB_PERSONAL_ACCESS_TOKEN"}
     assert "ghp_secret" not in gh_config
@@ -134,7 +135,7 @@ def test_wrap_puts_the_proxy_in_front_of_stdio_servers_and_unwrap_restores_them(
     # Idempotent, then reversible.
     assert install.wrap(mcp, out_dir=out, proxy="/opt/is/bin/intentshield-mcp") == []
     assert install.unwrap(mcp) == ["filesystem", "github"]
-    assert json.loads(mcp.read_text()) == original
+    assert json.loads(mcp.read_text(encoding="utf-8")) == original
 
 
 def test_a_server_wrapped_by_0_4_3_keeps_its_audit_database_when_it_is_wrapped_again(tmp_path: Path):
@@ -142,14 +143,14 @@ def test_a_server_wrapped_by_0_4_3_keeps_its_audit_database_when_it_is_wrapped_a
     with no such file gets the new name, which is per client file."""
     mcp = tmp_path / ".mcp.json"
     mcp.write_text(json.dumps({"mcpServers": {"notes": {"command": "npx", "args": ["notes"]},
-                                              "fresh": {"command": "npx", "args": ["fresh"]}}}))
+                                              "fresh": {"command": "npx", "args": ["fresh"]}}}), encoding="utf-8")
     out = tmp_path / "proxies"
     out.mkdir()
     (out / "notes.db").write_bytes(b"")  # left by 0.4.3
     install.wrap(mcp, out_dir=out, proxy="/opt/is/bin/intentshield-mcp")
-    servers = json.loads(mcp.read_text())["mcpServers"]
-    notes = json.loads(Path(servers["notes"]["args"][2]).read_text())
-    fresh = json.loads(Path(servers["fresh"]["args"][2]).read_text())
+    servers = json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]
+    notes = json.loads(Path(servers["notes"]["args"][2]).read_text(encoding="utf-8"))
+    fresh = json.loads(Path(servers["fresh"]["args"][2]).read_text(encoding="utf-8"))
     assert notes["database_path"] == str(out / "notes.db")
     assert fresh["database_path"] == str(Path(servers["fresh"]["args"][2]).with_suffix(".db"))
     assert fresh["database_path"] != str(out / "fresh.db")
@@ -157,7 +158,7 @@ def test_a_server_wrapped_by_0_4_3_keeps_its_audit_database_when_it_is_wrapped_a
 
 def test_wrap_names_unknown_servers(tmp_path: Path):
     mcp = tmp_path / "mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"a": {"command": "x"}}}), encoding="utf-8")
     with pytest.raises(ValueError, match="no such server"):
         install.wrap(mcp, servers=["b"], out_dir=tmp_path, proxy="intentshield-mcp")
 
@@ -179,11 +180,11 @@ def test_executable_is_found_beside_an_unresolved_interpreter_symlink(tmp_path: 
     sit beside the symlink, so the path must not be resolved first."""
     real = tmp_path / "toolchain" / "bin"
     real.mkdir(parents=True)
-    (real / "python3.12").write_text("")
+    (real / "python3.12").write_text("", encoding="utf-8")
     venv = tmp_path / "venv" / "bin"
     venv.mkdir(parents=True)
     (venv / "python").symlink_to(real / "python3.12")
-    (venv / "intentshield-hook").write_text("")
+    (venv / "intentshield-hook").write_text("", encoding="utf-8")
     monkeypatch.setattr(install.sys, "executable", str(venv / "python"))
     monkeypatch.setattr(install.sys, "prefix", str(tmp_path / "venv"))
     assert install.executable("intentshield-hook") == str(venv / "intentshield-hook")
@@ -211,33 +212,34 @@ def test_install_then_uninstall_restores_every_json_settings_file_byte_for_byte(
     theirs = {**_THEIRS[harness], "note": "naïve ☃"}
     before = (json.dumps(theirs, indent=2) + "\n" if style == "indented"
               else json.dumps(theirs, indent=4, ensure_ascii=False).replace("\n    ", "\n\t"))
-    path.write_text(before)
+    path.write_text(before, encoding="utf-8")
     install.install(harness, scope, hook="intentshield-hook", home=home, cwd=cwd)
-    assert "intentshield-hook" in path.read_text()
+    assert "intentshield-hook" in path.read_text(encoding="utf-8")
     install.uninstall(harness, scope, home=home, cwd=cwd)
-    assert path.read_text() == before
+    assert path.read_text(encoding="utf-8") == before
 
 
 def test_uninstall_after_the_user_edited_the_file_keeps_their_edit_and_text(tmp_path: Path):
     home = tmp_path / "home"
     path = home / ".claude" / "settings.json"
     path.parent.mkdir(parents=True)
-    path.write_text('{"theme": "dark", "note": "naïve ☃"}')
+    path.write_text('{"theme": "dark", "note": "naïve ☃"}', encoding="utf-8")
     install.install("claude", "user", hook="intentshield-hook", home=home)
-    path.write_text(path.read_text().replace('"dark"', '"light"'))
+    path.write_text(path.read_text(encoding="utf-8").replace('"dark"', '"light"'), encoding="utf-8")
     install.uninstall("claude", "user", home=home)
-    assert json.loads(path.read_text()) == {"theme": "light", "note": "naïve ☃"} and "☃" in path.read_text()
+    assert json.loads(path.read_text(encoding="utf-8")) == {"theme": "light", "note": "naïve ☃"} and "☃" in path.read_text(
+        encoding="utf-8")
     assert not list((home / ".intentshield" / "backups").iterdir())
 
 
 def test_wrap_then_unwrap_restores_the_mcp_file_byte_for_byte(tmp_path: Path):
     path = tmp_path / ".mcp.json"
     before = '{"mcpServers": {"notes": {"command": "uvx", "args": ["notes-mcp"], "env": {"NAME": "t \\u2713"}}}}'
-    path.write_text(before)
+    path.write_text(before, encoding="utf-8")
     install.wrap(path, out_dir=tmp_path / "proxies", proxy="intentshield-mcp")
-    assert "--transparent" in path.read_text()
+    assert "--transparent" in path.read_text(encoding="utf-8")
     install.unwrap(path)
-    assert path.read_text() == before
+    assert path.read_text(encoding="utf-8") == before
 
 
 def test_codex_install_then_uninstall_restores_the_file(tmp_path: Path):
@@ -245,11 +247,11 @@ def test_codex_install_then_uninstall_restores_the_file(tmp_path: Path):
     path = home / ".codex" / "config.toml"
     path.parent.mkdir(parents=True)
     before = 'model = "o3"\n\n[mcp_servers.demo]\ncommand = "demo"\n'
-    path.write_text(before)
+    path.write_text(before, encoding="utf-8")
     install.install("codex", "user", hook="intentshield-hook", home=home)
-    assert "intentshield-hook" in path.read_text()
+    assert "intentshield-hook" in path.read_text(encoding="utf-8")
     install.uninstall("codex", "user", home=home)
-    assert path.read_text() == before
+    assert path.read_text(encoding="utf-8") == before
 
 
 def test_hook_command_quotes_and_validates_its_arguments():
@@ -276,12 +278,12 @@ def test_install_writes_through_a_settings_symlink(tmp_path: Path):
     home = tmp_path / "home"
     target = tmp_path / "dotfiles" / "settings.json"
     target.parent.mkdir(parents=True)
-    target.write_text("{}\n")
+    target.write_text("{}\n", encoding="utf-8")
     link = home / ".claude" / "settings.json"
     link.parent.mkdir(parents=True)
     link.symlink_to(target)
     install.install("claude", "user", hook="intentshield-hook", home=home)
-    assert link.is_symlink() and "intentshield-hook" in target.read_text()
+    assert link.is_symlink() and "intentshield-hook" in target.read_text(encoding="utf-8")
 
 
 def test_a_wrapped_server_with_an_env_block_answers_tool_calls(tmp_path: Path, monkeypatch):
@@ -299,9 +301,9 @@ def test_a_wrapped_server_with_an_env_block_answers_tool_calls(tmp_path: Path, m
     mcp_json = tmp_path / ".mcp.json"
     mcp_json.write_text(json.dumps({"mcpServers": {"demo": {
         "command": sys.executable, "args": ["-m", "intentshield.demo_mcp_server"],
-        "env": {"DEMO_TOKEN": "secret-value-123"}}}}))
+        "env": {"DEMO_TOKEN": "secret-value-123"}}}}), encoding="utf-8")
     install.wrap(mcp_json, out_dir=home / ".intentshield" / "proxies")
-    generated = json.loads(mcp_json.read_text())["mcpServers"]["demo"]
+    generated = json.loads(mcp_json.read_text(encoding="utf-8"))["mcpServers"]["demo"]
     assert generated["env"] == {"DEMO_TOKEN": "secret-value-123"}  # the client still owns the secret
     config = MCPProxyConfig.from_file(generated["args"][generated["args"].index("--config") + 1])
     assert config.upstreams[0].env_from_env == {"DEMO_TOKEN": "DEMO_TOKEN"}
@@ -327,12 +329,12 @@ def test_uninstall_removes_a_file_that_held_only_our_hooks_and_the_cli_dispatche
     install.uninstall("claude", "user", home=home)
     assert not path.exists() and "removed" in capsys.readouterr().out
     mcp = tmp_path / ".mcp.json"
-    mcp.write_text(json.dumps({"mcpServers": {"demo": {"command": "demo-server", "args": []}}}))
+    mcp.write_text(json.dumps({"mcpServers": {"demo": {"command": "demo-server", "args": []}}}), encoding="utf-8")
     for argv in (["wrap", str(mcp), "--out-dir", str(tmp_path / "proxies")], ["unwrap", str(mcp)]):
         with pytest.raises(SystemExit) as exit_:
             cli.main(argv)
         assert exit_.value.code == 0
-    assert json.loads(mcp.read_text())["mcpServers"]["demo"] == {"command": "demo-server", "args": []}
+    assert json.loads(mcp.read_text(encoding="utf-8"))["mcpServers"]["demo"] == {"command": "demo-server", "args": []}
     out = capsys.readouterr().out
     assert "wrapped 1 server" in out and "unwrapped 1 server" in out and "kept" in out
 

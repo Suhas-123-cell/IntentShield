@@ -67,7 +67,7 @@ def intent(stdout: str, stderr: str, exit_code: int | None) -> tuple[str, str]:
 
 
 def load_captures(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def triple_id(record: dict) -> str:
@@ -106,9 +106,9 @@ def cmd_index(captures: Path, outdir: Path) -> int:
         stdout = base64.b64decode(group["stdout_b64"]).decode("utf-8", "replace")
         stderr = base64.b64decode(group["stderr_b64"]).decode("utf-8", "replace")
         verdict, why = intent(stdout, stderr, group["exit_code"])
-        (outdir / f"{tid}.json").write_text(json.dumps({k: group[k] for k in ("stdout_b64", "stderr_b64", "exit_code")}))
+        (outdir / f"{tid}.json").write_text(json.dumps({k: group[k] for k in ("stdout_b64", "stderr_b64", "exit_code")}), encoding="utf-8")
         index.append({"id": tid, "intent": verdict, "why": why, "exit_code": group["exit_code"], "captures": group["captures"]})
-    (outdir / "index.json").write_text(json.dumps(index, indent=1))
+    (outdir / "index.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
     by = defaultdict(int)
     for item in index:
         by[item["intent"]] += 1
@@ -155,7 +155,7 @@ def read_gemini(path: Path) -> dict[str, dict[str, dict]]:
     result: dict[str, dict[str, dict]] = {}
     for file in sorted(path.glob("*.jsonl")):
         rows = {}
-        for line in file.read_text().splitlines():
+        for line in file.read_text(encoding="utf-8").splitlines():
             rec = json.loads(line)
             rows[rec["scenario"].removeprefix("replay:")] = rec
         result[file.stem] = rows
@@ -258,7 +258,7 @@ def binary_for(harness: str, build: str) -> Path:
     """The installed release binary for a build (layouts differ: Codex <= 0.131 has another path, but only >= 0.133 is used)."""
     if harness == "claude":
         return RELEASES / f"claude-code/{build}/node_modules/@anthropic-ai/claude-code-darwin-arm64/claude"
-    manifest = json.loads((RELEASES / "codex/manifest.json").read_text())
+    manifest = json.loads((RELEASES / "codex/manifest.json").read_text(encoding="utf-8"))
     for entry in manifest["versions"]:
         if entry["version"] == build:
             return Path(entry["binary_path"])
@@ -498,7 +498,7 @@ def find_reply(index: list[dict], cell: StubCell) -> dict:
 
 def _write(path: Path, text: str, mode: int = 0o644) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     path.chmod(mode)
     return path
 
@@ -507,7 +507,7 @@ def hook_command(cell: StubCell, replay_file: Path, run_dir: Path, run_id: str) 
     # a copy inside the run directory: the real home (where the repository lives) is unreadable under containment
     local = run_dir / "hookbin" / "stubhook.py"
     if not local.exists():
-        _write(local, STUBHOOK.read_text())
+        _write(local, STUBHOOK.read_text(encoding="utf-8"))
     args = [
         sys.executable,
         str(local),
@@ -536,7 +536,7 @@ def build_run(
         d.mkdir(parents=True, exist_ok=True)
     nonce = hf_configs.nonce_for(run_id)
     proto = hf_cells.Cell(cell.harness, cell.bld, "M1", cell.kind, "R4")
-    (run_dir / "stub-script.json").write_text(json.dumps(hf_configs.stub_script(proto, nonce, work)))
+    (run_dir / "stub-script.json").write_text(json.dumps(hf_configs.stub_script(proto, nonce, work)), encoding="utf-8")
     prompt = hf_configs.prompt_for(cell.kind, nonce)
     binary = str(binary_for(cell.harness, cell.bld))
     command = hook_command(cell, index_dir / f"{reply['id']}.json", run_dir, run_id) if reply["id"] else ""
@@ -627,7 +627,7 @@ def hook_preflight(cell: StubCell, command: str, run_dir: Path, reply: dict) -> 
         cwd=str(run_dir / "work"),
         env={"PATH": "/usr/bin:/bin", "HOME": str(run_dir / "home"), "TMPDIR": str(run_dir / "tmp")},
     )
-    want = json.loads((Path(command.split("--replay-file")[1].split()[0])).read_text())
+    want = json.loads((Path(command.split("--replay-file")[1].split()[0])).read_text(encoding="utf-8"))
     got_out = proc.stdout.encode()
     if (
         proc.returncode != want["exit_code"]
@@ -665,7 +665,7 @@ def _jsonl(path: Path) -> list[dict]:
     if not path.is_file():
         return []
     rows = []
-    for line in path.read_text(errors="replace").splitlines():
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             rows.append(json.loads(line))
         except ValueError:
@@ -687,7 +687,7 @@ def run_one(cell: StubCell, rep: int, index: list[dict], index_dir: Path, out: P
     proto = hf_cells.Cell(cell.harness, cell.bld, "M1", cell.kind, "R4")
     nonce = hf_configs.nonce_for(run_id)
     script_path = run_dir / "stub-script.json"
-    script_path.write_text(json.dumps(hf_configs.stub_script(proto, nonce, work)))
+    script_path.write_text(json.dumps(hf_configs.stub_script(proto, nonce, work)), encoding="utf-8")
     script = stub_model.Script.load(script_path)
     stub = stub_model.StubServer(script, run_dir / "requests.jsonl", None, 0, max_calls=1).start()
     try:
@@ -698,7 +698,7 @@ def run_one(cell: StubCell, rep: int, index: list[dict], index_dir: Path, out: P
                 raise RuntimeError(f"{cell.key}: {problem}")
         t0 = time.monotonic()
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        with (run_dir / "stdout.txt").open("w") as so, (run_dir / "stderr.txt").open("w") as se:
+        with (run_dir / "stdout.txt").open("w", encoding="utf-8") as so, (run_dir / "stderr.txt").open("w", encoding="utf-8") as se:
             proc = subprocess.Popen(
                 contained(argv, run_dir),
                 cwd=str(work),
@@ -764,14 +764,14 @@ def run_one(cell: StubCell, rep: int, index: list[dict], index_dir: Path, out: P
         "wall_s": round(wall, 2),
         "capped": capped,
         "started_at": started,
-        "stdout_tail": scrub_text((run_dir / "stdout.txt").read_text(errors="replace")[-1500:]),
-        "stderr_tail": scrub_text((run_dir / "stderr.txt").read_text(errors="replace")[-800:]),
+        "stdout_tail": scrub_text((run_dir / "stdout.txt").read_text(errors="replace", encoding="utf-8")[-1500:]),
+        "stderr_tail": scrub_text((run_dir / "stderr.txt").read_text(errors="replace", encoding="utf-8")[-800:]),
     }
     return row
 
 
 def cmd_stub_plan(index_dir: Path, builds: bool = False) -> int:
-    index = json.loads((index_dir / "index.json").read_text())
+    index = json.loads((index_dir / "index.json").read_text(encoding="utf-8"))
     total = 0
     for cell in extra_build_cells() if builds else plan_cells():
         reply = find_reply(index, cell)
@@ -794,7 +794,7 @@ def cmd_stub_run(
     builds: bool = False,
     matchers: bool = False,
 ) -> int:
-    index = json.loads((index_dir / "index.json").read_text())
+    index = json.loads((index_dir / "index.json").read_text(encoding="utf-8"))
     cells = [
         c
         for c in (matcher_probe_cells() if matchers else extra_build_cells() if builds else plan_cells())
@@ -821,9 +821,9 @@ def cmd_stub_run(
     for cell in cells:
         for rep in range(cell.reps):
             row = run_one(cell, rep, index, index_dir, out)
-            with ledger.open("a") as handle:
+            with ledger.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"run_id": row["run_id"], "ts": time.time(), "attempt": 0}) + "\n")
-            with rows_path.open("a") as handle:
+            with rows_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row) + "\n")
             print(
                 f"{cell.harness} {cell.mode} {cell.state} {cell.guard}/{cell.scenario} rep{rep}: {row['outcome']} hook_invoked={row['hook_invoked']} "
@@ -936,13 +936,13 @@ def cmd_publish(src: Path, dest: Path) -> int:
         (dest / target).mkdir(exist_ok=True)
         pairs += [(f, dest / target / f.name) for f in sorted((src / sub).glob("*.json*"))]
     for source, target in pairs:
-        target.write_text(scrub_file_text(source.read_text()))
+        target.write_text(scrub_file_text(source.read_text(encoding="utf-8")), encoding="utf-8")
     print(f"published {len(pairs)} files to {dest}")
     return 0
 
 
 def cmd_table(index_dir: Path, stub_rows: list[Path], gemini_dir: Path | None, out_md: Path, out_json: Path) -> int:
-    index = {i["id"]: i for i in json.loads((index_dir / "index.json").read_text())}
+    index = {i["id"]: i for i in json.loads((index_dir / "index.json").read_text(encoding="utf-8"))}
     rows = [r for p in stub_rows for r in _jsonl(p)]
     summary = summarize_stub(rows)
     lines = [
@@ -1070,8 +1070,8 @@ def cmd_table(index_dir: Path, stub_rows: list[Path], gemini_dir: Path | None, o
             "",
         ]
     out_md.parent.mkdir(parents=True, exist_ok=True)
-    out_md.write_text("\n".join(lines) + "\n")
-    out_json.write_text(json.dumps(summary, indent=1))
+    out_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out_json.write_text(json.dumps(summary, indent=1), encoding="utf-8")
     print("\n".join(lines[-12:]))
     return 0
 
@@ -1098,7 +1098,7 @@ def harness_profile(run_dir: Path, readable_extra: list[Path] | None = None) -> 
 
 def contained(argv: list[str], run_dir: Path, readable_extra: list[Path] | None = None) -> list[str]:
     profile = run_dir / "harness.sb"
-    profile.write_text(harness_profile(run_dir, readable_extra))
+    profile.write_text(harness_profile(run_dir, readable_extra), encoding="utf-8")
     return ["/usr/bin/sandbox-exec", "-f", str(profile), *argv]
 
 

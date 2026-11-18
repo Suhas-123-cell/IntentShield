@@ -17,18 +17,19 @@ def test_wrap_does_not_forward_an_empty_env_value(tmp_path):
 def test_unwrap_leaves_a_hand_written_proxy_entry(tmp_path):
     config = tmp_path / "my.json"
     config.write_text(json.dumps({"upstreams": [{"server_id": "a", "transport": "stdio", "command": "echo"},
-                                                {"server_id": "b", "transport": "stdio", "command": "cat"}]}))
+                                                {"server_id": "b", "transport": "stdio", "command": "cat"}]}), encoding="utf-8")
     entry = {"command": "intentshield-mcp", "args": ["--transparent", "--config", str(config)]}
     path = tmp_path / "mcp.json"
-    path.write_text(json.dumps({"mcpServers": {"guarded": entry}}))
+    path.write_text(json.dumps({"mcpServers": {"guarded": entry}}), encoding="utf-8")
     with pytest.raises(ValueError, match="several upstreams"):
         install.unwrap(path)
-    assert json.loads(path.read_text())["mcpServers"]["guarded"] == entry
+    assert json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["guarded"] == entry
 
 
 def test_unwrap_of_an_entry_without_config_says_so(tmp_path):
     path = tmp_path / "mcp.json"
-    path.write_text(json.dumps({"mcpServers": {"s": {"command": "intentshield-mcp", "args": ["--transparent"]}}}))
+    path.write_text(json.dumps({"mcpServers": {"s": {"command": "intentshield-mcp", "args": ["--transparent"]}}}),
+        encoding="utf-8")
     with pytest.raises(ValueError, match="names no --config"):
         install.unwrap(path)
 
@@ -37,7 +38,7 @@ def test_unwrap_of_an_entry_without_config_says_so(tmp_path):
                                    {"url": "https://example.com/mcp", "headers": ["x"]}])
 def test_scan_reports_a_malformed_entry(tmp_path, entry):
     path = tmp_path / "mcp.json"
-    path.write_text(json.dumps({"mcpServers": {"bad": entry}}))
+    path.write_text(json.dumps({"mcpServers": {"bad": entry}}), encoding="utf-8")
     servers = scan.discover(tmp_path, tmp_path, [path])
     scan.scan(servers, connect=True, timeout=5, pins={})
     assert servers[0].error and "malformed entry" in servers[0].error
@@ -45,7 +46,7 @@ def test_scan_reports_a_malformed_entry(tmp_path, entry):
 
 def test_scan_reads_a_config_with_comments(tmp_path):
     path = tmp_path / "settings.json"
-    path.write_text('{\n  // my servers\n  "mcpServers": {"s": {"command": "echo"}} /* end */\n}')
+    path.write_text('{\n  // my servers\n  "mcpServers": {"s": {"command": "echo"}} /* end */\n}', encoding="utf-8")
     servers = scan.discover(tmp_path, tmp_path, [path])
     assert [s.name for s in servers] == ["s"] and servers[0].error is None
 
@@ -62,5 +63,5 @@ def test_scan_of_a_missing_file_is_not_green(tmp_path, capsys):
 
 def test_scan_of_an_unreadable_config_is_not_green(tmp_path, capsys):
     path = tmp_path / "mcp.json"
-    path.write_text("{not json")
+    path.write_text("{not json", encoding="utf-8")
     assert scan.run(_args([path])) == 2

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
+from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
@@ -24,6 +25,57 @@ def add_column(db: sqlite3.Connection, table: str, column: str, kind: str) -> No
             raise
 
 
+# A migration brings a database one version on: ``migrations[n]`` takes version n to n+1, and the version a database is at
+# is kept in ``PRAGMA user_version``. The first migration of each database makes the schema as 0.4.4 and earlier built it
+# (creating what is missing, adding what is not there yet), so a database from those versions, which carries version 0,
+# upgrades with its data as it is. Later migrations only add: a database written by a newer version still works for the
+# older code, on the tables and columns it knows.
+Migration = Callable[[sqlite3.Connection], None]
+
+
+def _has_tables(db: sqlite3.Connection, tables: Sequence[str]) -> bool:
+    return all(db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() for name in tables)
+
+
+def migrate(db: sqlite3.Connection, migrations: Sequence[Migration], tables: Sequence[str] = ()) -> int:
+    """Brings the database to the version of ``migrations`` and returns the version it is at. The migrations run in one
+    immediate transaction, so processes that start together (every hook is one) do not both apply one; the version is read
+    again once the lock is held. A database at a higher version, written by a newer release, is left as it is and its version
+    returned: the caller keeps working on the part it knows and may say so (``newer_schema``).
+
+    ``tables`` are tables the schema must have. When one is missing at a version the database claims, the file was stamped by
+    another schema (two modules given the same file), so the migrations run from the start; they only create what is missing,
+    and the version never goes down."""
+    target = len(migrations)
+    found = int(db.execute("PRAGMA user_version").fetchone()[0])
+    if found >= target and _has_tables(db, tables):
+        return found
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        found = int(db.execute("PRAGMA user_version").fetchone()[0])
+        first = found if found < target or _has_tables(db, tables) else 0
+        for number in range(first, target):
+            migrations[number](db)
+            db.execute(f"PRAGMA user_version = {max(number + 1, found)}")
+        db.execute("COMMIT")
+    except BaseException:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        raise
+    return max(found, target)
+
+
+def newer_schema(path: str | Path, known: int) -> int | None:
+    """The version of the database at ``path`` when it is higher than ``known`` (written by a newer release), else None. The
+    file is opened read-only; a file that is missing or cannot be read gives None."""
+    try:
+        with closing(sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True, timeout=2)) as db:
+            found = int(db.execute("PRAGMA user_version").fetchone()[0])
+    except (sqlite3.Error, OSError, ValueError):
+        return None
+    return found if found > known else None
+
+
 def default_database(name: str = "intentshield.db") -> str:
     """Where a database goes when nothing names one: ``~/.intentshield/<name>``, as the command line does, and not the working
     directory, where it would end up inside whatever project the caller runs in. A database an older version left in the
@@ -31,6 +83,85 @@ def default_database(name: str = "intentshield.db") -> str:
     if Path(name).is_file():
         return name
     return str(Path.home() / ".intentshield" / name)
+
+
+_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS runs (
+        id TEXT PRIMARY KEY,
+        user_intent TEXT NOT NULL,
+        scenario TEXT,
+        status TEXT NOT NULL,
+        call_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+    )""",
+    """CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        sequence INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(run_id, sequence)
+    )""",
+    """CREATE TABLE IF NOT EXISTS approvals (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        tool_name TEXT NOT NULL,
+        args_json TEXT NOT NULL,
+        call_fingerprint TEXT NOT NULL,
+        call_json TEXT NOT NULL,
+        call_index INTEGER NOT NULL DEFAULT 1,
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        decided_at TEXT,
+        result_json TEXT
+    )""",
+    """CREATE TABLE IF NOT EXISTS executions (
+        idempotency_key TEXT PRIMARY KEY,
+        call_fingerprint TEXT NOT NULL,
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS idempotency_reservations (
+        idempotency_key TEXT PRIMARY KEY,
+        call_fingerprint TEXT NOT NULL,
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        status TEXT NOT NULL,
+        result_json TEXT,
+        error_json TEXT,
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+    )""",
+)
+
+
+def _schema_1(db: sqlite3.Connection) -> None:
+    """The schema of 0.4.4 and earlier: the tables, the columns added since the first release, and the old idempotency records."""
+    for statement in _SCHEMA:
+        db.execute(statement)
+    for table, column, kind in (
+        ("runs", "call_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("approvals", "call_index", "INTEGER NOT NULL DEFAULT 1"),
+        ("approvals", "result_json", "TEXT"),
+        ("approvals", "reasons_json", "TEXT"),
+        ("idempotency_reservations", "error_json", "TEXT"),
+    ):
+        add_column(db, table, column, kind)
+    # Preserve pre-reservation idempotency records conservatively. Their
+    # old fingerprints will conflict rather than permit a duplicate side effect.
+    db.execute(
+        """INSERT OR IGNORE INTO idempotency_reservations
+           (idempotency_key,call_fingerprint,run_id,status,result_json,created_at,completed_at)
+           SELECT idempotency_key,call_fingerprint,run_id,'COMPLETED',result_json,created_at,created_at
+           FROM executions"""
+    )
+
+
+MIGRATIONS: tuple[Migration, ...] = (_schema_1,)
+SCHEMA_VERSION = len(MIGRATIONS)
 
 
 class Storage:
@@ -57,75 +188,7 @@ class Storage:
 
     def initialize(self) -> None:
         with self.connect() as db:
-            db.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS runs (
-                    id TEXT PRIMARY KEY,
-                    user_intent TEXT NOT NULL,
-                    scenario TEXT,
-                    status TEXT NOT NULL,
-                    call_count INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL,
-                    completed_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL REFERENCES runs(id),
-                    sequence INTEGER NOT NULL,
-                    kind TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    UNIQUE(run_id, sequence)
-                );
-                CREATE TABLE IF NOT EXISTS approvals (
-                    id TEXT PRIMARY KEY,
-                    run_id TEXT NOT NULL REFERENCES runs(id),
-                    tool_name TEXT NOT NULL,
-                    args_json TEXT NOT NULL,
-                    call_fingerprint TEXT NOT NULL,
-                    call_json TEXT NOT NULL,
-                    call_index INTEGER NOT NULL DEFAULT 1,
-                    expires_at TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    decided_at TEXT,
-                    result_json TEXT
-                );
-                CREATE TABLE IF NOT EXISTS executions (
-                    idempotency_key TEXT PRIMARY KEY,
-                    call_fingerprint TEXT NOT NULL,
-                    run_id TEXT NOT NULL REFERENCES runs(id),
-                    result_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS idempotency_reservations (
-                    idempotency_key TEXT PRIMARY KEY,
-                    call_fingerprint TEXT NOT NULL,
-                    run_id TEXT NOT NULL REFERENCES runs(id),
-                    status TEXT NOT NULL,
-                    result_json TEXT,
-                    error_json TEXT,
-                    created_at TEXT NOT NULL,
-                    completed_at TEXT
-                );
-                """
-            )
-            for table, column, kind in (
-                ("runs", "call_count", "INTEGER NOT NULL DEFAULT 0"),
-                ("approvals", "call_index", "INTEGER NOT NULL DEFAULT 1"),
-                ("approvals", "result_json", "TEXT"),
-                ("approvals", "reasons_json", "TEXT"),
-                ("idempotency_reservations", "error_json", "TEXT"),
-            ):
-                add_column(db, table, column, kind)
-            # Preserve pre-reservation idempotency records conservatively. Their
-            # old fingerprints will conflict rather than permit a duplicate side effect.
-            db.execute(
-                """INSERT OR IGNORE INTO idempotency_reservations
-                   (idempotency_key,call_fingerprint,run_id,status,result_json,created_at,completed_at)
-                   SELECT idempotency_key,call_fingerprint,run_id,'COMPLETED',result_json,created_at,created_at
-                   FROM executions"""
-            )
+            self.schema_version = migrate(db, MIGRATIONS, ('runs', 'events', 'approvals'))
 
     @staticmethod
     def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:

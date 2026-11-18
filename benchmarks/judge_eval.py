@@ -65,7 +65,7 @@ def judge_calls(judge: Judge, data: Path, models: list[str]) -> dict[str, Any]:
     grid = {c["id"]: c for c in msb.cases(data)}
     report: dict[str, Any] = {}
     for model in models:
-        rows = [json.loads(line) for line in Path(f"artifacts/msb-v2/results-{model}-none-holdout.jsonl").open()]
+        rows = [json.loads(line) for line in Path(f"artifacts/msb-v2/results-{model}-none-holdout.jsonl").open(encoding="utf-8")]
         rows = [r for r in {r["id"]: r for r in rows}.values() if "error" not in r]
         by_type: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
         cases_harmed = cases_stopped = cases_interrupted = 0
@@ -97,7 +97,7 @@ def judge_calls(judge: Judge, data: Path, models: list[str]) -> dict[str, Any]:
 
 
 def judge_descriptions(judge: Judge) -> dict[str, Any]:
-    rows = [json.loads(line) for line in Path("artifacts/injection/dataset.jsonl").open()]
+    rows = [json.loads(line) for line in Path("artifacts/injection/dataset.jsonl").open(encoding="utf-8")]
     rows = [r for r in rows if r["split"] == "test" and r["source"] in ("mcptox_clean_description",
                                                                         "mcptox_poisoned_description")]
     counts: collections.Counter = collections.Counter()
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> None:
         report["msb_heldout_calls"] = judge_calls(judge, args.data, args.models.split(","))
     report["judge_errors_no_opinion"] = judge.errors
     path = args.out / f"report-{args.judge.replace(':', '_')}.json"
-    path.write_text(json.dumps(report, indent=2))
+    path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

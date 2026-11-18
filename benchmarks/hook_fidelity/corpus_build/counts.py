@@ -101,7 +101,7 @@ def derive_measured(summary: dict, captures: list[dict], github: dict) -> dict:
 
 def main(argv: list[str]) -> int:
     path = Path(argv[0]) if argv else Path(__file__).resolve().parents[3] / "results" / "hook-fidelity" / "corpus.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     derived = derive(data)
     print(json.dumps(derived, indent=1))
     return 0 if derived == data.get("summary") else 1

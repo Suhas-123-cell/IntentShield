@@ -129,7 +129,7 @@ def chat_model(provider: str, model: str | None, usage_path: Path, max_failures:
             state["unparsed"] += answer is None
         streak = streak + 1 if content is None else 0
         usage_path.parent.mkdir(parents=True, exist_ok=True)
-        usage_path.write_text(json.dumps(state, indent=1))
+        usage_path.write_text(json.dumps(state, indent=1), encoding="utf-8")
         if streak >= max_failures:
             raise ProviderDown(f"{max_failures} failed requests in a row; last: {state['last_error']}")
         return answer
@@ -303,13 +303,14 @@ def memory_experiment(args: argparse.Namespace, corpus: list[dict[str, Any]], se
               "static": summary(static), "memory": summary(learned), "paired_by_seed": paired,
               "rewrites": {"static": rewrite_counts(static), "memory": rewrite_counts(learned)},
               "provenance": provenance, "benign_cost": benign, "seconds": round(time.time() - started),
-              "requests": json.loads(args.spend.read_text())}
+              "requests": json.loads(args.spend.read_text(encoding="utf-8"))}
     args.report.parent.mkdir(parents=True, exist_ok=True)
-    args.report.write_text(json.dumps(report, indent=2))
+    args.report.write_text(json.dumps(report, indent=2), encoding="utf-8")
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "trials.json").write_text(json.dumps({"seeds": seeds, "static": static, "memory": learned}, indent=1))
+    (args.out / "trials.json").write_text(json.dumps({"seeds": seeds, "static": static, "memory": learned}, indent=1),
+        encoding="utf-8")
     args.spotcheck.parent.mkdir(parents=True, exist_ok=True)
-    args.spotcheck.write_text(spotcheck(static, learned, seeds))
+    args.spotcheck.write_text(spotcheck(static, learned, seeds), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 
@@ -406,8 +407,9 @@ def main(argv: list[str] | None = None) -> None:
               "prompt_guard": args.prompt_guard, "static": summary(static), "learning": summary(learning),
               "benign_cost": cost, "rule_approval": "simulated: every gated proposal approved"}
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "report.json").write_text(json.dumps(report, indent=2))
-    (args.out / "trials.json").write_text(json.dumps({"static": static, "learning": learning, "events": events}, indent=1))
+    (args.out / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (args.out / "trials.json").write_text(json.dumps({"static": static, "learning": learning, "events": events}, indent=1),
+        encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

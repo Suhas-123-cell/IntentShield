@@ -31,13 +31,13 @@ def test_missing_or_tampered_artifact_is_unavailable_not_permissive(tmp_path: Pa
     assert not InjectionClassifier(tmp_path / "missing").ready
     assert InjectionClassifier(tmp_path / "missing").score("anything") == 0.0
     for name in ("config.json", "tokenizer_config.json", "model.safetensors"):
-        (tmp_path / name).write_text("{}")
+        (tmp_path / name).write_text("{}", encoding="utf-8")
     files = {n: hashlib.sha256((tmp_path / n).read_bytes()).hexdigest()
              for n in ("config.json", "tokenizer_config.json", "model.safetensors")}
     meta = {"id2label": {"0": "data", "1": "instruction"}, "threshold": 0.9, "max_length": 256, "files": files}
-    (tmp_path / METADATA).write_text(json.dumps(meta))
+    (tmp_path / METADATA).write_text(json.dumps(meta), encoding="utf-8")
     assert InjectionClassifier(tmp_path).ready
-    (tmp_path / "model.safetensors").write_text("tampered")
+    (tmp_path / "model.safetensors").write_text("tampered", encoding="utf-8")
     assert "hash mismatch" in InjectionClassifier(tmp_path).reason
     with pytest.raises(ValueError, match="not usable"):
         mcp_proxy.MCPProxyRuntime(mcp_proxy.MCPProxyConfig(

@@ -101,7 +101,7 @@ def record(args: argparse.Namespace) -> None:
     for model in args.models.split(","):
         for arm in args.arms.split(","):
             source = args.results / model / f"{arm}.jsonl"
-            rows = [r for r in map(json.loads, source.read_text().splitlines()) if "trace" in r][: args.limit]
+            rows = [r for r in map(json.loads, source.read_text(encoding="utf-8").splitlines()) if "trace" in r][: args.limit]
             sink = RECORDED / model / f"{arm}.jsonl.gz"
             sink.parent.mkdir(parents=True, exist_ok=True)
             done = {json.loads(line)["id"] for line in _lines(sink)} if sink.exists() else set()
@@ -256,7 +256,8 @@ def score(args: argparse.Namespace) -> dict[str, Any]:
     with tempfile.TemporaryDirectory() as tmp:
         for path in sorted(RECORDED.glob("*/*.jsonl.gz")):
             model, arm = path.parent.name, path.name.removesuffix(".jsonl.gz")
-            rows = {r["id"]: r for r in map(json.loads, (args.results / model / f"{arm}.jsonl").read_text().splitlines())
+            rows = {r["id"]: r for r in map(json.loads, (args.results / model / f"{arm}.jsonl").read_text(
+                encoding="utf-8").splitlines())
                     if "trace" in r}
             recs = [json.loads(line) for line in _lines(path)]
             for guard in GUARDS:
@@ -266,7 +267,8 @@ def score(args: argparse.Namespace) -> dict[str, Any]:
                 if args.decisions:
                     sink = args.decisions / model / f"{arm}-{guard}.jsonl"
                     sink.parent.mkdir(parents=True, exist_ok=True)
-                    sink.write_text("".join(json.dumps({"id": r["id"], "decisions": d}) + "\n" for r, d in pairs))
+                    sink.write_text("".join(json.dumps({"id": r["id"], "decisions": d}) + "\n" for r, d in pairs),
+                        encoding="utf-8")
     return report
 
 
@@ -304,7 +306,7 @@ def main(argv: list[str] | None = None) -> None:
     report = score(args)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report, indent=2) + "\n")
+        args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(table(report))
 
 

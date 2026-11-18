@@ -19,7 +19,7 @@ def test_the_gate_fails_on_a_rise_over_the_slack_and_on_a_missing_pair():
 @pytest.mark.skipif(not (review_gate.BASELINE / "msb-replay.json").exists(),
                     reason="needs results/improve/baseline (not in the sdist)")
 def test_the_committed_baseline_has_every_replayed_pair():
-    msb = json.loads((review_gate.BASELINE / "msb-replay.json").read_text())
-    live = json.loads((review_gate.BASELINE / "harness-live-replay.json").read_text())
+    msb = json.loads((review_gate.BASELINE / "msb-replay.json").read_text(encoding="utf-8"))
+    live = json.loads((review_gate.BASELINE / "harness-live-replay.json").read_text(encoding="utf-8"))
     rates = review_gate.load_rates(msb, live)
     assert len(rates) == 25 and {"live hooks", "live guarded", "live memory"} <= rates.keys()

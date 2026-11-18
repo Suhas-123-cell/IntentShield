@@ -485,6 +485,6 @@ def test_the_hook_and_the_proxy_make_their_memory_calls_through_one_class():
     for module in ("harness", "mcp_proxy"):
         path = root / module
         files = sorted(path.glob("*.py")) if path.is_dir() else [root / f"{module}.py"]
-        text = "\n".join(f.read_text() for f in files)
+        text = "\n".join(f.read_text(encoding="utf-8") for f in files)
         assert "getattr(self.memory" not in text and "getattr(self._memory" not in text, module
         assert not re.search(r"self\._(?:memory|remember)\(\s*[\"']", text), module

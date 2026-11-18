@@ -179,12 +179,12 @@ def status_for(guard: dict, gap: dict) -> tuple[str, str, str]:
 
 
 def _load(path: Path, default):
-    return json.loads(path.read_text()) if path.is_file() else default
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
 
 
 GITHUB = _load(GITHUB_META, {})
 REPLAY = _load(GUARDS_DIR / "summary.json", {})
-CAPTURES = [json.loads(line) for line in (GUARDS_DIR / "captures.jsonl").read_text().splitlines() if line.strip()] if (GUARDS_DIR / "captures.jsonl").is_file() else []
+CAPTURES = [json.loads(line) for line in (GUARDS_DIR / "captures.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()] if (GUARDS_DIR / "captures.jsonl").is_file() else []
 
 
 def _agg(guard: str, scenario: str, modes=None, harness: str = "claude", state: str | None = None, builds: bool = True) -> dict:
@@ -334,9 +334,9 @@ def main(argv: list[str] | None = None) -> int:
         rules=rules, summary=summary, measured=measured, guards=GUARDS, excluded=EXCLUDED, not_cloned=NOT_CLONED,
     )
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
-    OUT_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    OUT_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if args.out is not None:
-        args.out.write_text(markdown(data) + "\n")
+        args.out.write_text(markdown(data) + "\n", encoding="utf-8")
     else:
         print("corpus.json written; the Markdown inventory was not (pass --out PATH; it lives on the research-notes branch)", file=sys.stderr)
     print(json.dumps(summary, indent=1))

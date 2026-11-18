@@ -1,6 +1,7 @@
 """Prompt-injection detection: one corpus, every detector, recall per attack family and benign false flags.
 
     .venv/bin/python benchmarks/injection_eval.py [--classifier artifacts/injection-deberta-v3-small] [--judge groq]
+    .venv/bin/python benchmarks/injection_eval.py --from-rows results/injection/rows.jsonl     # the table from committed verdicts
 
 Corpus (label ``instruction`` = tries to steer the agent, ``data`` = benign):
 - ``artifacts/injection/dataset.jsonl`` (benchmarks/injection_data.py): MCPTox poisoned and clean
@@ -52,23 +53,23 @@ def family_of(source: str) -> str:
 
 
 def load_corpus(dataset: Path, injecagent: Path, agentdojo: Path, hard: Path | None = None) -> list[dict[str, Any]]:
-    rows = [json.loads(line) for line in dataset.read_text().splitlines()] if dataset.exists() else []
+    rows = [json.loads(line) for line in dataset.read_text(encoding="utf-8").splitlines()] if dataset.exists() else []
     if hard and hard.exists():
-        rows += [json.loads(line) for line in hard.read_text().splitlines() if line.strip()]
+        rows += [json.loads(line) for line in hard.read_text(encoding="utf-8").splitlines() if line.strip()]
     if injecagent.exists():
         seen = set()
         for setting in INJECAGENT_SETTINGS:
-            for case in json.loads((injecagent / f"test_cases_{setting}.json").read_text()):
+            for case in json.loads((injecagent / f"test_cases_{setting}.json").read_text(encoding="utf-8")):
                 if case["Tool Response"] not in seen:
                     seen.add(case["Tool Response"])
                     rows.append({"text": case["Tool Response"], "label": "instruction",
                                  "source": f"injecagent_{setting}", "group": case["User Tool"]})
-        for line in (injecagent / "user_cases.jsonl").read_text().splitlines():
+        for line in (injecagent / "user_cases.jsonl").read_text(encoding="utf-8").splitlines():
             case = json.loads(line)
             rows.append({"text": case["Tool Response Template"].replace("<Attacker Instruction>", ""),
                          "label": "data", "source": "injecagent_benign", "group": case["User Tool"]})
     if agentdojo.exists():
-        rows += [json.loads(line) for line in agentdojo.read_text().splitlines()]
+        rows += [json.loads(line) for line in agentdojo.read_text(encoding="utf-8").splitlines()]
     for row in rows:
         row.setdefault("split", "external")
         row["kind"], row["family"] = kind_of(row["source"]), family_of(row["source"])
@@ -136,12 +137,17 @@ def any_of(found: dict[str, Detector]) -> Detector:
 
 def evaluate(rows: list[dict[str, Any]], found: dict[str, Detector]) -> dict[str, Any]:
     """Per detector: flagged k/n per family and per label, over the rows it applies to."""
+    return tally(rows, {name: (lambda row, detect=detect: detect(row["text"], row["kind"])) for name, detect in found.items()})
+
+
+def tally(rows: list[dict[str, Any]], verdict: dict[str, Callable[[dict[str, Any]], "bool | None"]]) -> dict[str, Any]:
+    """The report for ``verdict``, one function per detector from a row to flagged, not flagged or None (does not apply)."""
     report: dict[str, Any] = {}
-    for name, detect in found.items():
+    for name, detect in verdict.items():
         by_family: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
         by_label: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
         for row in rows:
-            flagged = detect(row["text"], row["kind"])
+            flagged = detect(row)
             if flagged is None:
                 continue
             for counter in (by_family[f"{row['label']}:{row['family']}"], by_label[row["label"]]):
@@ -155,15 +161,24 @@ def evaluate(rows: list[dict[str, Any]], found: dict[str, Detector]) -> dict[str
     return report
 
 
+def report_from_rows(path: Path) -> tuple[int, str, dict[str, Any]]:
+    """The row count, the splits and the report from the verdicts ``--rows-out`` wrote. Needs no corpus and no detector."""
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    names = list(rows[0]["verdicts"]) if rows else []
+    splits = ",".join(s for s in ("test", "external") if any(r["split"] == s for r in rows))
+    return len(rows), splits, tally(rows, {name: (lambda row, name=name: row["verdicts"].get(name)) for name in names})
+
+
 def print_report(report: dict[str, Any]) -> None:
     names = list(report)
     families = sorted({f for r in report.values() for f in r["families"]})
     cell = lambda r: f"{r['flagged']}/{r['n']} {100 * r['flagged'] / r['n']:.1f}%" if r else "-"
-    print("family".ljust(52) + "".join(n.ljust(20) for n in names))
+    width = {n: max(20, len(n) + 2) for n in names}
+    print("family".ljust(52) + "".join(n.ljust(width[n]) for n in names))
     for key, label in (("recall", "ALL instruction (recall)"), ("benign_flagged", "ALL data (benign flagged)")):
-        print(label.ljust(52) + "".join(cell(report[n][key]).ljust(20) for n in names))
+        print(label.ljust(52) + "".join(cell(report[n][key]).ljust(width[n]) for n in names))
     for family in families:
-        print(family.ljust(52) + "".join(cell(report[n]["families"].get(family)).ljust(20) for n in names))
+        print(family.ljust(52) + "".join(cell(report[n]["families"].get(family)).ljust(width[n]) for n in names))
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -187,7 +202,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--rows-out", type=Path, default=None,
                         help="per-row verdicts as JSONL (text hash, source, label, split, every detector)")
     parser.add_argument("--out", type=Path, default=Path("artifacts/injection-eval/report.json"))
+    parser.add_argument("--from-rows", type=Path, default=None,
+                        help="print the table from a --rows-out file (results/injection/rows.jsonl); nothing is run or written")
     args = parser.parse_args(argv)
+    if args.from_rows:
+        count, splits, report = report_from_rows(args.from_rows)
+        print(f"{count} rows, splits {splits}")
+        print_report(report)
+        return
     load_dotenv(".env")
     rows = [r for r in load_corpus(args.dataset, args.injecagent, args.agentdojo, args.hard)
             if r["split"] in args.splits.split(",")]
@@ -198,9 +220,10 @@ def main(argv: list[str] | None = None) -> None:
         args.rows_out.write_text("".join(json.dumps({
             "sha256": hashlib.sha256(r["text"].encode()).hexdigest()[:16], "source": r["source"],
             "family": r["family"], "label": r["label"], "split": r["split"], "kind": r["kind"],
-            "verdicts": {name: detect(r["text"], r["kind"]) for name, detect in found.items()}}) + "\n" for r in rows))
+            "verdicts": {name: detect(r["text"], r["kind"]) for name, detect in found.items()}}) + "\n" for r in rows),
+                encoding="utf-8")
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps({"rows": len(rows), "splits": args.splits, "detectors": report}, indent=2))
+    args.out.write_text(json.dumps({"rows": len(rows), "splits": args.splits, "detectors": report}, indent=2), encoding="utf-8")
     print(f"{len(rows)} rows, splits {args.splits}")
     print_report(report)
 

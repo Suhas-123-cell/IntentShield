@@ -103,7 +103,7 @@ def test_the_running_package_directory_is_the_guard_too(tmp_path: Path, monkeypa
 
 def _wrapped(path: Path) -> Path:
     path.write_text(json.dumps({"mcpServers": {"fs": {"command": "/opt/v/bin/intentshield-mcp",
-                                                       "args": ["--transparent", "--config", "/h/.intentshield/proxies/fs.json"]}}}))  # noqa: E501
+                                                       "args": ["--transparent", "--config", "/h/.intentshield/proxies/fs.json"]}}}), encoding="utf-8")  # noqa: E501
     return path
 
 
@@ -111,7 +111,7 @@ def test_a_wrapped_client_file_asks_and_an_unwrapped_one_does_not(tmp_path: Path
     wrapped = _wrapped(tmp_path / ".mcp.json")
     plain = tmp_path / "other" / ".mcp.json"
     plain.parent.mkdir()
-    plain.write_text(json.dumps({"mcpServers": {"fs": {"command": "npx", "args": ["-y", "server"]}}}))
+    plain.write_text(json.dumps({"mcpServers": {"fs": {"command": "npx", "args": ["-y", "server"]}}}), encoding="utf-8")
     assert file_verdict(str(wrapped), write=True) == "ask"
     assert file_verdict(".mcp.json", write=True, cwd=str(tmp_path)) == "ask"
     assert verdict("echo '{}' > .mcp.json", cwd=str(tmp_path)) == "ask"
@@ -180,7 +180,7 @@ def test_a_search_of_a_credential_directory_or_the_whole_home_directory_is_not_l
     assert file_verdict("~/proj") == "allow"
 
 
-# --- deny and ask, as the guide lists them ------------------------------------------------------------------------------
+# --- deny and ask, as docs/rules.md lists them ------------------------------------------------------------------------------
 
 def test_a_read_of_the_sudo_rules_asks_and_a_write_is_a_deny():
     assert verdict("cat /etc/sudoers") == "ask"

@@ -95,7 +95,7 @@ def read_events(*logs: Path, run_id: str = "") -> list[dict]:
     for log in logs:
         if not log.exists():
             continue
-        for line in log.read_text().splitlines():
+        for line in log.read_text(encoding="utf-8").splitlines():
             try:
                 event = json.loads(line)
             except ValueError:
@@ -158,13 +158,13 @@ def oracle_hits(kind: str, work: Path, calls_log: Path, nonce: str, attestation:
     (written only by the run's PATH shim); with no attestation given no shell marker counts (see unattested_hits)."""
     if kind == "shell":
         marker = work / _marker_name(kind, nonce)
-        return int(bool(attestation) and marker.is_file() and attestation in marker.read_text(errors="replace"))
+        return int(bool(attestation) and marker.is_file() and attestation in marker.read_text(errors="replace", encoding="utf-8"))
     if kind == "write":
         return int((work / _marker_name(kind, nonce)).is_file())
     if not calls_log.exists():
         return 0
     hits = 0
-    for line in calls_log.read_text().splitlines():
+    for line in calls_log.read_text(encoding="utf-8").splitlines():
         try:
             entry = json.loads(line)
         except ValueError:
@@ -185,7 +185,7 @@ def unattested_hits(kind: str, work: Path, nonce: str, attestation: str = "") ->
     marker = work / _marker_name(kind, nonce)
     if not marker.is_file():
         return 0
-    return int(not (attestation and attestation in marker.read_text(errors="replace")))
+    return int(not (attestation and attestation in marker.read_text(errors="replace", encoding="utf-8")))
 
 
 def _is_user_line(lowered: str) -> bool:
@@ -418,9 +418,9 @@ def validate_row(row: dict) -> dict:
 def append_row(path: Path, row: dict) -> None:
     validate_row(row)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as handle:
+    with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row) + "\n")
 
 
 def read_rows(path: Path) -> list[dict]:
-    return [validate_row(json.loads(line)) for line in path.read_text().splitlines() if line.strip()]
+    return [validate_row(json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]

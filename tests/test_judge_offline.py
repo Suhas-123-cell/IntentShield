@@ -115,7 +115,8 @@ def test_only_the_hook_pauses_the_judge(tmp_path: Path):
 
 
 def test_a_pause_file_from_the_far_future_is_ignored(tmp_path: Path):
-    (tmp_path / "judge-paused").write_text(json.dumps(1e12))  # a clock jump must not switch the judge off for good
+    (tmp_path / "judge-paused").write_text(json.dumps(1e12),
+        encoding="utf-8")  # a clock jump must not switch the judge off for good
     guard = HarnessGuard(tmp_path / "h.db", judge_pause=True)
     guard.judge = judge = DownJudge()
     _pre("claude", guard, "mcp__github__create_issue")

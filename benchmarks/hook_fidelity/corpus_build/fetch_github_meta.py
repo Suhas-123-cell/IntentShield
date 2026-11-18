@@ -36,7 +36,7 @@ def fetch(repo_url: str) -> dict:
 
 def main(argv: list[str]) -> int:
     path = Path(argv[0]) if argv else Path(__file__).resolve().parents[3] / "results" / "hook-fidelity" / "corpus.json"
-    guards = json.loads(path.read_text())["guards"]
+    guards = json.loads(path.read_text(encoding="utf-8"))["guards"]
     out = {"_fetched": datetime.date.today().isoformat(), "_source": "api.github.com/repos/<owner>/<repo>, unauthenticated"}
     for guard in guards:
         try:

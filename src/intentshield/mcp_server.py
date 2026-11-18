@@ -405,7 +405,7 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         # server's read-only tool to another server's tool of the same name.
         temporary.write_text(json.dumps([{"name": exposed(t), "server": t.qualified_name.partition(":")[0],
                                           "tool": t.qualified_name.partition(":")[2], "description": t.description or "",
-                                          "read_only": config.is_read_only(t.qualified_name)} for t in tools]))
+                                          "read_only": config.is_read_only(t.qualified_name)} for t in tools]), encoding="utf-8")
         temporary.replace(path)
 
     @asynccontextmanager

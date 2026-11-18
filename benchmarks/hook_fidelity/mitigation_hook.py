@@ -67,7 +67,7 @@ def main() -> None:
             row["stdin_isatty"] = os.isatty(0)
             row["stdout_isatty"] = os.isatty(1)
             row["ppid"] = os.getppid()
-        with open(log, "a") as handle:
+        with open(log, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row) + "\n")
     if verdict == "probe":
         return

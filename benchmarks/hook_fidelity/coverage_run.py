@@ -125,7 +125,7 @@ def hook_cmd(harness: str, hooks_log: Path, raw_dir: Path) -> str:
 
 def write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -244,7 +244,7 @@ def persist_codex_hook_trust(binary: list[str], env: dict[str, str], cwd: Path, 
         proc.wait()
     text = "".join(f'\n[hooks.state.{json.dumps(h["key"])}]\nenabled = true\ntrusted_hash = {json.dumps(h["currentHash"])}\n'
                    for h in entries)
-    with config.open("a") as handle:
+    with config.open("a", encoding="utf-8") as handle:
         handle.write(text)
     return {"hooks_listed": len(entries), "trust_status_before": sorted({h.get("trustStatus") for h in entries})}
 
@@ -268,7 +268,7 @@ def read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
     out = []
-    for line in path.read_text(errors="replace").splitlines():
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             out.append(json.loads(line))
         except ValueError:
@@ -365,7 +365,7 @@ def launch(harness: str, version: str, binary: list[str], surface: str, rep: int
         if persist_trust:
             row["codex_hook_trust"] = persist_codex_hook_trust(binary, env, cwd, run / "home" / "codex-home" / "config.toml")
         t0 = time.time()
-        with (run / "stdout.txt").open("w") as so, (run / "stderr.txt").open("w") as se:
+        with (run / "stdout.txt").open("w", encoding="utf-8") as so, (run / "stderr.txt").open("w", encoding="utf-8") as se:
             proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=so, stderr=se,
                                     start_new_session=True)
             try:
@@ -389,7 +389,7 @@ def launch(harness: str, version: str, binary: list[str], surface: str, rep: int
     for name in ("stub.jsonl", "probe.jsonl", "hooks.jsonl"):
         if (run / name).exists():
             shutil.copy(run / name, evidence / name)
-    err = (run / "stderr.txt").read_text(errors="replace")[-600:] if (run / "stderr.txt").exists() else ""
+    err = (run / "stderr.txt").read_text(errors="replace", encoding="utf-8")[-600:] if (run / "stderr.txt").exists() else ""
     row["stderr_tail"] = err if not row["valid"] else ""
     return row
 
@@ -427,13 +427,13 @@ def main(argv: list[str] | None = None) -> int:
     done = 0
     for rep in range(a.rep_start, a.rep_start + a.reps):
         for surface in surfaces:
-            order = sum(1 for _ in ledger.open()) if ledger.exists() else 0
+            order = sum(1 for _ in ledger.open(encoding="utf-8")) if ledger.exists() else 0
             row = launch(a.harness, a.version, binary, surface, rep, a.work, a.out, order, a.codex_namespace,
                          a.codex_persist_trust, a.model, tuple(a.drop_env), a.variant)
             done += row.get("launched", False)
-            with (a.out / "rows.jsonl").open("a") as handle:
+            with (a.out / "rows.jsonl").open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row) + "\n")
-            with ledger.open("a") as handle:
+            with ledger.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"order": order, "harness": a.harness, "version": a.version, "surface_run": surface,
                                          "variant": a.variant, "rep": rep, "launched": row.get("launched", False),
                                          "valid": row["valid"],

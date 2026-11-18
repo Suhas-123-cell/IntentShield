@@ -36,12 +36,12 @@ def build(*args, **kwargs):
     log_dir = os.environ.get("R4_PERMREQ_DIR", "")
     if log_dir and "--settings" in spec.argv:   # Claude: add a passive PermissionRequest hook (coverage_hook.py logs the event)
         settings_file = Path(spec.argv[spec.argv.index("--settings") + 1])
-        settings = json.loads(settings_file.read_text())
+        settings = json.loads(settings_file.read_text(encoding="utf-8"))
         command = " ".join([sys.executable, str(HERE / "coverage_hook.py"), "claude",
                             f"{log_dir}/events-{spec.nonce}.jsonl", "--raw-dir", f"{log_dir}/raw-{spec.nonce}"])
         settings.setdefault("hooks", {})["PermissionRequest"] = [
             {"matcher": "", "hooks": [{"type": "command", "command": command, "timeout": 3}]}]
-        settings_file.write_text(json.dumps(settings))
+        settings_file.write_text(json.dumps(settings), encoding="utf-8")
     return spec
 
 

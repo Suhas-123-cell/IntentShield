@@ -311,7 +311,8 @@ def _find_roots(args: list[str]) -> list[str]:
     return roots
 
 
-_PARSED = frozenset({"sed", "perl", "ruby", "tar", "unzip", "tee", "find"}) | _AWKS | _EDITORS | _COPIERS | _DISK_COPIERS
+_PARSED = (frozenset({"sed", "perl", "ruby", "tar", "unzip", "tee", "truncate", "find"}) | _AWKS | _EDITORS | _COPIERS
+           | _DISK_COPIERS)
 
 
 def _find_writes(argv: list[str]) -> list[str]:
@@ -342,9 +343,11 @@ def written_paths(name: str, argv: list[str], redirects: list[tuple[str, str]] |
     """The paths the command ``argv`` (program ``name``) writes, as written: the targets of its output redirects, and what the
     program does to its arguments (see the module's text). A path it only reads is not here."""
     args = argv[1:]
-    out = [t for op, t in redirects or [] if op.startswith(">") and t not in ("/dev/null", "/dev/stderr", "/dev/stdout")]
+    out = [t for op, t in redirects or [] if op.startswith((">", "&>")) and t not in ("/dev/null", "/dev/stderr", "/dev/stdout")]
     if name == "tee":
         out += _options(args)[1]
+    elif name == "truncate":   # truncate -s SIZE FILE... (and -r REFERENCE FILE...): the files are emptied or resized
+        out += [a for a in _options(args, value="sr", longs={"--size": True, "--reference": True})[1] if a]
     elif name in _DISK_COPIERS:
         out += [a[3:] for a in args if a.startswith("of=")]
     elif name in _COPIERS:

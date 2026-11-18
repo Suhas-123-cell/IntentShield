@@ -46,7 +46,7 @@ def build(log_path: Path, tag: str) -> Server:
     state = {"lookup_v_calls": 0}
 
     def log(method: str, **detail: object) -> None:
-        with log_path.open("a") as handle:
+        with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"ts_ns": time.time_ns(), "method": method, **detail}, default=str) + "\n")
 
     def client(ctx) -> dict | None:

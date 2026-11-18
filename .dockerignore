@@ -6,4 +6,18 @@
 .claude
 artifacts
 *.db
-docs/research-notes/icse27-demo/*.pdf
+# Most of the repository by size: the study's committed results and the documents its tests compare them with. The image runs the
+# demo check and the code tests; the study's tests need a full clone and skip here (see tests/conftest.py).
+results
+docs
+# Local caches and notes
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+dist
+CLAUDE.md
+AGENTS.md
+session*.md

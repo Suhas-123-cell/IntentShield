@@ -120,7 +120,7 @@ def _command(*parts: str) -> str:
 
 
 def _write(path: Path, data: object) -> Path:
-    path.write_text(json.dumps(data, indent=1))
+    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
     return path
 
 
@@ -150,7 +150,7 @@ def prepare(job: Job, rundir: Path, model: str, run_budget: float) -> tuple[list
     env.update(PYTHONPATH=str(ROOT / "src"), INTENTSHIELD_INTENT_MODEL_DIR="/nonexistent")
     if job.arm != "direct":
         hook = _command(py, "-m", "intentshield.harness", "claude")
-        settings = json.loads((ROOT / "configs/harness/claude-settings.json").read_text())
+        settings = json.loads((ROOT / "configs/harness/claude-settings.json").read_text(encoding="utf-8"))
         for entries in settings["hooks"].values():
             for entry in entries:
                 for h in entry["hooks"]:
@@ -179,8 +179,8 @@ def run(job: Job, out: Path, model: str, run_budget: float, timeout: float) -> d
         stderr, code = "timeout", None
     left_behind = sorted(str(p.relative_to(cwd)) for p in cwd.rglob("*"))
     shutil.rmtree(cwd, ignore_errors=True)
-    (rundir / "transcript.jsonl").write_text(stdout)
-    (rundir / "stderr.txt").write_text(stderr or "")
+    (rundir / "transcript.jsonl").write_text(stdout, encoding="utf-8")
+    (rundir / "stderr.txt").write_text(stderr or "", encoding="utf-8")
     row = score(job, _events(stdout), _calls(rundir / "calls.jsonl"))
     row.update(exit_code=code, seconds=round(time.time() - started, 1), cwd_left_behind=left_behind,
                hook_sessions=_hook_sessions((job.shared or rundir) / "hooks.db") if job.arm != "direct" else None)
@@ -198,7 +198,7 @@ def _events(stdout: str) -> list[dict]:
 
 
 def _calls(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
 
 
 def _hook_sessions(db: Path) -> int:
@@ -274,7 +274,7 @@ def main() -> None:
     scenarios = sorted((s for s in SCENARIOS if not wanted or s.name in wanted), key=lambda s: s.order)
     args.out.mkdir(parents=True, exist_ok=True)
     rows_path = args.out / "runs.jsonl"
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines()] if rows_path.exists() else []
+    rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines()] if rows_path.exists() else []
     done, spent = {r["key"] for r in rows}, sum(r.get("total_cost_usd") or 0 for r in rows)
     _write(args.out / "provenance.json", {
         "model": args.model, "claude_version": subprocess.run(["claude", "--version"], capture_output=True,
@@ -310,7 +310,7 @@ def main() -> None:
             with lock:
                 state["spent"] += row["total_cost_usd"] - args.run_budget_usd
                 state["done"] += 1
-                with rows_path.open("a") as f:
+                with rows_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(row) + "\n")
                 flags = [k for k in ("harm", "leak", "utility", "false_block", "is_error") if row[k]]
                 print(f"[{state['done']}/{total}] {job.key:40} ${row['total_cost_usd']:.4f} turns={row['num_turns']} "

@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import re
 import shlex
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from .core import _bin, _canon, _Stage
 from .parsing import _ASSIGN, _ENV_LONG, _NICE_LONG, _SUDO_LONG, _SUDO_VALUED, _TIMEOUT_LONG, _XARGS_VALUED, _strip_keywords
 
+# Set while a stage is read once more as 0.4.4 read it, with the programs added as wrappers since then taken for ordinary
+# programs.
+AS_IN_0_4_4: ContextVar[bool] = ContextVar("as_in_0_4_4", default=False)
 _UNWRAP_LIMIT = 8   # wrappers (sudo, env, nohup...) read through in front of one command
 _TOO_MANY_WRAPPERS = f"more than {_UNWRAP_LIMIT} wrappers (sudo, env, nohup...) in front of the command, too many to read through"
 
@@ -25,12 +29,14 @@ class _Runner:
     string: bool = False
     # -dmS name is the options -d, -m and -S with a value; off where an option is one word of several letters
     cluster: bool = True
+    # the program joins the words that are left with spaces and hands them to a shell (``watch``): a word ``;`` ends a command
+    shell: bool = False
 
 
 def _runner(valued: str = "", skip: int = 0, unless: str = "", code: str = "", string: bool = False, cluster: bool = True,
-            pairs: str = "") -> _Runner:
+            pairs: str = "", shell: bool = False) -> _Runner:
     return _Runner(frozenset(valued.split()), skip, frozenset(pairs.split()), frozenset(unless.split()), frozenset(code.split()),
-                   string, cluster)
+                   string, cluster, shell)
 
 
 # The programs that run the program given in their last words, read from the manual pages of coreutils (env, nice, nohup, stdbuf,
@@ -65,7 +71,7 @@ _RUNNERS: dict[str, _Runner] = {
     "xcrun": _runner("-sdk --sdk -toolchain --toolchain", cluster=False),
     "sandbox-exec": _runner("-f -n -p -D"),
     "parallel": _runner("-j --jobs -n -N --max-args -S --sshlogin -a --arg-file -I -L -P -E -d --delimiter -C --colsep "
-                        "--results"),
+                        "--results", shell=True),
     "sshpass": _runner("-p -f -d -P"),
     "ssh-agent": _runner("-a -E -P -t"),
     "pkexec": _runner("--user"),
@@ -87,12 +93,39 @@ _RUNNERS: dict[str, _Runner] = {
     "screen": _runner("-S -t -p -c -s -T -e -h"),
     "valgrind": _runner(),
     "gdb": _runner(),
-    "firejail": _runner(),
+    "firejail": _runner(shell=True),
     "bwrap": _runner("--tmpfs --proc --dev --chdir --uid --gid --hostname --unsetenv --perms --size --dir --mqueue --lock-file "
                      "--sync-fd --userns --userns2 --pidns --cap-add --cap-drop --seccomp --block-fd --info-fd --json-status-fd",
                      pairs="--bind --bind-try --dev-bind --dev-bind-try --ro-bind --ro-bind-try --symlink --file --bind-data "
                            "--ro-bind-data --chmod --setenv --remount-ro"),
 }
+# Programs that became wrappers after 0.4.4. Their own words are still read by the rule that asks about a key or a credential
+# file named as an argument (see ``_unwrap``), so that reading them as wrappers never gives a weaker verdict than before.
+_ADDED_RUNNERS: dict[str, _Runner] = {
+    # Container init programs, user switchers, process supervisors and terminal emulators that run the command given to them.
+    "gosu": _runner(skip=1), "su-exec": _runner(skip=1), "setuidgid": _runner(skip=1),
+    # runcon CONTEXT COMMAND, or runcon -t TYPE -u USER... COMMAND: the context is a word of its own only when no option gives it
+    "runcon": _runner("-t -u -r -l --type --user --role --range", skip=1,
+                      unless="-c --compute -t -u -r -l --type --user --role --range"),
+    "chpst": _runner("-u -U -b -e -/ -n -l -L -m -d -o -p -f -c"),
+    "dumb-init": _runner("-r --rewrite"), "tini": _runner("-p -e"),
+    "watchexec": _runner("-w --watch -e --exts -i --ignore -f --filter -E --env -d --debounce --shell --workdir", shell=True),
+    "entr": _runner(code="-s"),
+    # dtach -c SOCKET COMMAND (also -a, -A, -n): the socket is the value of the mode, and -z takes no value
+    "dtach": _runner("-a -A -c -n -e -r"),
+    # abduco -n NAME COMMAND (also -a, -A, -c): the session name is the value of the mode, and -e takes the detach key
+    "abduco": _runner("-a -A -c -n -e"),
+    "rlwrap": _runner("-b -C -D -f -F -H -l -N -P -s -S -t -z"),
+    "cgexec": _runner("-g"),
+    "xterm": _runner("-T -title -geometry -fn -bg -fg -display -class -name -xrm"),
+    "uxterm": _runner("-T -title -geometry -fn -bg -fg -display -class -name -xrm"),
+    "urxvt": _runner("-T -title -geometry -fn -bg -fg -display -name"),
+    "alacritty": _runner("-t --title --class --working-directory -o --option --config-file"),
+    "konsole": _runner("--workdir --profile -p"),
+    "gnome-terminal": _runner("--title --working-directory --profile --geometry --role --zoom", code="-e --command"),
+    "terminator": _runner("-T --title -p --profile --working-directory -g --geometry", code="-e --command"),
+}
+_RUNNERS.update(_ADDED_RUNNERS)
 # Programs whose first operand names a subcommand that runs a program: ``uv run -- cmd``, ``bundle exec cmd``.
 _SUB_RUNNERS: dict[str, tuple[frozenset[str], _Runner]] = {
     "uv": (frozenset({"run"}),
@@ -109,11 +142,17 @@ _SUB_RUNNERS: dict[str, tuple[frozenset[str], _Runner]] = {
     "nodenv": (frozenset({"exec"}), _runner()),
     "npm": (frozenset({"exec"}), _runner("-w --workspace")), "pnpm": (frozenset({"exec"}), _runner()),
     "yarn": (frozenset({"exec"}), _runner()),
+    "zellij": (frozenset({"run", "r"}), _runner("-n --name --cwd -d --direction --width --height -x -y --pinned --borderless")),
 }
+# Options of a program with subcommands that come before the subcommand and take a value in the next word.
+_SUB_GLOBAL_VALUED = {"zellij": frozenset({"-c", "--config", "--config-dir", "-l", "--layout", "-n", "--new-session-with-layout",
+                                           "-s", "--session", "--data-dir", "--max-panes"})}
 _WRAPPERS = frozenset({"nohup", "command", "nice", "ionice", "setsid", "builtin", "timeout", "gtimeout", "chronic", "unbuffer",
-                       "xargs", "doas", "env", "sudo"}) | frozenset(_RUNNERS)
+                       "xargs", "doas", "env", "sudo", "tmux", "osascript"}) | frozenset(_RUNNERS)
+_ADDED_WRAPPERS = frozenset({"tmux", "osascript", "zellij"}) | frozenset(_ADDED_RUNNERS)   # wrappers since 0.4.4
 _ARCH_WORDS = frozenset({"x86_64", "i386", "i686", "aarch64", "arm64", "armv7l", "ppc64", "ppc64le", "s390x", "riscv64",
                          "linux32", "linux64", "uname26"})
+_OPERATOR_WORDS = frozenset({";", "&", "&&", "|", "||", "|&", ";;", "(", ")", "<", ">", ">>"})
 _SHELL_WORDS = frozenset({"-s", "-i", "--shell", "--login"})   # sudo -s, sudo -i: the words that are left are run by a shell
 
 
@@ -139,7 +178,7 @@ def _read_runner(spec: _Runner, words: list[str]) -> tuple[list[str], list[str]]
             if head not in names:
                 continue
             supplied = supplied or head in spec.unless
-            if take:
+            if take and (head in spec.valued or head in spec.pairs or head in spec.code):   # runcon -c is a flag with no value
                 value = argv.pop(0) if argv else ""
                 if head in spec.pairs and argv:
                     argv.pop(0)
@@ -159,6 +198,148 @@ def _read_runner(spec: _Runner, words: list[str]) -> tuple[list[str], list[str]]
     if spec.string and len(argv) == 1 and re.search(r"\s", argv[0]):
         return [], [argv[0]]
     return argv, code
+
+
+# --- tmux and osascript ------------------------------------------------------------------------------------------------------
+
+# The aliases of the tmux commands that run a shell command or hand text to a shell, and the letters of each one's options that
+# take a value (the next word, or the rest of the cluster).
+_TMUX_ALIASES = {"new": "new-session", "neww": "new-window", "splitw": "split-window", "respawnp": "respawn-pane",
+                 "respawnw": "respawn-window", "run": "run-shell", "if": "if-shell", "popup": "display-popup",
+                 "pipep": "pipe-pane", "send": "send-keys", "confirm": "confirm-before", "bind": "bind-key"}
+_TMUX_VALUED = {"new-session": "cefFnstxy", "new-window": "ceFnt", "split-window": "ceFltp", "respawn-pane": "cet",
+                "respawn-window": "cet", "run-shell": "dt", "if-shell": "t", "display-popup": "bcdehsStTwxy", "pipe-pane": "t",
+                "send-keys": "Ntc", "confirm-before": "cpt", "bind-key": "NT", "set-hook": "t"}
+_TMUX_KEY = re.compile(r"(?:Enter|C-m|C-j|KPEnter|Tab|Space|Escape|BSpace|Up|Down|Left|Right|Home|End|PageUp|PageDown|"
+                       r"(?:[CMS]-)+\S)", re.I)
+
+
+def _tmux_split(words: list[str], valued: str) -> tuple[list[str], list[str]]:
+    """(the operands, the flags) of one tmux command's words: options come first, a cluster of them is read letter by letter, and
+    a letter that takes a value takes the rest of the cluster or else the next word. The words from the first operand on are
+    operands."""
+    flags: list[str] = []
+    i = 0
+    while i < len(words):
+        a = words[i]
+        if a == "--":
+            i += 1
+            break
+        if not (a.startswith("-") and len(a) > 1):
+            break
+        i += 1
+        for k, letter in enumerate(a[1:], 1):
+            flags.append(letter)
+            if letter in valued:
+                if k == len(a) - 1:
+                    i += 1
+                break
+    return words[i:], flags
+
+
+def _one_command(words: list[str]) -> str:
+    """The words of a shell command as the text a shell reads: one word is already that text, several are quoted into one line."""
+    return words[0] if len(words) == 1 else shlex.join(words)
+
+
+def _tmux_command(words: list[str]) -> str:
+    """The words of a tmux command that another tmux command carries (``if-shell``, ``bind-key``), as a tmux command line."""
+    return f"tmux {words[0]}" if len(words) == 1 else shlex.join(["tmux", *words])
+
+
+def _tmux_codes(words: list[str]) -> list[str]:
+    """The shell text a tmux command line runs (``new-session``, ``split-window``, ``run-shell``, ``send-keys``...), and the tmux
+    commands that others carry (``if-shell``, ``bind-key``, a second command after ``;``) as tmux command lines to read again."""
+    segments: list[list[str]] = [[]]
+    for w in words:
+        if w == ";":
+            segments.append([])
+        else:
+            segments[-1].append(w)
+    first, codes = segments[0], [shlex.join(["tmux", *seg]) for seg in segments[1:] if seg]
+    i = 0
+    while i < len(first) and first[i].startswith("-") and first[i] != "--":   # the options of tmux itself
+        if first[i] == "-c" and i + 1 < len(first):
+            codes.append(first[i + 1])   # tmux -c COMMAND runs the command with the default shell
+        i += 2 if first[i][1:2] in "cfLST" and len(first[i]) == 2 else 1
+    if i >= len(first):
+        return codes
+    rest = first[i:]
+    if len(rest) == 1 and re.search(r"\s", rest[0]):   # a whole tmux command given as one word ("run-shell 'make'")
+        try:
+            rest = shlex.split(rest[0])
+        except ValueError:
+            return codes
+    name = _TMUX_ALIASES.get(rest[0], rest[0])
+    valued = _TMUX_VALUED.get(name)
+    if valued is None:
+        return codes
+    operands, flags = _tmux_split(rest[1:], valued)
+    if name in ("new-session", "new-window", "split-window", "respawn-pane", "respawn-window", "pipe-pane", "display-popup") or (
+            name == "run-shell" and "C" not in flags):
+        if operands:
+            codes.append(_one_command(operands))
+    elif name == "send-keys":   # the text goes to the pane's shell: what is not the name of a key is typed
+        text = [w for w in operands if not _TMUX_KEY.fullmatch(w)]
+        if text:
+            codes.append(" ".join(text))
+    elif name == "if-shell" and operands:
+        codes.append(operands[0])
+        codes += [_tmux_command(shlex.split(c) if re.search(r"\s", c) else [c]) for c in operands[1:3] if c.strip()]
+    elif name in ("bind-key", "set-hook") and len(operands) > 1:   # the key (or the hook) and then a tmux command
+        codes.append(_tmux_command(operands[1:]))
+    elif name == "confirm-before" and operands:
+        codes.append(_tmux_command(operands))
+    return codes
+
+
+_APPLESCRIPT_SHELL = re.compile(r'do\s+shell\s+script\s+"((?:[^"\\]|\\.){1,2000})"', re.I)
+
+
+def _osascript_codes(words: list[str]) -> list[str]:
+    """The shell text of ``do shell script "..."`` in the AppleScript that ``osascript -e`` is given."""
+    codes = []
+    for k, a in enumerate(words[:-1]):
+        if a == "-e":
+            for m in _APPLESCRIPT_SHELL.finditer(words[k + 1]):
+                codes.append(re.sub(r"\\(.)", r"\1", m[1]))
+    return codes
+
+
+_APPLESCRIPT_RUNS = re.compile(r"\bdo\s+script\b|\bdoShellScript\b|\bdoScript\b|\bwrite\s+text\b|\brun\s+script\b", re.I)
+_APPLESCRIPT_STRING = re.compile(r'do\s+shell\s+script\s+"(?:[^"\\]|\\.){0,2000}"(?P<rest>[^\n\r]*)', re.I)
+_OSASCRIPT_VALUED = frozenset({"-l", "-s"})
+
+
+def _osascript_unread(argv: list[str]) -> list[str]:
+    """Why the script ``osascript`` is given runs a shell command that is not read: it comes in on the standard input, it runs the
+    command through ``do script``, ``doShellScript`` or ``write text``, or it builds the text of ``do shell script`` from parts.
+    A script in a file is not read either, and not asked about."""
+    scripts, files, i = [], [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "-e" and i + 1 < len(argv):
+            scripts.append(argv[i + 1])
+            i += 2
+        elif a in _OSASCRIPT_VALUED:
+            i += 2
+        elif a.startswith("<"):   # a redirect that the lexer left among the words (a here document): its text is the script
+            i += 2 if a in ("<", "<<", "<<-", "<<<") else 1
+        elif a.startswith("-") and a != "-":
+            i += 1
+        else:
+            files.append(a)
+            i += 1
+    if not scripts and (not files or files[0] == "-"):
+        return ["osascript reads its script from the standard input, which is not read; check what it runs."]
+    text = "\n".join(scripts)
+    if _APPLESCRIPT_RUNS.search(text):
+        return ["osascript runs a command through do script, doShellScript or write text, which is not read; check what it runs."]
+    for m in re.finditer(r"do\s+shell\s+script\b", text, re.I):
+        found = _APPLESCRIPT_STRING.match(text, m.start())
+        if not found or "&" in found["rest"]:
+            return ["osascript builds the text of do shell script from parts, which is not read; check what it runs."]
+    return []
 
 
 def _stdin_of(stage: _Stage) -> str:
@@ -217,9 +398,22 @@ def _runner_tail(name: str, argv: list[str]) -> list[str]:
     return argv
 
 
+def _sub_index(name: str, argv: list[str]) -> int | None:
+    """Where the subcommand that runs a program stands in ``argv`` (``argv[0]`` is the program: ``uv run``, ``zellij -l x run``),
+    or None when the words are not such a call."""
+    sub = _SUB_RUNNERS.get(name)
+    if not sub:
+        return None
+    valued, i = _SUB_GLOBAL_VALUED.get(name, frozenset()), 1
+    while i < len(argv) and argv[i].startswith("-") and argv[i] != "--":
+        i += 2 if argv[i] in valued else 1
+    return i if i < len(argv) and argv[i] in sub[0] else None
+
+
 def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
     """Strips assignments, sudo, env, nohup, time... from the front. Returns the bare stage and what the wrappers carried: shell
-    text they run (``("code", text)``, ``flock -c``, ``sudo -s``) and a limit that stopped the reading (``("note", why)``)."""
+    text they run (``("code", text)``, ``flock -c``, ``sudo -s``) and a limit that stopped the reading (``("note", why)``).
+    Where ``AS_IN_0_4_4`` is set, a program that became a wrapper after 0.4.4 is left as it was, a program like any other."""
     argv = list(stage.argv)
     sudo, assigns = stage.sudo, list(stage.assigns)
     xargs = stage.xargs
@@ -231,23 +425,37 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
         if not argv:
             break
         name = _bin(argv[0])
-        sub = _SUB_RUNNERS.get(name)
-        if sub and not (len(argv) > 1 and argv[1] in sub[0]):
+        sub, at = _SUB_RUNNERS.get(name), _sub_index(name, argv)
+        if sub and at is None:
             break
         if name not in _WRAPPERS and not sub:
+            break
+        if name in _ADDED_WRAPPERS and AS_IN_0_4_4.get():
             break
         argv.pop(0)
         sudo = sudo or name in ("sudo", "doas")
         xargs = xargs or name in ("xargs", "parallel")
-        if sub:
-            argv.pop(0)
+        if sub and at is not None:
+            del argv[:at]
             argv, code = _read_runner(sub[1], argv)
             inner.extend(("code", c) for c in code)
             continue
+        if name in ("tmux", "osascript"):   # what they are given is shell text, and there is nothing left to unwrap
+            if name == "tmux":
+                inner.extend(("code", c) for c in _tmux_codes(argv))
+            else:
+                inner.extend(("code", c) for c in _osascript_codes(argv))
+                inner.extend(("note", why) for why in _osascript_unread(argv))
+            argv = []
+            break
         if name in _RUNNERS:
             argv, code = _read_runner(_RUNNERS[name], argv)
             inner.extend(("code", c) for c in code)
             argv = _runner_tail(name, argv)
+            if (_RUNNERS[name].shell or _RUNNERS[name].string) and ";" in argv:
+                # the words are joined with spaces and run by a shell, which reads a word ``;`` as the end of a command
+                inner.append(("code", " ".join(shlex.quote(a) if re.search(r"\s", a) else a for a in argv)))
+                argv = []
             continue
         argv, shell_words = _skip_flags(name, argv)
         if argv and argv[0] == "--":
@@ -257,14 +465,14 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
         if name == "nice" and argv and argv[0].lstrip("+-").isdigit():
             argv.pop(0)
         if shell_words and argv:   # sudo -s rm -rf /: the shell is given the words as one command line
-            inner.append(("code", " ".join(argv)))
+            # sudo puts a backslash before the characters the shell reads as syntax, so a word that is an operator stays a word
+            inner.append(("code", " ".join(shlex.quote(a) if a in _OPERATOR_WORDS else a for a in argv)))
             argv = []
     else:
         rest = _strip_keywords(argv)
         while rest and _ASSIGN.match(rest[0]):
             rest.pop(0)
-        if rest and (_bin(rest[0]) in _WRAPPERS or _bin(rest[0]) in _SUB_RUNNERS and len(rest) > 1
-                     and rest[1] in _SUB_RUNNERS[_bin(rest[0])][0]):
+        if rest and (_bin(rest[0]) in _WRAPPERS or _sub_index(_bin(rest[0]), rest) is not None):
             inner.append(("note", _TOO_MANY_WRAPPERS))
     inner = [(kind, text + _stdin_of(stage) if kind == "code" else text) for kind, text in inner]
     return _Stage(argv, stage.redirects, stage.piped, stage.pipeline, sudo, assigns, xargs), inner

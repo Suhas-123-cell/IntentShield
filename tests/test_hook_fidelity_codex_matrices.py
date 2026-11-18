@@ -28,10 +28,11 @@ def test_committed_r4_rows_match_the_readme_counts():
     rows_path = base / "codex" / "r4-gaps" / "runs.jsonl"
     if not rows_path.is_file():
         return
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
+    rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     persisted = [r for r in rows if r["state"] == "trusted-persisted" and r["reply"] in ("R3", "R5", "R9", "R11", "R16")]
     assert len(persisted) == 20 and all(r["outcome"] == "RAN" and r["hook_invoked"] is True for r in persisted)
-    flip = [json.loads(x) for x in (base / "claude" / "r4-gaps" / "bisect" / "runs.jsonl").read_text().splitlines() if x.strip()]
+    flip = [json.loads(x) for x in (base / "claude" / "r4-gaps" / "bisect" / "runs.jsonl").read_text(
+        encoding="utf-8").splitlines() if x.strip()]
     ask = {r["version"]: {x["outcome"] for x in flip if x["version"] == r["version"] and x["reply"] == "R3"} for r in flip}
     assert ask["2.1.84"] == {"RAN"} and ask["2.1.85"] == {"BLOCKED"}
 

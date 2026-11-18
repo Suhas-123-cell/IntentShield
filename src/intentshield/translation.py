@@ -153,14 +153,15 @@ def _cache(home: Path | None) -> Path:
     return (home or Path.home()) / ".intentshield" / CACHE_NAME
 
 
-def record_version(harness: str, version: str, binary: str, home: Path | None = None, path: str = "") -> None:
+def record_version(harness: str, version: str, binary: str, home: Path | None = None, path: str = "") -> bool:
     """Remember ``harness``'s version, the binary it was read from (its size and modification time, to notice an update in
     place) and the path it was found at (``path``: a symlink such as ``~/.local/bin/claude`` that an auto-update repoints to a new
     versioned file, which the size and time of the old file cannot show). The write is atomic: a hook reading the cache never sees
-    half of it."""
+    half of it. The record only saves the next ``--version`` run: a home that cannot be written (a read-only container, a full
+    disk) leaves it unrecorded and returns False, and the caller carries on with the version it has."""
     cache = _cache(home)
     try:
-        data = json.loads(cache.read_text())
+        data = json.loads(cache.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
     if not isinstance(data, dict):  # a file that holds a list or null is no record
@@ -171,10 +172,18 @@ def record_version(harness: str, version: str, binary: str, home: Path | None = 
     except OSError:
         stamp = {}
     data[harness] = {"version": version, "binary": binary, "checked": time.time(), **stamp, **({"path": path} if path else {})}
-    private_dir(cache.parent)
     tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, indent=1))
-    os.replace(tmp, cache)
+    try:
+        private_dir(cache.parent)
+        tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        os.replace(tmp, cache)
+    except (OSError, ValueError):   # ValueError: a path with a NUL byte
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return False
+    return True
 
 
 def probe_and_record(harness: str, home: Path | None = None, timeout: float = 20.0, program: str | None = None) -> Version | None:
@@ -200,7 +209,7 @@ def recorded_version(harness: str, home: Path | None = None) -> tuple[Version | 
     if override:
         return parse_version(override), "" if parse_version(override) else "INTENTSHIELD_HARNESS_VERSION is not a version"
     try:
-        entry = json.loads(_cache(home).read_text())[harness]
+        entry = json.loads(_cache(home).read_text(encoding="utf-8"))[harness]
         version = parse_version(entry["version"])
     except (OSError, ValueError, KeyError, TypeError):
         return None, "no version recorded (run `intentshield doctor`)"
@@ -577,7 +586,7 @@ class Semantics:
         stale = self.version is None
         if not stale and running:
             try:
-                entry = json.loads(_cache(self.home).read_text())[self.harness]
+                entry = json.loads(_cache(self.home).read_text(encoding="utf-8"))[self.harness]
                 stale = os.path.realpath(running) != entry.get("binary")
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 stale = True

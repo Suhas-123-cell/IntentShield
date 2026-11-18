@@ -16,7 +16,7 @@ from intentshield.mcp_upstream import MCPCallResult, MCPErrorInfo
 from intentshield.models import Decision, ReasonCode
 from intentshield.threat_memory import ThreatMemory
 
-# docs/related-work.md, "schema-valid lie" (TrustShift semantic corruption): a normal-looking record
+# A "schema-valid lie" (semantic corruption of a tool result): a normal-looking record
 # whose IBAN is the attacker's, printed in groups of four as invoices print it. No instruction at all.
 RECORD = {"vendor": "Acme GmbH", "invoice": "INV-2291", "amount": "1200.00 EUR",
           "iban": "DE89 3704 0044 0532 0130 00", "due": "2026-11-01"}

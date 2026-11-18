@@ -104,7 +104,7 @@ from .mcp_inspect import (
     readable,
     sourced_from,
 )
-from .storage import add_column
+from .storage import Migration, add_column, migrate
 
 MAX_TEXT = 20_000  # as learning.MAX_TEXT (not imported: learning needs numpy)
 SHINGLE, MIN_WORDS, MAX_WORDS, CONTAINMENT = 3, 8, 80, 0.6
@@ -157,9 +157,23 @@ CREATE TABLE IF NOT EXISTS threat_sources (
 CREATE TABLE IF NOT EXISTS threat_allowlist (value TEXT PRIMARY KEY, added REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS threat_benign (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, added REAL NOT NULL);
 """
-# Columns added after the first schema. Processes starting together may both try to add one.
+# Columns added after the first schema.
 _ADDED = (("threat_indicators", "decided_at", "REAL"), ("threat_fingerprints", "decided_at", "REAL"),
           ("threat_fingerprints", "anchor_json", "TEXT"))
+
+
+def _schema_1(db: sqlite3.Connection) -> None:
+    """The schema of 0.4.4 and earlier: the tables and the columns added since the first release."""
+    for statement in _SCHEMA.split(";"):
+        if statement.strip():
+            db.execute(statement)
+    for table, column, kind in _ADDED:
+        add_column(db, table, column, kind)
+
+
+# The version of the database is kept in ``PRAGMA user_version`` (see ``storage.migrate``).
+MIGRATIONS: tuple[Migration, ...] = (_schema_1,)
+SCHEMA_VERSION = len(MIGRATIONS)
 
 
 def _id(*parts: str) -> str:
@@ -406,9 +420,7 @@ class ThreatMemory:
                 db.execute("PRAGMA journal_mode=WAL")
             except sqlite3.OperationalError:  # another process is switching it; busy_timeout still holds
                 pass
-            db.executescript(_SCHEMA)
-            for table, column, kind in _ADDED:
-                add_column(db, table, column, kind)
+            self.schema_version = migrate(db, MIGRATIONS, ('threat_indicators', 'threat_fingerprints', 'threat_sightings'))
         finally:
             db.close()
         self._lock = threading.Lock()

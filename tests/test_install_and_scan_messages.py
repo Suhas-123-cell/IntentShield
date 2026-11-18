@@ -34,7 +34,7 @@ def test_a_byte_order_mark_is_named_as_the_cause(tmp_path: Path):
 
 def test_a_file_without_a_mark_still_gets_the_comments_hint(tmp_path: Path):
     mcp = tmp_path / ".mcp.json"
-    mcp.write_text('{"mcpServers": {},}')
+    mcp.write_text('{"mcpServers": {},}', encoding="utf-8")
     with pytest.raises(json.JSONDecodeError) as caught:
         install.wrap(mcp, out_dir=tmp_path / "out")
     assert "comments and trailing commas" in str(caught.value) and "byte order mark" not in str(caught.value)
@@ -44,11 +44,11 @@ def test_wrap_asks_to_close_the_client_only_for_the_file_it_rewrites(tmp_path: P
     monkeypatch.chdir(tmp_path)
     vscode = tmp_path / ".vscode" / "mcp.json"
     vscode.parent.mkdir()
-    vscode.write_text(json.dumps({"servers": {"ok": {"command": "plain-server"}}}))
+    vscode.write_text(json.dumps({"servers": {"ok": {"command": "plain-server"}}}), encoding="utf-8")
     install.wrap(vscode, out_dir=tmp_path / "out")
     assert "Next: restart the MCP client that reads" in (out := capsys.readouterr().out) and "claude.json" not in out
     claude = home / ".claude.json"
-    claude.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server"}}}))
+    claude.write_text(json.dumps({"mcpServers": {"ok": {"command": "plain-server"}}}), encoding="utf-8")
     install.wrap(claude, out_dir=tmp_path / "out2")
     assert "close it before wrapping ~/.claude.json" in capsys.readouterr().out
 
@@ -69,7 +69,7 @@ def test_a_server_error_that_fits_is_not_changed():
 
 def test_a_scan_of_the_current_directory_says_how_to_start_one_file(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".mcp.json").write_text(json.dumps({"mcpServers": {"a": {"command": "plain-server"}}}))
+    (tmp_path / ".mcp.json").write_text(json.dumps({"mcpServers": {"a": {"command": "plain-server"}}}), encoding="utf-8")
     servers = scan.discover(tmp_path / "nohome", tmp_path)
     findings = scan.scan(servers)
     assert "intentshield scan .mcp.json" in scan.report(servers, findings, tmp_path / "nohome")

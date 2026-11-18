@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> None:
         args.out.write_text(json.dumps({"request": REQUEST, "judges": list(judges),
                                         "endpoints": {spec: adaptive_judge.judge_endpoint(j) for spec, j in judges.items()},
                                         "victim": args.victim,
-                                        "summary": summary, "rows": rows}, indent=1, ensure_ascii=False))
+                                        "summary": summary, "rows": rows}, indent=1, ensure_ascii=False), encoding="utf-8")
 
 
 if __name__ == "__main__":

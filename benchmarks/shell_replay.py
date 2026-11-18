@@ -265,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
            builtin_tools=not args.mcp_only)
     result = report(tally)
     if args.out:
-        args.out.write_text(json.dumps(result, indent=2) + "\n")
+        args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return 0
 
 

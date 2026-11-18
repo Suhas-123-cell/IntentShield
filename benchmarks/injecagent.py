@@ -51,7 +51,7 @@ def words(name: str) -> list[str]:
 
 def load_tools(data: Path) -> dict[str, dict[str, Any]]:
     tools: dict[str, dict[str, Any]] = {}
-    for toolkit in json.loads((data / "tools.json").read_text()):
+    for toolkit in json.loads((data / "tools.json").read_text(encoding="utf-8")):
         for tool in toolkit["tools"]:
             props = {
                 p["name"]: {"type": _TYPES.get(p["type"], "string"), "description": p["description"]}
@@ -197,7 +197,7 @@ def sample_cases(data: Path, limit: int, seed: int, exclude_seed: int | None = N
     rng = random.Random(seed)
     cases: list[dict[str, Any]] = []
     for setting in SETTINGS:
-        rows = json.loads((data / f"test_cases_{setting}.json").read_text())
+        rows = json.loads((data / f"test_cases_{setting}.json").read_text(encoding="utf-8"))
         pool = [i for i in range(len(rows)) if (setting, i) not in excluded]
         for index in sorted(rng.sample(pool, min(limit, len(pool)))):
             cases.append({**rows[index], "_setting": setting, "_index": index})
@@ -212,9 +212,9 @@ def output_layer(data: Path, cache_path: Path) -> dict[str, Any]:
     """Score the MCP proxy's output layer on cached generations: scan the injected
     tool response, taint its values, and block attacker calls that reuse them."""
     rows = {(s, i): row for s in SETTINGS
-            for i, row in enumerate(json.loads((data / f"test_cases_{s}.json").read_text()))}
+            for i, row in enumerate(json.loads((data / f"test_cases_{s}.json").read_text(encoding="utf-8")))}
     stats: dict[str, collections.Counter] = {}
-    for line in cache_path.read_text().splitlines():
+    for line in cache_path.read_text(encoding="utf-8").splitlines():
         gen = json.loads(line)
         case = rows[(gen["setting"], gen["index"])]
         c = stats.setdefault(gen["setting"], collections.Counter())
@@ -266,13 +266,13 @@ def main(argv: list[str] | None = None) -> None:
         prompts = (SYS_PROMPT, USER_PROMPT)
     cache = {}
     if cache_path.exists():
-        for line in cache_path.read_text().splitlines():
+        for line in cache_path.read_text(encoding="utf-8").splitlines():
             row = json.loads(line)
             cache[(row["setting"], row["index"])] = row
 
     tools = load_tools(args.data)
     cases = sample_cases(args.data, args.limit, args.seed, args.exclude_seed)
-    with httpx.Client(base_url=args.host) as client, cache_path.open("a") as sink:
+    with httpx.Client(base_url=args.host) as client, cache_path.open("a", encoding="utf-8") as sink:
         for n, case in enumerate(cases, 1):
             key = (case["_setting"], case["_index"])
             if key in cache:
@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> None:
             t: {m: rate(v[m][0], v[m][1]) for m in v} for t, v in sorted(by_type.items())
         },
     }
-    (args.out / f"report-{report_tag}.json").write_text(json.dumps(report, indent=2))
+    (args.out / f"report-{report_tag}.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps({k: report[k] for k in ("model", "cases", "valid_outputs", "model_followed_injection",
                                               "defenses", "benign_false_block_rate")}, indent=2))
 

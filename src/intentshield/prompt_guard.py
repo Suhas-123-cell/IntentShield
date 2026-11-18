@@ -50,7 +50,7 @@ class PromptGuard:
         self.timeout, self.retries, self.errors, self.last_error = timeout, retries, 0, ""
         self.cache_path = Path(cache) if cache else None
         if self.cache_path and self.cache_path.exists():
-            for line in self.cache_path.read_text().splitlines():
+            for line in self.cache_path.read_text(encoding="utf-8").splitlines():
                 item = json.loads(line)
                 self._scores[item["key"]] = item["score"]
 
@@ -78,7 +78,7 @@ class PromptGuard:
             while len(self._scores) > 20_000:  # bounded, oldest window out
                 del self._scores[next(iter(self._scores))]
         if self.cache_path:
-            with self.cache_path.open("a") as handle:
+            with self.cache_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"key": key, "score": score}) + "\n")
         return score
 

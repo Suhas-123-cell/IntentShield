@@ -44,8 +44,8 @@ def main(argv: list[str] | None = None) -> int:
 
     msb = msb_replay.score(argparse.Namespace(results=msb_replay.ROOT / "results" / "msb", decisions=None))
     current = load_rates(msb, replay.score())
-    baseline = load_rates(json.loads((BASELINE / "msb-replay.json").read_text()),
-                          json.loads((BASELINE / "harness-live-replay.json").read_text()))
+    baseline = load_rates(json.loads((BASELINE / "msb-replay.json").read_text(encoding="utf-8")),
+                          json.loads((BASELINE / "harness-live-replay.json").read_text(encoding="utf-8")))
     failures = compare(baseline, current, args.slack)
     for key in sorted(current):
         print(f"{key}: {baseline.get(key, float('nan')):.3f} -> {current[key]:.3f}")

@@ -46,7 +46,8 @@ def test_the_home_directory_is_shortened_after_a_quote_or_a_space(capsys):
 def test_the_wrap_command_is_the_whole_path_and_can_be_copied(tmp_path: Path, home: Path, capsys):
     project = home / "my proj"
     project.mkdir()
-    (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"fs": {"command": "node", "args": ["server.js"]}}}))
+    (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"fs": {"command": "node", "args": ["server.js"]}}}),
+        encoding="utf-8")
     doctor.doctor(home, project, home / ".intentshield" / "hooks.db")
     out = capsys.readouterr().out
     line = next(ln for ln in out.splitlines() if "not behind the transparent proxy" in ln)
@@ -58,7 +59,7 @@ def test_the_wrap_command_is_the_whole_path_and_can_be_copied(tmp_path: Path, ho
 def test_the_wrap_command_of_a_plain_path_is_copyable_too(tmp_path: Path, home: Path, capsys):
     project = home / "proj"
     project.mkdir()
-    (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"fs": {"command": "node"}}}))
+    (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"fs": {"command": "node"}}}), encoding="utf-8")
     doctor.doctor(home, project, home / ".intentshield" / "hooks.db")
     line = next(ln for ln in capsys.readouterr().out.splitlines() if "not behind the transparent proxy" in ln)
     command = line[line.index("Run `") + 5:line.rindex("`")]

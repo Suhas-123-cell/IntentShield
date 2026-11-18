@@ -113,7 +113,7 @@ def _write(paths: RunPaths, path: Path, text: str, mode: int = 0o644) -> Path:
     if paths.root not in resolved.parents:
         raise ValueError(f"refusing to write {path}: outside the run directory {paths.root}")
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    resolved.write_text(text)
+    resolved.write_text(text, encoding="utf-8")
     resolved.chmod(mode)
     paths.written.append(resolved)
     return resolved
@@ -360,14 +360,15 @@ def lint_config(cell: cells.Cell, paths: RunPaths, spec: RunSpec) -> list[str]:
     matchers: list[str] = []
     try:
         if cell.harness == "claude":
-            groups = json.loads((paths.root / "settings.json").read_text())["hooks"]["PreToolUse"]
+            groups = json.loads((paths.root / "settings.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
         elif cell.harness == "gemini":
-            groups = json.loads((paths.home / ".gemini" / "settings.json").read_text())["hooks"]["BeforeTool"]
+            groups = json.loads((paths.home / ".gemini" / "settings.json").read_text(encoding="utf-8"))["hooks"]["BeforeTool"]
         elif cell.harness == "codex":
-            groups = tomllib.loads((Path(spec.env["CODEX_HOME"]) / "config.toml").read_text())["hooks"]["PreToolUse"]
+            groups = tomllib.loads((Path(spec.env["CODEX_HOME"]) / "config.toml").read_text(
+                encoding="utf-8"))["hooks"]["PreToolUse"]
         else:
             event = MATCHERS["cursor"][cell.kind][0]
-            raw = json.loads((paths.work / ".cursor" / "hooks.json").read_text())
+            raw = json.loads((paths.work / ".cursor" / "hooks.json").read_text(encoding="utf-8"))
             if raw.get("version") != 1:
                 problems.append("cursor hooks.json version is not 1")
             groups = [{"hooks": [h]} for h in raw["hooks"][event]]

@@ -47,5 +47,7 @@ def table(rows: list[dict]) -> str:
 
 
 if __name__ == "__main__":
-    data = [json.loads(line) for path in sys.argv[1:] for line in Path(path).read_text().splitlines() if line.strip()]
+    data = [
+        json.loads(line) for path in sys.argv[1:] for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
     print(table(data))

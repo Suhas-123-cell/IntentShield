@@ -143,7 +143,7 @@ def select(name: str) -> list[cells.Cell]:
 def manifest_binaries(manifest: Path) -> dict[str, str]:
     """``codex:<version>`` -> binary path for every release of the manifest that reported its version (the ones that hang on
     --version are left out)."""
-    data = json.loads(Path(manifest).read_text())
+    data = json.loads(Path(manifest).read_text(encoding="utf-8"))
     return {f"codex:{v['version']}": v["binary_path"] for v in data["versions"] if v.get("version_ok")}
 
 

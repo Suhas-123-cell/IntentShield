@@ -358,6 +358,22 @@ def _wrap_substitutions(text: str) -> str:
     return "".join(out)
 
 
+# A semicolon that is a word of its own, escaped or quoted (``\;``, ``';'``, ``";"``), is an argument and not the end of the
+# command: it ends the command that ``find -exec`` and ``tmux`` run, and the rest of the line is still theirs. It is put out of
+# the way of the lexer under a name of its own and put back after.
+_SEMI_WORD = re.compile(r"(?<![^\s])(?:\\;|';'|\";\")(?![^\s])")
+_SEMI_FORMS = {"\\;": "\x01A\x01", "';'": "\x01B\x01", '";"': "\x01C\x01"}
+_SEMI_BACK = {v: k for k, v in _SEMI_FORMS.items()}
+_SEMI_MARK = re.compile("\x01[ABC]\x01")
+
+
+def _unsemi(token: str) -> str:
+    """``token`` with the marks of ``_SEMI_WORD`` put back: a token that is one mark alone is the argument ``;``."""
+    if "\x01" not in token:
+        return token
+    return ";" if token in _SEMI_BACK else _SEMI_MARK.sub(lambda m: _SEMI_BACK[m[0]], token)
+
+
 def _stages(text: str, notes: list[str] | None = None) -> list[_Stage] | None:
     """The simple commands of ``text``, or None when it cannot be tokenized (unbalanced quotes). A reason is added to ``notes``
     when a size limit stopped the reading before the end."""
@@ -366,6 +382,8 @@ def _stages(text: str, notes: list[str] | None = None) -> list[_Stage] | None:
     if "#" in text:
         text = _lexical(text, comments=True)
     text = text.replace("\r", " ").replace("\n", " ; ")
+    if ";" in text:
+        text = _SEMI_WORD.sub(lambda m: _SEMI_FORMS[m[0]], text)
     if "$'" in text:
         text = _ANSI_C.sub(_decode_ansi_c, text)
     text = _wrap_substitutions(text)
@@ -422,11 +440,11 @@ def _stages(text: str, notes: list[str] | None = None) -> list[_Stage] | None:
             target = pieces[i] if i < len(pieces) else ""
             if target not in _OPS and target not in _REDIRECTS:
                 i += 1
-                redirects.append((token, target))
+                redirects.append((token, _unsemi(target)))
             if argv and _FD.match(argv[-1]) and token.startswith(("<", ">")):
                 argv.pop()
             continue
-        argv.append(token)
+        argv.append(_unsemi(token))
     flush()
     if i < len(pieces) and any(p not in _OPS for p in pieces[i:]):
         notes.append(f"more than {_MAX_STAGES} commands")

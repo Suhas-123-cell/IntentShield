@@ -35,7 +35,7 @@ def _write_config(tmp_path: Path, **overrides: object) -> Path:
         }.items()
     }
     path = tmp_path / "proxy.json"
-    path.write_text(json.dumps(config))
+    path.write_text(json.dumps(config), encoding="utf-8")
     return path
 
 
@@ -208,7 +208,7 @@ def test_demo_flag_needs_no_config_file_or_path(monkeypatch, capsys):
 
     def spy(directory: Path) -> Path:
         path = real(directory)
-        seen["directory"], seen["config"] = directory, json.loads(path.read_text())
+        seen["directory"], seen["config"] = directory, json.loads(path.read_text(encoding="utf-8"))
         return path
 
     monkeypatch.setattr(mcp_verify, "demo_config", spy)
@@ -249,10 +249,10 @@ def test_a_failed_run_says_on_stderr_which_kind_of_failure_it_was_without_quotin
 
 
 def test_a_proxy_that_cannot_start_shows_its_own_message_on_stderr(tmp_path: Path, capsys):
-    config = json.loads(_write_config(tmp_path).read_text())
+    config = json.loads(_write_config(tmp_path).read_text(encoding="utf-8"))
     config["upstream"]["command"] = str(tmp_path / "no-such-server")
     path = tmp_path / "broken.json"
-    path.write_text(json.dumps(config))
+    path.write_text(json.dumps(config), encoding="utf-8")
     assert main(["--config", str(path), "--stdio"]) == 1
     err = capsys.readouterr().err
     assert "FAIL:" in err and "does not exist" in err

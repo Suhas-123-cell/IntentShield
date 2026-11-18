@@ -34,10 +34,10 @@ def requirement_names(lines) -> set[str]:
 
 
 def declared() -> tuple[set[str], set[str]]:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     required = requirement_names(project["dependencies"])
     extras = {name for group in project["optional-dependencies"].values() for name in requirement_names(group)}
-    ml = requirement_names((ROOT / "requirements-ml.txt").read_text().splitlines())
+    ml = requirement_names((ROOT / "requirements-ml.txt").read_text(encoding="utf-8").splitlines())
     return required, extras | ml | OPTIONAL_ONLY
 
 
@@ -45,7 +45,7 @@ def third_party_imports() -> list[tuple[str, str, bool]]:
     """(top-level module, file name, imported at module level) for each third-party import under src."""
     found = []
     for path in sorted(PACKAGE.rglob("*.py")):
-        tree = ast.parse(path.read_text(), filename=str(path))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         top_level = {id(node) for node in tree.body}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):

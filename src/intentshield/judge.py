@@ -31,7 +31,6 @@ import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -386,7 +385,7 @@ class Judge:
         # Benchmarks keep answers on disk so a rerun after a rate limit spends nothing twice.
         self.cache_path = Path(cache) if cache else None
         if self.cache_path and self.cache_path.exists():
-            for line in self.cache_path.read_text().splitlines():
+            for line in self.cache_path.read_text(encoding="utf-8").splitlines():
                 try:  # an interrupted append leaves a partial line; skip it rather than refuse to start
                     item = json.loads(line)
                     self._answers[f"{self.provider}\0{self.url}\0{item['key']}"] = item["answer"]
@@ -463,7 +462,7 @@ class Judge:
             while len(self._answers) > _ANSWER_CACHE_SIZE:
                 del self._answers[next(iter(self._answers))]
         if self.cache_path:
-            with self.cache_path.open("a") as handle:
+            with self.cache_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"key": key, "answer": answer}) + "\n")
         return answer
 

@@ -3,9 +3,9 @@ import tempfile
 import json,re,os,sys,collections,urllib.request,urllib.error
 from concurrent.futures import ThreadPoolExecutor
 D=os.path.join((os.environ.get("HF_SCRATCH") or os.path.join(tempfile.gettempdir(), "intentshield-hook-fidelity")), "prev_data")
-cache=json.load(open(f"{D}/hookcache.json"))
-repos=json.load(open(f"{D}/hookrepos_claude.json"))["guard"]
-SC=f"{D}/scriptcache.json"; sc=json.load(open(SC)) if os.path.exists(SC) else {}
+cache=json.load(open(f"{D}/hookcache.json", encoding="utf-8"))
+repos=json.load(open(f"{D}/hookrepos_claude.json", encoding="utf-8"))["guard"]
+SC=f"{D}/scriptcache.json"; sc=json.load(open(SC, encoding="utf-8")) if os.path.exists(SC) else {}
 def fetch(a):
     r,p=a;k=f"{r}|{p}"
     if k in sc: return
@@ -27,7 +27,7 @@ for r in repos:
             if "$" in p or p.startswith("~") or p.startswith("/"): continue
             jobs.append((r,p))
 with ThreadPoolExecutor(14) as ex: list(ex.map(fetch,set(jobs)))
-json.dump(sc,open(SC,"w"))
+json.dump(sc,open(SC,"w", encoding="utf-8"))
 cat=collections.Counter(); rows=[]
 for r,cmds in info.items():
     kinds=set(); ask=False; pd=False; fetched=False
@@ -53,4 +53,4 @@ print("with >=1 repo-local script text fetched:",sum(1 for x in rows if x[2]))
 print("script text mentions permissionDecision/hookSpecificOutput:",sum(1 for x in rows if x[3]))
 print("script text mentions permissionDecision AND the string 'ask':",sum(1 for x in rows if x[4]))
 print("kinds:",collections.Counter(k for x in rows for k in x[1]).most_common())
-json.dump(rows,open(f"{D}/script_rows.json","w"))
+json.dump(rows,open(f"{D}/script_rows.json","w", encoding="utf-8"))

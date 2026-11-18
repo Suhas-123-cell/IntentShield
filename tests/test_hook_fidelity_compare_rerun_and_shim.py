@@ -37,7 +37,7 @@ def test_r8_case_id_of_a_case_without_a_round_is_unchanged():
 
 
 def test_r8_pair_arms_are_the_launched_wrapped_guards_of_the_twelve_round7_pairs():
-    summary = json.loads((RESULTS / "summary.json").read_text())
+    summary = json.loads((RESULTS / "summary.json").read_text(encoding="utf-8"))
     pairs = {(r["build"], r["cell"]): set(r["failed_unwrapped"]) for r in summary["round7"]["rows"]
              if r["cell"] in summary["round7"]["cells"] and r["failed_unwrapped"]}
     assert len(pairs) == 12
@@ -57,7 +57,7 @@ def test_r8_failure_cells_replay_the_silent_allow_and_one_malformed_reply(tmp_pa
         for build in compare.R8_EMPTY_ALLOW_BUILDS:
             case = {"build": build, "arm": "ALLOW+wrap", "cell": cell, "regime": "A", "rep": 0, "round": "r8"}
             cfg = compare.cell_config(case, tmp_path, tmp_path, "nzt")
-            record = json.loads(Path(cfg["replay"]).read_text())
+            record = json.loads(Path(cfg["replay"]).read_text(encoding="utf-8"))
             body = base64.b64decode(record["stdout_b64"]).decode()
             if cell == "malformed":
                 assert record["exit_code"] == 0 and body and not body.endswith("}")
@@ -80,7 +80,7 @@ def test_shim_script_logs_what_the_detector_read_and_what_the_shim_sent(tmp_path
     done = subprocess.run([str(shim), "--harness", "claude", "--version", "2.1.316", "--on-empty", "allow", "--", "true"],
                           input=json.dumps(event), capture_output=True, text=True, timeout=60)
     assert done.returncode == 0 and done.stdout == ""                      # a silent guard under --on-empty allow: nothing sent
-    rows = [json.loads(line) for line in (tmp_path / "shim.jsonl").read_text().splitlines()]
+    rows = [json.loads(line) for line in (tmp_path / "shim.jsonl").read_text(encoding="utf-8").splitlines()]
     detected = rows[0]["detected"]
     assert detected["mode"] in ("interactive", "headless", "yolo", "unknown") and detected["how"]
     assert detected["source"] in ("proc", "libproc", "ps", "none") and isinstance(detected["depth"], int)
@@ -103,8 +103,8 @@ def test_committed_round8_rows_regenerate_the_numbers():
     rows_path = RESULTS / "runs-r8.jsonl"
     if not rows_path.exists():
         pytest.skip("no committed round 8 rows")
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
-    committed = json.loads((RESULTS / "summary-r8.json").read_text())
+    rows = [json.loads(line) for line in rows_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    committed = json.loads((RESULTS / "summary-r8.json").read_text(encoding="utf-8"))
     fresh = json.loads(json.dumps(r8_summary.summarize(RESULTS), default=str))
     assert fresh == committed
     assert len(rows) == 51 and not any(r["outcome"] == "INVALID" for r in rows)

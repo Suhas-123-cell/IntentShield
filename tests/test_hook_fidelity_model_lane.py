@@ -36,7 +36,7 @@ def test_budget_refusals():
 
 def test_ledger_counts_lines(tmp_path):
     assert ml.ledger_count(tmp_path) == 0
-    (tmp_path / "launches.jsonl").write_text('{"a":1}\n\n{"a":2}\n')
+    (tmp_path / "launches.jsonl").write_text('{"a":1}\n\n{"a":2}\n', encoding="utf-8")
     assert ml.ledger_count(tmp_path) == 2
 
 
@@ -54,7 +54,7 @@ def test_prompt_calls_the_shim_by_absolute_path():
 
 
 def test_sandbox_profile_contains_the_model():
-    text = ml.PROFILE.read_text()
+    text = ml.PROFILE.read_text(encoding="utf-8")
     assert "(deny network-outbound)" in text and '(remote ip "localhost:*")' in text
     assert '(deny file-write* (subpath "/Users"))' in text
     assert "\\.env" in text
@@ -76,7 +76,7 @@ def test_summary_agreement_and_tool_call_rate(tmp_path):
     (root / "claude").mkdir()
     stub = [{"harness": "claude", "version": "2.1.316", "mode": "M1h", "kind": "shell", "reply": "R4", "outcome": "BLOCKED",
              "failcfg": "-", "variant": "plain"}] * 3
-    (root / "claude" / "all-runs.jsonl").write_text("\n".join(json.dumps(r) for r in stub))
+    (root / "claude" / "all-runs.jsonl").write_text("\n".join(json.dumps(r) for r in stub), encoding="utf-8")
     rows = [_row("generic", "claude", "deny", "BLOCKED"), _row("generic", "claude", "deny", "RAN", hooks=1),
             _row("generic", "claude", "deny", "BLOCKED", hooks=2), _row("generic", "claude", "deny", "INVALID", 0, False)]
     s = ml.summarize(rows, root)

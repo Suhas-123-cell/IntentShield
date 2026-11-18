@@ -298,7 +298,7 @@ def test_judge_objects_to_arguments_too_large_to_read():
 def test_judge_cache_file_survives_a_partial_line(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(Judge, "_answers", {})
     cache = tmp_path / "answers.jsonl"
-    cache.write_text('{"key": "k1", "answer": {"verdict": "clean"}}\n{"key": "k2", "answ\n{"nokey": 1}\n')
+    cache.write_text('{"key": "k1", "answer": {"verdict": "clean"}}\n{"key": "k2", "answ\n{"nokey": 1}\n', encoding="utf-8")
     Judge("ollama", cache=cache)
     # Disk lines keep their old keys; in memory they are filed under this judge's provider and host.
     assert list(Judge._answers.values()) == [{"verdict": "clean"}] and next(iter(Judge._answers)).endswith("\0k1")
