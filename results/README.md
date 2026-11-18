@@ -24,12 +24,19 @@ attack success 19/1579 = 1.2% [0.8, 1.9] (was 20/1579 = 1.3% [0.8, 1.9]); call l
 attack success 550/1579 = 34.8% [32.5, 37.2] (was 552, 35.0%) and reached human 594/1579 (was 593);
 full proxy reached human 12/1579 = 0.8% [0.4, 1.3] (was 13). Every other count is unchanged.
 
+On 2026-11-19 `injection/rows.jsonl`, `table.txt` and `report-rules-pg-exemplars.json` were regenerated with the 0.4.4 rules (offline,
+intent model off): the rules flag 1,503 of the 2,959 injections and 16 of the 758 benign texts, rules + exemplars 1,727 and 18. The earlier
+table is kept as `table-2026-10-21.txt`. The run needs the InjecAgent checkout and the AgentDojo strings (`artifacts/data/`), the exemplar index and embedder
+(`artifacts/exemplars`, `artifacts/embedder-e5-small`, with torch and transformers from `requirements-ml.txt`) and the Prompt Guard 2 scores cached from
+the earlier run (`artifacts/injection-eval/prompt-guard-scores.jsonl`, which covers every row, so no network is used). The table and the README figures are recomputed from the
+committed rows by `tests/test_injection_figures.py`. The classifier and judge columns of the older reports were not rerun.
+
 | Directory | What | Command |
 |---|---|---|
 | `msb/<model>/<arm>.jsonl` | MSB held-out traces, 220 cases (Gemini: 99) | `benchmarks/msb.py --per-type 20 --holdout` (see `MANIFEST.json`) |
 | `msb/cases.jsonl` | the MSB case grid (1,600 cases: id, attack type, agent, system prompt, task tool, task, attack task, implementation), as `benchmarks/msb.py cases()` builds it from the MSB checkout at commit `c1d6a70171e4d2c44c87a2ae909d13df00c6aa8d`; `paper_numbers.py` reads it when `artifacts/data/MSB` is absent, so a clean clone and CI can replay the tables | written 2026-10-29; sha256 in `MANIFEST.json` |
 | `mcptox/` | MCPTox replay, all proxy layers | `INTENTSHIELD_INTENT_MODEL_DIR=/nonexistent benchmarks/mcptox.py --data artifacts/data/MCPTox-Benchmark --replay --lenient-reads --out results/mcptox` |
-| `injection/` | output-injection detectors, 3,717 held-out rows | `benchmarks/injection_eval.py --exemplars artifacts/exemplars --prompt-guard --combine ...` |
+| `injection/` | output-injection detectors, 3,717 held-out rows. `rows.jsonl` holds each row's verdicts (text hash, source, family, label, split, kind, one verdict per detector, no text); `table.txt` is built from it; `report-rules-pg-exemplars.json` is the same run as a report; `table-2026-10-21.txt` is the earlier table, with the rules before 0.3.5 | `benchmarks/injection_eval.py --exemplars artifacts/exemplars --prompt-guard --combine rules+exemplars,rules+prompt_guard,rules+prompt_guard+exemplars --rows-out injection/rows.jsonl --out injection/report-rules-pg-exemplars.json`, then `benchmarks/injection_eval.py --from-rows results/injection/rows.jsonl > results/injection/table.txt` |
 | `agentdojo/` | structural floor on AgentDojo's published GPT-4o logs | `benchmarks/agentdojo_floor.py replay` |
 | `harness-live/` | live Claude Code (Haiku) vs the malicious notes server, 3 prompts x 3 arms | `OUT=... benchmarks/harness_live/run.sh` |
 | `harness-live-gemini/` | the same check in Gemini CLI (gemini-3.1-flash-lite), with each agent's tool-call trace | `OUT=... benchmarks/harness_live/run_gemini.sh` |

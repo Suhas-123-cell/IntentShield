@@ -2,14 +2,27 @@
 
 Start with the [README](../README.md) in the repository root. The files here are the reference behind it.
 
-**Which files are which.** Word counts are from `wc -w`.
+## How it works in 60 seconds
 
-- **Product documentation** (using, checking and changing the tool), about 71,400 words in all: the [README](../README.md),
-  [guide.md](guide.md), [layers.md](layers.md), [gateway.md](gateway.md), [detectors.md](detectors.md), [benchmarks.md](benchmarks.md),
-  [security-review.md](security-review.md), [architecture-and-testing.md](architecture-and-testing.md),
-  [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md) and [CHANGELOG.md](../CHANGELOG.md). A user needs only the
-  README and the guide, about 14,000 words.
-- **Research write-ups** (what the measurements support), about 14,100 words: [contribution.md](contribution.md), the
+IntentShield puts one set of rules in three places. Each place sees different things, so each stops different things.
+
+| placement | set up with | what it sees | what it stops | what it cannot see |
+|---|---|---|---|---|
+| **Hook** | `intentshield install <harness>` | the user's real prompt, and every MCP call and result (also shell, file and web calls with `--builtin-tools`) | injected instructions in a call's arguments; a value that came only from a tool result; credentials the user did not give; with `--builtin-tools`, dangerous commands ([rules](rules.md)) | tool descriptions. A harness can skip a hook that is untrusted or runs past its timeout |
+| **Proxy** (stdio servers) | `intentshield wrap <file>` | the server's tool descriptions, schemas and results | poisoned or changed descriptions, injected results, parameters that ask for the model's name or prompt | the user's prompt, and servers reached over HTTP |
+| **Gateway** | `intentshield-mcp` | the request the model states, and every call it routes through `intentshield_call` | any call outside the policy; a state-changing call waits for a human | a call the model does not route through it |
+
+The hook answers allow, ask or deny. The proxy hides or flags and never asks. The gateway reports ALLOW, REVIEW or BLOCK. Details, per
+harness: [layers.md](layers.md#what-each-layer-sees-and-stops).
+
+## Which files are which
+
+- **Product documentation** (using, checking and changing the tool): the [README](../README.md),
+  [guide.md](guide.md), [rules.md](rules.md), [layers.md](layers.md), [gateway.md](gateway.md), [detectors.md](detectors.md),
+  [benchmarks.md](benchmarks.md), [security-review.md](security-review.md),
+  [architecture-and-testing.md](architecture-and-testing.md), [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md)
+  and [CHANGELOG.md](../CHANGELOG.md). A user needs only the README and the guide.
+- **Research write-ups** (what the measurements support): [contribution.md](contribution.md), the
   [hook study report](hook-fidelity-report.md) and its [appendix](hook-fidelity-report-appendix.md), [related-work.md](related-work.md)
   and [coverage-study.md](coverage-study.md).
 - **Working notes** are not in this tree. The study's working record, the earlier long version of the verdict and superseded
@@ -21,14 +34,13 @@ Start with the [README](../README.md) in the repository root. The files here are
 
 | step | what you get | words | minutes |
 |---|---|---|---|
-| the [README](../README.md) down to Results | what it does, its threat model, how to install it, what it stops and does not stop, what is stored locally | 1,200 | 5 |
-| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,420 | 6 |
-| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 2,780 | 11 |
-| all three | | 5,400 | 22 |
+| the [README](../README.md) down to Results | what it does, how to install it, its threat model, what it stops and does not stop, where the documents are, what is stored locally | 1,360 | 5 |
+| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,700 | 7 |
+| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 3,230 | 13 |
+| all three | | 6,290 | 25 |
 
-The first two steps alone take 11 minutes. The report's three tables count for about 560 of its words, with their pipe characters,
-and its [appendix](hook-fidelity-report-appendix.md) (5,250 words) holds the denominators, the per-build detail and the long caveats. Everything
-else is reference to look up a number or a protocol.
+The first two steps alone take 12 minutes. The report's [appendix](hook-fidelity-report-appendix.md) holds the denominators, the
+per-build detail and the long caveats. Everything else is reference to look up a number or a protocol.
 
 Where to go next, by what you want:
 
@@ -41,6 +53,7 @@ Where to go next, by what you want:
 
 - [layers.md](layers.md): what each placement of the guard (hooks, transparent proxy, gateway) sees and stops, what `install`, `wrap`, `scan` and the judge options do in full, and the upstream configuration.
 - [guide.md](guide.md): guarding Claude Code, Codex CLI, Cursor and Gemini CLI with hooks and the transparent proxy, what to do when the guard blocks something legitimate, wrapping a third-party hook, scanning the servers you use, troubleshooting, and threat memory and packs.
+- [rules.md](rules.md): what the hook denies and asks about for shell, file and web tools (`--builtin-tools`), as tables by command class, and the limits on what it reads.
 - [gateway.md](gateway.md): the gateway (an MCP server your agent calls through `intentshield_call`), the dashboard, the REST API, production settings and the Gemini proposal path.
 - [benchmarks.md](benchmarks.md): every benchmark protocol and table (MSB, MCPTox, InjecAgent, AgentDojo, judge, self-disclosure, live harness checks, replayed incidents) and the limits of each.
 - [detectors.md](detectors.md): the optional learned detectors, their training, evaluation, negative results, the adaptive attacker and how the operator teaches them.
@@ -69,7 +82,7 @@ can be traced to the runs behind it. They are on the `research-notes` branch, in
 ## Background and research
 
 - [contribution.md](contribution.md): the verdict, what is claimed and not claimed, and the route that remains (two pages). The long earlier version is [contribution-history.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/contribution-history.md).
-- [related-work.md](related-work.md): literature survey and the adaptivity plan.
+- [related-work.md](related-work.md): the ten closest published works and how IntentShield differs from each.
 - [coverage-study.md](coverage-study.md): which MCP channels a hook-scoped guard sees versus a proxy, measured with benign markers.
 - [research-notes branch](https://github.com/Suhas-123-cell/IntentShield/tree/research-notes/docs/research-notes): archived. Historical drafts, not current claims: the artifact-paper skeleton, the earlier complete-mediation draft (its claim is not supported) and the demo-track paper source.
 

@@ -52,6 +52,10 @@ are off by default or evidence-only ([detectors.md](detectors.md)).
   six categories the rules were written from, it lets through fewer calls than safety-net and knox but trails safety-net on denies
   alone: 24 of 85 against 41 of 85 with the rules as they were when scored, and 29 of 85 with the rules in the repository now (the
   report's section 5). Nothing was tested outside those categories; the gain is post hoc and fits its own categories.
+  - Counted by source write-up instead of by item, safety-net's lead on denies is 17 to 6 (p = 0.035) with the rules as scored and 15 to 7 (p = 0.134) with
+    the current rules. As shipped, on builds where an ask is refused or hangs, IntentShield stops more than safety-net on the
+    extrapolated figures (76/104 against 44/104 on Claude Code 2.1.316), which are not measured, and the ranking depends on what the
+    harness does with an ask.
 - That IntentShield beats published defences. The surveyed MCP guards publish no detection numbers to compare against, and on
   AgentDojo, the one benchmark where defences do publish, IntentShield's row (a 7B agent, 15.6% residual attack success, 5 of 32, from a
   local run whose rows are not committed) is far behind LlamaFirewall's published 1.75% with GPT-4o. So the claim is not "best performing".
@@ -73,6 +77,18 @@ An artifact or tool paper, plus the hook-fidelity measurement note. A research-t
 - a completed vendor disclosure (drafts exist; nothing has been sent).
 
 [hook-fidelity-study.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md), section 15, lists these with their costs.
+
+## Next experiments
+
+The cheapest steps the repository already names, from the study's own list of work not done (section 13 of
+[hook-fidelity-study.md](https://github.com/Suhas-123-cell/IntentShield/blob/research-notes/docs/research-notes/hook-fidelity/hook-fidelity-study.md)).
+None needs a paid model.
+
+| experiment | what it costs | what it would show |
+|---|---|---|
+| **A determinism run of the stub.** Six representative cells, twenty repeats each, also under CPU load and in shuffled order (120 launches of the real harness binaries). | Machine time only: no money and no model. It is more than the 60-launch rounds the study ran under its own rules. | Whether the stub's outcomes repeat. The report says no separate determinism run was made, so a repeat rate would replace that caveat, or the label for an intermittent cell would go. |
+| **A test set written by someone else.** 30 to 50 harmful calls outside the six categories the built-in tool rules were written from, by a second author or a different model, committed with their provenance before any guard runs, scored once with the rules frozen (`benchmarks/hook_fidelity/detect_compare.py` and `fresh_report.py`). | A person or a model to write the calls, then analysis. No harness launches. | Whether the rules generalise beyond their own categories. It is the only test of that: the 214-call set was built by one author, from the same six categories. |
+| **A second human coder.** Re-derive the documentation-based expectations and the deviation classes for a random 40 to 60 cells, then compute an agreement statistic and recompute the kill criterion at thresholds 3, 5 and 7. | A person's time. | The agreement between two coders, which does not exist now, and whether the kill criterion's outcome depends on one coder's thresholds. |
 
 ## Where it stands among open-source MCP guards
 

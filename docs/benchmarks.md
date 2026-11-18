@@ -15,8 +15,10 @@ From a clone, after `uv sync --group dev` (the PyPI source distribution has no t
 | `uv run python benchmarks/hook_fidelity/fresh_report.py --out <empty directory> --current-rules` | the denies-alone comparison with the rules in your checkout, beside the study's | none: committed fixtures | about 3 s |
 | `uv run python benchmarks/latency.py --calls 50 --hooks 30 --out <file>` | hook and proxy overhead on your machine | none | about 15 s |
 | `uv run python benchmarks/mcptox.py --data <MCPTox-Benchmark checkout> --replay` (flags in `results/README.md`) | MCPTox replay rows | MCPTox-Benchmark checkout | not timed |
-| `uv run python benchmarks/injection_eval.py --dataset results/injection/dataset.jsonl --hard results/injection/hard_negatives.jsonl --agentdojo results/injection/agentdojo-strings.jsonl --injecagent <InjecAgent checkout>/data --out <file>` | the injection table's rules column | InjecAgent checkout | about 2 s |
+| `uv run python benchmarks/injection_eval.py --dataset results/injection/dataset.jsonl --hard results/injection/hard_negatives.jsonl --agentdojo results/injection/agentdojo-strings.jsonl --injecagent <InjecAgent checkout>/data --rows-out <file> --out <file>` | the injection table's rules column | InjecAgent checkout | about 2 s |
 | the same, with `--exemplars <index> --embedder <embedder> --combine rules+exemplars` | the exemplar columns | the exemplar index and e5 embedder, which are not committed, and the ML extras (`requirements-ml.txt`) | about 45 s |
+| `uv run python benchmarks/injection_eval.py --from-rows results/injection/rows.jsonl` | the injection table from the committed verdicts | none | under 1 s |
+| `uv run python benchmarks/hook_fidelity/cluster_compare.py --out <empty directory> --current-rules` | the denies-alone comparison per source write-up | none: committed fixtures | about 3 s |
 
 New MSB runs, live harness checks and the study's guard decisions need Docker, Ollama or a paid API, harness builds, or clones of
 the other guards; some figures come from runs whose rows are not committed. See [results/README.md](../results/README.md)
@@ -29,8 +31,8 @@ Provenance: the MSB rows are regenerated from the committed traces by `benchmark
 `benchmarks/mcptox.py --replay`, which needs the MCPTox-Benchmark checkout; the judge, adaptive and
 injection rows are committed reports under `results/`, of which only the injection table's rules column
 replays offline, from `results/injection/` plus the InjecAgent checkout (`results/README.md`). The injection
-figures below were rerun on 2026-11-12 with the 0.4.4 rules (the output is not committed; the committed table is the older
-run). The other rows were rerun 2026-10-29. Protocols, every per-type table and the limits of each benchmark are in
+figures below were rerun on 2026-11-12 with the 0.4.4 rules (`results/injection/rows.jsonl` holds the per-row verdicts and
+`results/injection/table.txt` the table; the older table is `results/injection/table-2026-10-21.txt`). The other rows were rerun 2026-10-29. Protocols, every per-type table and the limits of each benchmark are in
 the sections below; the learned detectors' training and negative results in
 [detectors.md](detectors.md). Read the limitations at the end of this section before quoting.
 
@@ -185,10 +187,10 @@ exemplar index of the earlier table, by `benchmarks/injection_eval.py --combine 
 | benign texts flagged | 758 | 16 (2.1%) | 18 (2.4%) |
 | of which hard benign texts | 142 | 14 | 14 |
 
-What changed since the earlier table (2026-10-21, `results/injection/table.txt`, the rules as they were before 0.3.5): the rules caught
+What changed since the earlier table (2026-10-21, `results/injection/table-2026-10-21.txt`, the rules as they were before 0.3.5): the rules caught
 30 of the 1,454 (2.1%) and rules + exemplars 263 (18.1%). The 0.3.5 rule that reads "Ignore your previous iunstructions" now flags all 27 `ignore_previous`
 rows (27 more for the rules, 16 more for rules + exemplars), and rule changes since then no longer flag two generated outputs. The
-exemplar index is the same: its column alone is 337 of 2,959 in both runs. The new output is not committed.
+exemplar index is the same: its column alone is 337 of 2,959 in both runs. The per-row verdicts of the new output are `results/injection/rows.jsonl` and its table is `results/injection/table.txt`; `tests/test_injection_figures.py` recomputes the figures here from them.
 
 - Most of the exemplar gain is in distribution. The index is built from the train split of the same dataset (`exemplars.py`: MCPTox
   descriptions, outputs written by a local model in four injection styles, translations and hard negatives). 228 of the 279 hits are on the 346 generated-output test rows,
@@ -250,7 +252,7 @@ the real hook.
   count, 1,054 are the "enhanced" half, which carries a literal "Ignore all previous instructions" marker and which both catch in
   full; this page and [detectors.md](detectors.md#adaptive-injection-detection) count those rows among the ones the rules were tuned on. On the
   1,054 base rows alone the rules catch 17 (1.6%) and Prompt Guard 2 6 (0.6%). On plain-language injections both stay under 4%.
-  (Prompt Guard 2 was not rerun on the current rules; these counts are the committed run of 2026-10-29, `results/injection/table.txt`.)
+  (Prompt Guard 2 was not rerun on the current rules; these counts are recomputed from `results/injection/rows.jsonl`: the rules of 0.4.4, with the Prompt Guard 2 scores of the earlier run, which do not depend on the rules.)
 - The rules lead only where they were written from the data (MCPTox, AgentDojo templates), so they are an
   offline equal, not a better detector ([detectors.md](detectors.md#adaptive-injection-detection)).
 
@@ -374,7 +376,7 @@ its section.
 
 ### MCP guardrail layers
 
-The proxy guards all three places an MCP attack enters (related work and next steps:
+The proxy guards all three places an MCP attack enters (related work:
 [related-work.md](related-work.md)):
 
 - **Descriptions.** `mcp_inspect.scan_description` checks every upstream tool's

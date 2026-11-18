@@ -107,7 +107,7 @@ something other than the hook stopped it; they are in neither count.
   (missing hook file). R7 (exit 2 with stderr) and R11 (exit 2, empty stderr) were BLOCKED without the key as well, so it changed nothing
   for them; R5 and R6 still RAN with it in 3 of 3. The counts come from `report_numbers.py` (the `onfailure:` line). On 2.1.281, R9 RAN in 2 of 2 runs with the key and in 2 of 2 without it, and R8 RAN in 2 of 2 with it
   (`results/hook-fidelity/claude/r4-gaps/onfailure/runs.jsonl`). IntentShield's `install` writes the key on Claude Code's `PreToolUse`
-  entry (`src/intentshield/install.py`). Since 0.4.3 it also wraps the hook in a launcher that refuses the call when the hook cannot
+  entry (`src/intentshield/install/`). Since 0.4.3 it also wraps the hook in a launcher that refuses the call when the hook cannot
   start, and gives the hook a 30 s deadline of its own, shorter than the harnesses' timeouts. Only one build was run with the key after
   its documented version, so "blocks on Claude Code 2.1.295 and later" is the documentation's statement, not a sweep result.
 - **Codex CLI bypass flag.** The hook did not run on 5 builds (0.131.0 to 0.140.0) and ran on 14 (0.141.0 to 0.166.0).
@@ -147,17 +147,17 @@ was known, so this is a post hoc score. The 178 are the items declared held out.
 
 **Held out when the sets were built, not now.** Both sets were held out when they were built: no item's source was used to write a
 rule, and its command or path was not in the repository's text at that time. The unit tests of the dangerous-command rules were written
-afterwards and contain the command or path of some of the harmful items: 7 of the 104 harmful items of the 214-call set and 33 of the 156
+afterwards and contain the command or path of some of the harmful items: 8 of the 104 harmful items of the 214-call set and 34 of the 156
 harmful built-in tool items of the 467 set (a plain substring match, so short strings such as `~/.bashrc` can match by chance;
-`benchmarks/hook_fidelity/overlap_check.py` lists them and `overlap_items.json` pins the list found at commit 1979d0e). The strings are
+`benchmarks/hook_fidelity/overlap_check.py` lists them and `overlap_items.json` pins the list found on the 0.4.4 tree, commit 5f50e5e). The strings are
 canonical dangerous commands, and the rules were written from category lists, so it may be coincidence, but the tests contain them.
 Scored without them:
-- 467-fixture set, without the 33 items: 133 items that stayed held out, 104/133 [70.4, 84.4]% before and 6/133 [2.1, 9.5]% after; 145 items
-  declared held out, 104/145 [63.9, 78.4]% before and 6/145 [1.9, 8.7]% after; 123 built-in tool calls, 104/123 [77.1, 89.9]% before and
-  6/123 [2.3, 10.2]% after. The rules caught all 33 removed items, so the count of misses stays at 6 and the share rises.
-- 214-call set, without the 7 items: IntentShield with the rules lets through 27 of 97 harmful calls (28 of 104 with them), asks on 39 and
-  denies 31 (41 and 35 with them). On safety-net's shell scope (82 items) safety-net denies 40 and IntentShield 22 (41 and 24 of 85 with
-  them), so IntentShield still trails safety-net on denies alone. On knox's scope (69 items) knox denies 28 and IntentShield 25 (29 and
+- 467-fixture set, without the 34 items: 132 items that stayed held out, 103/132 [70.2, 84.2]% before and 6/132 [2.1, 9.6]% after; 144 items
+  declared held out, 103/144 [63.7, 78.3]% before and 6/144 [1.9, 8.8]% after; 122 built-in tool calls, 103/122 [77.0, 89.8]% before and
+  6/122 [2.3, 10.3]% after. The rules caught all 34 removed items, so the count of misses stays at 6 and the share rises.
+- 214-call set, without the 8 items: IntentShield with the rules lets through 27 of 96 harmful calls (28 of 104 with them), asks on 39 and
+  denies 30 (41 and 35 with them). On safety-net's shell scope (82 items) safety-net denies 40 and IntentShield 22 (41 and 24 of 85 with
+  them), so IntentShield still trails safety-net on denies alone. On knox's scope (68 items) knox denies 28 and IntentShield 24 (29 and
   28 of 73 with them).
 
 The committed tables are the study's and were not changed.
@@ -179,8 +179,8 @@ the direction does not change:
 
 **Asks.** IntentShield's lead in asks is worth less than its lead in denies, because an `ask` is not a stop on Claude Code up to 2.1.84,
 on Codex CLI, or on Gemini CLI to 0.37.2, where it either runs the call or hangs. IntentShield ships a translation that turns an ask into
-a refusal where nobody can answer it. The study's effective-protection figures for it extrapolate shell-measured delivery to other tools
-and are in section 6e of the full record, not here.
+a refusal where nobody can answer it. The study's effective-protection figures for it extrapolate shell-measured delivery to other tools.
+Section 5 of the report shows two builds; every build is in `results/hook-fidelity/detect/fresh/table.md`.
 
 ## The rules since the study
 
@@ -248,6 +248,7 @@ cp -r results/hook-fidelity/detect $S/detect
 .venv/bin/python benchmarks/hook_fidelity/detect_compare.py report --decisions results/hook-fidelity/detect/decisions.jsonl --out $S/detect
 .venv/bin/python benchmarks/hook_fidelity/fresh_report.py --out $S/fresh     # the 214-item tables
 .venv/bin/python benchmarks/hook_fidelity/overlap_check.py           # which items are now in tests/ or src/, and the rescored figures (prints only)
+.venv/bin/python benchmarks/hook_fidelity/cluster_compare.py --out $S/cluster --current-rules   # the denies-alone comparison per source write-up
 .venv/bin/pytest -q tests/test_hook_fidelity_*.py                    # recomputes the figures the documents cite
 ```
 
@@ -326,5 +327,5 @@ detect_sn: safety-net on its scope: 31/130 [17.3, 31.9]%; knox on its scope: 67/
 detect_benign: 467-fixture set, benign calls, each guard on its own scope: IntentShield with the rules asks on 6/234 [1.2, 5.5]% and denies 0; safety-net denies 3/160 [0.6, 5.4]%; knox flags 0/168 [0.0, 2.2]%
 rules_same_items: 467-fixture set, harmful held-out items IntentShield lets through, before the built-in tool rules and after them (post hoc): 166 items that stayed held out, 137/166 [76.0, 87.6]% before, 6/166 [1.7, 7.7]% after; 178 items declared held out, 137/178 [70.3, 82.5]% before, 6/178 [1.6, 7.2]% after; 156 built-in tool calls, the only ones the rules act on, 137/156 [81.8, 92.1]% before, 6/156 [1.8, 8.1]% after
 rules_mcp_items: the 22 MCP calls among the 178 get the same reply before and after the rules in 22 of 22
-rules_without_overlap: 467-fixture set without the 33 items whose command or path is in tests/ or src/ (post hoc): 133 items that stayed held out, 104/133 [70.4, 84.4]% before, 6/133 [2.1, 9.5]% after; 145 items declared held out, 104/145 [63.9, 78.4]% before, 6/145 [1.9, 8.7]% after; 123 built-in tool calls, 104/123 [77.1, 89.9]% before, 6/123 [2.3, 10.2]% after
+rules_without_overlap: 467-fixture set without the 34 items whose command or path is in tests/ or src/ (post hoc): 132 items that stayed held out, 103/132 [70.2, 84.2]% before, 6/132 [2.1, 9.6]% after; 144 items declared held out, 103/144 [63.7, 78.3]% before, 6/144 [1.9, 8.8]% after; 122 built-in tool calls, 103/122 [77.0, 89.8]% before, 6/122 [2.3, 10.3]% after
 ```

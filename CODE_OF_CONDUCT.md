@@ -4,7 +4,7 @@ This is a small open-source project, and the aim is simple: people can ask quest
 changes without being treated badly.
 
 - Be respectful. Disagree with the code, the numbers or the design as hard as you like; do not make it personal.
-- No harassment, insults, discrimination or unwelcome attention, in issues, pull requests, discussions or anywhere
+- No harassment, insults, discrimination or unwelcome attention, in issues, pull requests or anywhere
   else the project is the subject.
 - Assume good faith, say plainly what you do not understand, and keep criticism specific and checkable. A report that
   an evaluation claim is overstated is welcome; the project's own notes ask for it.

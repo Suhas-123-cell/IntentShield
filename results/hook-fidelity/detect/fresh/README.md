@@ -13,12 +13,12 @@ read it as a same-category test, not a test of new techniques (see Limits).
 
 **Held out at scoring time, not now.** The header of `table.md` says the items were not in IntentShield's repository text. That was true
 when the set was built and scored. The unit tests of the dangerous-command rules, written afterwards, contain the command or path of
-7 of the 104 harmful items (`rm -rf *`, `security dump-keychain -d`, `git push -f origin HEAD` and four file paths such as
-`~/.bashrc`; a plain substring match at `633014e`, so the short paths may match by chance). Scored without those 7,
-`.venv/bin/python benchmarks/hook_fidelity/overlap_check.py` gives: IntentShield with the rules lets through 27 of 97 harmful items
-(28 of 104 with them), asks on 39 and denies 31 (41 and 35 with them). On safety-net's shell scope (82 items) safety-net denies 40 and
-IntentShield 22 (41 and 24 of 85 with them), so IntentShield still trails safety-net on denies alone. On knox's scope (69 items) knox
-denies 28 and IntentShield 25 (29 and 28 of 73 with them). The direction of every comparison is unchanged; the conclusion that the set is a
+8 of the 104 harmful items (`rm -rf *`, `security dump-keychain -d`, `git push -f origin HEAD` and five file paths such as
+`~/.bashrc`; a plain substring match on the 0.4.4 tree, so the short paths may match by chance). Scored without those 8,
+`.venv/bin/python benchmarks/hook_fidelity/overlap_check.py` gives: IntentShield with the rules lets through 27 of 96 harmful items
+(28 of 104 with them), asks on 39 and denies 30 (41 and 35 with them). On safety-net's shell scope (82 items) safety-net denies 40 and
+IntentShield 22 (41 and 24 of 85 with them), so IntentShield still trails safety-net on denies alone. On knox's scope (68 items) knox
+denies 28 and IntentShield 24 (29 and 28 of 73 with them). The direction of every comparison is unchanged; the conclusion that the set is a
 same-category test stands.
 
 **Corrections after review** (a refuting critic, round 8): the fixtures commit is `25b62ad` (the original hash `32a0e3b` no
@@ -38,6 +38,7 @@ guard on its claimed scope, and prints the ask/deny split, same-item comparisons
 | `benchmarks/hook_fidelity/fresh_build.py` | the fixture builder (item bank + source references, same payload shapes as `detect_fixtures.py`) |
 | `benchmarks/hook_fidelity/_is_subproc.py` | runs IntentShield's hook in-process against a fixtures file from a given `--src`, used once with the `r8-detect`-tip source tree and once with this branch's merged (`r8-fixrules`) source tree, so both variants could be scored without one import shadowing the other |
 | `benchmarks/hook_fidelity/fresh_report.py --out DIR` | computes `table.md`/`summary.json` into DIR (a scratch directory; diff it against the committed copies) from `fixtures.jsonl` + `decisions.jsonl` |
+| `cluster/cluster.json`, `cluster/cluster.md` | the denies-alone comparison with one row per source write-up and per category, and a bootstrap over write-ups, from `benchmarks/hook_fidelity/cluster_compare.py --out DIR --current-rules`; `study_rules` uses the committed decisions, `current_rules` the code of the checkout it was generated from |
 | `benchmarks/hook_fidelity/overlap_check.py` | which harmful items have their command or path in `tests/` or `src/`, and the 214-call comparison and the 467-fixture before and after figures without them |
 
 ## Method

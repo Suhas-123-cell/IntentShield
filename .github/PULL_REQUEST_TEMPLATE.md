@@ -4,6 +4,8 @@
 
 ## Checklist
 
+A documentation-only change needs only the box about a doc claim, and `uv run pytest -q tests/test_docs_*.py` locally.
+
 - [ ] `uv run ruff check src tests benchmarks` and `uv run mypy` pass.
 - [ ] The tests pass with the command in CONTRIBUTING.md, "Tests and lint" (`INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_KEY= INTENTSHIELD_INTENT_MODEL_DIR=/tmp/none uv run pytest -q`), and a new behaviour has a test.
 - [ ] A wall-clock assert in a test uses `limit()` from `tests/timelimits.py`, not a bare number.

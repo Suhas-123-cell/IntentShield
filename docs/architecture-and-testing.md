@@ -40,7 +40,7 @@ The proposal source does not supply authorization scores or approval decisions. 
   [the guide](guide.md#when-the-guard-blocks-or-asks-about-something-legitimate)).
 - By default built-in tools (shell, file edits, web fetches) are left to the harness's own permission flow.
   `intentshield install <harness> --builtin-tools` also sends them to the hook, which applies the session rules and the text rules of
-  the package `dangerous/` ([guide](guide.md#built-in-tools-and-the-dangerous-command-rules)).
+  the package `dangerous/` ([rules](rules.md)).
 
 ```mermaid
 flowchart TD
@@ -85,7 +85,7 @@ Every module in `src/intentshield/` is listed once, grouped by the layer it belo
 | Main service | `service.py` | Persists runs, obtains evidence, evaluates policy, manages approval and idempotency, invokes executors. |
 | Security workers | `security_agents.py` | Concurrent deterministic detection and grounding. Their validated evidence cannot authorize execution. |
 | Policy | `policy.py` | Pure authorization logic; performs no tool execution. |
-| Storage | `storage.py` | SQLite runs, ordered events, approvals and atomic mutation reservations. |
+| Storage | `storage.py` | SQLite runs, ordered events, approvals and atomic mutation reservations, and the schema-version helpers (`migrate`, `newer_schema`) the other databases use. Kept at a schema version in `PRAGMA user_version`, with ordered migrations; a database from a newer release still works. |
 | Local tools | `tools.py` | Synthetic inbox read and synthetic email send. No email provider is connected. |
 | Gemini adapter | `model_gateway.py` | Sends a proposal request to Gemini, normalizes exactly one known native function call, supports a safe no-action, rejects malformed responses. |
 | Logging and rate limit | `logs.py`, `ratelimit.py` | JSON decision logs without arguments; in-memory per-client token bucket. |
@@ -144,14 +144,18 @@ Notes on the table above:
 | | `harness/guard.py` | The per-session guard: stored intent and taint, and the checks of calls and results against them. |
 | | `harness/events.py` | A hook event of each harness read as a call, a result or a prompt, and the reply the harness expects. |
 | | `harness/builtin.py` | The built-in tools (`--builtin-tools`) and the MCP tools whose arguments name a command, a path or text to write. |
-| | `harness/store.py` | The sessions database: intent, taint, flags, and when each harness last ran a hook. |
+| | `harness/store.py` | The sessions database: intent, taint, flags, and when each harness last ran a hook. Kept at a schema version in `PRAGMA user_version`, with ordered migrations; a database from a newer release still works. |
 | | `harness/verdict.py` | The verdict, the kinds of built-in tools, how each harness answers an ask, and how a tool name is read. |
 | | `harness/sensitive.py` | The names the rules look for: persistence paths, argument names for a command, a path or text, shell-script and JSON recognition. |
 | | `harness/text.py` | Text the hook stores or shows: escaped, scrubbed of credentials, cut to the length a session keeps. |
 | | `harness/env.py` | The API keys `install --judge` stored, read into the environment. |
 | Verdict translation | `translation.py` | Turns the guard's allow, ask or deny into the reply the harness build, in its version and mode, is measured to honour; reads the harness version and the process ancestry that decides the mode. |
 | Hook wrapper | `wrap_hook.py` | `intentshield wrap-hook`: runs any third-party hook under the fail-closed launcher, a deadline and the translation. |
-| Installer | `install.py` | `install`, `uninstall`, `wrap`, `unwrap`: writes and removes the hook entries and the transparent-proxy entries, with backups of the files it edits. |
+| Installer | `install/settings.py`, `install/wrapping.py`, `install/cli.py` | `install` and `uninstall` (`settings.py`), `wrap` and `unwrap` (`wrapping.py`) and the four subcommands (`cli.py`): write and remove the hook entries and the transparent-proxy entries, with backups of the files they edit. `install/__init__.py` re-exports the names the other modules and the tests use. |
+| | `install/hooks.py` | The hook entries and the command each harness runs, including the `--builtin-tools` matchers. |
+| | `install/judgekey.py` | The judge's API key and endpoint, kept in `~/.intentshield/.env`. |
+| | `install/textedit.py` | JSON with comments and TOML edited as text, so a file keeps its comments, order and spacing. |
+| | `install/records.py` | The atomic write, the copy of a file's original text, the record of installs. |
 | Missing-package message | `_launch.py` | Lets the entry points print one line, not a traceback, when a package the command needs is missing (as on a `pip install --no-deps` install). |
 | Doctor | `doctor.py` | `intentshield doctor`: checks that the hooks and proxies are installed and wired correctly (the entry names a program that exists, the hook has run, each wrapped server's config and command exist) without starting anything; `--connect` starts each wrapped server once through its proxy and lists its tools. |
 | Scanner | `scan.py` | `intentshield scan`: finds the MCP servers installed in agent harnesses, starts them as the client would and checks their tools offline. |
@@ -169,6 +173,8 @@ Notes on the table above:
 | | `dangerous/variables.py` | Variables, brace lists and the working directory of one command line. |
 | | `dangerous/writes.py` | Which paths a command writes: redirects, `tee`, `dd of=`, the destination of copies, in-place edits (`sed -i`, `perl -pi`, `gawk -i inplace`), editors, `tar -C`, `unzip -d` and a `find` that deletes or runs a command. |
 | | `dangerous/runners.py` | Programs that run another program (`sudo`, `env`, `flock`, `ssh`, `find -exec`): the words read through to the command behind them, with a cap of 8 wrappers. |
+| | `dangerous/links.py` | The real path of a symbolic link, so a path is read as the place it leads to as well as by its text. |
+| | `dangerous/reach.py` | What reaches a protected place by another way: a link made to it, a search of the home, a `find` that runs a reader. |
 | | `dangerous/paths.py` | Paths as the rules read them (home, system and protected directories, credential stores, persistence files). |
 | | `dangerous/rules.py` | The rules of one command: git, rm, find, disks, modes, persistence, what a command sends over the network. |
 | | `dangerous/selfguard.py` | The guard's own surface: the hook settings and the state a command must not delete or switch off. |
@@ -365,7 +371,17 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --group dev --frozen` and has none of those variables set.
 
-Expect every test to pass. Measured on 2026-11-12 on the working tree released as 0.4.4:
+Expect every test to pass. Measured on 2026-11-19 on the working tree after commit 5f50e5e (0.4.4 plus the changes under "Unreleased" in the
+changelog; the `lowest` job of CI, which installs the lowest allowed version of every direct dependency, was not run on this tree).
+`pytest --collect-only` lists 17043 tests, which on macOS is the 17038 that passed and the 5 that skipped:
+
+| platform | result |
+|---|---|
+| macOS, Python 3.14 | 17038 passed, 5 skipped |
+| Linux container, Python 3.11, with `--cov` (93.1% covered; the floor is 85%) | 17032 passed, 11 skipped |
+| Linux container, Python 3.14, with `--cov` (93.1% covered) | 17032 passed, 11 skipped |
+
+Measured on 2026-11-12 on the working tree released as 0.4.4, which had fewer tests:
 
 | platform | result |
 |---|---|
@@ -401,11 +417,13 @@ For focused investigation, use the relevant file rather than repeating everythin
 | Files | Covered behavior |
 |---|---|
 | `test_gateway.py` | policy decisions, exact approval binding, expiry and consumption, scope, budget, persistence, idempotency replay and conflict, uncertain mutations, concurrent reservations |
+| `test_schema_versions.py` | `PRAGMA user_version` and ordered migrations of the hook, threat and gateway databases: an upgrade of 0.4.4-shaped databases keeps every row, hooks that start together do not collide, a hook guard and a gateway storage given the same file both get their tables, and a database from a newer release is left alone |
 | `test_security_agents.py` | detection rules, negation, action and target grounding, schema binding, destinations, classifier fusion, timeouts, malformed or spoofed evidence |
 | `test_detector.py` | fail-closed signals for a call that names an unregistered tool |
 | `test_api.py` | web routes, simulated decisions, approval flow, a real guarded stdio upstream, approval authentication, local host restriction |
 | `test_model_gateway.py` | fake Gemini responses: missing key before any network call, malformed, multiple or unknown calls, no-action, preflight |
 | `test_intent_classifier.py` | dataset balance and group isolation, manifest and hash failures, qualification, abstention, the action-family adapter |
+| `test_intent_training_steps.py` | the steps of `intent_training.train` (data, fit, evaluation, metadata, saved files) run against a stand-in for torch and transformers, so CI covers them without the ML packages |
 | `test_logs.py`, `test_ratelimit.py` | JSON decision logs without arguments; per-client rate limit and 429 responses |
 | `test_evaluation.py` | the offline evaluation dataset, Wilson intervals and safety invariants |
 
@@ -435,6 +453,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_hook_loopback_and_internal_hosts.py`, `test_hook_after_flagged_result.py`, `test_hook_url_hosts_and_persistence.py` | what a flagged session may still do (build, test, commit) and which writes set up code that later sessions run |
 | `test_hook_regressions.py` | hook, scan and installer regressions: failed-call results, session expiry, credentials, installer files, the exact sentence for each variable that loosens the hook |
 | `test_harness_event_handling.py` | the hook: built-in events it cannot read are refused with `--builtin-tools`, `Grep` is covered, the `--deadline` range, and the record of whether the harness or a person fed the hook an event |
+| `test_hook_host_and_ssh_files.py` | `--builtin-tools`: another page of a site an injected result named asks, the public files of `~/.ssh` are not a read of secrets in a command's arguments, and a search result is scanned |
 | `test_harness_unreadable_tool_names.py` | a call whose tool name is missing, empty, not text or named like an MCP tool without the MCP part is refused with a reason on Claude Code, Codex CLI, Gemini CLI and Cursor (one table of odd names and odd inputs); an event that is not a call is never refused for its name |
 | `test_builtin_tools.py`, `test_builtin_live_score.py` | `--builtin-tools` for the four harnesses and `doctor`; scoring of the live built-in-tool runs on synthetic rows |
 | `test_harness_fail_closed_and_installer_ownership.py`, `test_review_gate.py` | fail-closed modes, installer ownership, provenance of bare hosts; the CI gate on benign review load |
@@ -453,6 +472,7 @@ For focused investigation, use the relevant file rather than repeating everythin
 | Files | Covered behavior |
 |---|---|
 | `test_install.py` | `install`, `uninstall`, `wrap` and `unwrap` for the hook and proxy installers |
+| `test_install_unhappy_paths.py` | messages on a machine that is not as expected (a read-only home, a harness program that is not on PATH, files that do not parse), full documentation addresses, the `install` package's names and patch seam, Grep in the built-in matcher, long server names |
 | `test_install_validation.py` | installer and `scan` input checks: ephemeral paths, `wrap` validating every entry first, `--judge` dry runs, the "Next:" line, the address the bare command prints |
 | `test_doctor_install_and_wrap.py` | what `doctor`, `install`, `wrap` and `unwrap` say and do |
 | `test_doctor_home_prefix.py`, `test_install_and_scan_messages.py` | `doctor` writes `~` only where a path starts, so a printed `wrap` command can be copied; what `install`, `wrap` and `scan` say when a file or a server is not what they expected |
@@ -485,6 +505,10 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_dangerous_size_limits.py` | a command over the character, command, word or nesting limit asks, and a deny placed after the cut is not lost; hostile input stays linear |
 | `test_dangerous_verdict_accuracy.py` | ordinary commands that must be allowed and risky ones that must not be, in both directions (`find` with a name test, `git clean -n`, key generation, empty variables, `curl \| sh` variants, harness credential files) |
 | `test_dangerous_wrappers.py` | programs that run another program (`sudo`, `flock`, `taskset`, `ssh host`, `find -exec` and the rest of the list in `dangerous`) do not hide what they run: a deny behind a wrapper is the same deny |
+| `test_dangerous_added_wrappers.py` | `dangerous/`: a program that is read as a wrapper is still given its words as an ordinary program (a key it names asks as before), a `;` word, `osascript` scripts, the options of the programs added as wrappers and a variable set from `$HOME` |
+| `test_dangerous_symlinks.py` | `dangerous/`: a symbolic link is followed for a path that exists (shell rules, file tools, `apply_patch`); the aliases of `/tmp`, `/var` and `/etc`, a home behind a link, loops, dangling links and the budget of paths |
+| `test_dangerous_reach.py` | `dangerous/`: `ln -s` of a protected directory, a search of the home or above it, and a `find` or `xargs` that runs a reader, judged by its name test |
+| `test_dangerous_equivalence.py` | `dangerous/`: every documented deny target in many spellings through many readers, writers and deleters gets one verdict; a seeded random check that a wrapper is never weaker than the command it runs |
 | `test_dangerous_powershell.py` | the PowerShell tool is read as the POSIX commands its cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content` of a credential file, an `Invoke-WebRequest` upload, a download run with `Invoke-Expression`); other cmdlets are not read, and the tests say so |
 | `test_builtin_shell_tools.py` | `PowerShell`, `Monitor` and `apply_patch` run through the shell tool get the same rules as `Bash` with `--builtin-tools` |
 | `test_dangerous_guard_files_and_credential_paths.py` | `dangerous/` beyond a plain read or delete: the guard's own programs, package and wrapped client files, a key named by a program that no rule reads, a key fixture in the project's test directory, and the path and command arguments of an MCP tool (`--builtin-tools` only) |
@@ -520,10 +544,12 @@ For focused investigation, use the relevant file rather than repeating everythin
 |---|---|
 | `test_msb_scoring.py`, `test_paper_numbers.py` | MSB scoring on synthetic traces; the headline cells replayed from the committed traces in `results/msb` |
 | `test_injection_eval.py`, `test_adaptive_attacker.py`, `test_self_disclosure_eval.py` | injection evaluation corpus and per-family scoring; the adaptive-attacker protocol; self-disclosure stripping over recorded catalogs |
-| `test_docs_inventory.py`, `test_docs_links.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository, and the README links to its own sections by `#anchor` |
-| `test_docs_tables_and_versions.py` | no table cell in `README.md` or `docs/guide.md` is longer than 300 characters, no paragraph in the front-door documents or the guide is longer than 900 characters (700 in the README, 500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
-| `test_docs_figures.py` | the README stays at 140 lines or fewer; the reading path's word counts and the stated size of the product documentation are `wc -w` counts; the injection table's rules column and its sums match the committed corpus and table; the upper bounds beside 0.0% cells are Wilson bounds; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
+| `test_injection_figures.py` | `results/injection/rows.jsonl` holds no text and covers the committed corpus by hash; the table and the report are built from it; the figures the README and `docs/benchmarks.md` cite are recomputed from it |
+| `test_docs_inventory.py`, `test_docs_links.py`, `test_docs_rules_page.py` | this page names every module and test file; every relative link and anchor in the repository's Markdown resolves, as do the README's absolute links to files in the repository, and the README links to its own sections by `#anchor`; the rules page has a class, a verdict and a reason in every row and carries no release history |
+| `test_docs_tables_and_versions.py` | no table cell in `README.md`, `docs/guide.md` or `docs/rules.md` is longer than 300 characters, no paragraph in the front-door documents or the guide is longer than 900 characters (700 in the README, 500 in this page), and `pyproject.toml`, `CITATION.cff`, `uv.lock` and the changelog name the same version |
+| `test_docs_figures.py` | the README stays at 140 lines or fewer, with the quick start before the threat model and the documents before the results; the reading path's word counts are `wc -w` counts and `docs/README.md` keeps no other word count; the injection table's rules column and its sums match the committed corpus and table; the upper bounds beside 0.0% cells are Wilson bounds; the baseline outputs in `CONTRIBUTING.md` are what `injection_eval.py` and `shell_replay.py` print |
 | `test_docs_unreleased.py` | while "Unreleased" in the changelog is empty, no document carries a "on main, after <version>" qualifier and the README has no note that PyPI has an older version; while it is not empty, the README has that note and the guide marks features under "Unreleased" |
+| `test_text_encoding.py` | every text-mode `open`, `read_text`, `write_text` and `fdopen` in `src/`, `tests/` and `benchmarks/` names its encoding |
 | `test_import_declarations.py` | every third-party package that `src/intentshield` imports is declared in `pyproject.toml` |
 | `test_workflow_files.py` | the workflow files parse (no `: ` in a plain step name), nothing installs the removed `dev` extra, and every supported Python has a classifier and a CI job |
 | `test_coverage_study.py`, `test_security_review_counts.py` | coverage-study instrumentation; `docs/security-review.md` table counts equal its finding rows |
@@ -539,7 +565,9 @@ For focused investigation, use the relevant file rather than repeating everythin
 | `test_hook_fidelity_compare.py`, `test_hook_fidelity_compare_arms.py`, `test_hook_fidelity_compare_rerun_and_shim.py`, `test_hook_fidelity_guards.py` | the head-to-head runner, the wrapped, allow and deny-all arms, `--on-empty allow` cells, guard byte capture and replay |
 | `test_hook_fidelity_detect.py`, `test_hook_fidelity_fresh_report.py` | the decision comparison: fixtures, reply classification, metrics; a guard never run on a row is excluded, not scored; `--current-rules` scores IntentShield with the code in the checkout; `overlap_check.py` names an item that matches the tests and is not pinned |
 | `test_hook_fidelity_coverage.py`, `test_hook_fidelity_linux_probe.py` | the coverage re-run tooling; the Linux `/proc` probe's case matrix and committed rows |
-| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` carries the matrix and build counts of `benchmarks/hook_fidelity/report_numbers.py` and stays under 2,650 words; its appendix embeds exactly the script's output; the 467-fixture set is rescored without the items now in the rules' tests; one build count per harness is used in every document; the report carries its limits and no process wording, every percentage matches its k/n, and "registered in advance" does not return |
+| `test_hook_fidelity_report.py` | `docs/hook-fidelity-report.md` carries the matrix and build counts of `benchmarks/hook_fidelity/report_numbers.py` and stays under 2,950 words; its appendix embeds exactly the script's output; the 467-fixture set is rescored without the items now in the rules' tests; one build count per harness is used in every document; the report carries its limits and no process wording, every percentage matches its k/n, and "registered in advance" does not return |
+| `test_hook_fidelity_cluster.py` | the denies-alone comparison counted by source write-up (`cluster_compare.py`): the sign test and bootstrap, the committed output, and the figures the report quotes, including the as-shipped table |
+| `test_hook_fidelity_ledgers.py` | the launch counts that `results/hook-fidelity/README.md` gives for each harness's ledger |
 | `test_hook_fidelity_study_numbers.py`, `test_hook_fidelity_reproduce.py` | the counts and ranges in the committed rows that the study quoted, recomputed from the rows; a clean clone regenerates the detection tables without the guard clones |
 
 The study's working notes are not in this tree; they are on the `research-notes` branch. The checks of their wording and numbers (the study's status lines, its glossary, its section 14, the contribution history's section numbers, the corpus inventory's counts and the claims about the order of writing in the notes) went with them and live on that branch. The checks of the report, the data under `results/` and the code stay here.
@@ -941,7 +969,7 @@ The rest need external datasets that you clone yourself, by convention under `ar
 | `hook_fidelity/fetch_corpus.py [--dry-run] [--only <guard>]` | The network and git: it clones the 26 guards of the hook study at their pinned commits (hooks disabled, nothing run) | None |
 | `msb_compare.py` | MSB checkout for the case grid and the committed traces in `results/msb` | None; rescores stored traces |
 
-Results and their caveats are in the README, and the raw outputs the papers cite are in [`results/`](../results/README.md); related work and next steps are in [related-work.md](related-work.md).
+Results and their caveats are in the README, and the raw outputs the papers cite are in [`results/`](../results/README.md); related work is in [related-work.md](related-work.md).
 
 ## 16. Completion checklist and practical limits
 

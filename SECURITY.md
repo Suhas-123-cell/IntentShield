@@ -35,6 +35,7 @@ Reporters are credited by name in the release notes and the changelog entry unle
   without a size limit (stdio lines, HTTP bodies and SSE events), so `max_result_bytes` and
   `max_total_schema_bytes` apply only after a message is read in full. This is a known gap, to be raised
   with the SDK.
+- A symbolic link is followed only once it exists on disk; one made on the same command line is not yet there when the line is read (see [docs/rules.md](docs/rules.md)).
 - Detection gaps that are already documented as limitations in `docs/benchmarks.md` and `docs/detectors.md` (for example plain-language injections from independent sources). Reports with a new sample are still welcome as issues.
 
 ## What is stored locally
@@ -70,14 +71,14 @@ the guard can tell later that you gave that very value; it does not keep the val
 stays in the prompt text as you typed it.
 
 `intentshield scan` and `intentshield doctor --connect` start the MCP servers named in your own client files, which runs their code with
-your user rights; `--no-connect` (scan) and plain `doctor` start nothing. A server named by a file in the working directory, which a
+your user rights; `--no-connect` (scan) and plain `doctor` start no MCP server (`install` and `doctor` do run `<harness> --version` once to record the build). A server named by a file in the working directory, which a
 repository may have chosen, is started only with `--connect-project`.
 
 Since 0.4.3 the library's default databases (`Storage()`, `IntentShieldService.default()`, `create_mcp_server()` and a proxy
 config with no `database_path`) are in `~/.intentshield`, as the command line's are. Before that they were `intentshield.db`
 and `intentshield-mcp.db` in the working directory, and a file of that name already in the working directory keeps being used, so an upgrade keeps
 its data: move or delete it to start using `~/.intentshield`. The configs `configs/mcp-proxy.demo.json` and `mcp-proxy.uvx.json` still name
-`intentshield-mcp.db` in the working directory. When a detection or grounding agent fails and the guard fails closed, it logs the
+`intentshield-mcp.db` in the working directory, and a run with either also leaves `threats.db` there. When a detection or grounding agent fails and the guard fails closed, it logs the
 name of the exception class at warning level, never its message, which may hold call arguments.
 
 To delete it, first run `intentshield uninstall <harness>` and `intentshield unwrap <file>` so that no hook or proxy entry

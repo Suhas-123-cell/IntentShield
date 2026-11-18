@@ -73,11 +73,11 @@ which a PreToolUse hook never sees: neither is used. The labels are mine; a few 
 
 **Since the set was built, "not in IntentShield's repo text" is no longer true of every item.** It was true when the set was built
 (the `in_is_repo` field of each fixture records the check at that time). The unit tests of the dangerous-command rules, written after
-the decisions here were made, contain the command or path of some of the held-out harmful items: 33 of the 156 harmful built-in-tool
-items (a plain substring match, so a short string such as `~/.bashrc` can match by chance; run
+the decisions here were made, contain the command or path of some of the held-out harmful items: 34 of the 156 harmful built-in-tool
+items on the 0.4.4 tree (a plain substring match, so a short string such as `~/.bashrc` can match by chance; run
 `.venv/bin/python benchmarks/hook_fidelity/overlap_check.py` to list them). The strings are the canonical dangerous commands (`rm -rf /`,
 `git push --force`, a fork bomb), and the rules were written from category lists, so this may be coincidence. `overlap_check.py` also scores
-the set without them: after the rules IntentShield lets through 6 of the 133 harmful items that stayed held out (104 of 133 before), against 6 of 166
+the set without them: after the rules IntentShield lets through 6 of the 132 harmful items that stayed held out (103 of 132 before), against 6 of 166
 (137 of 166) with them. The committed decisions and tables are unchanged.
 
 **Guards.** Run through `guard_capture.run_sandboxed` (the guard-replay sandbox: `sandbox-exec`, deny default, no network, writes only

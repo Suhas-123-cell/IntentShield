@@ -10,7 +10,7 @@ Four areas, one reviewer each:
 |---|---|
 | Proxy, gateway and control plane | `mcp_proxy/`, `mcp_upstream.py`, `mcp_server.py`, `api.py`, `service.py` |
 | LLM judge | `judge.py` and its wiring in `harness/` and `mcp_proxy/` |
-| Hook path and installer | `harness/`, `install.py`, `scan.py`, `credentials.py` |
+| Hook path and installer | `harness/`, `install/`, `scan.py`, `credentials.py` |
 | Deterministic detection and provenance | `mcp_inspect/`, `threat_memory.py`, the output and description rules |
 
 Method:
@@ -68,18 +68,18 @@ Status values: fixed, partly fixed, open. "Unverified" means the fix report impl
 
 | Id | Finding | Severity | Status | Where fixed |
 |---|---|---|---|---|
-| HK1 | Tool errors were never scanned: no `PostToolUseFailure` handler | High | Partly fixed | `install.py`, `configs/harness/claude-settings.json`, `harness/` (Claude registered; Gemini `AfterTool` and Cursor scan an error field). Not registered for Codex, which may not have the event |
+| HK1 | Tool errors were never scanned: no `PostToolUseFailure` handler | High | Partly fixed | `install/`, `configs/harness/claude-settings.json`, `harness/` (Claude registered; Gemini `AfterTool` and Cursor scan an error field). Not registered for Codex, which may not have the event |
 | HK2 | A bare `intentshield scan` started repo-controlled servers with the full environment | Medium | Fixed | `scan.py` (minimal environment; project-config servers need `--connect-project`) |
 | HK3 | The 7-day expiry dropped taint mid-session | Medium | Fixed | `harness/` (every event renews the session; tainted or flagged sessions keep 30 idle days); `test_a_tainted_session_survives_eight_idle_days_and_a_clean_one_does_not` |
 | HK4 | Cursor gets an explicit `allow` on every clean call, which may skip Cursor's own approval prompt | Medium (plausible) | Fixed (after 0.4.1) | Measured on Cursor CLI 2026.10.22 (`benchmarks/harness_live/cursor_hook_probe.py`): `allow` did not skip Cursor's approval and behaved like an empty reply. The hook now answers `{}`. The probe found worse: an `ask` on an allowlisted MCP tool ran the call (3 of 3), so Cursor MCP asks are now refusals |
 | HK5 | The catalog read-only decision was keyed on the bare tool name, not the server | Medium | Fixed | `harness/` (keyed by server and tool), `mcp_server.py` (`write_catalog` writes `server` and `tool`) |
-| HK6 | `wrap ~/.claude.json` skipped Claude Code's local-scope servers | Low-medium | Partly fixed | `install.py` (covers `projects.<path>.mcpServers`; byte-exact unwrap). The unlocked read-modify-write of a file Claude Code rewrites is not addressed |
+| HK6 | `wrap ~/.claude.json` skipped Claude Code's local-scope servers | Low-medium | Partly fixed | `install/` (covers `projects.<path>.mcpServers`; byte-exact unwrap). The unlocked read-modify-write of a file Claude Code rewrites is not addressed |
 | HK7 | Credential detector missed formats and ignored encoding tricks; some placeholders flagged | Low | Partly fixed | `credentials.py` (about 15 more formats, NFKC and format-character stripping, placeholder filters). Base64, hex, reversed or split tokens are still missed |
 | HK8 | `is_mutation` missed write verbs next to a read verb (`get_and_exec`) | Low | Fixed | `harness/` (about 40 more verbs; any write verb makes a write) |
 | HK9 | Schema drift (missing event name, `session_id` or result) was a silent no-opinion | Low | Fixed | `harness/` (deny or flag on all four harnesses, with a stderr line). An event with an unknown but present name still gets no opinion |
 | HK10 | Corrupt pins file reset the baseline; `guarded()` was a substring test | Low | Fixed | `scan.py` (backup, warning, atomic 0600 write; `guarded()` parses the hooks structure) |
 | HK11 | `--format sarif` crashed on a relative config path | Low | Fixed | `scan.py` (`resolve().as_uri()`) |
-| HK12 | Installer hygiene: `.env` comments dropped and symlink followed; bare-name executable fallback; reversed Codex markers; judge-outputs env typo | Low | Partly fixed | `install.py`, `harness/` (comments kept, symlink refused, markers refused, env value validated). The bare-name executable fallback and a repo-level `env` block were not changed or tested |
+| HK12 | Installer hygiene: `.env` comments dropped and symlink followed; bare-name executable fallback; reversed Codex markers; judge-outputs env typo | Low | Partly fixed | `install/`, `harness/` (comments kept, symlink refused, markers refused, env value validated). The bare-name executable fallback and a repo-level `env` block were not changed or tested |
 
 ### Deterministic detection and provenance (RP)
 

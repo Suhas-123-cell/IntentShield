@@ -5,11 +5,28 @@ By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). To report
 ## Your first change
 
 1. Clone the repository and run `uv sync --group dev` (see below).
-2. Fix a line in the documentation, or add a test for a harmless command that the guard wrongly asks about.
-3. Run the tests for the files you touched, for example `uv run pytest -q tests/test_dangerous_rules.py`, and `uv run ruff check src tests benchmarks`.
+2. Pick a task from the list below. The usual first one is a command the `--builtin-tools` rules ask about or deny that is harmless:
+
+   ```sh
+   uv run python -c "from intentshield.dangerous import assess_shell; print(assess_shell('git reset --hard HEAD~1', ''))"
+   ```
+
+   It prints the rule's verdict and reason (`None` means allow). Put your command in place of the example, which is a correct ask.
+   If the verdict is wrong, add the command to the `ALLOW` list of `tests/test_dangerous_rules.py` (checked by
+   `test_benign_near_misses_are_left_alone`) and change the rule in `src/intentshield/dangerous/` until
+   `uv run pytest -q tests/test_dangerous_rules.py` passes.
+3. Run the tests for the files you touched and `uv run ruff check src tests benchmarks`.
 4. Open a pull request. A documentation-only change needs only `uv run pytest -q tests/test_docs_*.py` locally, which takes a few
-   seconds; CI runs the rest. The review-load gate (item 6 under [Tests and lint](#tests-and-lint)) is for a change to a detection rule
+   seconds; CI runs the rest. Of the boxes in the pull-request template, a documentation-only change needs only the one about
+   checking a doc claim; the review-load gate (item 6 under [Tests and lint](#tests-and-lint)) is for a change to a detection rule
    or to what the hook asks about.
+
+Starter tasks:
+
+- Add a harmless command that is wrongly asked about to the `ALLOW` list, with the rule change that stops the ask.
+- Fix a statement in the documentation that the code does not bear out (`uv run intentshield --help` and the tests are the check).
+- Add an ordinary sentence that a tool-text rule wrongly flags to the benign lists of `tests/test_rules_detection.py` (for example `OVERRIDE_BENIGN`), with the rule change that stops the flag.
+- Re-run a committed benchmark on other hardware and send the rows (see [What contributions are wanted](#what-contributions-are-wanted)).
 
 ## Development setup
 
@@ -20,11 +37,16 @@ git clone https://github.com/Suhas-123-cell/IntentShield.git && cd IntentShield
 uv sync --group dev
 ```
 
-The optional ML extras (torch, transformers, sentencepiece, protobuf) are needed only for the local DeBERTa classifiers and the exemplar embedder:
+The optional ML packages (torch, transformers, sentencepiece, protobuf) are needed only for the local DeBERTa classifiers and the exemplar embedder:
 
 ```sh
 uv pip install --python .venv/bin/python -r requirements-ml.txt
 ```
+
+There is no `ml` extra of the package, on purpose: `requirements-ml.txt` pins `transformers>=4.48,<5`, and the newest release that pin
+allows (4.57.6 when this was checked) has published advisories whose fixes are only in 5.x. As an extra it would be in the locked
+packages the `audit` workflow checks, and that workflow fails for an advisory that has a fix. The packages are therefore
+installed from the file, in a clone, and are not locked.
 
 A plain `uv sync` removes them again. CI runs without them (`uv sync --group dev --frozen`), so a new third-party import must be declared in `pyproject.toml` (then `uv lock`); the local `.venv` can hide a missing declaration.
 
@@ -98,12 +120,12 @@ The steps, none of which needs a local LLM or a download:
      --out /tmp/injection-eval.json > /tmp/before.txt
    ```
 
-   At 0.4.3 it prints `ALL instruction (recall) 432/851` and `ALL data (benign flagged) 16/741`, and takes a couple of
+   It prints `ALL instruction (recall) 432/851` and `ALL data (benign flagged) 16/741`, and takes a couple of
    seconds. Of the 16 benign texts flagged, 13 are texts that quote an attack (`data:hard_quoted_attack` and its
    translation): a known limit, since the rules flag legitimate quotations of attack phrases. The other three are the rest of the baseline.
    (`--injecagent /nonexistent` skips a dataset a clean clone does not have; `--out` keeps the report out of the repository.)
 2. For a rule on a shell command or a file path, the baseline is the benign review load of the built-in-tools hook,
-   replayed from a fixture inside the script: `uv run python benchmarks/shell_replay.py`. At 0.4.3 it prints
+   replayed from a fixture inside the script: `uv run python benchmarks/shell_replay.py`. It prints
    `shell: 1/25 asked or denied` and `write: 1/3`.
 3. Write the rule, and in the tests above add the texts or commands it must flag and at least as many near-misses it must leave alone.
 4. Run the same command again into `/tmp/after.txt` and `diff /tmp/before.txt /tmp/after.txt`. A rule is accepted when the
@@ -132,7 +154,7 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
    some older modules still fail are switched off per module in its `[[tool.mypy.overrides]]` lists. A new module has to pass
    the full set, and a module leaves its list when it does.
    There is no formatter: lines are at most 130 columns and the layout is kept by hand, so do not reformat a file you are not
-   changing for another reason (`ruff format` would rewrite 48 of the 51 files in `src`, measured 2026-11-12).
+   changing for another reason (`ruff format --check src` reports nearly every file).
 3. **The tests**, with the command above. It takes a few minutes. To run one file while you work, add its path:
    `uv run pytest -q tests/test_dangerous_rules.py`. One CI job also measures coverage (`uv run pytest -q --cov`, with `--cov` last because
    it takes an optional argument that would be read as the source path); the floor is `fail_under` in `pyproject.toml`. A third-party
@@ -151,10 +173,19 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
    the benign reviews per task rise more than 0.05 above `results/improve/baseline` on any of the 25 pairs. Run it after
    a change to a detection rule or to what the hook asks about; a rule that passes its own tests can still fail it.
 
-Two more checks run outside the test job: a Docker job builds the image and runs the demo proxy check in it, and an
+Two more checks run outside the test job: a Docker job builds the image, runs the demo proxy check in it and runs the code tests there (`pytest -q -m "not study"`), and an
 `audit` workflow checks the locked dependencies against the PyPI advisory database on each push and weekly.
 CI runs the test job on Linux with Python 3.11 to 3.14 and on macOS with 3.12, and one job tests the lowest allowed versions of the direct dependencies on 3.11. The module map, the test inventory by
 area and how to diagnose a failure are in [docs/architecture-and-testing.md](docs/architecture-and-testing.md).
+
+### How pins are kept current
+
+No bot bumps them; they change by hand, when a release or an advisory makes it worth doing.
+
+- **GitHub Actions** are pinned by commit SHA with the tag in a comment, in `.github/workflows/ci.yml`, `publish.yml` and `audit.yml`: `actions/checkout`, `astral-sh/setup-uv`, `actions/upload-artifact`, `actions/download-artifact` and `pypa/gh-action-pypi-publish`. To move one, find the commit of the new tag on the action's releases page, replace the SHA in every workflow that names it, and update the comment.
+- **uv** is `0.11.16`, written in six places: the `version:` of each `astral-sh/setup-uv` step (three in `ci.yml`, one in `publish.yml`, one in `audit.yml`) and the `COPY --from=ghcr.io/astral-sh/uv:0.11.16` line of the `Dockerfile`. Change them together. `pip-audit` has its own pin in `audit.yml`.
+- **Python packages** are pinned by `uv.lock`. Refresh with `uv lock --upgrade` (everything) or `uv lock --upgrade-package NAME`, run the tests, and commit `uv.lock`. CI installs with `--frozen`, so a lock that does not match `pyproject.toml` fails there.
+- **The weekly audit** (`audit.yml`) runs on every push to `main`, on pull requests and on Mondays at 05:17 UTC. It checks `uv.lock` against the PyPI advisory database and fails the run when an advisory has a fixed version; an advisory with no fix yet is printed and does not fail it. It reads only the Python packages: it says nothing about the Actions or the uv version, which stay as pinned until someone moves them.
 
 ## Changelog
 

@@ -133,6 +133,25 @@ sample: an interval below is sampling noise on these items only.
   exfiltration 17, destructive 15, git 14, pipe to shell 12, rc and CI write 8) and by source. The rules changed after the items had been seen, and
   the data were cut several ways (the 467 and 214 sets, with and without overlap, the study's rules and the current ones) with no correction for
   multiplicity. The current-rules result is one item from non-significance.
+- **Counted by source write-up.** The 85 items come from 44 write-ups. With one row per write-up (it goes to the guard that denied more of its
+  items; ties are dropped), safety-net leads 17 to 6 with the study's rules (21 ties, p = 0.035) and 15 to 7 with the current ones (22 ties,
+  p = 0.134). A bootstrap over write-ups puts its lead in deny rate at +20.0 points [+5.8, +32.1] and +14.1 points [0.0, +27.9]. So the lead
+  survives clustering with the study's rules and does not clear p < 0.05 with the current ones. With one row per category (six) neither is
+  significant (p = 0.69), and on knox's items neither count separates the guards. See `cluster_compare.py` and
+  `results/hook-fidelity/detect/fresh/cluster/`.
+
+**As shipped, where an ask is refused or hangs (extrapolated, not measured).** An `ask` is refused on Claude Code from 2.1.85 and hangs on
+Gemini CLI from 0.38.0 (finding 2), and IntentShield's hook turns it into a refusal where nobody can answer. The study's rules, from
+`results/hook-fidelity/detect/fresh/table.md`: each reply is pushed through what the build did with that class of reply in the shell stub cells and
+applied to every tool kind, including read, write and edit, which were not measured.
+
+| build | an ask is | harmful stopped, IntentShield as shipped | harmful stopped, safety-net | benign blocked, IntentShield / safety-net |
+|---|---|---|---|---|
+| Claude Code 2.1.316 | refused | 76/104 [63.8, 80.7]% | 44/104 [33.3, 51.9]% | 5/110 / 4/110 |
+| Gemini CLI 0.66.0 | hangs | 66/92 [61.8, 79.9]% | 41/92 [34.8, 54.7]% | 5/105 / 4/105 |
+
+Where an ask runs the call and nothing translates it (Claude Code 2.1.84, Codex CLI, Gemini CLI 0.37.1), IntentShield stops 35/104, 24/85 and
+28/92 against safety-net's 40/104, 41/85 and 41/92. The ranking of the two guards depends on what the harness does with an ask.
 
 **Where IntentShield is ahead: only on its own rule categories, and post hoc.** The opt-in rules were written after the first set's result was known. The
 214 items sample the same six categories the rules were written from, and the set was built by the same model family. The gain measures
@@ -141,10 +160,10 @@ fit to those categories, not detection of anything unseen.
   (85 items): safety-net 44/85 [41.3, 62.1]%, IntentShield 25/85 [20.8, 39.8]%. On knox's scope (73 items): knox 44/73 [48.8, 70.7]%,
   IntentShield 18/73 [16.2, 35.6]%.
 - 467-fixture set, 166 held-out harmful items: 137/166 before the rules, 6/166 [1.7, 7.7]% after.
-- Some items appear in the rules' unit tests: 33 of the 156 built-in tool items at commit 1979d0e, among them canonical commands such as
-  `rm -rf /`, so "held out" was weak for those from the start. Without them the 467-set figures are 104/133 [70.4, 84.4]% before and
-  6/133 [2.1, 9.5]% after. `overlap_check.py` names any item the tests have matched since and exits 1: it now names H129, so the
-  count on the tree is 34 of 156. The 214-call set has 7 of 104; the appendix rescores its comparison.
+- Some items appear in the rules' unit tests: 34 of the 156 built-in tool items on the 0.4.4 tree, among them canonical commands such as
+  `rm -rf /`, so "held out" was weak for those from the start. Without them the 467-set figures are 103/132 [70.2, 84.2]% before and
+  6/132 [2.1, 9.6]% after. The 214-call set has 8 of 104; the appendix rescores its comparison. `overlap_check.py` exits 1 when the
+  tests or source match an item that is not pinned in `overlap_items.json`, and a test fails then, so the counts cannot drift unseen.
 
 **Benign calls: a tie with safety-net and a loss to knox.** On the 214-call set IntentShield asks on 4 of safety-net's 100 shell items and
 safety-net denies 4; on knox's 74 items IntentShield asks on 5 and knox flags 0. On the 467-fixture set IntentShield asks on 6 of 234
@@ -182,6 +201,7 @@ Everything cited here regenerates offline from the committed rows:
 .venv/bin/python benchmarks/hook_fidelity/report_numbers.py   # the builds, matrix and every figure above (prints only)
 .venv/bin/python benchmarks/hook_fidelity/overlap_check.py    # the items now in the tests, and the rescored figures (prints only; exit 1 on drift)
 .venv/bin/python benchmarks/hook_fidelity/fresh_report.py --out <empty directory> --current-rules   # IntentShield's decisions from this checkout's rules
+.venv/bin/python benchmarks/hook_fidelity/cluster_compare.py --out <empty directory> --current-rules   # the same comparison per source write-up
 .venv/bin/pytest -q tests/test_hook_fidelity_*.py             # recomputes the figures the documents cite
 ```
 

@@ -25,7 +25,7 @@ from a clone, the Gemini proposal path and the REST API. What each placement of 
 - Atomic idempotency protection for mutations; uncertain executor outcomes enter a persistent `IN_DOUBT` state and are never retried automatically
 - Human approval bound to the exact run, tool, arguments, and expiry
 - SQLite audit trail for runs, events, approvals, and executions
-- Real MCP 2.2 client support over stdio and Streamable HTTP
+- A real MCP client (Python SDK 2.2) over stdio and Streamable HTTP
 - Guarded connections to multiple real upstream MCP servers over stdio or Streamable HTTP
 - Upstream JSON Schema validation, namespaced tool identities, and fail-closed catalog drift checks
 - MCP poisoning defense: description scanning with quarantine, cross-server shadowing detection, and rug-pull fingerprints over descriptions and annotations
@@ -386,7 +386,7 @@ Or, without installing anything but Docker (no ML extras):
 ```bash
 docker build -t intentshield .
 docker run --rm intentshield              # verifies the demo proxy end to end
-docker run --rm intentshield pytest -q    # the test suite
+docker run --rm intentshield pytest -q    # the code tests (the study's tests need docs/ and results/ from a clone, which the image leaves out, and skip)
 ```
 
 Optional extras:

@@ -4,6 +4,8 @@ All of these are optional and evidence-only; the README keeps the summary.
 
 The PyPI package ships no trained model and has no `ml` extra. The detectors are off by default and their PyTorch path is not exercised
 in CI, so the packages they need (PyTorch, transformers, sentencepiece, protobuf) are listed in `requirements-ml.txt` for a clone.
+There is no extra because the `transformers` pin has published advisories whose fixes are in a newer major version, and a locked extra
+would fail the dependency audit ([CONTRIBUTING.md](../CONTRIBUTING.md#development-setup)).
 
 ## Train the local intent classifier
 
@@ -131,9 +133,11 @@ injections caught and the share of benign texts flagged:
 | rules + Prompt Guard + exemplars on outputs | 58.5% | 2.9% | 15/142 |
 | any of the four (rules, classifier, Prompt Guard, exemplars on outputs) | 70.6% | 24.9% (189/758) | 113/142 |
 
-The rows above are the committed run of 2026-10-21, with the rules as they were before 0.3.5. Rerun on 2026-11-12 with the 0.4.4 rules,
-the rules catch 50.8% of the injections and flag 2.1% of benign texts (16/758), and rules + exemplars catch 58.4% and flag 2.4%
-(18/758); [benchmarks.md](benchmarks.md#detail-behind-the-headline) has that run by family. Prompt Guard 2 and the classifier were not rerun.
+The rows above are the committed run of 2026-10-21, with the rules as they were before 0.3.5 (`results/injection/table-2026-10-21.txt`).
+Rerun on 2026-11-12 with the 0.4.4 rules (`results/injection/rows.jsonl`, with the Prompt Guard 2 scores of the earlier run), the rules catch
+50.8% of the injections and flag 2.1% of benign texts (16/758), rules + exemplars 58.4% and 2.4% (18/758), rules + Prompt Guard 51.0% and
+2.5% (19/758), and rules + Prompt Guard + exemplars 58.5% and 2.8% (21/758), with 14/142 hard benign texts flagged by each of the four.
+[benchmarks.md](benchmarks.md#detail-behind-the-headline) has that run by family. The classifier was not rerun.
 
 The MCPTox poisoned descriptions (370) and the 81 AgentDojo important_instructions/system_message/tool_knowledge rows were used while writing the rules, and 1,054 InjecAgent 'enhanced' rows are trivially marked (1,505 of the 2,959 injections in all). On the remaining 1,454, rules + exemplars catch 19.2% (279) and the rules 3.8% (55); without the 27 AgentDojo `ignore_previous` rows that a 0.3.5 rule was written from, 17.7% (252 of 1,427) and 2.0% (28). In the 2026-10-21 run these were 18.1% (263/1,454) and 2.1% (30/1,454).
 
@@ -169,6 +173,10 @@ Wilson 95% intervals and an exact McNemar test on the paired verdicts:
 | MCPTox descriptions (rules tuned on them) | attacks | 313/370 84.6% | 95/370 25.7% | 218 / 0 | <0.001 |
 | MCPTox descriptions | benign | 2/128 | 0/128 | 2 / 0 | 0.5 |
 | hard benign texts | benign | 15/142 10.6% | 12/142 8.5% | 3 / 0 | 0.25 |
+
+With the 0.4.4 rules (`results/injection/rows.jsonl`) two rows of this table change: the LLM-written plain-language outputs are 11/346
+(3.2%) for the rules, 11 / 0 only rules / only Prompt Guard 2 (p < 0.001), and the hard benign texts 14/142 (9.9%), 2 / 0 (p = 0.5). The other
+rows are the same.
 
 On the 1,427 injections independent of the rules (InjecAgent base, the LLM-written outputs, AgentDojo
 `direct`) the rules caught 30 (2.1%) in this run, which used the 0.3.5 rules (28 with the 0.4.4 rules), and Prompt Guard 2 caught 6 (0.4%). Read together: the

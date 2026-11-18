@@ -6,6 +6,103 @@ Terms such as taint, provenance, verdict translation and the fail-closed launche
 
 ## Unreleased
 
+### Upgrading from 0.4.4
+
+Nothing to run: an installed hook keeps working. Install again with your earlier options (`intentshield install claude --builtin-tools`)
+only to get Grep results scanned. What changes for you:
+
+- **Everyone:** a read-only or missing `~/.intentshield` no longer turns an ask into "hook failed" when the session database
+  (`--db`, `INTENTSHIELD_HOOK_DB`) is somewhere else. **Weaker than 0.4.4** in that one case: the call is asked about, where 0.4.4
+  refused it. With the default database under an unwritable `HOME` the database cannot open and every call is still refused.
+- **Everyone:** `wrap-hook` denies a guard reply whose `hookSpecificOutput` is not an object (stricter).
+- **Everyone:** the hook, threat-memory and gateway databases are stamped with a schema version the first time this release opens
+  them. 0.4.4 still opens them, and a database from a newer release no longer stops the hook. A `wrap` of a server whose name is
+  longer than 100 characters names its files with the first 100 characters and the hash; shorter names are unchanged.
+- **Everyone:** several messages changed (see Changed). No verdict changes with them.
+- **Only with `--builtin-tools`, stricter:** a symbolic link is followed; `ln -s` of the home, `/` or a system directory asks; `find`
+  with `-exec`, `-execdir`, `-ok` or `| xargs` and a reader, and a recursive `grep`, `rg`, `ag` or `ack`, at the home or above it, ask or
+  deny; `.`, `tr` and other readers of standard input, and `python3 -m json.tool` and its kind, read a file like `cat`; `rm` of a
+  glob over `~` or `/` denies and over another protected directory asks; `git checkout -f` and `git switch -f` ask; `rm -rf /media`
+  denies; `tmux`, `osascript`, `zellij run` and 20 more programs that start a command are read through; `&>`, `truncate`, `$HOME` in a variable's
+  value, globs over system secrets, an escaped `;` in `find -exec`, and `ssh` or `sudo -s` with a download piped to a shell are
+  read; `chattr -R` of the home and `sudo chown -R` of the home deny; `osascript` asks where its script runs a command in a form that
+  is not read; `WebFetch` of another page of a host an injected result named asks; Grep results are scanned.
+- **Only with `--builtin-tools`, weaker than 0.4.4:** four families.
+  - A command that sends data out and names a public file of `~/.ssh` (`config`, `config.d/*`, `known_hosts`, `known_hosts2`,
+    `known_hosts.*` including `known_hosts.d/*`, `authorized_keys`, `authorized_keys2`, `allowed_signers`, `*.pub` and their backups)
+    no longer asks "reads secrets": `ssh -F ~/.ssh/config host`, `ssh -o UserKnownHostsFile=~/.ssh/known_hosts host` and
+    `git -c core.sshCommand='ssh -F ~/.ssh/config'` are allowed, where 0.4.4 asked. That removes a false ask on files the guide already
+    said are not held. `ssh -i KEY` and uploads of a key are unchanged.
+  - A variable set from `$HOME/...` is followed: `d=$HOME/proj; rm -rf $d` is judged as `rm -rf ~/proj` and allowed, where 0.4.4 asked
+    about a variable it could not follow. The same holds for `$USERPROFILE/...` and for `${HOME}x`. `d=$HOME; rm -rf $d` and
+    `d=$HOME/Documents; rm -rf $d` are judged as the direct spelling is, a deny.
+  - A `;` that is a word of its own (`\;`, `';'`) is an argument, as the shell passes it, and no longer ends a command where the
+    shell hands it on as an argument: `echo a \; rm -rf /`, `bash -c 'echo a \; rm -rf /'`, `su -c`, `sudo -s`, `sudo -i`, `env`, `nohup`,
+    `timeout`, `time`, `xargs`, `flock -c`, `script -c`, `screen` and the like are allowed, where 0.4.4 denied the `rm` that follows
+    the `;`. Where a program joins its words with spaces and hands them to a shell (`watch`, `watchexec`, `parallel`, `firejail`,
+    `ssh host`, `eval`, and the remote-shell clients `autossh`, `rsh`, `rexec`, `plink`, `mosh`, `tsh ssh` and `gcloud compute ssh`)
+    a `;` word still ends a command: `watch echo a \; rm -rf /` is a deny.
+  - A recursive search of the home that names `.ssh` or a key only in an exclusion (`grep -r --exclude-dir=.ssh x ~`,
+    `rg -g '!.ssh' x ~`, `ack --ignore-dir=.ssh x ~`) asks as a search of the whole home, where 0.4.4 denied it for the name.
+
+  No other verdict is known to be weaker. A program that became a wrapper (`tmux`, `osascript`, `runcon`, `xterm` and the rest of the
+  twenty) is also read as the ordinary program it was, so a key or a credential file named to it asks as in 0.4.4.
+
+### Added
+
+- `doctor` warns when a hook or threat-memory database was written by a newer release.
+
+### Changed
+
+- Only with `--builtin-tools`: a symbolic link is followed for a path that exists (shell rules, file tools, `apply_patch`): the real
+  path is read as well and the stricter verdict wins. `ln -s` of the home, `/`, a system directory or a protected home folder asks.
+  The `/tmp`, `/var` and `/etc` links of macOS and a home behind a link keep their verdicts ([the rules](docs/rules.md)).
+- Only with `--builtin-tools`: `find` at the home or above it with `-exec`, `-execdir`, `-ok` or `| xargs` and a reader is judged by
+  its name test (a key name denies, `.env*` or `*.pem` asks, no name test asks). A recursive `grep`, `rg`, `ag`, `ack` or the Grep tool at
+  the home, above it, or at `~/.config`, `~/.local` or `~/Library` asks.
+- Only with `--builtin-tools`: `tmux`, `osascript` (`do shell script`), `zellij run` and 20 more programs that start a command are read
+  as wrappers, also where an option takes the place of an operand (`runcon -t TYPE cmd`, `dtach -c SOCKET cmd`, `cgexec --sticky -g
+  cpu:x cmd`, `gnome-terminal -e 'cmd'`, `entr -s 'cmd'`, `zellij -l layout run -- cmd`); `osascript` asks when its script uses `do script`,
+  `doShellScript` or `write text`, builds the text of `do shell script` from parts or comes on the standard input; `. FILE`, `tr`, `fmt`,
+  `column` and other readers, and `python3 -m json.tool` and its kind, are readers like `cat`.
+- Only with `--builtin-tools`: `chattr -R` of the home directory and `sudo chown -R` of it are denies, as `chattr -R` of `/` and `sudo
+  chmod -R` of the home are; `grep -r --exclude-dir=.ssh x ~` asks as a search of the home and is not denied for the name in the
+  exclusion, and a directory above the home asks whichever way it is spelled.
+- Only with `--builtin-tools`: `rm` of a glob over `~` or `/` is a deny (also without `-r`), over `~/Documents/*` or `/var/log/*` an
+  ask; `git checkout -f`, `git checkout --force`, `git switch -f` and `git switch --discard-changes` ask; `/media` is a protected
+  directory.
+- Only with `--builtin-tools`: `&>` and `&>>` redirects and `truncate` are writes; `$HOME` in a variable's value is followed;
+  `cat /etc/shado?` and other globs over system secrets deny (a glob that also reaches many ordinary files asks); a `;` that is a word of
+  its own no longer ends a `find -exec` command; `ssh host curl URL | sh` and `sudo -s curl URL | sh` ask like `curl URL | sh`.
+- Only with `--builtin-tools`: `WebFetch` of another page, a subdomain or the parent domain of a host that an injected result named
+  asks (the address itself and its path stay a deny); a popular host or one you named does not count; `--review never` turns it off.
+- Only with `--builtin-tools`, weaker: `ssh -F ~/.ssh/config`, `UserKnownHostsFile=` and the other public files of `~/.ssh` no longer
+  ask "reads secrets" (see Upgrading).
+- Only with `--builtin-tools` on Claude Code: `install` also sends a Grep result to the hook (the PostToolUse and PostToolUseFailure
+  matchers), so injected text in a search result is scanned like one in a Read result. Install again to get it.
+- `wrap-hook` refuses a `hookSpecificOutput` that is not an object. A read-only `~/.intentshield` no longer turns an ask into "hook
+  failed" when `--db` names a file elsewhere (see Upgrading).
+- The hook, threat-memory and gateway databases carry a schema version with ordered migrations (`PRAGMA user_version`).
+- `wrap`, `unwrap` and `doctor` say how to fix an MCP file that is not valid JSON and no longer blame comments for a plain syntax
+  error; `install` and `wrap` name the directory when a permission is refused instead of a temporary file; Cursor's missing program
+  is named `cursor-agent`; messages name documents by their full GitHub address, because the wheel carries no `docs/` directory.
+- `doctor` names `--connect-project` for a wrapped file in the working directory, where it named `--connect`.
+- The rules for the harness's own tools are on their own page, [docs/rules.md](docs/rules.md), as tables; the README is a shorter front
+  page.
+
+### Fixed
+
+- `wrap` of a server whose name is 400 characters long failed with an operating-system error; the file names are cut to 100 characters
+  and the hash.
+- The `~user` lookup is cached: a command with 20,000 repeated `~a` words took 3.0 s and takes 0.16 s.
+
+### Study and benchmarks
+
+- `benchmarks/injection_eval.py --from-rows` prints the injection table from `results/injection/rows.jsonl`, which holds each row's
+  verdicts (a text hash, no text); the table there is the one for the rules of 0.4.4.
+- The hook study report counts the denies-alone comparison by source write-up (`benchmarks/hook_fidelity/cluster_compare.py`) and shows
+  an as-shipped table where an ask is refused or hangs; the pinned overlap items now match the tree, and a test fails if they drift.
+
 ## 0.4.4 - 2026-11-12
 
 ### Upgrading from 0.4.3
@@ -35,7 +132,7 @@ Nothing to run: an installed hook keeps working. What changes for you:
   home directory and back (`~/../x/.ssh/id_rsa`) is read as the key; a home outside `/Users`, `/home` and `/root` is a home (the
   `HOME` of the hook and of the event); the listed folder names match without regard to case; `find ~/Downloads -mtime +30 -delete`
   (or by size, `-empty`, owner, `-newer`) asks instead of denying; git hook overrides through `GIT_CONFIG_KEY_n` or `export HUSKY=0` ask;
-  `aws configure get region` no longer asks; a shell tool input that is a list is refused or read. See [the rules](docs/guide.md#built-in-tools-and-the-dangerous-command-rules).
+  `aws configure get region` no longer asks; a shell tool input that is a list is refused or read. See [the rules](docs/rules.md).
 
 ### Added
 
@@ -52,7 +149,7 @@ Nothing to run: an installed hook keeps working. What changes for you:
 - `scan` prints what each matched `tool_poisoning` rule means and the first words that matched; the proxy logs one warning for each
   tool it hides.
 - Only with `--builtin-tools`: the hook also reads the arguments of an MCP tool, a path through the file rules and `command` or `cmd`
-  through the shell rules. It only makes a verdict stricter ([guide](docs/guide.md#built-in-tools-and-the-dangerous-command-rules)).
+  through the shell rules. It only makes a verdict stricter ([the rules](docs/rules.md)).
 - The proxy config takes `trusted_tools` (`server:tool` names). A description that only names a secret file still hides its tool, and
   no longer counts as an attack by its server ([guide](docs/guide.md#troubleshooting)).
 
@@ -84,9 +181,9 @@ Nothing to run: an installed hook keeps working. What changes for you:
 - The help text of `intentshield-mcp --host` said a non-loopback address was accepted with a token; the server refuses it, and the help
   and the error now say so.
 - Only with `--builtin-tools`: the rules read the command behind about 80 wrapper programs and the PowerShell cmdlets, deny or ask in
-  more cases (a credential given to an unlisted program, `~/.aws`, `/etc/sudoers`, a raw socket, a write to IntentShield's own files, a redirect over a key, `rsync --delete` onto a system directory)
+  more cases (`/run`, `/nix`, `/cores` and `/lost+found` as destruction targets, a credential given to an unlisted program, `~/.aws`, `/etc/sudoers`, a raw socket, a write to IntentShield's own files, a redirect over a key, `rsync --delete` onto a system directory)
   and ask less in a few; a relative path is read from the call's directory and a file in `~/.ssh` by what it is
-  ([the full list](docs/guide.md#built-in-tools-and-the-dangerous-command-rules)).
+  ([the full list](docs/rules.md)).
 - Only with `--builtin-tools`: a path is one path whatever its spelling (dot segments, a climb and a return, doubled slashes, a climb
   above the home directory and back); a home is also the home of the running user wherever it lies; a climb in a relative path is
   made on the working directory as the event wrote it, for the path arguments of commands (also the file arguments of a shell or an
@@ -105,7 +202,8 @@ Nothing to run: an installed hook keeps working. What changes for you:
   `localhost` or `127.0.0.1` is allowed and one to another host asks; reading, listing or unsetting `core.hooksPath` is allowed
   (setting it asks); a dead copy of a startup file or of `~/.ssh/config` (`.zshrc.bak`, `.bashrc.orig`, `.zshrc~`, `config.bak`) is
   allowed; `~/.ssh/config.d` is allowed, and another `~/.ssh` file not named like a key asks (one named like a key, or holding key
-  text, is still a deny); a cleanup of a home folder by age, size, emptiness or owner (`find ~/Downloads -mtime +30 -delete`) asks;
+  text, is still a deny); a key-named file inside a test directory of the project, by an absolute path inside the working directory
+  and outside any dot directory, asks (it was a deny); a cleanup of a home folder by age, size, emptiness or owner (`find ~/Downloads -mtime +30 -delete`) asks;
   `aws configure get region` is allowed; `~/../x/proj` is the folder `x/proj`, not the home, so `rm -rf ~/../x/proj/build` is allowed.
 
 ### Fixed
@@ -123,7 +221,7 @@ Nothing to run: an installed hook keeps working. What changes for you:
   not allowed (verdict translation, a fail-closed launcher and a 30 s deadline, written by `install`).
 - New `intentshield wrap-hook` runs any third-party hook under the same launcher and translation.
 - New opt-in dangerous-command rules for the harness's own shell, file and web tools (`--builtin-tools`). What they deny and ask is in
-  [docs/guide.md](docs/guide.md#built-in-tools-and-the-dangerous-command-rules), not here.
+  [docs/rules.md](docs/rules.md), not here.
 
 ### Upgrading from 0.4.2
 
