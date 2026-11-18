@@ -67,6 +67,18 @@ _HANDLED_EVENTS = {
 }
 
 
+def _recased_call(event: dict[str, Any], builtin_tools: bool) -> bool:
+    """True for an event with no ``tool_name`` that still carries a call under keys in another case (``toolName``,
+    ``toolInput``) or a ``tool_input`` alone: a schema that changed its keys must not read as an allow. Without
+    ``--builtin-tools`` only a re-cased MCP tool name counts, since the built-in tools are not guarded then."""
+    if event.get("tool_name"):
+        return False
+    other = event.get("toolName")
+    if isinstance(other, str) and other and (builtin_tools or other.startswith("mcp__")):
+        return True
+    return builtin_tools and any(event.get(key) for key in ("tool_input", "toolInput"))
+
+
 def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = False) -> dict[str, Any] | None:
     """A reply when an event carries a tool but no event name (or, with ``--builtin-tools``, one this hook does not act on): the
     harness changed its schema, and nothing says whether it is the call or the result, so the call is refused rather than
@@ -84,7 +96,7 @@ def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = Fal
     else:
         mcp = "mcp_context" in event or _odd_tool_name(event) or (
             builtin_tools and str(event.get("tool_name") or "") in _BUILTIN)
-    if not mcp:
+    if not mcp and not _recased_call(event, builtin_tools):
         return None
     reason = ("IntentShield could not tell what this hook event is (its hook_event_name is "
               f"{name!r}), so it refused the call; update IntentShield or the harness.")

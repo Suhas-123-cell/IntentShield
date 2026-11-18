@@ -373,13 +373,13 @@ give; CI uses `uv sync --group dev --frozen` and has none of those variables set
 
 Expect every test to pass. Measured on 2026-11-19 on the working tree after commit 5f50e5e (0.4.4 plus the changes under "Unreleased" in the
 changelog; the `lowest` job of CI, which installs the lowest allowed version of every direct dependency, was not run on this tree).
-`pytest --collect-only` lists 17043 tests, which on macOS is the 17038 that passed and the 5 that skipped:
+`pytest --collect-only` lists 17138 tests, which on macOS is the 17133 that passed and the 5 that skipped:
 
 | platform | result |
 |---|---|
-| macOS, Python 3.14 | 17038 passed, 5 skipped |
-| Linux container, Python 3.11, with `--cov` (93.1% covered; the floor is 85%) | 17032 passed, 11 skipped |
-| Linux container, Python 3.14, with `--cov` (93.1% covered) | 17032 passed, 11 skipped |
+| macOS, Python 3.14 | 17133 passed, 5 skipped |
+| Linux container, Python 3.11, with `--cov` (93.1% covered; the floor is 85%) | 17127 passed, 11 skipped |
+| Linux container, Python 3.14, with `--cov` (93.1% covered) | 17127 passed, 11 skipped |
 
 Measured on 2026-11-12 on the working tree released as 0.4.4, which had fewer tests:
 

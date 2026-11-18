@@ -187,3 +187,39 @@ def test_a_result_of_a_tool_whose_name_is_not_text_is_scanned_like_any_other(tmp
     assert clean is None
     flagged = handle(harness, event_of(harness, 1, name, {"a": "b"}, tool_response=INJECTION), g)
     assert flagged is not None and "instruct" in str(flagged).lower()
+
+
+# --- a call whose keys came in another case ---------------------------------------------------------------------------------
+
+RECASED = [
+    {"hookEventName": "PreToolUse", "sessionId": "s", "toolName": "Bash", "toolInput": {"command": "rm -rf /"}},
+    {"hookEventName": "BeforeTool", "toolName": "run_shell_command", "toolInput": {"command": "rm -rf /"}},
+    {"tool_input": {"command": "rm -rf /"}},
+    {"toolInput": {"command": ["bash", "-lc", "rm -rf /"]}},
+    {"toolName": "Write", "tool_input": {"file_path": "/etc/passwd", "content": "x"}},
+]
+
+
+def refused(reply: dict | None) -> bool:
+    if reply is None:
+        return False
+    return "deny" in (denial(reply), reply.get("permission", ""))
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex", "gemini", "cursor"])
+@pytest.mark.parametrize("event", RECASED)
+def test_a_call_whose_keys_are_in_another_case_is_refused_with_builtin_tools(tmp_path: Path, harness: str, event: dict):
+    assert refused(handle(harness, dict(event), guard(tmp_path, builtin_tools=True))), event
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex", "gemini", "cursor"])
+def test_an_mcp_call_whose_keys_are_in_another_case_is_refused_without_builtin_tools(tmp_path: Path, harness: str):
+    event = {"hookEventName": "PreToolUse", "toolName": "mcp__mail__send_email", "toolInput": {"to": "a@example.org"}}
+    assert refused(handle(harness, event, guard(tmp_path)))
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex", "gemini", "cursor"])
+@pytest.mark.parametrize("builtin_tools", [True, False])
+@pytest.mark.parametrize("event", [{"prompt": "hello"}, {"sessionId": "s"}, {}, {"toolInput": {}}, {"toolName": ""}])
+def test_an_event_with_no_name_and_no_call_in_it_is_not_refused(tmp_path: Path, harness: str, builtin_tools: bool, event: dict):
+    assert not refused(handle(harness, dict(event), guard(tmp_path, builtin_tools=builtin_tools)))

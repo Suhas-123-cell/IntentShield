@@ -215,9 +215,12 @@ def _ps_command_text(argv: list[str]) -> str:
     """The text ``pwsh -Command ...`` or ``-EncodedCommand ...`` runs."""
     for i, a in enumerate(argv[1:], 1):
         low = a.lower()
+        if low.startswith("/") and len(low) > 1:   # powershell.exe also takes /c, /e and /enc
+            low = "-" + low[1:]
         if low in ("-c", "-command") or (len(low) > 2 and "-command".startswith(low)):
             return " ".join(argv[i + 1:])
-        if len(low) > 2 and low.startswith("-e") and "-encodedcommand".startswith(low) and i + 1 < len(argv):
+        # -e and -ec are aliases of -EncodedCommand; -ex is -ExecutionPolicy and is not a prefix of it
+        if (low == "-ec" or (low.startswith("-e") and "-encodedcommand".startswith(low))) and i + 1 < len(argv):
             try:
                 return base64.b64decode(argv[i + 1], validate=False)[:_MAX * 2].decode("utf-16-le", "ignore")
             except ValueError:

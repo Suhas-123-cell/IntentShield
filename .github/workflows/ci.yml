@@ -85,5 +85,12 @@ jobs:
       - run: docker build -t intentshield .
       - run: docker run --rm intentshield
       # The image keeps tests/ and leaves out docs/ and results/ (see .dockerignore): the study's tests skip there.
+      # CI is passed in so the wall-clock limits get the shared-runner margin the other jobs have (tests/timelimits.py). The names
+      # of failing tests are repeated as error annotations, which are readable on the run's summary page.
       - name: Code tests in the image
-        run: docker run --rm intentshield pytest -q -m "not study"
+        shell: bash
+        run: |
+          docker run --rm -e CI=true intentshield pytest -q -m "not study" | tee image-tests.log || {
+            grep '^FAILED' image-tests.log | head -20 | sed 's/^/::error::/'
+            exit 1
+          }

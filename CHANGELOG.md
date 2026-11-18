@@ -95,6 +95,9 @@ only to get Grep results scanned. What changes for you:
 - `wrap` of a server whose name is 400 characters long failed with an operating-system error; the file names are cut to 100 characters
   and the hash.
 - The `~user` lookup is cached: a command with 20,000 repeated `~a` words took 3.0 s and takes 0.16 s.
+- A hook event with no event name whose keys came in another case (`toolName`, `toolInput`), or that carried a `tool_input` and no
+  tool name, was allowed. It is refused: an MCP tool name always, every tool with `--builtin-tools`.
+- Only with `--builtin-tools`: `powershell -e`, `-ec`, `/e` and `/enc` are decoded like `-EncodedCommand`; they were not read.
 
 ### Study and benchmarks
 

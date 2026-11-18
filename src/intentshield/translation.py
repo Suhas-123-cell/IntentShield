@@ -86,11 +86,17 @@ NON_CALL_EVENTS = frozenset({
     "stop", "beforeTabFileRead", "afterTabFileEdit"})
 
 
+# The keys a call carries, as the harnesses spell them and in the other case: a schema that changed case must not read as an
+# allow.
+_CALL_KEYS = ("tool_name", "toolName", "tool_input", "toolInput", "command", "cmd")
+
+
 def looks_like_call(event: dict[str, Any]) -> bool:
-    """True for an event that names a tool but whose event name is not a call event nor a known other one (missing, in another
-    case, or new): it may be the question whether to run a call, so it is held to the deadline and the fail-closed rules."""
+    """True for an event that names a tool or carries a tool's input but whose event name is not a call event nor a known other
+    one (missing, in another case, or new): it may be the question whether to run a call, so it is held to the deadline and the
+    fail-closed rules."""
     name = event.get("hook_event_name")
-    return name not in CALL_EVENTS and name not in NON_CALL_EVENTS and bool(event.get("tool_name"))
+    return name not in CALL_EVENTS and name not in NON_CALL_EVENTS and any(event.get(key) for key in _CALL_KEYS)
 
 
 # Harnesses whose hook command is measured to run through a shell that honours ``||`` (the evaluation's launcher cells). Cursor is

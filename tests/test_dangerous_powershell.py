@@ -93,3 +93,23 @@ def test_the_hook_reads_cmdlets_for_the_powershell_tool_only(tmp_path: Path, too
     reply = handle("claude", claude("PreToolUse", tool_name=tool, tool_input={"command": "Remove-Item -Recurse -Force ~"}), guard)
     decision = reply["hookSpecificOutput"].get("permissionDecision", "allow") if reply else "allow"
     assert decision == ("deny" if tool == "PowerShell" else "allow")
+
+
+# --- every spelling of -EncodedCommand ---------------------------------------------------------------------------------------
+
+def _encoded(text: str) -> str:
+    import base64
+    return base64.b64encode(text.encode("utf-16-le")).decode()
+
+
+@pytest.mark.parametrize("flag", ["-e", "-ec", "-en", "-enc", "-EncodedCommand", "-E", "-EC", "/e", "/enc", "/EncodedCommand"])
+@pytest.mark.parametrize("program", ["powershell", "pwsh", "powershell -NoProfile -NonInteractive -WindowStyle Hidden"])
+def test_an_encoded_command_is_decoded_under_every_spelling_of_the_parameter(flag: str, program: str):
+    assert verdict(f"{program} {flag} {_encoded('Remove-Item -Recurse -Force ~')}", powershell=False) == "deny", flag
+    assert verdict(f"{program} {flag} {_encoded('Get-Date')}", powershell=False) == "allow", flag
+
+
+def test_the_execution_policy_parameter_is_not_read_as_an_encoded_command():
+    assert verdict("powershell -ex Bypass -c 'Get-Date'", powershell=False) == "allow"
+    assert verdict("powershell -ExecutionPolicy Bypass -File build.ps1", powershell=False) == "allow"
+    assert verdict("powershell -ex Bypass /c 'Remove-Item -Recurse -Force ~'", powershell=False) == "deny"
