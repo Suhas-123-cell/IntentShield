@@ -375,17 +375,17 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --group dev --frozen` and has none of those variables set.
 
-Expect every test to pass. Measured on 2026-11-19 on the tree of release 0.4.5, before it was tagged.
+Expect every test to pass. Measured on 2026-11-19 on `main` after release 0.4.5.
 
-`pytest --collect-only` lists 19097 test cases in a clean copy of the tree, which on macOS is the 19091 that passed and the 6
-that skipped. The cases come from 2382 test functions: a parametrised function is collected once for each set of arguments, so the
+`pytest --collect-only` lists 19113 test cases in a clean copy of the tree, which on macOS is the 19107 that passed and the 6
+that skipped. The cases come from 2390 test functions: a parametrised function is collected once for each set of arguments, so the
 larger figure counts cases. Count the functions with `pytest --collect-only -q | grep '::' | sed 's/\[.*//' | sort -u | wc -l`.
 
 | platform | result |
 |---|---|
-| macOS, Python 3.14 | 19091 passed, 6 skipped |
-| Linux container (Debian bookworm), Python 3.14 | 19086 passed, 11 skipped |
-| Linux container, Python 3.11, with `--cov` (93.3% covered; the floor is 85%) | 19086 passed, 11 skipped |
+| macOS, Python 3.14 | 19107 passed, 6 skipped |
+| Linux container (Debian bookworm), Python 3.14 | 19102 passed, 11 skipped |
+| Linux container, Python 3.11, with `--cov` (93.3% covered; the floor is 85%) | 19102 passed, 11 skipped |
 
 The `lowest` job of CI (the lowest allowed version of every direct dependency) was not run locally on this tree; CI runs it.
 

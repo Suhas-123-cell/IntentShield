@@ -343,6 +343,10 @@ On Claude Code, and on Gemini CLI with `--gemini-ask`, a call that would normall
 safe side (put the harness on `PATH` and run `intentshield doctor` to record it). On Codex CLI, Cursor and Gemini CLI without
 `--gemini-ask` no verdict depends on the version.
 
+When `CLAUDE_CONFIG_DIR` or `CODEX_HOME` names another directory, the harness reads its user settings there, so `install`,
+`uninstall`, `doctor` and `scan` use that directory, and with `--builtin-tools` the guard asks before a command changes those
+settings. A session started without the variable reads `~/.claude` or `~/.codex`: run `install` once for each one you use.
+
 `install` then writes two things into the hooks that check a call (Claude Code, Codex and Gemini; Cursor keeps `failClosed`): the
 hook's own deadline and the launcher above. The deadline is `--deadline 30` on the hook command, so a slow judge or database answers
 with a refusal before the harness's timeout, which every harness measured treats as permission to run the call. `install` has no
@@ -414,7 +418,7 @@ Each message has one row: what you see, why, and what to run. The notes after th
 | `externally-managed-environment` (from `pip`) | the system Python does not let pip change it | `uv tool install intentshield-mcp`, or `pipx install intentshield-mcp` |
 | `pip` says it ignored versions that "require a different python version", or `uv` says "depends on Python>=3.11" | IntentShield needs Python 3.11 or newer | `uv tool install --python 3.12 intentshield-mcp` (uv fetches the interpreter) or `pipx install --python python3.12 intentshield-mcp` |
 | `could not read the version of <harness>` | `install` runs `<harness> --version`; the harness is not on `PATH`, printed no number or did not answer. On Claude Code, and Gemini CLI with `--gemini-ask`, an ask is refused until the version is recorded | put the harness on `PATH` (Cursor's program is `cursor-agent`), then `intentshield doctor`, which records the version |
-| `CLAUDE_CONFIG_DIR is set to <dir>` or `CODEX_HOME is set to <dir>`, `... will not see the hooks` | the harness reads its user settings from that directory; `install` writes to `~/.claude` or `~/.codex` | Claude Code: `intentshield install claude --scope project` in the project. Either harness: copy the entries that `install <harness> --dry-run` prints into the settings file in that directory |
+| `CLAUDE_CONFIG_DIR is set to <dir>` or `CODEX_HOME is set to <dir>`, `... reads its user settings from there` | the harness reads its user settings from that directory, so `install` wrote the hooks there; nothing is wrong | to guard a session started without the variable as well, run `intentshield install <harness>` once without it |
 | `holds a number that JSON cannot write back` | the file holds `NaN`, `Infinity` or a number such as `1e400`; it was left unchanged | change that number, then run the command again |
 | `not started (config in the current directory)`, and `scan` exits 2 | the servers of a project's `.mcp.json` are code the repository chose, so a bare `scan` does not start them | `intentshield scan .mcp.json`, or `intentshield scan --connect-project` |
 | the built-in rules for the shell, file and web tools were on and are now off | you ran `install` again without `--builtin-tools`; the files are written as before and the message prints the command that keeps them | `intentshield install <harness> --builtin-tools` (add `--scope project` if you used it) |

@@ -85,7 +85,7 @@ def _explain(exc: Exception) -> str:
         return (f"cannot use {exc.filename} ({exc.strerror}). IntentShield edits the settings or MCP file and keeps its own "
                 "records in ~/.intentshield, so both must be readable and writable by you: fix the permissions (or the read-only "
                 "mount), then run the command again")
-    if isinstance(exc, OSError) and exc.errno in (errno.EISDIR, errno.ENOTDIR) and exc.filename:
+    if isinstance(exc, OSError) and exc.errno in (errno.EISDIR, errno.ENOTDIR, errno.EEXIST) and exc.filename:
         return (f"{exc.filename} is not a file IntentShield can edit ({exc.strerror}); move it aside or fix the path, "
                 "then run the command again")
     return str(exc)

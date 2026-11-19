@@ -70,6 +70,54 @@ def _wrapped_client_file(path: str) -> bool:
     return "--transparent" in text and "intentshield" in text
 
 
+# The files of a harness's settings directory that hold its hooks, as paths inside the directory.
+_RELOCATED_FILE = re.compile(r"(?:settings[\w.-]*\.json|config\.toml|hooks\.json|hooks(?:/.*)?)", re.I)
+
+
+_RELOCATING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME")
+_RELOCATING_WORD = re.compile(r"^\$(?:\{(" + "|".join(_RELOCATING) + r")\}|(" + "|".join(_RELOCATING) + r")(?![A-Za-z0-9_]))")
+
+
+def _real(path: str) -> str:
+    """``path`` with its symbolic links followed (``/tmp`` is ``/private/tmp`` on macOS), or as it is when that cannot be done."""
+    try:
+        return os.path.realpath(path).replace("\\", "/")
+    except (OSError, ValueError):
+        return path
+
+
+def _relocated_dirs() -> tuple[str, ...]:
+    """The directories ``CLAUDE_CONFIG_DIR`` and ``CODEX_HOME`` name, as absolute paths in lower case, as written and with their
+    links followed. The hook inherits them from the harness that started it, and that harness reads its hook settings there
+    and not in ``~/.claude`` or ``~/.codex``."""
+    found: list[str] = []
+    for name in _RELOCATING:
+        value = os.environ.get(name, "").strip()
+        if value and "\n" not in value:
+            written = posixpath.normpath(os.path.expanduser(value).replace("\\", "/"))
+            found += [written, _real(written)]
+    return tuple(dict.fromkeys(d.lower() for d in found if d.startswith("/") and d.strip("/")))
+
+
+def _relocated_spellings(path: str) -> tuple[str, ...]:
+    """``path`` as absolute paths in lower case to compare with ``_relocated_dirs``: ``$CLAUDE_CONFIG_DIR`` or ``$CODEX_HOME`` at
+    its start is replaced by the directory it names, and the path is given as written and with its links followed. Empty when
+    it cannot be told."""
+    named = _RELOCATING_WORD.match(path)
+    if named:
+        value = os.environ.get(named[1] or named[2], "").strip()
+        path = os.path.expanduser(value).replace("\\", "/") + path[named.end():] if value else path
+    absolute = _absolute(path)
+    return tuple(dict.fromkeys(p.lower() for p in (absolute, _real(absolute)))) if absolute else ()
+
+
+def _relocated_settings(path: str) -> bool:
+    """``path`` is a hook settings file in a directory that ``CLAUDE_CONFIG_DIR`` or ``CODEX_HOME`` names."""
+    moved = _relocated_dirs()
+    return bool(moved) and any(spelled.startswith(d + "/") and _RELOCATED_FILE.fullmatch(spelled[len(d) + 1:])
+                               for spelled in _relocated_spellings(path) for d in moved)
+
+
 def guard_surface(path: str) -> tuple[str, str] | None:
     """(decision, why) when ``path`` holds the hook settings of a harness, IntentShield's own state (database, API key), its
     programs, its installed package or an MCP client file that runs a server behind its proxy: what an agent would change to
@@ -87,6 +135,8 @@ def guard_surface(path: str) -> tuple[str, str] | None:
         return ASK, "the hook settings of a harness or IntentShield's own state, which is how the guard is switched off"
     if _PROGRAM.search(n) or _SITE_PACKAGE.search(n):
         return ASK, _WHY_PROGRAM
+    if _relocated_settings(p):
+        return ASK, "the hook settings of a harness or IntentShield's own state, which is how the guard is switched off"
     absolute = _absolute(p)
     if absolute and (absolute == _PACKAGE_DIR or absolute.startswith(_PACKAGE_DIR + "/")):
         return ASK, _WHY_PROGRAM
@@ -114,6 +164,16 @@ def guard_dir(path: str, whole: bool = True) -> tuple[str, str] | None:
     p = _clean_path(path.strip().strip("\"'").replace("\\", "/"))
     if not p or len(p) > _PATH_CAP:
         return None
+    moved = _relocated_dirs()   # the directories CLAUDE_CONFIG_DIR and CODEX_HOME name
+    for spelled in _relocated_spellings(p) if moved else ():
+        parent, _, last = spelled.rpartition("/")
+        if any(c in last for c in "*?["):
+            if parent in moved and (_ends_in_glob(spelled) or any(fnmatch.fnmatchcase(name, last) for name in _GUARD_FILE_NAMES)):
+                return ASK, _WHY_DIR
+            if any(posixpath.dirname(d) == parent and fnmatch.fnmatchcase(posixpath.basename(d), last) for d in moved):
+                return ASK, _WHY_DIR   # ``rm -rf ~/.config/cc-w*`` can be the directory itself
+        elif spelled in moved and (whole or _ends_in_glob(p)):
+            return ASK, _WHY_DIR
     rooted = p.startswith(("~", "$", "/"))
     n = _norm(p) if rooted else posixpath.normpath(p)
     parent, _, last = n.rpartition("/")

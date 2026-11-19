@@ -6,6 +6,16 @@ Terms such as taint, provenance, verdict translation and the fail-closed launche
 
 ## Unreleased
 
+### Changed
+
+- `install`, `uninstall` and `doctor` follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. When one names a directory other than
+  `~/.claude` or `~/.codex`, Claude Code or Codex CLI reads its user settings from there, so the hooks are written to
+  `settings.json` or `config.toml` in that directory, where 0.4.5 wrote them to the default place and warned. `scan` and `doctor`
+  also read the MCP servers of `.claude.json` and `config.toml` there, and with `--builtin-tools` the guard asks before a command
+  changes the settings in that directory. Hooks that 0.4.5 wrote to the default place stay there and guard a session started
+  without the variable; `intentshield uninstall <harness>` without the variable removes them, and `uninstall` says when hooks
+  remain in the other directory.
+
 ## 0.4.5 - 2026-11-19
 
 ### Upgrading from 0.4.4

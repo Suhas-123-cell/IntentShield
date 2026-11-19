@@ -241,8 +241,9 @@ def _disabled(harness: str, path: Path, home: Path, cwd: Path | None = None) -> 
     if harness != "claude":
         return ""
     project = [cwd / ".claude" / "settings.json", cwd / ".claude" / "settings.local.json"] if cwd else []
-    for candidate in dict.fromkeys([path, path.with_name("settings.local.json"), home / ".claude" / "settings.json",
-                                    home / ".claude" / "settings.local.json", *project]):
+    user = install.settings_path("claude", "user", home)   # in the directory CLAUDE_CONFIG_DIR names, when it names one
+    for candidate in dict.fromkeys([path, path.with_name("settings.local.json"), user,
+                                    user.with_name("settings.local.json"), *project]):
         try:
             data = install._parse(candidate.read_text(encoding="utf-8"), candidate)
         except (OSError, ValueError):
@@ -261,8 +262,9 @@ def _loosening_settings(harness: str, path: Path, home: Path, cwd: Path | None =
     from .harness import _LOOSENING_ENV  # not at the top: the hook's own module is large and doctor reads settings only
     project = [cwd / ".claude" / "settings.json", cwd / ".claude" / "settings.local.json"] if cwd else []
     notes = []
-    for candidate in dict.fromkeys([path, path.with_name("settings.local.json"), home / ".claude" / "settings.json",
-                                    home / ".claude" / "settings.local.json", *project]):
+    user = install.settings_path("claude", "user", home)   # in the directory CLAUDE_CONFIG_DIR names, when it names one
+    for candidate in dict.fromkeys([path, path.with_name("settings.local.json"), user,
+                                    user.with_name("settings.local.json"), *project]):
         try:
             data = install._parse(candidate.read_text(encoding="utf-8"), candidate)
         except (OSError, ValueError):
@@ -402,7 +404,7 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
         return False
     problems_before = report.problems
     if project is None and (moved := install.relocated_config_dir(harness, home)):
-        report.line("warn", subject, install.relocated_config_advice(harness, *moved, path))
+        report.line("note", subject, install.relocated_config_advice(harness, *moved, path))
     before, why_stale = translation.recorded_version(harness, home)
     version = _harness_version(harness, home)
     if before is None and why_stale and not why_stale.startswith("no version"):

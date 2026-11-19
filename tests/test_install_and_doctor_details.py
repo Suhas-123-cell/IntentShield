@@ -103,65 +103,195 @@ def test_doctor_only_reads_a_settings_file_with_such_a_number(tmp_path, home, ca
 # --- a harness that reads its settings from another directory ---------------------------------------------------------
 
 def _said_moved(out: str) -> list[str]:
-    return [line for line in out.splitlines() if "will not see the hooks" in line]
+    return [line for line in out.splitlines() if "reads its user settings from there" in line]
 
 
-def test_install_says_when_claude_code_reads_its_settings_from_another_directory(tmp_path, home, capsys, monkeypatch):
+def test_install_writes_claude_codes_hooks_to_the_directory_the_variable_names(tmp_path, home, capsys, monkeypatch):
     other = tmp_path / "elsewhere"
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other))
-    install.install("claude", home=home, cwd=tmp_path, hook=HOOK, translate=False)
-    said = _said_moved(capsys.readouterr().out)
-    assert len(said) == 1
-    assert f"CLAUDE_CONFIG_DIR is set to {other}" in said[0] and "claude reads its user settings from there" in said[0]
-    assert f"written to {home / '.claude' / 'settings.json'}" in said[0]
-    assert "`--scope project`" in said[0] and f"{other}/settings.json" in said[0]
-    assert (home / ".claude" / "settings.json").exists() and not other.exists(), "where files are written is unchanged"
+    assert install.settings_path("claude", "user", home, tmp_path) == other / "settings.json"
+    written = install.install("claude", home=home, cwd=tmp_path, hook=HOOK, translate=False)
+    out = capsys.readouterr().out
+    assert written == other / "settings.json" and f"installed claude hooks in {other / 'settings.json'}" in out
+    assert "PreToolUse" in json.loads((other / "settings.json").read_text(encoding="utf-8"))["hooks"]
+    assert not (home / ".claude" / "settings.json").exists(), "the default place is not written when the harness does not read it"
+    said = _said_moved(out)
+    assert len(said) == 1 and f"CLAUDE_CONFIG_DIR is set to {other}" in said[0] and "warning" not in said[0]
+    assert "A session started without that variable reads ~/.claude" in said[0]
 
 
-def test_install_says_it_for_codex_without_promising_a_project_scope(tmp_path, home, capsys, monkeypatch):
+def test_install_writes_codexs_block_to_the_directory_the_variable_names(tmp_path, home, capsys, monkeypatch):
     other = tmp_path / "codex-home"
     monkeypatch.setenv("CODEX_HOME", str(other))
-    install.install("codex", home=home, cwd=tmp_path, hook=HOOK, translate=False)
+    written = install.install("codex", home=home, cwd=tmp_path, hook=HOOK, translate=False)
     said = _said_moved(capsys.readouterr().out)
-    assert len(said) == 1 and f"CODEX_HOME is set to {other}" in said[0] and f"{other}/config.toml" in said[0]
-    assert "--scope project" not in said[0] and "no project scope" in said[0]
-    with pytest.raises(ValueError, match="use --scope user"):  # the claim about scopes is the code's own
+    assert written == other / "config.toml" and HOOK in written.read_text(encoding="utf-8")
+    assert not (home / ".codex" / "config.toml").exists()
+    assert len(said) == 1 and f"CODEX_HOME is set to {other}" in said[0] and "reads ~/.codex" in said[0]
+    with pytest.raises(ValueError, match="use --scope user"):  # Codex has no project scope, with or without the variable
         install.settings_path("codex", "project", home, tmp_path)
 
 
-def test_install_says_nothing_when_the_variable_names_the_default_directory_or_is_empty_or_is_another_harnesss(
+@pytest.mark.parametrize(("harness", "variable", "name"), [("claude", "CLAUDE_CONFIG_DIR", "settings.json"),
+                                                           ("codex", "CODEX_HOME", "config.toml")])
+def test_uninstall_removes_the_hooks_from_that_directory_and_leaves_the_default_one(tmp_path, home, capsys, monkeypatch,
+                                                                                   harness, variable, name):
+    usual = install.install(harness, home=home, cwd=tmp_path, hook=HOOK, translate=False)   # a session without the variable
+    kept = usual.read_text(encoding="utf-8")
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv(variable, str(other))
+    install.install(harness, home=home, cwd=tmp_path, hook=HOOK, translate=False)
+    assert HOOK in (other / name).read_text(encoding="utf-8")
+    install.uninstall(harness, home=home, cwd=tmp_path)
+    assert not (other / name).exists() or HOOK not in (other / name).read_text(encoding="utf-8")
+    assert usual.read_text(encoding="utf-8") == kept, "the install made without the variable is its own"
+
+
+def test_the_variable_changes_nothing_when_it_names_the_default_directory_or_is_empty_or_is_another_harnesss(
         tmp_path, home, capsys, monkeypatch):
+    usual = home / ".claude" / "settings.json"
     for value in (str(home / ".claude"), f"{home / '.claude'}/", f"{home}/.claude/../.claude", "", "  "):
         monkeypatch.setenv("CLAUDE_CONFIG_DIR", value)
+        assert install.settings_path("claude", "user", home, tmp_path) == usual, value
         install.install("claude", home=home, cwd=tmp_path, hook=HOOK, translate=False, dry_run=True)
         assert not _said_moved(capsys.readouterr().out), value
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "elsewhere"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "elsewhere"))
     for harness in ("cursor", "gemini"):
+        assert install.settings_path(harness, "user", home, tmp_path).is_relative_to(home), harness
         install.install(harness, home=home, cwd=tmp_path, hook=HOOK, translate=False, dry_run=True)
         assert not _said_moved(capsys.readouterr().out), harness
+    assert install.settings_path("claude", "project", home, tmp_path) == tmp_path / ".claude" / "settings.local.json"
     install.install("claude", "project", home=home, cwd=tmp_path, hook=HOOK, translate=False, dry_run=True)
     assert not _said_moved(capsys.readouterr().out), "a project's own settings file is read wherever the user's are"
 
 
-def test_a_dry_run_says_it_too(tmp_path, home, capsys, monkeypatch):
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "elsewhere"))
+def test_a_dry_run_names_that_directory_and_writes_nothing(tmp_path, home, capsys, monkeypatch):
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other))
     install.install("claude", home=home, cwd=tmp_path, hook=HOOK, translate=False, dry_run=True)
-    assert len(_said_moved(capsys.readouterr().out)) == 1
+    out = capsys.readouterr().out
+    assert f"would install claude hooks in {other / 'settings.json'}" in out and len(_said_moved(out)) == 1
+    assert not other.exists()
 
 
-def test_doctor_warns_with_the_same_facts(tmp_path, home, capsys, monkeypatch):
+def test_doctor_reads_the_settings_of_that_directory(tmp_path, home, capsys, monkeypatch):
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other))
+    db = home / ".intentshield" / "hooks.db"
+    doctor.doctor(home, tmp_path, db)
+    assert "claude: no IntentShield hooks" in capsys.readouterr().out
+    install.install("claude", home=home, cwd=tmp_path, hook=_hook(tmp_path), translate=False)
+    capsys.readouterr()
+    doctor.doctor(home, tmp_path, db, verbose=True)
+    out = capsys.readouterr().out
+    assert f"claude ({other / 'settings.json'})" in out.replace(str(home), "~") or str(other / "settings.json") in out
+    lines = _said_moved(out)
+    assert len(lines) == 1 and lines[0].startswith("note") and f"CLAUDE_CONFIG_DIR is set to {other}" in lines[0]
+    doctor.doctor(home, tmp_path, db)
+    assert not _said_moved(capsys.readouterr().out), "a note is printed with --verbose only"
+
+
+def test_the_mcp_client_files_of_those_directories_are_found(tmp_path, home, monkeypatch):
+    claude, codex = tmp_path / "cc", tmp_path / "cx"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude))
+    monkeypatch.setenv("CODEX_HOME", str(codex))
+    claude.mkdir()
+    (claude / ".claude.json").write_text(json.dumps({"mcpServers": {"notes": {"command": "notes-server"}}}), encoding="utf-8")
+    user_files, _ = install.client_config_files(home, tmp_path)
+    assert claude / ".claude.json" in user_files and codex / "config.toml" in user_files
+    found = {(server.client, server.name) for server in scan.discover(home, tmp_path)}
+    assert ("claude-code", "notes") in found
+
+
+def test_the_guard_asks_before_its_settings_in_those_directories_are_changed(tmp_path, monkeypatch):
+    from intentshield.dangerous import assess_file, assess_shell
+    claude, codex = tmp_path / "cc", tmp_path / "cx"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude))
+    monkeypatch.setenv("CODEX_HOME", str(codex))
+    for command in (f"rm -rf {claude}", f"mv {claude} {tmp_path / 'old'}", f"rm {claude}/settings.json", f"rm {claude}/*",
+                    f"echo x > {claude}/settings.json", f"rm {codex}/config.toml", f"sed -i s/a/b/ {codex}/config.toml"):
+        hit = assess_shell(command, cwd=str(tmp_path / "proj"))
+        assert hit is not None and hit.decision == "ask", command
+    for command in (f"ls {claude}", f"cat {claude}/settings.json", f"rm -rf {claude}/projects/x", f"rm -rf {tmp_path / 'other'}"):
+        assert assess_shell(command, cwd=str(tmp_path / "proj")) is None, command
+    assert assess_file(f"{claude}/settings.json", "{}", True, cwd=str(tmp_path)).decision == "ask"
+    assert assess_file(f"{claude}/commands/x.md", "text", True, cwd=str(tmp_path)) is None
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR")
+    assert assess_shell(f"rm -rf {claude}", cwd=str(tmp_path / "proj")) is None, "only while the variable names it"
+
+
+def test_the_guard_reads_the_spellings_of_that_directory(tmp_path, monkeypatch):
+    from intentshield.dangerous import assess_shell
+    work = tmp_path / "cfg" / "cc-work"
+    work.mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "cfg")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(link / "cc-work"))   # named through a link, as /tmp is on macOS
+    cwd = str(tmp_path / "proj")
+    for command in ("echo x > $CLAUDE_CONFIG_DIR/settings.json", 'echo x > "$CLAUDE_CONFIG_DIR"/settings.json',
+                    "echo x > ${CLAUDE_CONFIG_DIR}/settings.json", "rm -rf $CLAUDE_CONFIG_DIR", f"rm -rf {work}",
+                    f"echo x > {work}/settings.json", f"rm -rf {link}/cc-work", f"rm -rf {tmp_path}/cfg/cc-w*",
+                    f"echo x > {str(work).upper()}/settings.json"):
+        hit = assess_shell(command, cwd=cwd)
+        assert hit is not None and hit.decision == "ask", command
+    for command in ("echo $CLAUDE_CONFIG_DIR", "ls $CLAUDE_CONFIG_DIR", "rm -rf $CLAUDE_CONFIG_DIRX/settings.json",
+                    f"rm -rf {tmp_path}/cfg/other*", f"rm -rf {work}/projects/x", "echo x > $CLAUDE_CONFIG_DIR/notes.md"):
+        assert assess_shell(command, cwd=cwd) is None, command
+
+
+@pytest.mark.parametrize("value", ["", "/", "relative/dir", "a" * 5000, "/srv/[x]*?", "/srv/a\nb", "~"])
+def test_an_odd_value_of_the_variable_never_stops_the_rules(monkeypatch, value):
+    from intentshield.dangerous import assess_file, assess_shell
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", value)
+    monkeypatch.setenv("CODEX_HOME", value)
+    assert assess_shell("ls -la && rm -rf build && git status", cwd="/srv/proj") is None
+    assert assess_file("/srv/proj/src/a.py", "x = 1", True, cwd="/srv/proj") is None
+
+
+def test_scan_sees_the_hooks_of_that_directory(tmp_path, home, capsys, monkeypatch):
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other))
+    assert not scan.guarded("claude-code", home)
+    install.install("claude", home=home, cwd=tmp_path, hook=HOOK, translate=False)
+    assert scan.guarded("claude-code", home)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR")
+    assert not scan.guarded("claude-code", home), "the usual file holds no hooks"
+
+
+def test_doctor_does_not_read_disable_all_hooks_from_a_file_claude_code_does_not_read(tmp_path, home, capsys, monkeypatch):
+    usual = home / ".claude" / "settings.json"
+    usual.parent.mkdir(parents=True)
+    usual.write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other))
     install.install("claude", home=home, cwd=tmp_path, hook=_hook(tmp_path), translate=False)
     capsys.readouterr()
     db = home / ".intentshield" / "hooks.db"
     doctor.doctor(home, tmp_path, db)
-    assert not _said_moved(capsys.readouterr().out)
-    other = tmp_path / "elsewhere"
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(other))
+    assert "switched off" not in capsys.readouterr().out
+    (other / "settings.local.json").write_text(json.dumps({"disableAllHooks": True}), encoding="utf-8")
     doctor.doctor(home, tmp_path, db)
-    lines = _said_moved(capsys.readouterr().out)
-    assert len(lines) == 1 and lines[0].startswith("warn claude (")
-    assert f"CLAUDE_CONFIG_DIR is set to {other}" in lines[0] and "`--scope project`" in lines[0]
+    assert "switched off: disableAllHooks is true" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("harness", "variable"), [("claude", "CLAUDE_CONFIG_DIR"), ("codex", "CODEX_HOME")])
+def test_uninstall_says_where_other_hooks_of_the_harness_remain(tmp_path, home, capsys, monkeypatch, harness, variable):
+    usual = install.install(harness, home=home, cwd=tmp_path, hook=HOOK, translate=False)
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv(variable, str(other))
+    moved = install.install(harness, home=home, cwd=tmp_path, hook=HOOK, translate=False)
+    capsys.readouterr()
+    install.uninstall(harness, home=home, cwd=tmp_path, dry_run=True)
+    out = capsys.readouterr().out
+    assert f"are also in {usual}" in out and f"`intentshield uninstall {harness}` without {variable}" in out
+    monkeypatch.delenv(variable)
+    install.uninstall(harness, home=home, cwd=tmp_path)
+    out = capsys.readouterr().out
+    assert f"are also in {moved.resolve()}" in out and f"with {variable}={moved.resolve().parent}" in out
+    monkeypatch.setenv(variable, str(other))
+    install.uninstall(harness, home=home, cwd=tmp_path)
+    assert "are also in" not in capsys.readouterr().out, "nothing is left anywhere"
 
 
 # --- what an unread version costs, harness by harness -----------------------------------------------------------------

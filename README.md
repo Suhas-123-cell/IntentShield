@@ -29,6 +29,9 @@ intentshield install claude        # or codex, cursor, gemini; guards MCP calls 
 intentshield-mcp-verify --demo --stdio --summary   # the proxy's own check against a bundled demo server
 ```
 
+> **PyPI has 0.4.5**, which predates one change on `main`: see
+> [Unreleased](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#unreleased).
+
 What you should see:
 - `demo` prints one line per sample call (`allow`, `ask`, `deny`) with the rule's reason, then a second `deny` for an MCP call, and exits 0.
 - `install` runs `<harness> --version` once to record the build, prints `installed claude hooks in <the settings file>`, then a `Next:` line.

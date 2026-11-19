@@ -117,7 +117,7 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             _record_install(path, home, time.time())
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
     if scope == "user" and (moved := relocated_config_dir(harness, home)):
-        print("warning: " + relocated_config_advice(harness, *moved, path))
+        print(relocated_config_advice(harness, *moved, path))
     if translate and not dry_run:
         _record_version(harness, home, gemini_ask)
     if harness == "codex" and (switched_off := codex_hooks_switched_off(path)):
@@ -177,7 +177,7 @@ def client_config_files(home: Path, cwd: Path) -> tuple[tuple[Path, ...], tuple[
     """(user files, project files): the MCP client config files ``doctor`` reads, those of the user's home and those of the
     current directory. A server wrapped in any other file is not found by it."""
     return ((home / ".claude.json", home / ".cursor" / "mcp.json", home / ".gemini" / "settings.json",
-             home / ".codex" / "config.toml"),
+             home / ".codex" / "config.toml", *hooks.relocated_client_files(home)),
             (cwd / ".mcp.json", cwd / ".cursor" / "mcp.json", cwd / ".gemini" / "settings.json", cwd / ".vscode" / "mcp.json"))
 
 
@@ -200,7 +200,45 @@ def uninstall(harness: str, scope: str = "user", dry_run: bool = False,
     legacy = legacy_project_settings(harness, cwd) if scope == "project" else None
     if legacy is not None and _holds_our_hooks(legacy):
         _uninstall_file(harness, legacy, dry_run, home)  # a hook an earlier version put in the shared file
-    return _uninstall_file(harness, path, dry_run, home)
+    done = _uninstall_file(harness, path, dry_run, home)
+    if scope == "user":
+        for line in _installs_elsewhere(harness, path, home):
+            print(line)
+    return done
+
+
+def _holds_hooks_of(harness: str, path: Path) -> bool:
+    """``path`` exists and holds IntentShield's hooks for ``harness``: a block of the Codex TOML, or entries of a JSON file."""
+    try:
+        return _TOML_BEGIN in path.read_text(encoding="utf-8") if harness == "codex" else _holds_our_hooks(path)
+    except (OSError, ValueError):
+        return False
+
+
+def _installs_elsewhere(harness: str, path: Path, home: Path | None) -> list[str]:
+    """One line for each other user settings file of ``harness`` that still holds IntentShield's hooks: the usual one when
+    ``CLAUDE_CONFIG_DIR`` or ``CODEX_HOME`` names another directory, and each directory an earlier ``install`` recorded when it
+    does not. ``uninstall`` works on the file the harness reads in this environment, so the others stay until it is run there."""
+    variable = hooks._CONFIG_DIR_VARIABLE.get(harness)
+    if not variable:
+        return []
+    usual = (home or Path.home()) / hooks._DEFAULT_CONFIG_DIR[harness] / path.name
+    try:
+        recorded = [Path(p) for p in json.loads(records._installs_path(home).read_text(encoding="utf-8"))]
+    except (OSError, ValueError, TypeError):
+        recorded = []
+    lines = []
+    for other in dict.fromkeys([usual, *(p for p in recorded if p.name == path.name)]):
+        try:
+            same = other.resolve() == path.resolve()
+        except (OSError, RuntimeError):
+            same = True
+        if same or not _holds_hooks_of(harness, other):
+            continue
+        how = (f"without {variable}" if other == usual else f"with {variable}={other.parent}")
+        lines.append(f"IntentShield's hooks for {harness} are also in {other}; run `intentshield uninstall {harness}` {how} to "
+                     "remove them.")
+    return lines
 
 
 def _uninstall_file(harness: str, path: Path, dry_run: bool, home: Path | None) -> Path:

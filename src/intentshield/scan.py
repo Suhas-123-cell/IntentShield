@@ -43,7 +43,7 @@ from typing import Any
 
 from . import credentials, translation
 from .harness import is_mutation
-from .install import _HOOK, server_stem, strip_json_comments
+from .install import _HOOK, relocated_client_files, server_stem, settings_path, strip_json_comments
 from .mcp_inspect import explain_rules, scan_description, scan_server, self_disclosure_fields, tool_text
 
 ERROR, WARNING, NOTE = "error", "warning", "note"
@@ -135,7 +135,10 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
     if files:
         sources = [("file", path, "", False) for path in files]
     else:
-        sources = [(c, home / rel, key, False) for c, rel, key in _USER_CONFIGS] + \
+        moved = [("claude-code" if path.name == ".claude.json" else "codex", path,
+                  "mcpServers" if path.name == ".claude.json" else "mcp_servers", False)
+                 for path in relocated_client_files(home)]   # CLAUDE_CONFIG_DIR and CODEX_HOME
+        sources = [(c, home / rel, key, False) for c, rel, key in _USER_CONFIGS] + moved + \
                   [(c, cwd / rel, key, True) for c, rel, key in _PROJECT_CONFIGS]
     seen: set[Path] = set()
     for client, path, key, project in sources:
@@ -383,7 +386,8 @@ def guarded(client: str, home: Path) -> bool:
     if not rel:
         return False
     try:
-        path = home / rel
+        harness = {"claude-code": "claude", "codex": "codex"}.get(client)
+        path = settings_path(harness, "user", home) if harness else home / rel   # where CLAUDE_CONFIG_DIR or CODEX_HOME points
         text = path.read_text(encoding="utf-8")
         data = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
     except (OSError, ValueError):

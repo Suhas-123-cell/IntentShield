@@ -65,10 +65,13 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
     cwd = cwd or Path.cwd()
     if scope == "project":
         if harness == "codex":
-            raise ValueError("Codex CLI reads hooks from ~/.codex/config.toml only; use --scope user")
+            raise ValueError("Codex CLI reads hooks from its user config.toml only (in ~/.codex, or in the directory CODEX_HOME "
+                             "names); use --scope user")
         # settings.local.json is Claude Code's file for one machine, and the hook command holds this machine's paths
         return cwd / {"claude": ".claude/settings.local.json", "cursor": ".cursor/hooks.json",
                       "gemini": ".gemini/settings.json"}[harness]
+    if (moved := relocated_config_dir(harness, home)):   # the harness reads its user settings from this directory
+        return Path(moved[1]).expanduser() / {"claude": "settings.json", "codex": "config.toml"}[harness]
     return home / {"claude": ".claude/settings.json", "codex": ".codex/config.toml",
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
 
@@ -80,8 +83,8 @@ _DEFAULT_CONFIG_DIR = {"claude": ".claude", "codex": ".codex"}
 
 def relocated_config_dir(harness: str, home: Path | None = None) -> tuple[str, str] | None:
     """(variable, value) when the variable that moves the harness's user settings (``CLAUDE_CONFIG_DIR``, ``CODEX_HOME``) names a
-    directory other than ``~/.claude`` or ``~/.codex``, else None. ``install`` writes to the default place only, and the harness
-    then reads its user settings from the other directory."""
+    directory other than ``~/.claude`` or ``~/.codex``, else None. The harness then reads its user settings from that directory,
+    so ``settings_path`` names the file there and ``install``, ``uninstall`` and ``doctor`` work on it."""
     name = _CONFIG_DIR_VARIABLE.get(harness)
     value = os.environ.get(name, "").strip() if name else ""
     if not name or not value:
@@ -95,15 +98,20 @@ def relocated_config_dir(harness: str, home: Path | None = None) -> tuple[str, s
 
 
 def relocated_config_advice(harness: str, variable: str, value: str, path: Path) -> str:
-    """What to say when the harness reads its user settings from a directory the hooks were not written to."""
-    if harness == "claude":
-        fix = ("install with `--scope project` in the project (Claude Code also reads .claude/settings.local.json there), or "
-               f"copy the hook entries that `intentshield install claude --dry-run` prints into {value}/settings.json")
-    else:
-        fix = (f"copy the block that `intentshield install codex --dry-run` prints into {value}/config.toml "
-               "(Codex has no project scope here)")
-    return (f"{variable} is set to {value}, and {harness} reads its user settings from there, so it will not see the hooks "
-            f"written to {path}. To guard {harness}: {fix}.")
+    """What to say when the harness reads its user settings from a directory other than the usual one: where the hooks are, and
+    that a session started without the variable reads another file."""
+    usual = "~/" + _DEFAULT_CONFIG_DIR[harness]
+    return (f"{variable} is set to {value}, so {harness} reads its user settings from there and the hooks are in {path}. A "
+            f"session started without that variable reads {usual} and is not guarded by this install; run `intentshield "
+            f"install {harness}` without the variable to guard it too.")
+
+
+def relocated_client_files(home: Path | None = None) -> tuple[Path, ...]:
+    """The MCP client files of Claude Code and Codex CLI in the directories ``CLAUDE_CONFIG_DIR`` and ``CODEX_HOME`` name, when
+    they name one other than the default: ``.claude.json`` and ``config.toml`` live there then."""
+    names = {"claude": ".claude.json", "codex": "config.toml"}
+    return tuple(Path(moved[1]).expanduser() / names[harness] for harness in names
+                 if (moved := relocated_config_dir(harness, home)))
 
 
 _JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|deepseek|openai|openrouter|custom|on|default)(:[A-Za-z0-9_.:/-]+)?")
