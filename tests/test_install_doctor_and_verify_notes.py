@@ -42,7 +42,8 @@ def test_install_says_in_plain_words_what_an_unread_harness_version_costs(tmp_pa
     monkeypatch.setattr(translation, "probe_and_record", lambda *a, **k: None)
     install.install("claude", hook=_hook(tmp_path), home=home)
     out = capsys.readouterr().out
-    assert "could not read the version of claude (it is not on PATH)" in out
+    assert "could not read the version of claude (it is not on PATH, or its --version printed no number or did not answer " \
+           "within 20 s)" in out
     assert "blocked instead, which is the safe side" in out and "run `intentshield doctor`" in out
     assert "asks are sent as refusals" not in out
 

@@ -57,6 +57,8 @@ from .lexical import (
     _tokens,
     host,
     is_loopback,
+    without_logins,
+    without_selectors,
 )
 from .network import _curl_sends, _downloads, _dynamic, _git_sub, _httpie_sends, _positionals, _wget_sends, network_values
 from .programs import _known_program, _local_dev, _read_only
@@ -186,15 +188,22 @@ def _segment(argv: list[str], piped_in: bool, found: Command, depth: int, env: d
     program it reads on stdin (``sh``, ``python -``, not ``python3 -c '...'``, which reads data there)."""
     if PurePosixPath(argv[0]).name in ("env", "set") and all("=" in a or a.startswith("-") for a in argv[1:]):
         found.secrets.append(argv[0])  # with no command to run, env and set print every variable
-    whole, argv = argv, _program(argv)
+    whole, argv = without_selectors(argv), without_selectors(_program(argv))
     if depth < 3:
         _program_variables(whole, found, depth, env, loopvars)
     if not argv:
         return "", False
     name = _binary(argv[0])
     args = argv[1:]
+    flag = next((i for i, a in enumerate(args) if re.fullmatch(r"-[a-z]*c", a)), None)  # -c, -lc
+    # The string a shell runs is one word here and is read again below, command by command: the key an ssh-family command in it
+    # names for a login is used there, as it is when the command is not inside a shell (``bash -lc 'ssh -i KEY host'``).
+    run = None
+    if name in _COMMAND_FLAG and flag is not None and depth < 3:
+        run = next((a for a in args[flag + 1:] if a != "--"), None)
     if name not in _NAMES_ONLY:
-        found.secrets += [a for a in _without_identity(name, whole) if SECRET.search(a)]
+        scanned = _without_identity(name, whole)
+        found.secrets += [a for a in scanned if SECRET.search(a) and not (a == run and not SECRET.search(without_logins(a)))]
     runs_stdin = (name in _SHELLS or name in _INTERPRETERS) and all(a.startswith("-") and a not in ("-c", "-e")
                                                                     or a == "-" or a in _STDIN_FILES for a in args)
     if (argv[0] == "." or name == "source") and args[:1] and args[0] in _STDIN_FILES:
@@ -210,7 +219,6 @@ def _segment(argv: list[str], piped_in: bool, found: Command, depth: int, env: d
     if not read_only and not (_downloads(name, args) and not piped_in):
         found.read_only = False
         found.ordinary &= known and _local_dev(name, args, whole)
-    flag = next((i for i, a in enumerate(args) if re.fullmatch(r"-[a-z]*c", a)), None)  # -c, -lc
     if name in _COMMAND_FLAG and flag is not None and depth < 3:
         rest = args[flag + 1:]
         while rest and rest[0] == "--":

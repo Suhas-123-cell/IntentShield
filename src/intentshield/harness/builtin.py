@@ -60,6 +60,8 @@ def _shape_problem(tool: str, arguments: dict[str, Any]) -> str:
             return f"its {field_name!r} value is a list that is not made of words"
         if set(arguments) == {"value"}:
             return "its tool input is a list, not an object"
+    if isinstance(value, list) and not all(isinstance(item, str) for item in value):   # several paths are text, not objects
+        return f"its {field_name!r} value is a list that is not made of text"
     return "" if isinstance(value, (str, list)) else f"its {field_name!r} value is not text"
 
 

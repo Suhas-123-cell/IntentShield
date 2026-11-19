@@ -36,6 +36,7 @@ from .core import Hit as Hit
 from .paths import persistence_path as persistence_path
 from .rules import path_risk as path_risk
 from .rules import shlex_args as shlex_args
+from .selfguard import guard_dir as guard_dir
 from .selfguard import guard_surface as guard_surface
 
 for _module in (core, parsing, runners, paths, links, reach, rules, variables, selfguard, powershell, writes, analysis):

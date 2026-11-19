@@ -4,6 +4,9 @@ Every benchmark protocol and table behind the [README](../README.md)'s results s
 commands that regenerate them. Start with the headline numbers and the limitations; the sections after them hold the
 per-benchmark detail.
 
+On this page: [reproduce](#reproduce) · [headline numbers](#headline-numbers) ·
+[live harness checks](#live-harness-checks-claude-code-gemini-cli-codex-cli-and-cursor) · [documented real-world incidents](#documented-real-world-incidents)
+
 ## Reproduce
 
 From a clone, after `uv sync --group dev` (the PyPI source distribution has no tests or benchmarks):
@@ -60,7 +63,7 @@ v8/v9/v10/v11 runs on older code and carry `provenance: null` in `results/msb/MA
 | AgentDojo important_instructions injections flagged in tool output | - | 100%, but not independent of the rules' tuning (see below; no stored artifact) |
 | DeBERTa intent model in the gateway (off by default) | - | as a veto it blocked the task tool in up to 29% of cases and cost up to 15 points of user task; as advisory evidence within 3 points of off (unconfirmed, note 1 below) |
 | Self-disclosure parameter stripping, 159 distinct tool schemas the 4 MSB agents saw (756 cases) | undefended harm went through such a parameter in 23/29 (Gemini), 33/33 (llama), 48/129 (qwen), 51/122 (ornith) harmful calls in the unpaired undefended runs | 36 parameters stripped (one on each of 36 schemas), all on attack-role servers; **0 of 194 parameters** on the 86 task and filesystem tools (`results/self-disclosure.md`; an in-sample check, see the limits below) |
-| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,427 injections no rule was written from: rules 2.0%, rules + exemplars 17.7%, mostly on generated outputs in the exemplar index's own styles (table in the prompt-injection section below). Over all 2,959 injections, rules + exemplars on outputs: **58.4%** caught, **2.4%** of 758 benign texts flagged (note 2 below) |
+| Prompt-injection detection, 3,717 texts incl. 142 hard benign ones (held out for the learned detectors) | - | on the 1,427 injections no rule was written from: rules 2.0%, rules + exemplars 17.7%, mostly on generated outputs in the index's own styles (table in the prompt-injection section). Over all 2,959, rules + exemplars on outputs: **58.4%** caught, **2.4%** of 758 benign texts flagged (note 2 below) |
 | Adaptive attacker on IntentShield's own detectors (local qwen2.5:7b, 42 seeds, 5 attempts each) | - | seeds evaded: 16/42 static, 13/42 learning from operator labels (not significant; weak attacker) |
 
 *Harmful executed* counts a call held for a human as not executed. Held for review, the trivial baseline leaves a harmful call

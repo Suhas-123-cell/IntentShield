@@ -11,6 +11,7 @@ from intentshield import shell
 
 from . import links
 from .core import (
+    _CAPS,
     _EVENT_HOMES,
     _MAX,
     _MAX_DEPTH,
@@ -25,6 +26,8 @@ from .core import (
     Hit,
     _bin,
     _canon,
+    _limit_hit,
+    _note_cap,
     _Stage,
 )
 from .parsing import _FETCHERS, _INTERPRETERS, _SHELLS, _mask_data, _normalise, _stages, _substitutions
@@ -42,6 +45,7 @@ from .paths import (
     _in_order,
     _named_secret,
     _protected,
+    _protected_glob,
     overwrite_level,
     persistence_path,
     search_root,
@@ -71,7 +75,7 @@ from .rules import (
     shlex_args,
 )
 from .runners import _ADDED_WRAPPERS, AS_IN_0_4_4, _stdin_of, _unwrap
-from .selfguard import _erase_hit, _guard_hit, _guard_text, guard_surface
+from .selfguard import _erase_hit, _guard_hit, _guard_text, guard_dir, guard_surface
 from .variables import _EXPANDED, _braces, _expand_vars, _moved_stages, _track
 from .writes import _placeholder, _run_by_find
 
@@ -82,10 +86,12 @@ def _inner_hits(extras: list[tuple[str, str]], intent: str, depth: int, state: d
     for kind, text in extras:
         if kind == "note":
             out.append(Hit(ASK, text))
+        elif kind == "limit":
+            out.append(_limit_hit(text))
         elif depth < _MAX_DEPTH:
             out.extend(_analyse(text, intent, depth + 1, state, sudo))
         else:
-            out.append(Hit(ASK, _TOO_DEEP))
+            out.append(_limit_hit(_TOO_DEEP))
     return out
 
 
@@ -170,7 +176,7 @@ def _shell_text_hits(name: str, argv: list[str], intent: str, depth: int, state:
                 break
     if code and depth < _MAX_DEPTH:
         return _analyse(code, intent, depth + 1, state, sudo)
-    return [Hit(ASK, _TOO_DEEP)] if code else []
+    return [_limit_hit(_TOO_DEEP)] if code else []
 
 
 def _redirect_hits(name: str, argv: list[str], redirects: list[tuple[str, str]], intent: str, depth: int, state: dict[str, Any],
@@ -185,7 +191,7 @@ def _redirect_hits(name: str, argv: list[str], redirects: list[tuple[str, str]],
                                                                                 for a in argv[1:]):
             out.extend(_analyse(target, intent, depth + 1, state, sudo))  # bash <<< 'rm -rf /': the string is the program
         elif op == "<<<" and name in _SHELLS and not any(not a.startswith("-") or "c" in a[1:] for a in argv[1:]):
-            out.append(Hit(ASK, _TOO_DEEP))
+            out.append(_limit_hit(_TOO_DEEP))
         elif op == "<" and (level := _cred_level(target)) and level[0] == DENY:
             # the readers show it or send it on; another program (``gh secret set X < key``) is only asked about
             shows = name in _READERS or name in _NET_SINKS or name in _SHELL_READS
@@ -223,7 +229,7 @@ def _destruction_hits(name: str, argv: list[str], bare: _Stage, intent: str, dep
         rest = argv[argv.index(";") + 1:]
         out.extend(_inner_hits([("code", " ".join(shlex.quote(a) if re.search(r"\s", a) else a for a in rest))], intent, depth,
                                state, sudo))
-    elif name == "mv" and any(_protected(a) for a in argv[1:-1] if not a.startswith("-")):
+    elif name == "mv" and any(_protected(a) or _protected_glob(a) for a in argv[1:-1] if not a.startswith("-")):
         out.append(Hit(DENY, "mv moves a root, home or system directory away.", argv[1]))
     elif name == "git":
         hit = _git_hit(argv, bare.assigns)
@@ -343,8 +349,8 @@ def _stage_hits_as_written(stage: _Stage, intent: str, depth: int, state: dict[s
     argv, name, too_long = _expanded_argv(argv)
     sudo = bare.sudo
     if too_long:
-        out.append(Hit(ASK, "a brace list in the command is too long to expand in full (over 300 characters, 16 alternatives, "
-                            "64 words or 4 levels); check the paths it names."))
+        out.append(_limit_hit("a brace list in the command is too long to expand in full (over 300 characters, 16 alternatives, "
+                              "64 words or 4 levels); check the paths it names."))
     out.extend(_shell_text_hits(name, argv, intent, depth, state, sudo))
     out.extend(_redirect_hits(name, argv, bare.redirects, intent, depth, state, sudo))
     out.extend(_destruction_hits(name, argv, bare, intent, depth, state, sudo))
@@ -580,7 +586,7 @@ def _walk_stages(stages: list[_Stage], intent: str, depth: int, state: dict[str,
             hits.extend(_piped_xargs(stages[k - 1], st, intent, depth, {**state, "cwd": where["cwd"]}))
             hits.extend(_piped_find(stages[k - 1], st, {**state, "cwd": where["cwd"]}))
         elif st.piped and k and _piped_text(stages[k - 1], st, intent, 0, sudo):
-            hits.append(Hit(ASK, _TOO_DEEP))
+            hits.append(_limit_hit(_TOO_DEEP))
         local = dict(state)
         local["prev_secret"] = state_pipe_secret
         local["cwd"] = where["cwd"]   # a shell this stage starts reads its relative paths from here
@@ -588,7 +594,7 @@ def _walk_stages(stages: list[_Stage], intent: str, depth: int, state: dict[str,
         loop_notes: list[str] = []
         variants = _expand_vars(st, env, loop_notes)
         for note in dict.fromkeys(loop_notes):
-            hits.append(Hit(ASK, f"the command uses {note}, too many to follow; check what it does."))
+            hits.append(_limit_hit(f"the command uses {note}, too many to follow; check what it does."))
         for variant in variants:
             hits.extend(_stage_hits(_with_hook_variables(variant, env), intent, depth, local))
         _track(st, env, where)
@@ -606,7 +612,7 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
     notes: list[str] = []
     stages = _stages(text, notes)
     for note in notes:
-        hits.append(Hit(ASK, f"the command has {note}, too long to read in full; check the part after that."))
+        hits.append(_limit_hit(f"the command has {note}, too long to read in full; check the part after that."))
     if stages is None:
         return hits
     hits.extend(_walk_stages(stages, intent, depth, state, sudo))
@@ -622,9 +628,10 @@ def _analyse(command: str, intent: str, depth: int, state: dict[str, Any], sudo:
         if body.strip() and depth < _MAX_DEPTH:
             hits.extend(_analyse(body, intent, depth + 1, {}, sudo))
         elif body.strip():
-            hits.append(Hit(ASK, _TOO_DEEP))
+            hits.append(_limit_hit(_TOO_DEEP))
     if len(spans) > _MAX_SUBSTITUTIONS:
-        hits.append(Hit(ASK, f"the command has more than {_MAX_SUBSTITUTIONS} command substitutions, too many to read in full."))
+        hits.append(_limit_hit(
+            f"the command has more than {_MAX_SUBSTITUTIONS} command substitutions, too many to read in full."))
     return hits
 
 
@@ -647,7 +654,17 @@ def _start_dir() -> str | None:
 
 def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
     """The hit that decides. A deny becomes an ask only when every deny of the command is for a target the user's prompts name
-    exactly (``_named``: the whole path or host, not a part of a longer one, and not in a sentence that forbids it)."""
+    exactly (``_named``: the whole path or host, not a part of a longer one, and not in a sentence that forbids it). An ask
+    that the command's limits raised is kept (``limit``) when another ask is the one chosen."""
+    chosen = _decide(hits, intent)
+    if chosen is not None and chosen.decision != DENY and not chosen.limit:
+        cut = next((h.limit for h in hits if h.limit), "")
+        if cut:
+            chosen = replace(chosen, limit=cut)
+    return chosen
+
+
+def _decide(hits: list[Hit], intent: str) -> Hit | None:
     if not hits:
         return None
     denies = [h for h in hits if h.decision == DENY]
@@ -660,6 +677,14 @@ def _worst(hits: list[Hit], intent: str, review: str = "tainted") -> Hit | None:
     return left[0] if left else None
 
 
+def _capped(hit: Hit | None, caps: list[str]) -> Hit | None:
+    """``hit`` marked as raised by a limit when a path past the length limit was met on the way (its ask is built by the path
+    rules, which return a pair), and the verdict is an ask."""
+    if hit is None or hit.decision == DENY or hit.limit or not caps:
+        return hit
+    return replace(hit, limit=caps[0])
+
+
 def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: str = "",
                  homes: tuple[str, ...] = ()) -> Hit | None:
     """The verdict on a shell command by its text, or None when nothing here objects. ``powershell``: the command is the input of
@@ -669,38 +694,60 @@ def assess_shell(command: str, intent: str = "", powershell: bool = False, cwd: 
     if not command or not command.strip():
         return None
     token, home_token, seen = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes)), links.start()
+    caps: list[str] = []
+    caps_token = _CAPS.set(caps)
     try:
         hits = _analyse(command, intent, 0, {})
         if powershell:
             hits.extend(_ps_hits(command, intent, 0, {}, False))
         if links.over_budget():
-            hits.append(Hit(ASK, links.TOO_MANY_LINKS))
+            hits.append(_limit_hit(links.TOO_MANY_LINKS))
     finally:
+        _CAPS.reset(caps_token)
         links.finish(seen)
         _EVENT_HOMES.reset(home_token)
         _WORKDIR.reset(token)
     if len(command) > _MAX and not any(h.decision == DENY for h in hits):  # the rest was not read: do not pass it as safe
-        hits.append(Hit(ASK,
-                        f"the command is longer than {_MAX} characters, too long to read in full; check the part after that."))
+        hits.append(_limit_hit(
+            f"the command is longer than {_MAX} characters, too long to read in full; check the part after that."))
     if command.strip() and hits and all(h.decision == DENY for h in hits) and _named(command.strip(), intent):
         return Hit(ASK, hits[0].reason + " (the user typed this command, so confirm it)")
-    return _worst(hits, intent)
+    return _capped(_worst(hits, intent), caps)
 
 
 def assess_file(path: str, content: Any = None, write: bool = False, intent: str = "", cwd: str = "",
-                homes: tuple[str, ...] = ()) -> Hit | None:
+                homes: tuple[str, ...] = (), erase: bool = False) -> Hit | None:
     """The verdict on a file read or write by a built-in tool. ``cwd``: the directory a relative ``path`` is read from.
-    ``homes``: as for ``assess_shell``."""
+    ``homes``: as for ``assess_shell``. ``erase``: the tool deletes or moves what ``path`` names (an MCP server's
+    ``delete_directory``, the source of ``move_file``), so it is judged as ``rm -r`` and ``mv`` of that path are."""
     token, home_token, seen = _WORKDIR.set(cwd), _EVENT_HOMES.set(tuple(homes)), links.start()
+    caps: list[str] = []
+    caps_token = _CAPS.set(caps)
     try:
         hit = _assess_file(path, content, write, intent)
+        if erase:   # what is taken away is changed: the verdict for a write of the path counts as well
+            for other in (_erase_path(path, intent), None if write else _assess_file(path, content, True, intent)):
+                if other and (hit is None or other.decision == DENY and hit.decision != DENY):
+                    hit = other
         if links.over_budget() and (hit is None or hit.decision != DENY):
-            return Hit(ASK, links.TOO_MANY_LINKS, path)
-        return hit
+            return _limit_hit(links.TOO_MANY_LINKS, path)
+        return _capped(hit, caps)
     finally:
+        _CAPS.reset(caps_token)
         links.finish(seen)
         _EVENT_HOMES.reset(home_token)
         _WORKDIR.reset(token)
+
+
+def _erase_path(path: str, intent: str) -> Hit | None:
+    """The verdict on a tool that deletes or moves ``path``: a root, home or system directory is a deny (as for ``rm -r``), the
+    directory of a harness's hook settings an ask (as for ``rm -r`` and ``mv``)."""
+    for spelled in dict.fromkeys(p for p in (path, _from_workdir(path)) if p):
+        if _protected(spelled) or _protected_glob(spelled):
+            return _worst([Hit(DENY, f"deleting or moving {path}, a root, home or system directory.", path)], intent)
+        if (own := guard_dir(spelled)):
+            return Hit(own[0], f"deleting or moving {path}, {own[1]}.", path)
+    return None
 
 
 def _assess_file(path: str, content: Any, write: bool, intent: str) -> Hit | None:
@@ -726,7 +773,8 @@ def _assess_file_as_written(path: str, content: Any, write: bool, intent: str) -
     if not path:
         return None
     if len(_clean_path(path)) > _PATH_CAP:  # a path, whatever it looks like: not read in full, so asked about
-        return Hit(ASK, f"{'writing' if write else 'reading'} {path}, {_PATH_CAP_WHY}.", path)
+        _note_cap(_PATH_CAP_WHY)
+        return _limit_hit(f"{'writing' if write else 'reading'} {path}, {_PATH_CAP_WHY}.", path)
     if not write:
         cred = _cred_level(path)
         if cred:
@@ -738,6 +786,8 @@ def _assess_file_as_written(path: str, content: Any, write: bool, intent: str) -
     pers = persistence_path(path)
     text = _text(content)[:_MAX]
     hits: list[Hit] = []
+    if _device(path):   # as a redirect into it is
+        hits.append(Hit(DENY, f"writing the block device {path}.", path))
     if pers:
         hits.append(Hit(pers[0], f"writing {path}, {pers[1]}.", path))
         if _MALICIOUS_CONTENT.search(text) or any(h.decision == DENY or h.escalate for h in _analyse(text, intent, 1, {})):

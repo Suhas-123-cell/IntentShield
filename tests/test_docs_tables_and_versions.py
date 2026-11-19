@@ -47,16 +47,17 @@ def _long_cells(name: str) -> list[str]:
     return problems
 
 
-def test_no_table_cell_in_the_readme_is_longer_than_300_characters():
-    assert not _long_cells("README.md")
+# Every page of docs/ and the README. The verdict page is left out until its one long cell is split.
+CELL_PAGES = ("README.md", *sorted(f"docs/{p.name}" for p in (ROOT / "docs").glob("*.md") if p.name != "contribution.md"))
 
 
-def test_no_table_cell_in_the_guide_is_longer_than_300_characters():
-    assert not _long_cells("docs/guide.md")
+@pytest.mark.parametrize("name", CELL_PAGES)
+def test_no_table_cell_in_the_readme_or_a_docs_page_is_longer_than_300_characters(name):
+    assert not _long_cells(name)
 
 
-def test_no_table_cell_in_the_rules_page_is_longer_than_300_characters():
-    assert not _long_cells("docs/rules.md")
+def test_the_pages_checked_for_long_cells_include_the_readme_the_guide_and_the_rules_page():
+    assert {"README.md", "docs/guide.md", "docs/rules.md", "docs/architecture-and-testing.md"} <= set(CELL_PAGES)
 
 
 def test_the_checker_finds_a_long_cell_and_skips_an_excluded_section(tmp_path, monkeypatch):
@@ -111,11 +112,12 @@ PARAGRAPH_FILES = (
 # Sections that the paragraph test does not read, by file. None: every section of every file listed above is checked.
 PARAGRAPH_EXCLUDED_SECTIONS: dict[str, tuple[str, ...]] = {}
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+_LINK_DEFINITION = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*\S+")
 
 
 def _long_paragraphs(name: str, limit: int, root: Path | None = None) -> list[str]:
     """Paragraphs longer than ``limit`` characters. A paragraph is the lines between blank lines, with each list item counted
-    on its own; code blocks, headings and table rows are not paragraphs."""
+    on its own; code blocks, headings, table rows and link reference definitions are not paragraphs."""
     problems: list[str] = []
     block: list[str] = []
     start = 0
@@ -144,7 +146,7 @@ def _long_paragraphs(name: str, limit: int, root: Path | None = None) -> list[st
             if stripped in skipped:
                 excluded_level = level
             continue
-        if fenced or not stripped or stripped.startswith(("|", "<!--", "<a ")):
+        if fenced or not stripped or stripped.startswith(("|", "<!--", "<a ")) or _LINK_DEFINITION.match(line):
             close()
             continue
         if _LIST_ITEM.match(line):

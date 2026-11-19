@@ -657,7 +657,15 @@ def test_a_codex_or_claude_reinstall_without_the_option_names_it(tmp_path: Path,
     install.install(harness, "user", hook="intentshield-hook", home=home, builtin_tools=True)
     capsys.readouterr()
     install.install(harness, "user", hook="intentshield-hook", home=home)
-    assert "no longer set: --builtin-tools" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "built-in rules for the shell, file and web tools were on and are now off" in out
+    assert f"To keep them, run: intentshield install {harness} --builtin-tools" in out
+    assert "no longer set" not in out, "one line, not two"
+    install.install(harness, "user", hook="intentshield-hook", home=home, builtin_tools=True, review="always")
+    capsys.readouterr()
+    install.install(harness, "user", hook="intentshield-hook", home=home, dry_run=True)
+    out = capsys.readouterr().out
+    assert "would be off" in out and "no longer set: --review always" in out
 
 
 @pytest.mark.parametrize("builtin", [False, True])

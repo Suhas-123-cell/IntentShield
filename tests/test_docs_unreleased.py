@@ -1,35 +1,31 @@
 """What the documents say about behaviour that is in the repository but not in the latest package on PyPI.
 
-While the "Unreleased" section of CHANGELOG.md is empty, the repository and the latest release are the same product, so no
-document carries a qualifier such as "on main, after 0.4.3" and the README has no note that PyPI has an older version. While the
-section is not empty, the README carries one note under the install block that says PyPI has the latest release and links the
-changelog, and a statement in the guide about a feature listed under "Unreleased" says "on main, after <latest release>" in the
-same paragraph, list item, table row or code line, until that version is released.
+The pages describe what the tool does now: what changed between releases is in CHANGELOG.md, so no page carries a qualifier such
+as "on main, after 0.4.3" or "since 0.4.4". The one place that tells a reader the repository is ahead of the package is a note in
+the README under the quick start, and it is there only while the "Unreleased" section of CHANGELOG.md is not empty: it says
+that PyPI has the latest release and links the changelog.
 """
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ("docs/guide.md",)
-# Every Markdown file that describes the product; none may carry a qualifier while Unreleased is empty.
+# Every Markdown file that describes the product; none may carry an "on main, after <version>" qualifier.
 QUALIFIER_FILES = (
     "README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/guide.md", "docs/rules.md", "docs/layers.md", "docs/gateway.md",
     "docs/detectors.md",
     "docs/benchmarks.md", "docs/security-review.md", "docs/architecture-and-testing.md", "docs/hook-fidelity-report.md",
     "docs/hook-fidelity-report-appendix.md", "docs/contribution.md", "results/hook-fidelity/README.md",
 )
+# The pages that tell a reader how to use the tool: none may date a statement by a release ("since 0.4.4", "in 0.4.3 it").
+USAGE_FILES = (
+    "README.md", "SECURITY.md", "docs/guide.md", "docs/rules.md", "docs/layers.md", "docs/gateway.md", "docs/detectors.md",
+    "docs/architecture-and-testing.md", ".github/ISSUE_TEMPLATE/bug_report.md", ".github/ISSUE_TEMPLATE/feature_request.md",
+)
 QUALIFIER = re.compile(r"\bon main,? after \d+\.\d+\.\d+", re.I)
+SINCE = re.compile(r"\bsince \d+\.\d+\.\d+|\bin \d+\.\d+\.\d+ it\b|\bbefore \d+\.\d+\.\d+ the\b", re.I)
 PYPI_NOTE = re.compile(r"PyPI has \d+\.\d+\.\d+")
-
-# Each "Added" bullet of the Unreleased section of CHANGELOG.md, by its first words, with the patterns by which the guide names
-# that feature. An empty tuple says the two documents do not name it. A new bullet fails the first test until it is
-# listed here, so that whoever adds a feature decides whether a document needs the mark. Empty while Unreleased is empty.
-UNRELEASED_ADDED: dict[str, tuple[str, ...]] = {"`doctor` warns when a hook or threat-memory database": ()}
-# Features of the "Changed" and "Fixed" lists that the guide also names.
-UNRELEASED_OTHER: tuple[str, ...] = (r"symbolic link", r"Permission denied\)")
 
 
 def _changelog() -> str:
@@ -43,72 +39,9 @@ def _latest_release() -> str:
     return match.group(1)
 
 
-def _mark() -> str:
-    return f"on main, after {_latest_release()}"
-
-
 def _unreleased() -> str:
     match = re.search(r"^## Unreleased\n(.*?)(?=^## )", _changelog(), re.M | re.S)
     return match.group(1) if match else ""
-
-
-def _unreleased_added() -> list[str]:
-    added = re.search(r"^### Added\n(.*?)(?=^### |\Z)", _unreleased(), re.M | re.S)
-    if not added:
-        return []
-    bullets: list[str] = []
-    for line in added.group(1).splitlines():
-        if line.startswith("- "):
-            bullets.append(line[2:].strip())
-        elif line.strip() and bullets:
-            bullets[-1] += " " + line.strip()
-    return bullets
-
-
-def _blocks(name: str) -> list[tuple[int, str]]:
-    """(first line number, text) of each paragraph, list item and table row; a line of a code block is a block of its own."""
-    out: list[tuple[int, str]] = []
-    block: list[str] = []
-    start = 0
-    fenced = False
-
-    def close() -> None:
-        if block:
-            out.append((start, " ".join(part.strip() for part in block)))
-        block.clear()
-
-    for number, line in enumerate((ROOT / name).read_text(encoding="utf-8").splitlines(), 1):
-        stripped = line.strip()
-        if stripped.startswith(("```", "~~~")):
-            close()
-            fenced = not fenced
-            continue
-        if fenced:
-            if stripped:
-                out.append((number, stripped))
-            continue
-        if not stripped or stripped.startswith(("#", "|")):
-            close()
-            if stripped.startswith("|"):
-                out.append((number, stripped))
-            continue
-        if re.match(r"^\s*(?:[-*+]|\d+[.)])\s", line):
-            close()
-        if not block:
-            start = number
-        block.append(line)
-    close()
-    return out
-
-
-def _unmarked(patterns: tuple[str, ...]) -> list[str]:
-    found: list[str] = []
-    mark = _mark()
-    for name in FILES:
-        for number, text in _blocks(name):
-            if any(re.search(pattern, text) for pattern in patterns) and mark not in text:
-                found.append(f"{name}:{number}: {text[:90]}")
-    return found
 
 
 def _qualifiers(text: str) -> list[str]:
@@ -116,46 +49,23 @@ def _qualifiers(text: str) -> list[str]:
     return [line.strip()[:100] for line in text.splitlines() if QUALIFIER.search(line)]
 
 
-def test_every_unreleased_added_feature_is_listed_here():
-    unlisted = [b[:60] for b in _unreleased_added() if not any(b.startswith(key) for key in UNRELEASED_ADDED)]
-    assert not unlisted, f"list these CHANGELOG bullets in UNRELEASED_ADDED, with the patterns that name them: {unlisted}"
+def _dated(text: str) -> list[str]:
+    """The lines of ``text`` that date a statement by a release, such as "since 0.4.4" or "in 0.4.3 it exits 1"."""
+    return [line.strip()[:100] for line in text.splitlines() if SINCE.search(line)]
 
 
-def test_a_statement_about_an_unreleased_feature_carries_the_mark():
-    problems: list[str] = []
-    for bullet in _unreleased_added():
-        for key, patterns in UNRELEASED_ADDED.items():
-            if bullet.startswith(key):
-                problems += _unmarked(patterns)
-    problems += _unmarked(UNRELEASED_OTHER) if _unreleased().strip() else []
-    assert not problems, "\n".join(problems)
-
-
-def test_the_guide_explains_the_mark_only_while_something_is_unreleased():
-    guide = (ROOT / "docs" / "guide.md").read_text(encoding="utf-8")
-    explanation = f'A statement marked "({_mark()})"'
-    if _unreleased().strip():
-        assert explanation in guide
-    else:
-        assert "A statement marked" not in guide
-
-
-def test_no_document_carries_a_qualifier_while_unreleased_is_empty():
-    if _unreleased().strip():
-        return
+def test_no_document_carries_an_on_main_qualifier():
     found = {name: _qualifiers((ROOT / name).read_text(encoding="utf-8")) for name in QUALIFIER_FILES}
     assert not {name: lines for name, lines in found.items() if lines}
 
 
-def test_the_checker_finds_a_statement_without_the_mark(tmp_path, monkeypatch):
-    (tmp_path / "doc.md").write_text(
-        "# T\n\nOne feature (--connect) here.\n\n- item (--connect, on main, after 0.4.3)\n\n```sh\nx --connect\n```\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
-    monkeypatch.setattr(sys.modules[__name__], "FILES", ("doc.md",))
-    monkeypatch.setattr(sys.modules[__name__], "_mark", lambda: "on main, after 0.4.3")
-    assert [line.split(":")[1] for line in _unmarked((r"--connect(?![-\w])",))] == ["3", "8"]
+def test_no_usage_page_dates_a_statement_by_a_release():
+    found = {name: _dated((ROOT / name).read_text(encoding="utf-8")) for name in USAGE_FILES}
+    assert not {name: lines for name, lines in found.items() if lines}
+
+
+def test_the_guide_does_not_explain_a_mark():
+    assert "A statement marked" not in (ROOT / "docs" / "guide.md").read_text(encoding="utf-8")
 
 
 def test_the_qualifier_pattern_matches_the_forms_the_documents_used():
@@ -163,6 +73,14 @@ def test_the_qualifier_pattern_matches_the_forms_the_documents_used():
         assert _qualifiers(text), text
     for text in ("since 0.4.4", "on main, before the tag", "a clone of main, 0.4.3 denied it", "after 0.4.3 the hook sends"):
         assert not _qualifiers(text), text
+
+
+def test_the_dating_pattern_matches_the_forms_the_documents_used():
+    for text in ("since 0.4.4", "Since 0.4.3, `install` writes", "In 0.4.3 it exits 1", "(the last two since 0.4.4)",
+                 "Before 0.4.3 the protocol library dropped"):
+        assert _dated(text), text
+    for text in ("the rules of 0.4.4", "scored with the 0.4.4 rules", "a hook that has run since the install", "0.4.3 is older"):
+        assert not _dated(text), text
 
 
 def _readme_problems(text: str, unreleased: str, latest: str = "0.4.3") -> list[str]:

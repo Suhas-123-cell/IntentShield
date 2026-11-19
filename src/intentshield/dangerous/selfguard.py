@@ -1,14 +1,16 @@
 """The guard's own surface: the hook settings and the state a command must not delete, edit or switch off."""
 from __future__ import annotations
 
+import fnmatch
 import os
 import posixpath
 import re
 from pathlib import Path
 
-from .core import _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, Hit, _bin, _Stage
+from .core import _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, Hit, _bin, _is_opt, _note_cap, _Stage
 from .parsing import _INTERPRETERS
-from .paths import _clean_path, _cred_level, _norm, _pathlike, persistence_path
+from .paths import _clean_path, _cred_level, _ends_in_glob, _glob_hits, _home_or_above, _norm, _pathlike, persistence_path
+from .writes import _find_roots
 
 # --- the guard's own surface -------------------------------------------------------------------------------------
 
@@ -29,9 +31,18 @@ _SELF_FILES = re.compile(r"(?:^|[;&|(\n]\s{0,5})(?:sudo\s+)?(?:rm|mv|unlink|chmo
                          r"(?:\.intentshield\b|\b(?:hooks|threats)\.db\b|(?:bin/|Scripts/|which\s+|command\s+-v\s+|type\s+-p\s+)"
                          r"intentshield[\w-]*)")
 _SELF_SQL = re.compile(r"(?:^|[;&|(\n]\s{0,5})sqlite3?\b[^\n]{0,1200}\b(?:hooks|threats)\.db\b", re.I)
-_SQL_WRITE = re.compile(r"\b(?:delete\s+from|drop\s+(?:table|index|view)|update\s+\w|insert\s+(?:or\s+\w+\s+)?into|replace"
-                        r"\s+into|"
-                        r"alter\s+table|vacuum)\b", re.I)
+_SQL_WRITE = re.compile(r"\b(?:delete\s+from|drop\s+(?:table|index|view|trigger)|update\s+(?:or\s+\w+\s+)?\w+|"
+                        r"insert\s+(?:or\s+\w+\s+)?into|replace\s+into|alter\s+table|vacuum|pragma\s+writable_schema|"
+                        r"create\s+(?:temp(?:orary)?\s+)?(?:unique\s+|virtual\s+)?(?:table|trigger|view|index)|"
+                        r"reindex|analyze)\b|\bpragma\s+\w+\s*=", re.I)
+# sqlite3's own commands that run or load a script it cannot be seen to hold (``.read FILE``).
+_SQL_DOT = re.compile(r"(?<![\w.])\.(?:read|restore|import)\b|(?<![\w-])-init\b", re.I)
+# sqlite3 fed a script on its standard input, by a redirect from a file or a pipe: what the script holds is not in the command.
+_DB = r"\b(?:hooks|threats)\.db\b"
+_SQL_STDIN = re.compile(
+    r"(?:^|[;&|(\n]\s{0,5})sqlite3?\b[^\n;&|]{0,1200}" + _DB + r"[^\n;&|]{0,1200}(?<!<)<(?!<)|"
+    r"(?:^|[;&|(\n]\s{0,5})sqlite3?\b[^\n;&|]{0,1200}(?<!<)<(?!<)[^\n;&|]{0,1200}" + _DB + r"|"
+    r"(?<!\|)\|\s{0,5}sqlite3?\b[^\n;&|]{0,1200}" + _DB + r"['\"]?\s{0,5}(?:$|[;&|)\n<>])", re.I)
 _PACKAGE_MANAGERS = frozenset({"pip", "pip3", "pipx", "uv", "conda", "mamba", "poetry", "pdm", "brew", "python", "python3"})
 _SELF_WRITE_CODE = re.compile(r"\b(?:write|dump|unlink|remove|rmtree|replace|rename|truncate|write_text|copyfile|move)\b|"
                               r"open\([^)]{0,200}['\"][wa]", re.I)
@@ -67,7 +78,10 @@ def guard_surface(path: str) -> tuple[str, str] | None:
     if not p:
         return None
     if len(p) > _PATH_CAP:
-        return (ASK, _PATH_CAP_WHY) if _pathlike(p) else None
+        if not _pathlike(p):
+            return None
+        _note_cap(_PATH_CAP_WHY)
+        return ASK, _PATH_CAP_WHY
     n = _norm(p) if p.startswith(("~", "$", "/")) else posixpath.normpath(p)
     if _GUARD_SURFACE.search(n):
         return ASK, "the hook settings of a harness or IntentShield's own state, which is how the guard is switched off"
@@ -81,12 +95,74 @@ def guard_surface(path: str) -> tuple[str, str] | None:
     return None
 
 
+# The directories that hold the hook settings above, and the files in them that a pattern for names must not reach: removing
+# or moving the directory removes the settings file in it, so it is judged as the file is.
+_GUARD_DIR = re.compile(r"(?:^|/)(?:\.claude|\.codex|\.cursor|\.gemini|\.intentshield|\.claude/hooks|etc/claude-code|"
+                        r"application support/claudecode|programdata/claudecode)$", re.I)
+_GUARD_DIR_PATHS = ("~/.claude", "~/.codex", "~/.cursor", "~/.gemini", "~/.intentshield", "~/.claude/hooks", "/etc/claude-code")
+_GUARD_FILE_NAMES = ("settings.json", "settings.local.json", "hooks", "config.toml", "hooks.json", "managed-settings.json")
+_WHY_DIR = ("a directory that holds the hook settings of a harness or IntentShield's own state, which is how the guard is "
+            "switched off")
+
+
+def guard_dir(path: str, whole: bool = True) -> tuple[str, str] | None:
+    """(decision, why) when removing, moving or (recursively) changing ``path`` takes the hook settings with it: the directory
+    that holds them (``~/.claude``, ``.codex``, ``.cursor``, ``.gemini``, ``.claude/hooks``), spelled alone (when ``whole``: the
+    operation takes the whole directory, as ``rm -r``, ``mv`` and ``find -delete`` do), with a glob over everything in it
+    (``~/.claude/*``) or with a glob over names that can be the settings file (``~/.claude/set*``). A path inside the directory
+    (``.claude/worktrees/x``, ``.claude/commands/x.md``) is not."""
+    p = _clean_path(path.strip().strip("\"'").replace("\\", "/"))
+    if not p or len(p) > _PATH_CAP:
+        return None
+    rooted = p.startswith(("~", "$", "/"))
+    n = _norm(p) if rooted else posixpath.normpath(p)
+    parent, _, last = n.rpartition("/")
+    if any(c in last for c in "*?["):
+        if _GUARD_DIR.search(parent) and (_ends_in_glob(n) or any(fnmatch.fnmatchcase(name, last.lower())
+                                                                 for name in _GUARD_FILE_NAMES)):
+            return ASK, _WHY_DIR
+        return (ASK, _WHY_DIR) if rooted and _glob_hits(p, _GUARD_DIR_PATHS) else None   # ``~/.cl*`` can be ``~/.claude``
+    return (ASK, _WHY_DIR) if _GUARD_DIR.search(n) and (whole or _ends_in_glob(p)) else None
+
+
+def _takes_dir(name: str, argv: list[str]) -> list[tuple[str, bool]]:
+    """(path, whole) of the arguments of ``name`` that it removes, moves or changes everything in: ``whole`` is True when it takes
+    the directory itself (``rm -r``, ``rmdir``, a ``mv`` source, ``chmod -R``), False when it takes the files of the directory
+    only if the path ends in a glob (``rm ~/.claude/*``)."""
+    flags = [a for a in argv[1:] if a.startswith("-") and len(a) > 1 and a != "--"]
+    args = [a for a in argv[1:] if not a.startswith("-")]
+    recursive = any(_is_opt(a, "--recursive") or (not a.startswith("--") and "r" in a[1:].lower()) for a in flags)
+    if name == "mv":
+        return [(a, True) for a in args[:-1]] if len(args) > 1 else []
+    if name == "rmdir" or (name in ("chmod", "chown", "chgrp") and recursive):
+        return [(a, True) for a in args]
+    if name in ("trash", "trash-put", "rmtrash", "gtrash"):   # moves what it is given to the trash
+        return [(a, True) for a in args]
+    if name == "rm":   # ``-d`` removes a directory that is empty, as ``rmdir`` does
+        return [(a, recursive or any(not a.startswith("--") and "d" in a[1:] for a in flags)) for a in args]
+    return []
+
+
+def _find_deletes(args: list[str]) -> bool:
+    """The ``find`` deletes what it matches (``-delete``, or ``-exec rm``)."""
+    return "-delete" in args or ("-exec" in args and any(_bin(a) in ("rm", "shred", "unlink") for a in args))
+
+
+def _find_reaches_settings(args: list[str]) -> bool:
+    """False only when every test on the name that limits the ``find`` is one that the settings files cannot pass (``-name
+    '*.jsonl'``). No test on the name, a test on age or size alone, ``-o``, ``!`` or ``-not`` can reach them."""
+    if any(a in ("-o", "-or", "!", "-not") for a in args):
+        return True
+    names = [args[k + 1].lower() for k, a in enumerate(args[:-1]) if a in ("-name", "-iname")]
+    return not names or any(fnmatch.fnmatchcase(name, pattern) for pattern in names for name in _GUARD_FILE_NAMES)
+
+
 def _guard_text(data: str, text: str) -> Hit | None:
     """Commands that delete or change IntentShield's own files or programs, or edit its database, by their text (a command
     that starts with the program, so a commit message that names them does not count)."""
     if _SELF_FILES.search(data):
         return Hit(ASK, "this deletes or changes IntentShield's own files or programs, which switches the guard off.")
-    if _SELF_SQL.search(text) and _SQL_WRITE.search(text):
+    if _SELF_SQL.search(text) and (_SQL_WRITE.search(text) or _SQL_DOT.search(text) or _SQL_STDIN.search(text)):
         return Hit(ASK, "this edits IntentShield's own database (sessions, taint, threat memory).")
     return None
 
@@ -108,6 +184,16 @@ def _guard_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
         for a in args[:-1] if name == "mv" and len(args) > 1 else args:
             if (hit := guard_surface(a)):
                 return Hit(hit[0], f"{name} changes {a}, {hit[1]}.", a)
+    for a, whole in _takes_dir(name, argv):
+        if (hit := guard_dir(a, whole)):
+            return Hit(hit[0], f"{name} takes {a}, {hit[1]}.", a)
+    if name == "find" and _find_deletes(argv[1:]) and _find_reaches_settings(argv[1:]):
+        for start in _find_roots(argv[1:]):
+            if (hit := guard_dir(start)):
+                return Hit(hit[0], f"find deletes under {start}, {hit[1]}.", start)
+            if _home_or_above(start):   # the directories of the settings lie below it
+                return Hit(ASK, f"find deletes under {start}, which holds the hook settings of a harness, and its test can match "
+                                "a settings file.", start)
     if name in ("cp", "mv", "install", "ln", "rsync", "ditto"):  # a file named like the program, put into a bin directory
         args = [a for a in argv[1:] if not a.startswith("-")]
         if len(args) > 1 and re.search(r"(?:^|/)(?:bin|Scripts)/?$", args[-1]) and any(
@@ -120,6 +206,8 @@ def _guard_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
             return Hit(ASK,
                        "this program's code writes or deletes a file of the guard's own surface (hook settings, IntentShie"
                        "ld's state).")
+        if re.search(_DB, joined, re.I) and _SQL_WRITE.search(joined):
+            return Hit(ASK, "this program's code edits IntentShield's own database (sessions, taint, threat memory).")
     return None
 
 

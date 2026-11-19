@@ -34,12 +34,12 @@ harness: [layers.md](layers.md#what-each-layer-sees-and-stops).
 
 | step | what you get | words | minutes |
 |---|---|---|---|
-| the [README](../README.md) down to Results | what it does, how to install it, its threat model, what it stops and does not stop, where the documents are, what is stored locally | 1,360 | 5 |
-| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,700 | 7 |
-| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 3,230 | 13 |
-| all three | | 6,290 | 25 |
+| the [README](../README.md) down to Results | what it does, how to install it, its threat model, what it stops and does not stop, where the documents are, what is stored locally | 1,619 | 6 |
+| [contribution.md](contribution.md) | what the work does and does not support as a research contribution | 1,784 | 7 |
+| [hook-fidelity-report.md](hook-fidelity-report.md) | the one study: method, version matrix, four findings, the guard comparison, limits | 3,102 | 12 |
+| all three | | 6,505 | 26 |
 
-The first two steps alone take 12 minutes. The report's [appendix](hook-fidelity-report-appendix.md) holds the denominators, the
+The first two steps alone take 13 minutes. The report's [appendix](hook-fidelity-report-appendix.md) holds the denominators, the
 per-build detail and the long caveats. Everything else is reference to look up a number or a protocol.
 
 Where to go next, by what you want:

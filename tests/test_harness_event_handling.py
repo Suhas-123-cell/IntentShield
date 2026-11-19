@@ -50,9 +50,17 @@ def test_nothing_changes_for_an_install_without_builtin_tools(tmp_path):
     g = guard(tmp_path, builtin=False)
     for event in ({"session_id": "s", "tool_name": "Bash", "tool_input": {"command": "rm -rf /"}},
                   {"hook_event_name": "Weird", "session_id": "s", "tool_name": "Bash", "tool_input": {"command": "rm -rf /"}},
-                  {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash", "tool_input": {"command": 5}},
-                  {"hook_event_name": "Weird", "session_id": "s", "tool_name": "mcp__srv__tool", "tool_input": {}}):
+                  {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash", "tool_input": {"command": 5}}):
         assert handle("claude", event, g) is None
+
+
+def test_an_mcp_call_under_an_event_name_no_harness_documents_is_refused_without_the_option_too(tmp_path):
+    g = guard(tmp_path, builtin=False)
+    assert verdict(handle("claude", {"hook_event_name": "Weird", "session_id": "s", "tool_name": "mcp__srv__tool",
+                                     "tool_input": {}}, g)) == "deny"
+    # an event the harnesses document (a permission dialog, a result) that carries the tool is not a call and is left alone
+    for name in ("PermissionRequest", "PostToolBatch", "Notification"):
+        assert handle("claude", {"hook_event_name": name, "session_id": "s", "tool_name": "mcp__srv__tool", "tool_input": {}}, g) is None
 
 
 def test_a_missing_event_name_still_refuses_an_mcp_call_without_the_option(tmp_path):

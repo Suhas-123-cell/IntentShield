@@ -3,15 +3,14 @@
 This guide covers what the [README](../README.md) leaves out: guarding an agent harness with hooks and the
 transparent proxy, what to do when the guard blocks something legitimate, scanning the servers you already use, wrapping a
 third-party hook, threat memory, and troubleshooting. The gateway, dashboard, REST API and production settings are in
-[gateway.md](gateway.md). A feature marked "since 0.4.3" or "since 0.4.4" needs that version or a later one.
-A statement marked "(on main, after 0.4.4)" describes the main branch of the repository and is not in the 0.4.4 package on PyPI.
+[gateway.md](gateway.md). Terms such as taint, provenance and the fail-closed launcher are in the [glossary](layers.md#terms).
 
 ## Quick start
 
 ```sh
 uv tool install intentshield-mcp       # or: pipx install intentshield-mcp
+intentshield demo                      # sample calls through the real hook; nothing runs and no settings change
 intentshield install claude            # or codex, cursor, gemini; add --builtin-tools to guard shell, file and web tools too
-intentshield demo                      # sample calls through the real hook; nothing runs
 intentshield wrap .mcp.json            # put the proxy in front of the stdio servers in a file; unwrap undoes it
 intentshield doctor                    # after you start the harness and send any prompt
 ```
@@ -77,8 +76,7 @@ Harnesses that call MCP tools get two layers that share IntentShield's rules:
   they cannot.
 
 `intentshield install <harness>` writes the hook entries into the harness's settings
-file (`--scope project` for the current directory, which for Claude Code is `.claude/settings.local.json` since 0.4.4 and
-`.claude/settings.json` in 0.4.3; `--review always` for a harness that
+file (`--scope project` for the current directory, which for Claude Code is `.claude/settings.local.json`; `--review always` for a harness that
 cannot ask; `--gemini-ask` for interactive Gemini CLI 0.66 or later, see [layers.md](layers.md#what-each-harness-lets-the-guard-do)); `intentshield uninstall <harness>` removes them. The same entries are in
 `configs/harness/` of a repository clone (not in the PyPI package; `install --dry-run` prints what `install` would write) for a manual install; they call `intentshield-hook` by name, so put the
 install's `bin` on the harness's `PATH` or use absolute paths.
@@ -89,8 +87,8 @@ The per-harness table (hook config, argument rewriting, asking the user) is in
 The proxy layer needs no harness support at all: `intentshield wrap <file>` rewrites every stdio
 server in an `mcpServers` file (Claude Code `.mcp.json`, Cursor `mcp.json`, Gemini CLI
 `settings.json`, or any client with that layout), in VS Code's `servers` key (`mcp.json`) or `mcp.servers` key (`settings.json`), and in the
-`[mcp_servers.NAME]` tables of Codex CLI's `~/.codex/config.toml` (the last two since 0.4.4); `unwrap` gives the file back byte
-for byte, whatever its line endings or spacing (since 0.4.4). Claude Code keeps the servers added with
+`[mcp_servers.NAME]` tables of Codex CLI's `~/.codex/config.toml`; `unwrap` gives the file back byte
+for byte, whatever its line endings or spacing. Claude Code keeps the servers added with
 `claude mcp add` in `~/.claude.json`, the top-level ones and each project's own; `wrap` handles that file the same way to launch the proxy in front of it, with one
 generated config per server under `~/.intentshield/proxies/`; `intentshield unwrap <file>` restores
 them. By hand, the entry looks like this:
@@ -103,8 +101,7 @@ them. By hand, the entry looks like this:
 Servers reached over HTTP (`"url"`) are not launched by the client, so `wrap` leaves them alone;
 guard those with the [gateway](gateway.md#real-mcp-proxy).
 
-**Check the install.** Right after `install`, `intentshield doctor` says that no hook has run yet, which is expected. In 0.4.3 it exits 1
-and prints `FAIL <harness> ...: installed, but no hook has run since <time>` for each harness; since 0.4.4 it prints a `warn`
+**Check the install.** Right after `install`, `intentshield doctor` says that no hook has run yet, which is expected. It prints a `warn`
 line for the first hour after the install and exits 0. Start the
 harness, send any prompt (a prompt is enough, no tool call is needed) and run `doctor` again; a line that stays `FAIL` is explained under
 [Troubleshooting](#troubleshooting).
@@ -113,7 +110,8 @@ harness, send any prompt (a prompt is enough, no tool call is needed) and run `d
 MCP files: the hook executable and, after `wrap`, a proxy config under `~/.intentshield/proxies/`. A teammate who
 clones a repository holding such a file gets an entry that points at a path they do not have, and a hook launcher
 that refuses every MCP call. This applies to `install --scope project` and to a wrapped project `.mcp.json`; keep
-those files out of git, or run `install` and `wrap` on each machine.
+those files out of git, or run `install` and `wrap` on each machine. `install` prints a note after a project-scope install, and
+`wrap` prints one when the file is inside a git working tree.
 
 **What is stored on your machine.** The hooks keep a session's prompts and the addresses, URLs, accounts and paths
 seen in tool results in `~/.intentshield/hooks.db`, for 7 days after the session's last event (30 days if a
@@ -124,7 +122,7 @@ result was flagged). [SECURITY.md](../SECURITY.md#what-is-stored-locally) lists 
 By default the hooks check MCP calls only. `intentshield install <harness> --builtin-tools` also sends the harness's own shell,
 file and web tools to the hook, which then denies or asks about dangerous commands. It is opt-in and best effort, not a sandbox.
 Every rule, the limits on what is read and what is not read are on one page: [rules.md](rules.md). A symbolic link is followed
-for a path that exists on disk: the real path is read as well as the text, and the stricter verdict counts (on main, after 0.4.4).
+for a path that exists on disk: the real path is read as well as the text, and the stricter verdict counts.
 
 ### Point the model at the right tool
 
@@ -170,11 +168,11 @@ user actually sees (that table has the hook configuration):
 |---|---|---|
 | Claude Code | Claude Code's own permission prompt in an interactive session; a refusal in a headless run (notes below) | the call does not run; the model is shown the reason |
 | Codex CLI | never a prompt: Codex runs a call its hook asked about, so an ask is sent as a refusal that tells the agent not to retry | the same refusal |
-| Cursor | an MCP call: a refusal (Cursor ran an allowlisted MCP call its hook asked about). A shell command with `--builtin-tools`: Cursor's own approval prompt | `permission: deny`, with the reason as the user message |
+| Cursor | an MCP call: a refusal (Cursor ran an allowlisted MCP call its hook asked about). A shell command with `--builtin-tools`: Cursor's own approval prompt. A file read with `--builtin-tools` has no ask: a `.env` or `~/.npmrc` is read with a note to you, and a key is refused | `permission: deny`, with the reason as the user message |
 | Gemini CLI | by default a refusal; a prompt only with `install gemini --gemini-ask` (notes below) | the same refusal |
 
 - **Claude Code.** The prompt shows the hook's reason as its text, and you answer yes or no there. In a headless run
-  (`claude -p`) nobody can answer: since 0.4.3 the hook sends the ask as a refusal that says so, and Claude Code 2.1.85
+  (`claude -p`) nobody can answer: the hook sends the ask as a refusal that says so, and Claude Code 2.1.85
   and later refuses an ask nobody answers by itself.
 - **Gemini CLI.** `--gemini-ask` needs Gemini CLI 0.66 or later, an interactive session, and covers shell commands
   only; an MCP ask is always refused. After the third refusal since your last prompt the hook also ends the agent's
@@ -205,7 +203,7 @@ changes. What you can change, narrowest first:
 
    `never` removes every ask, including the asks for values from tool outputs, for credentials the user did not give, for a judge's
    objection and for the dangerous-command rules; it keeps the denies (injected instructions in the arguments, a value from an
-   injected output, a known attack, the dangerous-command denies). It is not a way to approve one call; use it only where a refusal
+   injected output, a known attack, the dangerous-command denies) and refuses a call past a limit of what the rules read. It is not a way to approve one call; use it only where a refusal
    costs more than the ask protects.
 
    Reads whose argument came from an output can be let through on their own with `INTENTSHIELD_HOOK_SOURCED_READS=allow` (or
@@ -215,7 +213,7 @@ changes. What you can change, narrowest first:
    project's settings file) removes only IntentShield's hook entries and leaves every other setting; the file is
    deleted only when it held nothing else. `intentshield unwrap <mcp.json>` restores the servers `wrap` rewrote
    (`--server NAME` for one) and keeps their proxy configs and audit databases. All four commands accept
-   `--dry-run` to print the result. Since 0.4.3, `install --no-translate` (or `INTENTSHIELD_HOOK_TRANSLATE=off`) goes
+   `--dry-run` to print the result. `install --no-translate` (or `INTENTSHIELD_HOOK_TRANSLATE=off`) goes
    back to the hook as it was before the verdict translation: no deadline, no fail-closed launcher, and asks sent
    as the harness table above lists them.
 
@@ -229,18 +227,18 @@ change. For `intentshield scan`, `--update-pins` accepts the tools as they are.
 
 | the reason starts | what it means |
 |---|---|
-| `Arguments carry injected instructions (instruction_override).` | deny: the call's own arguments contain text the rules read as an instruction to the agent; the name in brackets is the rule |
+| `Arguments carry injected instructions (instruction_override).` | deny: the call's own arguments contain text the rules read as an instruction to the agent; the name in brackets is the rule ([the rule names](#the-rule-names-in-a-reason)) |
 | `An argument value came from a tool output that contained injected instructions, not from the user: <values>.` | deny: a value in the call (at most three are shown) came from a result the scan flagged |
 | `An argument value came from a tool output, not from the user: <values>. Confirm this call.` | ask: the address, URL, account or path appears in an earlier result and not in your prompts; see "name the value" above |
 | `A tool output in this session tried to instruct the agent; confirm this call.` | ask: a result in this session was flagged and the call changes state |
 | `An argument carries a credential the user did not give (<masked>)` | ask, or deny once the session is flagged: a token or key you did not type is leaving |
 | `An argument matches an earlier attack (<value>); confirm this call.` / `An argument matches a known attack` | threat memory: a learned value asks, an operator-confirmed or imported one denies |
 | `IntentShield's LLM judge found this call inconsistent with your request; confirm with the user.` | ask from the optional judge, which never denies on its own; Claude Code's prompt shows the judge's own words to you and not to the agent |
-| `IntentShield: <reason>` | a dangerous-command rule (since 0.4.3, with `--builtin-tools`), for example `IntentShield: git commit -n skips the repository's pre-commit hooks.` |
-| `... (IntentShield wanted the user to confirm this call, but <why>; so it is refused and the user can allow it.)` | an ask that was sent as a refusal (since 0.4.3); `<why>` says whether it was a headless run, a harness that does not honour an ask, or an unmeasured build |
-| `[IntentShield read this session as <mode>: <how> [ancestry: <source>]]` | since 0.4.3, the mode the hook read (`interactive`, `headless`, `yolo` or `unknown`) and which source decided |
-| `IntentShield did not finish checking this call within 30 s ...` | the hook's own deadline (since 0.4.3) answered before the harness's timeout, which every harness measured lets the call run |
-| `IntentShield hook did not run (exit code <n>); this call is refused.` | the fail-closed launcher (since 0.4.3): the hook could not start or crashed; run `intentshield doctor` |
+| `IntentShield: <reason>` | a dangerous-command rule (with `--builtin-tools`), for example `IntentShield: git commit -n skips the repository's pre-commit hooks.` |
+| `... (IntentShield wanted the user to confirm this call, but <why>; so it is refused and the user can allow it.)` | an ask that was sent as a refusal; `<why>` says whether it was a headless run, a harness that does not honour an ask, or an unmeasured build |
+| `[IntentShield read this session as <mode>: <how> [ancestry: <source>]]` | the mode the hook read (`interactive`, `headless`, `yolo` or `unknown`) and which source decided |
+| `IntentShield did not finish checking this call within 30 s ...` | the hook's own deadline answered before the harness's timeout, which every harness measured lets the call run |
+| `IntentShield hook did not run (exit code <n>); this call is refused.` | the fail-closed launcher: the hook could not start or crashed, for example after its environment was deleted; run `intentshield doctor`, then `intentshield install <harness>` from the environment you use |
 
 Two of these lines carry a note. `(the user typed this command, so confirm it)` after a dangerous-command reason marks a
 deny softened to an ask. "The harness process was not found among the ancestors: assumed headless" in the mode line
@@ -253,9 +251,36 @@ settings can set these, and the other `INTENTSHIELD_HOOK_*` and `INTENTSHIELD_TH
 `INTENTSHIELD_HOOK_SOURCED_READS=allow`, `INTENTSHIELD_THREAT_MEMORY=0`, and the database, pack and catalog paths), for a
 session. The hook names each one that loosens it on stderr. Do not set them for a repository you do not trust.
 
+### The rule names in a reason
+
+The name in brackets in a reason (`Arguments carry injected instructions (instruction_override, sensitive_request).`) is a text rule
+that matched. A reason can carry these names; a rule from a threat pack you installed shows under its own name. `intentshield scan`
+also prints rule names, for tool descriptions; five of them are the same as these.
+
+| rule | what it matched |
+|---|---|
+| `instruction_override` | text that tells the agent to ignore or replace its instructions |
+| `hidden_directive` | a tag such as `<IMPORTANT>` that marks hidden instructions |
+| `tool_call_directive` | an order to call a particular tool first |
+| `threat_coercion` | a warning of damage if the agent does not comply |
+| `hidden_text` | a run of Unicode tag characters, which display as nothing |
+| `agent_directive` | what an AI, "the assistant" or "you" must do, with an address, URL or path after the verb |
+| `new_task` | "New task:" or "Important instructions:" followed by an order, an AI reader or a destination |
+| `exfiltration` | an order to send, forward or upload a password, token, key or other secret |
+| `user_impersonation` | text that speaks as the user ("message from me to you", "I am the user") |
+| `task_hijack` | text that rearranges the agent's task ("before you can solve the task", "the previous task is completed") |
+| `instruction_demand` | "you must follow", "obey" or "comply with" |
+| `role_marker` | a chat-template marker such as `[INST]` or `<<SYS>>` |
+| `sensitive_request` | a request to read or send a key, a credential or a secrets file |
+| `agent_address` | a note to the AI reading the text that asks it to send, delete, share or ignore something |
+| `reviewer_address` | a note to the scanner reading the text that vouches that it is clean |
+| `user_proxy` | text that says the user also wants the agent to send something to an address or URL |
+| `forged_tool_call` | a tool call written into the text, in JSON or XML, with an order to run it |
+| `image_exfiltration` | an image whose URL carries a placeholder for the agent to fill in with data |
+
 ## Wrapping a third-party hook
 
-Since 0.4.3, `intentshield wrap-hook` runs any hook command under the same fail-closed
+`intentshield wrap-hook` runs any hook command under the same fail-closed
 launcher, deadline and version-keyed verdict translation that `install` writes for IntentShield's own hook. It
 exists because the hook-fidelity study found that the harnesses let a call run when a hook crashes, is slow or
 prints nothing, and that a guard's `ask` is dropped, run or hung on some builds
@@ -271,7 +296,7 @@ intentshield wrap-hook --harness claude|codex|gemini|cursor [--version X.Y.Z] [-
 by the absolute path of the `intentshield` program, as `install` writes it, because a harness started from the Dock or an IDE
 may not have it on `PATH`. The guard may be given as one shell string or as separate arguments. Give `--hook-timeout` the same
 number as the entry's own timeout setting. For Cursor, `install` relies on `"failClosed": true` in the hook entry and not on the
-launcher below, so set that key on a Cursor entry as well (since 0.4.4, `--print-entry --harness cursor` says so).
+launcher below, so set that key on a Cursor entry as well (`--print-entry --harness cursor` says so).
 
 A hook entry that ran `pnpm dlx block-no-verify` becomes
 
@@ -313,14 +338,19 @@ not that the wrapped guard is better, and nothing was measured about a guard's d
 ## What `install` writes
 
 `intentshield install` runs `<harness> --version` and records it in `~/.intentshield/harness-versions.json`. When the harness is
-not on `PATH` it says that it could not read the version, so a call that would normally ask you is blocked instead, which is the
-safe side (put the harness on `PATH` and run `intentshield doctor` to record it).
+not on `PATH`, or its `--version` prints no number or does not answer within 20 s, it says that it could not read the version.
+On Claude Code, and on Gemini CLI with `--gemini-ask`, a call that would normally ask you is then blocked instead, which is the
+safe side (put the harness on `PATH` and run `intentshield doctor` to record it). On Codex CLI, Cursor and Gemini CLI without
+`--gemini-ask` no verdict depends on the version.
 
 `install` then writes two things into the hooks that check a call (Claude Code, Codex and Gemini; Cursor keeps `failClosed`): the
-hook's own deadline (`--deadline`, 30 s by default, so a slow judge or database answers with a refusal before the
-harness's timeout, which every harness measured treats as permission to run the call) and the launcher above
-(a hook that cannot start, with exit 126 or 127, becomes exit 2 with a reason). The launcher is for POSIX shells
-and is left out on Windows. `--no-translate`, or `INTENTSHIELD_HOOK_TRANSLATE=off` at run time, writes the hook as
+hook's own deadline and the launcher above. The deadline is `--deadline 30` on the hook command, so a slow judge or database answers
+with a refusal before the harness's timeout, which every harness measured treats as permission to run the call. `install` has no
+`--deadline` option of its own; to change the number, edit it in the hook command in the settings file (`intentshield-hook --help`
+gives the range; `0` is no deadline). `INTENTSHIELD_HOOK_DEADLINE` applies only to a hook command with no `--deadline`. The launcher
+makes a hook that cannot start, with exit 126 or 127, exit 2 with a reason. It is for POSIX shells and is left out on Windows.
+
+`--no-translate`, or `INTENTSHIELD_HOOK_TRANSLATE=off` at run time, writes the hook as
 it was before: verdicts are sent as the guard made them, with no deadline and no launcher. `intentshield doctor`
 warns about a call hook installed without them.
 
@@ -332,7 +362,7 @@ intentshield scan --no-connect     # read the configs only; start no server
 intentshield scan --format sarif   # for GitHub code scanning; also --format json
 ```
 
-`scan` starts each server as its client would (with only the environment its config names plus basics such as `PATH` and `HOME`),
+`scan` starts each stdio server as its client would and connects to each Streamable HTTP server (with only the environment its config names plus basics such as `PATH` and `HOME`),
 lists its tools without calling any, and checks them offline: poisoned descriptions, split instructions, self-disclosure
 parameters, shadowed names, credentials written into a config, and tools that changed since the last scan. It exits 0 when no
 error-level finding remains (also when no MCP config is found), 1 when one does, and 2 when a named file is missing or unreadable
@@ -349,14 +379,14 @@ intentshield install claude           # repeat for each harness, with the option
 intentshield doctor                   # after you have started the harness and sent a prompt
 ```
 
-A reinstall prints which options it dropped, if any (since 0.4.4). Wrapped servers keep working and need no new `wrap`. What changes for you in a
+A reinstall prints which options it dropped, if any: run `install` again without `--builtin-tools` and the rules for shell, file
+and web tools are off again, so repeat the options you want to keep. Wrapped servers keep working and need no new `wrap`. What changes for you in a
 release is in [CHANGELOG.md](../CHANGELOG.md), under "Upgrading from" the version you had.
 
 The databases in `~/.intentshield` (`hooks.db`, `threats.db`, the gateway's and each proxy's) carry a schema version, which a new release
-sets the first time it opens one (on main, after 0.4.4). The release before it still opens the file, and a file written by a newer release
-no longer stops the hook; `intentshield doctor` warns about a `hooks.db` or `threats.db` written by a newer release, and does not look at
+sets the first time it opens one. A file written by a newer release does not stop the hook; `intentshield doctor` warns about a `hooks.db` or `threats.db` written by a newer release, and does not look at
 the gateway's or a proxy's database. A `wrap` of a server whose name is longer than 100 characters names its
-files with the first 100 characters of the name and the hash (on main, after 0.4.4).
+files with the first 100 characters of the name and the hash.
 
 **Remove everything.** Undo the changes to your files before you remove the package, because a hook entry that names a program that no longer
 exists makes the launcher refuse each call the hook guards, and a wrapped server whose proxy is gone does not start. `intentshield doctor` shows
@@ -374,58 +404,64 @@ removed last. [SECURITY.md](../SECURITY.md#what-is-stored-locally) lists what is
 
 ## Troubleshooting
 
-**`intentshield doctor`** checks every harness's user and project settings file, then the MCP configs it finds (Claude Code, Cursor and
-Gemini CLI, and Codex CLI and VS Code, the last two since 0.4.4).
+Each message has one row: what you see, why, and what to run. The notes after the tables explain the longer cases. Any other option that a reinstall drops prints `replaced the previous install; no longer set: <option>`.
+
+### Install, wrap and scan
+
+| you see | why | what to run |
+|---|---|---|
+| `command not found: intentshield` | the directory that `uv tool` or `pipx` installs into is not on `PATH` | `uv tool update-shell` (or `pipx ensurepath`), then open a new terminal |
+| `externally-managed-environment` (from `pip`) | the system Python does not let pip change it | `uv tool install intentshield-mcp`, or `pipx install intentshield-mcp` |
+| `pip` says it ignored versions that "require a different python version", or `uv` says "depends on Python>=3.11" | IntentShield needs Python 3.11 or newer | `uv tool install --python 3.12 intentshield-mcp` (uv fetches the interpreter) or `pipx install --python python3.12 intentshield-mcp` |
+| `could not read the version of <harness>` | `install` runs `<harness> --version`; the harness is not on `PATH`, printed no number or did not answer. On Claude Code, and Gemini CLI with `--gemini-ask`, an ask is refused until the version is recorded | put the harness on `PATH` (Cursor's program is `cursor-agent`), then `intentshield doctor`, which records the version |
+| `CLAUDE_CONFIG_DIR is set to <dir>` or `CODEX_HOME is set to <dir>`, `... will not see the hooks` | the harness reads its user settings from that directory; `install` writes to `~/.claude` or `~/.codex` | Claude Code: `intentshield install claude --scope project` in the project. Either harness: copy the entries that `install <harness> --dry-run` prints into the settings file in that directory |
+| `holds a number that JSON cannot write back` | the file holds `NaN`, `Infinity` or a number such as `1e400`; it was left unchanged | change that number, then run the command again |
+| `not started (config in the current directory)`, and `scan` exits 2 | the servers of a project's `.mcp.json` are code the repository chose, so a bare `scan` does not start them | `intentshield scan .mcp.json`, or `intentshield scan --connect-project` |
+| the built-in rules for the shell, file and web tools were on and are now off | you ran `install` again without `--builtin-tools`; the files are written as before and the message prints the command that keeps them | `intentshield install <harness> --builtin-tools` (add `--scope project` if you used it) |
+| `could not save the tool hashes to <file>` | `scan --pins` names a file or place you cannot write | give `--pins` a file in a directory you can write, or `--no-pins` |
+| `TimeoutError: it did not list its tools within <n> s` | a server that downloads its package on its first start is slow | start it once by hand, or `intentshield scan --timeout 120` |
+| `this command needs the package '<name>', which is not installed` | a `--no-deps` install runs only the hooks, `wrap-hook`, `install`, `uninstall`, `doctor` (`--connect` needs the full install), `demo` and `scan --no-connect`; the proxy, `wrap`, the dashboard, `scan` with a connection and the verifier print this and exit 2 | `pip install intentshield-mcp` |
+| `is in the cache of a run-once launcher (uvx, pipx run, npx)` | `install` was run through `uvx`; a cache clean would delete the path it records | `uv tool install intentshield-mcp`, then `intentshield install <harness>` |
+| `cannot use <directory> (Permission denied)` | `install` or `wrap` edits the harness's settings file (or the MCP file you name) and keeps its records in `~/.intentshield`; one of them is not writable by you; nothing was changed | fix the permissions or the read-only mount, then run the command again |
+| `is not valid JSON` | Claude Code's and Cursor's settings files are strict JSON (Gemini's `settings.json` and files in a `.vscode` folder may have comments: [the note below](#geminis-settingsjson-has-comments-or-trailing-commas)); the file was not touched | remove the comments and trailing commas, or fix the syntax error the message points at, then run the command again |
+
+### doctor
+
+`intentshield doctor` checks every harness's user and project settings file, then the MCP configs it finds (Claude Code, Cursor and
+Gemini CLI, Codex CLI and VS Code).
 - A line is `ok`, `note`, `warn`, `FAIL` or `--` (no IntentShield hooks for that harness). It exits 1 when any line is `FAIL`; `note`
   and `warn` lines do not change the exit code.
 - A `note` line is a measured fact about your harness version (for example that a hook which prints nothing lets the call run). It
   needs no action unless it names one. Only `FAIL` is a fault. A repeated line is printed and counted once. `doctor` prints
-  the notes only with `--verbose` and counts them in its summary either way (since 0.4.4).
+  the notes only with `--verbose` and counts them in its summary either way.
 - For each file whose wrapped servers passed it prints an `ok` line that names them: the proxy config exists and the server's command
-  is found. The summary counts the problems, the warnings and the notes (since 0.4.4).
+  is found. The summary counts the problems, the warnings and the notes.
 - `--connect` also starts each wrapped server once through its proxy and lists its tools, which runs the server's code;
-  `--connect-project` adds the servers named by files in the working directory (both since 0.4.4). Without them `doctor`
+  `--connect-project` adds the servers named by files in the working directory. With nothing wrapped it says so. Without them `doctor`
   starts nothing, and apart from recording each harness's version it only reads.
 
-Messages from a run against a fresh install:
+| you see | why | what to run |
+|---|---|---|
+| `warn ... installed <n> minute(s) ago; no hook has run yet` | expected for the first hour after `install`: the harness has not run a hook | start the harness, send any prompt (every hook event counts, not only a tool call), then `intentshield doctor` again |
+| `FAIL <harness> (<file>): installed, but no hook has run since <time>` | an hour has passed and the harness has run no hook. For Codex the line adds that it skips hooks nobody has trusted ([Codex hooks not yet trusted](#codex-hooks-not-yet-trusted)) | start `codex` and approve the IntentShield hooks; for another harness, `intentshield install <harness>` again |
+| `warn <harness> (<file>): installed; the only events ... reached the hook from a process that is not <harness>` | the hook records whether the harness is among its ancestors; an event piped in by hand (`echo '{...}' \| intentshield-hook claude`) comes from your terminal and is not counted as a run. An IDE that starts the harness under another name looks the same; Cursor cannot be told apart | start the harness and send any prompt |
+| `warn <harness>: the version of <program> could not be read` | Claude Code, or Gemini CLI with `--gemini-ask`: the harness is not on `PATH` or its `--version` gave no number, so a call that would ask you is blocked instead. For the other harnesses it is a note under `--verbose` | put it on `PATH`, then run `intentshield doctor` once |
+| `FAIL ... no IntentShield hook for <events>; run intentshield install <harness>` | the settings file lacks one of the hook events | `intentshield install <harness>` |
+| `FAIL ... the hook executable <path> does not exist` | the environment that held `intentshield-hook` was deleted | `intentshield install <harness>` from the environment you use |
+| `FAIL ... starts with #!<interpreter>, which does not exist` | a virtual environment whose Python was removed or upgraded; with the launcher the line is a `warn`, because the launcher refuses the call, but results and prompts go unchecked | `intentshield install <harness>` from the environment you use |
+| `FAIL ... the hooks are installed but switched off: disableAllHooks is true in <file>` | a Claude Code setting runs no hooks (the message can also name `allowManagedHooksOnly`) | remove the key the message names, or set it to `false`, in the file it names |
+| `warn codex (<file>): [features] codex_hooks is false, which can switch Codex's hooks off` | only an explicit `false` of `codex_hooks` or `hooks` under `[features]` warns (`install codex` prints the same warning); whether a given Codex build honours the flag was not tested | remove the line or set it to `true` |
+| `FAIL ... the <event> matcher ... does not match MCP tools` (and the same for `Bash` with `--builtin-tools`) | the matcher in the settings file no longer selects those tools | `intentshield install <harness>` again |
+| `FAIL ... the groq judge has no GROQ_API_KEY in ~/.intentshield/.env` (and the same for the other judges) | the hook runs on the rules alone; a key exported only in your shell is a `warn`, because a harness started from the Dock or an IDE does not inherit it | `intentshield install <harness> --judge groq` stores the key |
+| `nothing is installed: no IntentShield hooks and no wrapped MCP server were found` | `doctor` found neither a hook nor a wrapped server in the usual config files of each client or of this directory; that is a statement, not a failure, and the exit status is 0 | `intentshield install <harness>`, or `intentshield scan <file>` for a server wrapped in some other file |
+| `--connect: no wrapped MCP server was found to start` | `doctor --connect` found no wrapped server in the usual files | `intentshield wrap <file>` |
+| `FAIL <file>: <server>: the server's command '<cmd>' is not on PATH` (or `does not exist`) | the proxy cannot start the server it wraps and the harness shows it as failed | install the command, or put its absolute path in the entry and wrap again |
+| `warn <file>: <n> stdio server(s) not behind the transparent proxy, so their tool descriptions go unchecked: <names>` | those servers are not wrapped | `intentshield wrap <file>` |
+| `FAIL ... runs the proxy with a missing config` | the proxy config the entry names is gone | `intentshield unwrap <file>` restores the entry from the copy `wrap` kept, or edit it by hand |
+| `Claude Code 2.1.322: a hook that prints nothing or malformed JSON allows the call, with or without onFailure: block` (a `note` line; for Codex, "a hook's ask, an empty reply, malformed JSON, exit 1, 126, 127 and a timeout all let the call run") | what was measured for the detected version: a fact about the harness, not a fault in your install | nothing; `doctor --verbose` lists the notes |
+| `version unknown` | the harness was not on `PATH` when `install` or `doctor` ran; until the version is recorded, every ask is sent as a refusal | put the harness on `PATH`, then `intentshield doctor` |
 
-- `FAIL <harness> (<file>): installed, but no hook has run since <time>.` Right after `install` this is expected (since
-  0.4.4, it is a `warn` line, `installed <n> minute(s) ago; no hook has run yet ...`, for the first hour, and the FAIL comes only after
-  that): start the harness and send any prompt (every hook event counts, not only a tool call). If it stays, the harness is not running the hooks. For Codex the line adds: "Codex skips
-  hooks nobody has trusted: start `codex` and approve the IntentShield hooks."
-- `warn <harness> (<file>): installed; the only events ... reached the hook from a process that is not <harness>`: since
-  0.4.3 the hook records whether the harness is among its ancestors. A test event piped in by hand
-  (`echo '{...}' | intentshield-hook claude`) comes from your terminal, so it is not counted as a run and `doctor` warns.
-  Start the harness and send any prompt. It is a warning because an IDE that starts the harness under another process
-  name looks the same; Cursor cannot be told apart, and `doctor` says so on its `ok` line.
-- `FAIL ... no IntentShield hook for <events>; run intentshield install <harness>`, and `FAIL ... the hook
-  executable <path> does not exist` (a deleted environment): run `install` again from the environment you use.
-  `FAIL ... starts with #!<interpreter>, which does not exist` is a virtual environment whose Python was removed or
-  upgraded; with the launcher the line is a `warn`, because the launcher refuses the call, but results and prompts
-  go unchecked.
-- `FAIL ... the hooks are installed but switched off: disableAllHooks is true in <file>` (Claude Code).
-- `warn codex (<file>): [features] codex_hooks is false, which can switch Codex's hooks off` (since 0.4.4; `install codex` prints
-  the same warning). Only an explicit `false` of `codex_hooks` or `hooks` under `[features]` warns. Remove the line or set it to
-  `true`. Whether a given Codex build honours the flag was not tested.
-- `FAIL ... the <event> matcher ... does not match MCP tools`, and the same for `Bash` with `--builtin-tools`:
-  `install` again.
-- `FAIL ... the groq judge has no GROQ_API_KEY in ~/.intentshield/.env` (and the same for the other judges): the
-  hook runs on the rules alone. A key exported only in your shell is a `warn`, because a harness started from the
-  Dock or an IDE does not inherit it. `install <harness> --judge groq` stores it.
-- `nothing is installed: no IntentShield hooks and no wrapped MCP server were found, so nothing is guarded.` `doctor` found
-  neither a hook nor a wrapped server in the usual config files of each client or in those of this directory. That is a statement,
-  not a failure, so the exit status is 0; run `intentshield install <harness>`, or `intentshield scan <file>` for a server wrapped
-  in some other file (since 0.4.4). `intentshield doctor --help` lists the exit status: 1 when any line is `FAIL`, else 0.
-- `FAIL <file>: <server>: the server's command '<cmd>' is not on PATH` (or `does not exist`): the proxy cannot start the
-  server it wraps and the harness shows it as failed. Install the command, or put its absolute path in the entry and wrap again.
-- `warn <file>: <n> stdio server(s) not behind the transparent proxy, so their tool descriptions go unchecked:
-  <names>. Run intentshield wrap <file>`. And `FAIL ... runs the proxy with a missing config`: `unwrap` restores
-  the entry from the copy `wrap` kept, or edit it by hand.
-- Since 0.4.3, `warn` lines state what was measured for the detected version, for example "Claude Code 2.1.322: a
-  hook that prints nothing or malformed JSON allows the call, with or without `onFailure: block`", or, for Codex,
-  "a hook's ask, an empty reply, malformed JSON, exit 1, 126, 127 and a timeout all let the call run". They are
-  facts about the harness, not faults in your install. "version unknown" means the harness was not on `PATH`
-  when `install` or `doctor` ran; until it is recorded, every ask is sent as a refusal.
+### Notes
 
 **`Could not connect to MCP server ...` now says why.** `scan`, the proxy and `doctor` add the cause when they can tell it:
 the command was not found on `PATH` or does not exist, it cannot be run (permission denied), it ended before it answered the
@@ -435,29 +471,22 @@ server's own stderr line when it has one, and the proxy's stderr is on its termi
 
 **A client request the proxy cannot parse gets an error.** In transparent mode (`intentshield-mcp --config ...`) a request
 whose `params` is not an object is answered with error -32602 and its id, and a line that is not JSON with -32700 and a null
-id; the proxy keeps serving. Before 0.4.3 the protocol library dropped these silently and the client waited. Since 0.4.4,
-JSON that is not a request gets -32600 and a null id in the same way: `{}`, `null`, a batch, a message with no method or a method that
+id; the proxy keeps serving. JSON that is not a request gets -32600 and a null id in the same way: `{}`, `null`, a batch, a message with no method or a method that
 is not text, and an id that is an object. A reply from the client to a request of the server is passed on as before. The other
 transports were not checked for this.
 
-**A command that needs a package that is not installed.** After `pip install --no-deps intentshield-mcp` only the hooks,
-`wrap-hook`, `install`, `uninstall`, `doctor`, `demo` and `scan --no-connect` run (`doctor --connect`, since 0.4.4, says it
-needs the full install). The proxy, `wrap`, the dashboard, `scan` with a
-connection and the verifier print one line, "this command needs the package '<name>', which is not installed ... Install
-everything with: pip install intentshield-mcp", and exit with status 2.
+#### Gemini's `settings.json` has comments or trailing commas
 
-**Gemini's `settings.json` has comments or trailing commas.** Gemini CLI reads its settings as JSONC, and `install` and `wrap`
-do too, as they do for files in a `.vscode` folder or VS Code's user folder (since 0.4.4). Writing the file back drops the comments and trailing commas; the original text is saved and `intentshield uninstall`
+Gemini CLI reads its settings as JSONC, and `install` and `wrap`
+do too, as they do for files in a `.vscode` folder or VS Code's user folder. Writing the file back drops the comments and trailing commas; the original text is saved and `intentshield uninstall`
 (or `unwrap`) puts it back byte for byte, comments included. A settings file of another harness, which is strict JSON,
 that does not parse stops the command with a message that says what to do: remove the comments and trailing commas, or add the entries by hand
-from the output of `intentshield install <harness> --dry-run`. A file that starts with a byte order mark does not parse either, and since
-0.4.4 the message says so: save the file as UTF-8 without it.
+from the output of `intentshield install <harness> --dry-run` (`--dry-run` prints the entries even when the file does not parse, and writes nothing). A file that starts with a byte order mark does not parse either, and the
+message says so: save the file as UTF-8 without it.
 
-**`install --scope project` and `wrap` write absolute paths.** The project file then holds the path of the hook program on this
-machine, so do not commit it. `install` prints a note after a project-scope install, and `wrap` prints one when the file is
-inside a git working tree.
+#### Codex hooks not yet trusted
 
-**Codex hooks not yet trusted.** Codex runs a new hook only after you trust it once, and until then it skips it
+Codex runs a new hook only after you trust it once, and until then it skips it
 without a word in the session. Start `codex` interactively and approve the IntentShield hooks when it asks;
 `install codex` prints the same reminder, and `doctor` reports `no hook has run` until it happens. A live run
 with the hooks installed but not trusted was unguarded (the notes reached the attacker in 3/3 runs,
@@ -466,7 +495,7 @@ Codex 0.140.0 (it does from 0.141.0), so do not rely on it for an older build.
 
 **Gemini CLI waits for ever on an ask.** That is the headless case: with `install gemini --gemini-ask`, a headless
 run (`gemini -p`) waits for an answer that never comes from Gemini CLI 0.38.0 on (measured to 0.66.0), and 0.37 in
-yolo mode ran the call. `--gemini-ask` is for interactive sessions only. Since 0.4.3 the hook sends a refusal when it can
+yolo mode ran the call. `--gemini-ask` is for interactive sessions only. The hook sends a refusal when it can
 tell the run is headless, and `doctor` warns whenever the flag is on. If a session hangs, interrupt it and run
 `intentshield install gemini` again without `--gemini-ask`. If the hook cannot read the mode it refuses the ask;
 `INTENTSHIELD_HARNESS_MODE=interactive` restores the prompt in a session you know has a person.
@@ -487,43 +516,26 @@ refused) the rules alone decide, with no extra ask or refusal; the agent is told
 unavailable; only the rules checked this call", stderr says why, and the hooks skip the judge for 5 minutes before
 trying again, so an offline session does not wait on it at every call. A judge with no stored key says so in the
 same note and in `doctor`. A timeout, a rate limit or a reply it could not parse does not start the 5-minute pause. An address
-for the judge, or for a model provider, that is not `http` or `https` is refused and never opened; the judge then has no opinion
-(since 0.4.4).
+for the judge, or for a model provider, that is not `http` or `https` is refused and never opened; the judge then has no opinion.
 With a local judge (`--judge ollama`), an Ollama server that is not running ("Connection refused") starts the same
 pause.
 
 **A tool has gone from the client's list.** Through `wrap`, the proxy hides a tool whose description matched a poisoning rule, and a
 call to it by name is answered "... is quarantined: its description matched poisoning rules". `intentshield scan` on the same config names the rules that matched (for example `hidden_directive`), and
 the proxy's audit database records an `MCP_TOOLS_QUARANTINED` event. The proxy also logs one warning for each tool it hides, with the
-rules that matched (since 0.4.4). If the only rule is `sensitive_target` (the description names a key or a secrets file) and the
+rules that matched. If the only rule is `sensitive_target` (the description names a key or a secrets file) and the
 tool is one you trust, such as one that reads your project's `.env`, add `"server:tool"` to the `trusted_tools` list in its proxy config under
-`~/.intentshield/proxies/` (`server` is the `server_id` in that file); every other rule still hides it (since 0.4.4).
+`~/.intentshield/proxies/` (`server` is the `server_id` in that file); every other rule still hides it.
 
 **`IntentShield: its session database ... could not be used.`** The hook could not open or use `hooks.db` (or the file
 `INTENTSHIELD_HOOK_DB` names): the file is damaged or not a database. It holds session state only, the flags and prompts of earlier
 sessions, so move it aside with the `mv` command the message prints; the next call starts a new one. A database that is only locked
-by another process is not told to be moved (since 0.4.4).
+by another process is not told to be moved.
 
 **Every ask is refused, or a hook seems slow.** Check the `[IntentShield read this session as ...]` note first (see
 above). A refusal that names a 30 s deadline means the judge or the database was slow; a hosted judge on a free
 tier can be. Each hook is a process of about 70 to 75 ms (the Overhead row of [benchmarks.md](benchmarks.md): 70 to 72 ms in
-three committed runs of the working tree, about the same as 0.4.3 within a few milliseconds); a much longer time is the judge.
-
-**Messages from `install` and `wrap` on a machine that is not as expected.**
-- `pip install intentshield-mcp` says it ignored versions that "require a different python version", or `uv` says "depends on
-  Python>=3.11". IntentShield needs Python 3.11 or newer. Install with `uv tool install --python 3.12 intentshield-mcp` (uv fetches
-  the interpreter) or `pipx install --python python3.12 intentshield-mcp`.
-- `install` ends with "could not read the version of <harness> (it is not on PATH)". The hooks are installed, but until the version is
-  recorded a call that would normally ask you is blocked instead (the safe side). Put the harness on PATH (for Cursor the program is
-  `cursor-agent`; on main, after 0.4.4, the message says so), then run `intentshield doctor`, which records the version.
-- `install` or `wrap` stops with "cannot use <directory> (Permission denied)" (on main, after 0.4.4; 0.4.4 printed an operating-system
-  error naming a temporary file). IntentShield edits the harness's settings file (or the MCP file you name) and keeps its own records
-  in `~/.intentshield`. Both must be writable by you. Fix the permissions or the read-only mount and run the command again; nothing
-  was changed.
-- `install` stops with "is not valid JSON ... remove its comments and trailing commas". Claude Code's and Cursor's settings files are
-  read as strict JSON. Remove the comments and trailing commas (or fix the syntax error the message points at) and run the command
-  again; the file was not touched. Gemini's `settings.json` and files in a `.vscode` folder may have comments: they are kept in a
-  copy, and `uninstall` puts the file back byte for byte (see [wrapping](#wrapping-a-third-party-hook) and `install` above).
+three committed runs of the working tree); a much longer time is the judge.
 
 ## Adaptive threat memory and threat packs
 

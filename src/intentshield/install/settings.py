@@ -23,6 +23,8 @@ from .hooks import (
     hook_command,
     hook_entries,
     merge_hooks,
+    relocated_config_advice,
+    relocated_config_dir,
     remove_hooks,
     settings_path,
 )
@@ -68,6 +70,9 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         try:
             tomllib.loads(text)  # refuse to append to a file Codex could not read either
         except tomllib.TOMLDecodeError as exc:
+            if dry_run:  # the error below points at this output, so it must not end with nothing printed
+                print(f"--- would add to {path} (not written: the file does not parse, so merge this block by hand)\n"
+                      f"{codex_toml(command, builtin_tools, translate)}", end="")
             raise ValueError(f"{path} is not valid TOML ({exc}); Codex CLI cannot read it either. Fix it, then run `intentshield "
                              "install codex` again (`--dry-run` prints the block it adds)") from None
         stripped, had_block = _strip_toml_block(text)  # replace an earlier block instead of stacking a second
@@ -78,7 +83,8 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             return path
         if had_block:
             block = text[text.find(_TOML_BEGIN):text.find(_TOML_END)]
-            _say_what_was_replaced([json.loads(c) for c in re.findall(r'^command = (".*")\s*$', block, re.M)], command)
+            _say_what_was_replaced([json.loads(c) for c in re.findall(r'^command = (".*")\s*$', block, re.M)], command,
+                                   harness, scope, dry_run)
         _keep_original(path, home, dry_run)
         records._write(path, new, dry_run)
         if not dry_run:
@@ -86,10 +92,15 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
     else:
         existed = path.exists()
         try:
-            current = _read_json(path)
+            current = _read_json(path, records._BY_HAND_DRY_RUN if dry_run else records._BY_HAND_HOOKS)
             previous = _our_commands(current)
             settings, changed = merge_hooks(current, hook_entries(harness, command, builtin_tools, translate))
         except ValueError as exc:
+            if isinstance(exc, json.JSONDecodeError):
+                if dry_run:  # the error below points at this output, so it must not end with nothing printed
+                    print(f"--- would add to {path} (not written: the file does not parse, so merge these entries by hand)\n"
+                          + records._json_text({"hooks": hook_entries(harness, command, builtin_tools, translate)}), end="")
+                raise records._NotJSON(str(exc).replace("install <harness>", f"install {harness}"), exc) from None
             if str(path) in str(exc):
                 raise
             raise ValueError(f"{path}: {exc}") from None
@@ -97,7 +108,7 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
             print(f"already installed: {path}")
             return path
         if previous:
-            _say_what_was_replaced(previous, command)
+            _say_what_was_replaced(previous, command, harness, scope, dry_run)
         if harness == "cursor" and not existed:  # a file Cursor wrote already has it; uninstall restores theirs
             settings.setdefault("version", 1)
         _keep_original(path, home, dry_run)
@@ -105,17 +116,10 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         if not dry_run:
             _record_install(path, home, time.time())
     print(f"{'would install' if dry_run else 'installed'} {harness} hooks in {path}")
+    if scope == "user" and (moved := relocated_config_dir(harness, home)):
+        print("warning: " + relocated_config_advice(harness, *moved, path))
     if translate and not dry_run:
-        seen = translation.probe_and_record(harness, home)
-        if seen:
-            print(f"{harness} version {'.'.join(map(str, seen))} found and recorded, so the hook answers in the way that "
-                  "version expects (`intentshield doctor` shows what is measured)")
-        else:
-            program = translation._PROCESS.get(harness, harness)  # Cursor's command line program is `cursor-agent`
-            it = "it" if program == harness else f"`{program}`"
-            print(f"IntentShield could not read the version of {harness} ({it} is not on PATH), so a call that would normally "
-                  f"ask you is blocked instead, which is the safe side. Put {it} on PATH and run `intentshield doctor` to "
-                  "record the version.")
+        _record_version(harness, home, gemini_ask)
     if harness == "codex" and (switched_off := codex_hooks_switched_off(path)):
         print(f"warning: {path} has `{switched_off} = false` under [features], which can switch Codex's hooks off, so these "
               "hooks may not run. Remove that line or set it to true.")
@@ -134,6 +138,27 @@ def install(harness: str, scope: str = "user", review: str | None = None, hook: 
         print(f"Next: {NEXT_STEP.format(harness=harness)} Until the harness has run a hook, `doctor` says \"no hook has run "
               "yet\" as a warning: that is expected right after an install.")
     return path
+
+
+def _record_version(harness: str, home: Path | None, gemini_ask: bool) -> None:
+    """Reads the harness's version (it can take up to 20 s) and says what was found. Only Claude Code, and Gemini CLI with
+    --gemini-ask, send an ask as a prompt by the version; for the others it changes no verdict."""
+    program = translation._PROCESS.get(harness, harness)  # Cursor's command line program is `cursor-agent`
+    print(f"reading the version of {harness} (`{program} --version`, up to 20 s) ...", flush=True)
+    seen = translation.probe_and_record(harness, home)
+    if seen:
+        print(f"{harness} version {'.'.join(map(str, seen))} found and recorded, so the hook answers in the way that "
+              "version expects (`intentshield doctor` shows what is measured)")
+        return
+    it = "it" if program == harness else f"`{program}`"
+    why = f"{it} is not on PATH, or its --version printed no number or did not answer within 20 s"
+    if harness == "claude" or (harness == "gemini" and gemini_ask):
+        print(f"IntentShield could not read the version of {harness} ({why}), so a call that would normally "
+              f"ask you is blocked instead, which is the safe side. Put {it} on PATH and run `intentshield doctor` to "
+              "record the version.")
+    else:
+        print(f"IntentShield could not read the version of {harness} ({why}). The hook's verdicts for {harness} do not "
+              f"depend on it, so nothing changes; `intentshield doctor` records it once {it} is on PATH.")
 
 
 def codex_hooks_switched_off(path: Path) -> str:

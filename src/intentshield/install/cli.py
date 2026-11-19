@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import errno
 import sys
+import textwrap
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -14,9 +15,17 @@ from .settings import install, uninstall
 from .wrapping import unwrap, wrap
 
 
+class _KeepAddresses(argparse.HelpFormatter):
+    """Help text wrapped so that an address stays on one line: the default breaks it at its hyphens, and it cannot be copied."""
+
+    def _split_lines(self, text: str, width: int) -> list[str]:
+        return textwrap.wrap(self._whitespace_matcher.sub(" ", text).strip(), width, break_on_hyphens=False,
+                             break_long_words=False)
+
+
 def add_subcommands(sub: Any) -> None:
     for verb in ("install", "uninstall"):
-        p = sub.add_parser(verb, help=f"{verb} the IntentShield hooks in an agent harness")
+        p = sub.add_parser(verb, help=f"{verb} the IntentShield hooks in an agent harness", formatter_class=_KeepAddresses)
         p.add_argument("harness", choices=HARNESSES, help="the agent harness whose settings file to edit")
         p.add_argument("--scope", choices=("user", "project"), default="user",
                        help="user: the harness's home settings; project: its settings in the current directory")
@@ -34,7 +43,9 @@ def add_subcommands(sub: Any) -> None:
                            help="with --judge custom:<model>: your OpenAI-compatible chat completions endpoint")
             p.add_argument("--builtin-tools", action="store_true",
                            help="also guard the harness's own shell, file and web tools (Bash, PowerShell, Monitor, "
-                                "WebFetch, Read, Write...); off by default until its review load is measured")
+                                "WebFetch, Read, Write...) with the built-in text rules: opt-in and best effort, not a "
+                                "sandbox (rules: https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/rules.md). "
+                                "Install again without it to turn them off")
             p.add_argument("--gemini-ask", action="store_true",
                            help="Gemini CLI 0.66 or later, interactive sessions only: ask instead of refusing. "
                                 "Headless runs (gemini -p) then hang on an ask; check with `intentshield doctor`")
@@ -74,6 +85,9 @@ def _explain(exc: Exception) -> str:
         return (f"cannot use {exc.filename} ({exc.strerror}). IntentShield edits the settings or MCP file and keeps its own "
                 "records in ~/.intentshield, so both must be readable and writable by you: fix the permissions (or the read-only "
                 "mount), then run the command again")
+    if isinstance(exc, OSError) and exc.errno in (errno.EISDIR, errno.ENOTDIR) and exc.filename:
+        return (f"{exc.filename} is not a file IntentShield can edit ({exc.strerror}); move it aside or fix the path, "
+                "then run the command again")
     return str(exc)
 
 

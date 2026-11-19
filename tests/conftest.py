@@ -23,6 +23,10 @@ def _isolate_environment(monkeypatch, tmp_path):
     for name in _JUDGE_KEYS:
         monkeypatch.setenv(name, "")
         monkeypatch.delenv(name)
+    # The variables that move a harness's user settings: install and doctor say so when one names another directory.
+    for name in ("CLAUDE_CONFIG_DIR", "CODEX_HOME"):
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
     home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
     monkeypatch.setattr("intentshield.harness.env.ENV_FILE", home / ".intentshield" / ".env")

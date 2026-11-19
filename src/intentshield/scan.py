@@ -1,8 +1,8 @@
 """``intentshield scan``: find the MCP servers installed in agent harnesses and check them, offline.
 
 It reads the MCP configs of Claude Code, Claude Desktop, Cursor, Gemini CLI, Codex CLI, Windsurf and VS Code
-(or the files given), starts each server as its client would, lists its tools and checks them with the
-guard's own rules. Nothing is sent anywhere and no API key is needed.
+(or the files given), starts each stdio server as its client would (and connects to each Streamable HTTP one), lists its
+tools and checks them with the guard's own rules. Nothing is sent to IntentShield or any third party and no API key is needed.
 
 - **Config:** credentials written into it (``credentials``), and a file holding one that others can read.
 - **Tools:** the poisoning rules on each description and schema, an instruction split across one server's
@@ -124,6 +124,11 @@ class Finding:
         return {**found, "detail": self.detail} if self.detail else found
 
 
+# What to do about a config that cannot be read (False: it is not valid JSON or TOML; True: the operating system refused it).
+_UNREADABLE_FIX = {False: "fix the syntax error at that position, then scan again",
+                   True: "make the file readable by you, then scan again"}
+
+
 def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Server]:
     """The MCP servers of every config found, or of ``files`` (``mcpServers`` or ``servers`` JSON)."""
     found: list[Server] = []
@@ -147,7 +152,8 @@ def discover(home: Path, cwd: Path, files: list[Path] | None = None) -> list[Ser
                 except ValueError:  # Gemini CLI settings and VS Code's mcp.json may hold comments
                     data = json.loads(strip_json_comments(text))
         except (OSError, ValueError) as exc:
-            found.append(Server(client, path, "(config)", {}, error=f"unreadable: {exc}", project=project))
+            fix = _UNREADABLE_FIX[isinstance(exc, OSError)]
+            found.append(Server(client, path, "(config)", {}, error=f"unreadable: {exc}; {fix}", project=project))
             continue
         if not isinstance(data, dict):
             continue
@@ -258,6 +264,9 @@ async def _list_tools(server: Server, timeout: float) -> None:
                                 for t in await upstream.list_tools()]
     except Exception as exc:  # one broken server must not stop the scan of the others
         server.error = f"{type(exc).__name__}: {_clip(credentials.mask(str(exc)))}"
+        if isinstance(exc, TimeoutError) and not str(exc):  # a server that downloads its package on its first start is slow
+            server.error = (f"TimeoutError: it did not list its tools within {timeout:g} s; start it once by hand, or scan "
+                            "with a larger --timeout")
 
 
 def _config_findings(servers: list[Server]) -> list[Finding]:
@@ -434,7 +443,7 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
         group = [s for s in servers if s.client == client]
         state = ", IntentShield hooks installed" if guarded(client, home) else ""
         tools = f", {sum(len(s.tools) for s in group)} tool(s)" if connected else ""
-        lines.append(f"{client}: {len(group)} server(s){tools}{state}")
+        lines.append(f"{client}: {sum(s.name != '(config)' for s in group)} server(s){tools}{state}")
         for server in group:
             skipped = bool(server.skipped and connected)
             not_started = not_started or skipped
@@ -443,8 +452,13 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
                 f"{len(server.tools)} tool(s)" if connected else "config only"
             lines.append(f"  {server.name}  {server.path}  [{status}]")
     if not_started:  # one hint for all of them, not the same sentence on every line
-        lines.append("Servers named by a config in the current directory are code the repository chose, so they are not started; "
-                     "pass --connect-project to start them, or name the file (`intentshield scan .mcp.json`).")
+        held = next(s.path for s in servers if s.skipped)
+        try:
+            named = held.resolve().relative_to(Path.cwd().resolve())
+        except ValueError:
+            named = held
+        lines.append("Servers named by a config in the current directory are code the repository chose, so they are not started. "
+                     f"To start them, run `intentshield scan --connect-project`, or only one file: `intentshield scan {named}`.")
     for f in sorted(findings, key=lambda f: ("error", "warning", "note").index(f.level)):
         if f.rule != "not_scanned":
             lines.append(f"{f.level.upper():7} {f.rule}: {f.server}{':' + f.tool if f.tool else ''}: {f.message}")
@@ -452,17 +466,24 @@ def report(servers: list[Server], findings: list[Finding], home: Path, connected
                 lines.append(f"        {f.detail}")
     errors = sum(f.level == ERROR for f in findings)
     warnings = sum(f.level == WARNING for f in findings)
-    left = sum(1 for s in servers if s.error or (s.skipped and connected))
-    lines.append((f"{len(servers)} server(s) checked: " if not left else
-                  f"{len(servers) - left} of {len(servers)} server(s) checked, {left} not scanned (--no-connect checks "
-                  "the configs without starting them): ")
-                 + f"{errors} error(s), {warnings} warning(s)" if servers else "no MCP configs found")
+    # A config that could not be read is not a server: the line for it says what is wrong, and starting nothing would not help.
+    real = [s for s in servers if s.name != "(config)"]
+    unreadable = len(servers) - len(real)
+    left = sum(1 for s in real if s.error or (s.skipped and connected))
+    failed = any(s.error for s in real)  # a server held back for being in this directory has its own hint above
+    head = f"{len(real)} server(s) checked" if not left else \
+        f"{len(real) - left} of {len(real)} server(s) checked, {left} not scanned" \
+        + (" (--no-connect checks the configs without starting them)" if failed else "")
+    if unreadable:
+        head += f", {unreadable} config(s) not readable"
+    lines.append(f"{head}: {errors} error(s), {warnings} warning(s)" if servers else "no MCP configs found")
     return "\n".join(lines)
 
 
 def add_subcommand(sub: Any) -> None:
-    p = sub.add_parser("scan", help="find the MCP servers your agents use and check them offline",
-                       epilog="exit status: 0 nothing wrong found, 1 an error-level finding, 2 nothing could be scanned "
+    p = sub.add_parser("scan", help="find the MCP servers your agents use and check their tools (no API key)",
+                       epilog="exit status: 0 nothing wrong found, 1 an error-level finding or the pins could not be saved, "
+                              "2 nothing could be scanned "
                               "(a missing or unreadable config, or no server was started)")
     p.add_argument("files", nargs="*", type=Path, help="MCP config files to scan instead of the installed ones")
     p.add_argument("--no-connect", action="store_true", help="check the configs only; start no server")
@@ -528,9 +549,11 @@ def run(args: argparse.Namespace) -> int:
     findings = scan(servers, connect=not args.no_connect, timeout=args.timeout, pins=pins,
                     connect_project=args.connect_project)
     skipped = [s for s in servers if s.skipped and not args.no_connect]
-    if skipped:
-        print("intentshield scan: not started (config in the current directory; --connect-project starts them): "
-              + ", ".join(f"{s.name} ({s.path})" for s in skipped), file=sys.stderr)
+    if skipped and args.format != "text":  # the text report says this itself
+        print(f"intentshield scan: {len(skipped)} server(s) in a config of the current directory were not started: it is code "
+              "the repository chose. Run `intentshield scan --connect-project` to start them, or name one file: "
+              f"`intentshield scan {skipped[0].path}`", file=sys.stderr)
+    pins_kept = True
     if not args.no_pins and not args.no_connect and any(s.tools for s in servers):
         if args.update_pins:
             # Accept what was seen: a server that did not start (or was skipped) keeps its baseline, and a server
@@ -543,7 +566,13 @@ def run(args: argparse.Namespace) -> int:
                 owner = max((p for p in prefixes if key.startswith(p)), key=len, default=None)
                 return owner is not None and prefixes[owner]
             pins = {**{k: v for k, v in saved.items() if not owner_started(k)}, **pins}
-        save_pins(args.pins, pins)
+        try:
+            save_pins(args.pins, pins)
+        except OSError as exc:  # the scan itself ran: say that the baseline was not kept, and why
+            print(f"intentshield scan: could not save the tool hashes to {args.pins} ({exc.strerror or exc}); tools that changed "
+                  "since this scan will not be noticed. Give --pins a file in a directory you can write, or --no-pins "
+                  "to leave them out", file=sys.stderr)
+            pins_kept = False
     if args.format == "json":
         print(json.dumps({"servers": [{"client": s.client, "config": str(s.path), "name": s.name,
                                        "tools": len(s.tools), "error": s.error, "skipped": s.skipped}
@@ -553,7 +582,7 @@ def run(args: argparse.Namespace) -> int:
         print(json.dumps(sarif(findings), indent=2))
     else:
         print(report(servers, findings, home, connected=not args.no_connect))
-    if any(f.level == ERROR for f in findings):
+    if any(f.level == ERROR for f in findings) or not pins_kept:  # no baseline was saved: a script must not read this as clean
         return 1
     # Servers were found but none was started or read: a green exit would say they were checked.
     if any(s.error and s.name == "(config)" for s in servers):  # a config that could not be read was not checked

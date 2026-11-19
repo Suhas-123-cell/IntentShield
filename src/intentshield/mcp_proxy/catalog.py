@@ -205,8 +205,10 @@ class _Catalog(_State):
         for qualified, matched in self._quarantined.items():
             if (qualified, tuple(matched)) not in self._said_hidden:
                 self._said_hidden.add((qualified, tuple(matched)))
-                logger.warning("IntentShield hid the tool %r: its description matched %s. Run `intentshield scan` on the server "
-                               "to see why.", qualified, ", ".join(dict.fromkeys(matched)))
+                logger.warning("IntentShield hid the tool %r: its description matched %s. To see why, run "
+                               "`intentshield scan <the MCP config file that lists this server>`: name the file, because a bare "
+                               "`intentshield scan` does not start the servers of a file in the current directory.",
+                               qualified, ", ".join(dict.fromkeys(matched)))
 
     def _serve(self, tool: MCPTool, counts: Counter[str]) -> ToolSpec | None:
         """The registry entry for ``tool``, or None when the proxy cannot serve it safely."""

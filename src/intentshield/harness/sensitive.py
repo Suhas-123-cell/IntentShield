@@ -13,6 +13,10 @@ _CONTENT_ARGUMENTS = ("content", "contents", "text", "data", "new_string", "new_
 _NAMES_ONLY_TOOLS = ("list", "tree", "info", "exists", "search")
 _WRITING_TOOLS = ("write", "edit", "create", "move", "rename", "copy", "delete", "remove", "append", "save", "put", "upload",
                   "mkdir", "patch", "replace", "insert", "update", "touch", "set_")
+# The words of a tool name that delete or move what its path argument names, and the arguments that name it: the source of a move
+# is taken away, its destination is not.
+_ERASING_TOOLS = ("delete", "remove", "move", "rename", "rmdir", "trash", "unlink")
+_ERASED_ARGUMENTS = frozenset({"path", "paths", "file", "filename", "file_path", "filepath", "source"})
 # The header's path is read to the end of the line and trimmed afterwards: a lazy ``(.+?)\s*$`` is quadratic on a
 # long run of spaces, and a hook that times out fails open.
 _PATCH_FILE = re.compile(r"^[ \t]*\*\*\* (?:(?:Update|Add|Delete) File|Move to): ([^\r\n]*)|^\+\+\+ (?:b/)?(\S+)", re.M)

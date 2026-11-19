@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -823,9 +824,13 @@ def main(argv: list[str] | None = None) -> int:
         "--url",
         help="Verify an already-running IntentShield Streamable HTTP MCP endpoint",
     )
-    parser.add_argument("--summary", action="store_true",
-                        help="print one line (PASS 13/13 checks) and a line for each check that did not pass, instead of "
-                             "the JSON report")
+    shape = parser.add_mutually_exclusive_group()
+    shape.add_argument("--summary", action="store_true",
+                       help="print one line (PASS 13/13 checks) and a line for each check that did not pass, instead of "
+                            "the JSON report")
+    shape.add_argument("--json", action="store_true",
+                       help="print the JSON report (one line). This is the default when the output is not a terminal; on a "
+                            "terminal the default is the --summary form")
     args = parser.parse_args(argv)
     if args.demo:  # the demo's files live in a directory that goes away with the run
         with tempfile.TemporaryDirectory(prefix="intentshield-demo-") as directory:
@@ -842,6 +847,13 @@ def _verify_and_print(args: argparse.Namespace) -> int:
         if args.url
         else "in_process_preflight"
     )
+    # As for the proxy started over stdio (see _stdio_target): the check sends a canary call that is blocked on purpose, and the
+    # INFO line the proxy logs for that block reads as a failure on the terminal. A level the caller set is kept.
+    quiet = mode == "in_process_preflight" and "INTENTSHIELD_LOG_LEVEL" not in os.environ
+    logger = logging.getLogger("intentshield")
+    level_before = logger.level
+    if quiet:
+        logger.setLevel(logging.WARNING)
     try:
         report = asyncio.run(
             verify_mcp(args.config, verification_mode=mode, url=args.url)
@@ -854,7 +866,13 @@ def _verify_and_print(args: argparse.Namespace) -> int:
             tail = _child_stderr_tail(args.config)
             if tail:
                 print(f"intentshield-mcp-verify: the proxy, started on its own, printed:\n{tail}", file=sys.stderr)
-    print(_summary(report) if args.summary else json.dumps(report, sort_keys=True, separators=(",", ":")))
+    finally:
+        logger.setLevel(level_before)
+    # Piped or redirected output (CI, a script) stays the one line of JSON it always was; a person at a terminal gets the summary.
+    readable = args.summary or (not args.json and sys.stdout.isatty())
+    print(_summary(report) if readable else json.dumps(report, sort_keys=True, separators=(",", ":")))
+    if readable and not args.summary:
+        print("(the full report is JSON: add --json, or pipe this command's output)")
     return 0 if report["status"] == "PASS" else 1
 
 
@@ -863,7 +881,15 @@ def _summary(report: dict[str, Any]) -> str:
     checks = [c for c in report.get("checks") or [] if isinstance(c, dict)]
     passed = sum(c.get("status") == "PASS" for c in checks)
     lines = [f"{report.get('status')} {passed}/{len(checks)} checks"]
-    lines += [f"  {c.get('status')} {c.get('id')}: {c.get('message', '')}" for c in checks if c.get("status") != "PASS"]
+    for c in checks:
+        if c.get("status") != "PASS":
+            details = c.get("details")
+            why = details.get("error") if isinstance(details, dict) else None
+            lines.append(f"  {c.get('status')} {c.get('id')}: {c.get('message', '')}"
+                         + (f" ({why})" if isinstance(why, str) and not why.endswith("redacted.") else ""))
+    actions = report.get("next_actions")
+    if report.get("status") != "PASS" and isinstance(actions, list) and actions and isinstance(actions[0], str):
+        lines.append(f"  next: {actions[0]}")
     return "\n".join(lines)
 
 

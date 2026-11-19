@@ -16,11 +16,12 @@ from .paths import (
     _is_empty_var_target,
     _norm,
     _protected,
+    _protected_glob,
     _system,
     overwrite_level,
     persistence_path,
 )
-from .selfguard import guard_surface
+from .selfguard import guard_dir, guard_surface
 from .writes import written_paths
 
 # --- the rules ---------------------------------------------------------------------------------------------------
@@ -94,6 +95,19 @@ def _sets_hooks_path(args: list[str]) -> bool:
     return any(a.lower().startswith("core.hookspath") and ("=" in a or k + 1 < len(positional)) for k, a in enumerate(positional))
 
 
+def _sets_fsmonitor_command(args: list[str]) -> bool:
+    """``git config core.fsmonitor VALUE`` with a value that is not a boolean: a program that git runs on every ``git status``.
+    ``true`` and ``false`` switch the built-in file system monitor, which is ordinary, and a read or ``--unset`` is not a set."""
+    if any(_is_opt(a, *_GIT_CONFIG_READS) or a == "-l" for a in args if a.startswith("-")):
+        return False
+    positional = [a for a in args if not a.startswith("-")]
+    for k, a in enumerate(positional):
+        if a.lower().startswith("core.fsmonitor"):
+            value = a.partition("=")[2] if "=" in a else positional[k + 1] if k + 1 < len(positional) else None
+            return value is not None and value.strip("\"'").lower() not in ("true", "false")
+    return False
+
+
 # ``GIT_CONFIG_VALUE_0=core.hooksPath`` and its key, and ``GIT_CONFIG_PARAMETERS='core.hooksPath=/dev/null'``: the settings of
 # ``git -c`` given through the environment.
 _GIT_CONFIG_ENV = re.compile(r"GIT_CONFIG_(?:KEY_\d{1,4}|PARAMETERS)=[^=]{0,10}[\"']{0,2}core\.(?:hookspath|fsmonitor)", re.I)
@@ -124,6 +138,8 @@ def _git_hit(argv: list[str], assigns: list[str]) -> Hit | None:
                     return Hit(ASK, "git commit -n skips the repository's pre-commit hooks.")
     if sub == "config" and _sets_hooks_path(args):
         return Hit(ASK, "git config core.hooksPath replaces the repository's hooks.")
+    if sub == "config" and _sets_fsmonitor_command(args):
+        return Hit(ASK, "git config core.fsmonitor with a program as its value makes git run that program on every git status.")
     if sub == "push":
         pos = [a for a in args if not a.startswith("-")]
         refs = pos[1:]
@@ -201,7 +217,7 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
         return None
     small_system = None
     for t in targets:
-        if _protected(t) or (default := _default_target(t)) and _protected(default):
+        if _protected(t) or _protected_glob(t) or (default := _default_target(t)) and _protected(default):
             return Hit(DENY, f"recursive delete of {t}, a root, home or system directory.", t)
         if sudo and _system(t) and _norm(t).count("/") <= 2 and small_system is None:
             small_system = Hit(ASK, f"sudo recursive delete inside the system directory {t}; confirm it.", t)
@@ -210,7 +226,7 @@ def _rm_hit(argv: list[str], sudo: bool) -> Hit | None:
     for t in targets:
         if _is_empty_var_target(t) and (force or recursive):
             return Hit(ASK, f"recursive delete of {t}: if the variable is empty this is the root directory.", t)
-        if _norm(t) in (".", "*", "..", "../..") or t in ("*", ".*", "./*", "../*", ".", ".."):
+        if _norm(t) in (".", "*", ".*", "..", "../..") or t in ("*", ".*", "./*", "../*", ".", ".."):
             return Hit(ASK, f"recursive delete of {t} removes everything in or above the working directory.", t)
     return None
 
@@ -252,7 +268,7 @@ def _find_hit(argv: list[str]) -> Hit | None:
         starts.append(a)
     if not ("-delete" in args or ("-exec" in args and any(_bin(a) in ("rm", "shred", "unlink") for a in args))):
         return None
-    protected = [s for s in starts if _protected(s)]
+    protected = [s for s in starts if _protected(s) or _protected_glob(s)]
     if not protected:
         return None
     start = protected[0]
@@ -392,16 +408,40 @@ def _wipe_hit(name: str, argv: list[str]) -> Hit | None:
         removes_source = any(_is_opt(a, "--remove-source-files") for a in args)
         # what is deleted: the destination (the last path), and with --remove-source-files the sources as well
         for target in (pos[-1:] if not removes_source else pos):
-            if _protected(target):
+            if _protected(target) or _protected_glob(target):
                 return Hit(DENY, f"rsync {'--remove-source-files' if removes_source else '--delete'} empties {target}, a root, "
                                  "home or system directory.", target)
+            if (own := guard_dir(target, True)):
+                return Hit(own[0], f"rsync {'--remove-source-files' if removes_source else '--delete'} empties {target}, "
+                                   f"{own[1]}.", target)
         return None
     if name == "tar" and any(_is_opt(a, "--remove-files") for a in args):
         for target in (a for a in args if not a.startswith("-")):
-            if _protected(target):
+            if _protected(target) or _protected_glob(target):
                 return Hit(DENY, f"tar --remove-files deletes what it archives from {target}, a root, home or system directory.",
                            target)
+            if (own := guard_dir(target, True)):
+                return Hit(own[0], f"tar --remove-files deletes what it archives from {target}, {own[1]}.", target)
     return None
+
+
+_ACCOUNT_MAKERS = frozenset({"useradd", "adduser", "newusers", "chpasswd", "visudo"})
+_ADMIN_GROUPS = frozenset({"sudo", "admin", "wheel", "root"})
+_DSCL_WRITES = frozenset({"create", "passwd", "append", "delete", "change", "merge"})
+_SYSADMINCTL_WRITES = frozenset({"adduser", "deleteuser", "resetpasswordfor", "admin", "secureton"})
+
+
+def _joins_admin_group(name: str, args: list[str]) -> bool:
+    """``usermod -aG sudo me``, ``gpasswd -a me admin``, ``adduser me sudo``: adds an account to a group that can run anything as
+    root. ``usermod -aG docker me`` is ordinary and is not."""
+    if name not in ("usermod", "gpasswd"):
+        return False
+    return any(group in _ADMIN_GROUPS for a in args if not a.startswith("--") for group in a.lstrip("-").split(","))
+
+
+def _sets_password(name: str, args: list[str], sudo: bool) -> bool:
+    """``passwd USER`` and ``sudo passwd``: sets the password of an account (a bare ``passwd`` changes the user's own)."""
+    return name == "passwd" and (sudo or any(not a.startswith("-") for a in args))
 
 
 def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
@@ -417,6 +457,11 @@ def _persist_hit(name: str, argv: list[str], stage: _Stage) -> Hit | None:
         return Hit(ASK, "systemctl enables or edits a unit that starts later.")
     elif name in ("at", "batch", "atq"):
         return Hit(ASK, "at schedules a job.") if name != "atq" else None
+    elif name in _ACCOUNT_MAKERS or _joins_admin_group(name, args) or _sets_password(name, args, stage.sudo) or (
+            name == "dscl" and any(a.lstrip("-").lower() in _DSCL_WRITES for a in args)) or (
+            name == "sysadminctl" and any(a.lstrip("-").lower() in _SYSADMINCTL_WRITES for a in args)):
+        return Hit(ASK, f"{name} creates an account, sets a password or adds a user to an administrator group, which changes who "
+                        "can log in.")
     elif name == "gh" and "secret" in args and any(a in ("set", "delete", "remove") for a in args):
         return Hit(ASK, "gh secret changes a repository's CI secrets.")
     elif name == "defaults" and "write" in args and any("LoginItems" in a or "loginwindow" in a for a in args):

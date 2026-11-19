@@ -34,6 +34,8 @@ from .env import load_env_file
 from .sensitive import (
     _COMMAND_ARGUMENTS,
     _CONTENT_ARGUMENTS,
+    _ERASED_ARGUMENTS,
+    _ERASING_TOOLS,
     _JSON_STRING,
     _NAMES_ONLY_TOOLS,
     _PATH_ARGUMENTS,
@@ -239,6 +241,7 @@ class HarnessGuard(SessionStore):
         name = tool.rpartition(":")[2].rpartition("__")[2].lower()
         listing = any(word in name for word in _NAMES_ONLY_TOOLS)
         writes = any(word in name for word in _WRITING_TOOLS)
+        erases = any(word in name for word in _ERASING_TOOLS)
         content = next((arguments[k] for k in _CONTENT_ARGUMENTS if arguments.get(k) is not None), None)
         for key, value in arguments.items():
             field = key.lower()
@@ -250,11 +253,12 @@ class HarnessGuard(SessionStore):
                     hit = dangerous.assess_shell(item, intent, cwd=self.cwd, homes=self.homes)
                 elif field in _PATH_ARGUMENTS and not listing:
                     hit = dangerous.assess_file(item, content, writes and field != "source", intent, cwd=self.cwd,
-                                                homes=self.homes)
+                                                homes=self.homes, erase=erases and field in _ERASED_ARGUMENTS)
                 else:
                     continue
                 if hit:
-                    return dangerous.Hit(hit.decision, f"the {key} argument of {tool}: {hit.reason}", hit.trigger, hit.escalate)
+                    return dangerous.Hit(hit.decision, f"the {key} argument of {tool}: {hit.reason}", hit.trigger, hit.escalate,
+                                         hit.limit)
         return None
 
     def _call_session(self, session: str, tool: str, arguments: dict[str, Any]) -> Verdict:
@@ -381,7 +385,11 @@ class HarnessGuard(SessionStore):
 
     def _stricter(self, verdict: Verdict, risky: "dangerous.Hit | None") -> Verdict:
         """``verdict`` of the session rules against the text rules' hit: the text rules only ever make it stricter. An ask of
-        the text rules is dropped under ``--review never``; a deny never is."""
+        the text rules is dropped under ``--review never``, unless a limit raised it (the command could not be read in full,
+        and there is no prompt to ask the user): that is a deny. A deny never is dropped."""
+        if risky is not None and risky.decision != "deny" and self.review == "never" and risky.limit:
+            risky = dangerous.Hit("deny", "this call could not be read in full, and --review never has no prompt to ask the "
+                                          f"user, so it is not allowed. What stopped the reading: {risky.limit}")
         if risky is None or (risky.decision != "deny" and self.review == "never"):
             return verdict
         found = Verdict(risky.decision, f"IntentShield: {risky.reason}")

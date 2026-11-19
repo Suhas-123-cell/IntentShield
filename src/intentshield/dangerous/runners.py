@@ -412,7 +412,8 @@ def _sub_index(name: str, argv: list[str]) -> int | None:
 
 def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
     """Strips assignments, sudo, env, nohup, time... from the front. Returns the bare stage and what the wrappers carried: shell
-    text they run (``("code", text)``, ``flock -c``, ``sudo -s``) and a limit that stopped the reading (``("note", why)``).
+    text they run (``("code", text)``, ``flock -c``, ``sudo -s``), a limit that stopped the reading (``("limit", why)``) and a
+    script that is not read (``("note", why)``).
     Where ``AS_IN_0_4_4`` is set, a program that became a wrapper after 0.4.4 is left as it was, a program like any other."""
     argv = list(stage.argv)
     sudo, assigns = stage.sudo, list(stage.assigns)
@@ -473,6 +474,6 @@ def _unwrap(stage: _Stage) -> tuple[_Stage, list[tuple[str, str]]]:
         while rest and _ASSIGN.match(rest[0]):
             rest.pop(0)
         if rest and (_bin(rest[0]) in _WRAPPERS or _sub_index(_bin(rest[0]), rest) is not None):
-            inner.append(("note", _TOO_MANY_WRAPPERS))
+            inner.append(("limit", _TOO_MANY_WRAPPERS))
     inner = [(kind, text + _stdin_of(stage) if kind == "code" else text) for kind, text in inner]
     return _Stage(argv, stage.redirects, stage.piped, stage.pipeline, sudo, assigns, xargs), inner

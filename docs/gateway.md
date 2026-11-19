@@ -4,7 +4,8 @@ The gateway is the third way to run IntentShield: an MCP server that your agent 
 dashboard, an approval queue and a REST API. Most people want hooks and the transparent proxy instead; those are in
 [guide.md](guide.md). This page covers the feature list, the gateway and its upstream servers, production settings, running
 from a clone, the Gemini proposal path and the REST API. What each placement of the guard sees and stops is in
-[layers.md](layers.md#what-each-layer-sees-and-stops).
+[layers.md](layers.md#what-each-layer-sees-and-stops). Terms such as taint, provenance and the fail-closed launcher are in the
+[glossary](layers.md#terms).
 
 ## Contents
 
@@ -346,9 +347,9 @@ too, and needs `INTENTSHIELD_CONTROL_TOKEN`. Like the control token, it is requi
 `INTENTSHIELD_PROXY_CONFIG` is set; left unset in the simulated mode it leaves those routes open on loopback.
 A token that only a `.env` found by searching held (a checkout's own) is ignored, and the web API and
 `intentshield-mcp --transport streamable-http` refuse to start on it; export the variable or put it in `~/.intentshield/.env`. A stdio
-proxy reads no token, so it starts either way (since 0.4.3).
+proxy reads no token, so it starts either way.
 
-Since 0.4.3 the library's default databases are in `~/.intentshield/`, not in the working directory of whatever project calls
+The library's default databases are in `~/.intentshield/`, not in the working directory of whatever project calls
 it: `Storage()`, `IntentShieldService.default()` and `create_mcp_server()` use `~/.intentshield/intentshield.db`, and a proxy
 config with no `database_path` uses `~/.intentshield/intentshield-mcp.db`. `INTENTSHIELD_DB` still overrides. The committed
 `configs/mcp-proxy.demo.json` and `mcp-proxy.uvx.json` name `intentshield-mcp.db` in the working directory themselves. A

@@ -96,6 +96,9 @@ def _ps_words(text: str) -> list[tuple[list[str], str]]:
             sep = text[i:i + 2] if text[i:i + 2] in ("||", "&&") else c
             end_statement(sep.strip() or ";")
             i += len(sep) - 1
+        elif c == "{" and cur and cur[-1] == "$" and 0 < (close := text.find("}", i, min(n, i + 80))):
+            cur.append(text[i:close + 1])   # ``${env:USERPROFILE}`` is one variable, not a brace that ends a word
+            i = close
         elif c.isspace() or c in _PS_WORD_BREAK:
             end_word()
         else:

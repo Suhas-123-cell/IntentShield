@@ -53,7 +53,7 @@ def test_a_claude_settings_file_that_is_not_json_says_what_to_do_and_is_left_alo
                                           "builtin_tools": False, "gemini_ask": False, "no_translate": False,
                                           "allow_ephemeral": True})())
     err = capsys.readouterr().err
-    assert code == 1 and "remove its comments and trailing commas" in err and "install <harness> --dry-run" in err
+    assert code == 1 and "remove its comments and trailing commas" in err and "`intentshield install claude --dry-run`" in err
     assert path.read_text(encoding="utf-8") == '{\n  // note\n  "theme": "dark"\n}\n'
 
 
@@ -90,7 +90,7 @@ def test_wrap_warns_when_the_file_lies_in_a_git_working_tree(tmp_path, capsys):
 
 def test_the_next_step_and_the_readme_give_the_same_instruction():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-    assert "send any prompt" in readme and "send any prompt" in install.NEXT_STEP
+    assert "send any prompt" in " ".join(readme.split()) and "send any prompt" in install.NEXT_STEP
 
 
 # --- unwrap and wrap of a file that is not there ------------------------------------------------------------------------------

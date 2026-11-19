@@ -1,6 +1,6 @@
 # Contributing
 
-By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). To report a security problem, follow [SECURITY.md](SECURITY.md) and do not open a public issue. If you cite IntentShield, [CITATION.cff](CITATION.cff) has the reference.
+By taking part you agree to the [code of conduct](CODE_OF_CONDUCT.md). To report a security problem, follow [SECURITY.md](SECURITY.md) and put no details in a public issue. If you cite IntentShield, [CITATION.cff](CITATION.cff) has the reference.
 
 ## Your first change
 
@@ -173,7 +173,8 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
    the benign reviews per task rise more than 0.05 above `results/improve/baseline` on any of the 25 pairs. Run it after
    a change to a detection rule or to what the hook asks about; a rule that passes its own tests can still fail it.
 
-Two more checks run outside the test job: a Docker job builds the image, runs the demo proxy check in it and runs the code tests there (`pytest -q -m "not study"`), and an
+Three more checks run outside the test job: a Docker job builds the image, runs the demo proxy check in it and runs the code tests there (`pytest -q -m "not study"`), a
+`next-python` job runs the tests on Python 3.15, which is not supported yet, and is allowed to fail (a red mark on it is advisory and does not fail the workflow), and an
 `audit` workflow checks the locked dependencies against the PyPI advisory database on each push and weekly.
 CI runs the test job on Linux with Python 3.11 to 3.14 and on macOS with 3.12, and one job tests the lowest allowed versions of the direct dependencies on 3.11. The module map, the test inventory by
 area and how to diagnose a failure are in [docs/architecture-and-testing.md](docs/architecture-and-testing.md).
@@ -197,7 +198,7 @@ For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the
 
 1. Set the version in `pyproject.toml` and in `CITATION.cff` (`version` and `date-released`), then run `uv lock` and commit `uv.lock`: the lock records the package's own version, and a later non-frozen `uv sync` would otherwise rewrite it and leave the tree dirty.
 2. In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z - YYYY-MM-DD` and start a new empty `## Unreleased` above it.
-3. Check that no document still calls a released feature unreleased: delete the note under Install in `README.md` that says PyPI has an older version (if there is one), and make sure `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
+3. Check that no document still calls a released feature unreleased: delete the note under Quick start in `README.md` that says PyPI has an older version (if there is one), and make sure `grep -rn "not yet in a PyPI release" README.md docs/` and a search for "on main" print nothing that is still true.
 4. Run the tests, `ruff` and `mypy` as above, and check the wheel's rendered description on TestPyPI: PyPI does not rewrite the README's relative links.
 
 ## Benchmark numbers

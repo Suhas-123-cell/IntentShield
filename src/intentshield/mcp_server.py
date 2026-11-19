@@ -460,7 +460,9 @@ def create_transparent_mcp_server(config: Any, runtime: Any = None) -> Any:
         return types.CallToolResult(content=content, structured_content=result.structured_content,
                                     is_error=result.is_error)
 
-    server = Server("IntentShield", lifespan=lifespan, on_list_tools=list_tools, on_call_tool=call_tool)
+    from . import __version__  # not at the top: the package reads its metadata the first time it is asked
+
+    server = Server("IntentShield", version=__version__, lifespan=lifespan, on_list_tools=list_tools, on_call_tool=call_tool)
     server.intentshield_runtime = runtime  # type: ignore[attr-defined]  # read by the HTTP control routes
     return server
 
@@ -775,6 +777,13 @@ def run_mcp_server(
         server.run(transport=transport)
 
 
+def _stdin_is_terminal() -> bool:
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (ValueError, OSError):  # a closed stdin
+        return False
+
+
 def main(argv: list[str] | None = None) -> None:
     pre = argparse.ArgumentParser(add_help=False)  # the token variable's name is chosen by the user, so it is read first
     pre.add_argument("--control-token-env", default="INTENTSHIELD_CONTROL_TOKEN")
@@ -818,6 +827,9 @@ def main(argv: list[str] | None = None) -> None:
         help="expose the upstream's own tools (catalog layer only) for harnesses guarded by intentshield-hook",
     )
     args = parser.parse_args(argv)
+    if args.transport == "stdio" and _stdin_is_terminal():  # typed by hand: nothing else says why it waits
+        print("intentshield-mcp: waiting for an MCP client on stdin. A client starts this command (put it in front of your "
+              "servers with `intentshield wrap`); press Ctrl-C to quit.", file=sys.stderr)
     failures: list[BaseException] = []
     try:
         run_mcp_server(

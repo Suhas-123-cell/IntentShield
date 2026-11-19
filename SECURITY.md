@@ -6,8 +6,11 @@ Only the latest release on PyPI (`intentshield-mcp`) receives fixes. Older relea
 
 ## Reporting a vulnerability
 
-- Sensitive reports (anything an attacker could use before a fix ships): use GitHub private vulnerability reporting on the repository (Security tab, "Report a vulnerability"). Do not open a public issue.
+- Sensitive reports (anything an attacker could use before a fix ships): use GitHub private vulnerability reporting on the repository (Security tab, "Report a vulnerability"). Do not put details in a public issue.
 - Non-sensitive reports (hardening suggestions, false positives or negatives on published samples, documentation errors): the Issues page.
+- If you cannot use GitHub's private form: open an issue with the title "Security contact request" that says you have a sensitive report
+  and asks for a private channel. Give no details in it, not even which part of the project is affected. The maintainer replies in that issue
+  with a way to send the report.
 
 Include the IntentShield version, the harness or transport (hooks, transparent proxy, gateway), a minimal reproduction and what the guard decided (ALLOW, REVIEW, BLOCK, or allow/ask/deny in a hook). Never include real credentials, real tool outputs with personal data, or working attack payloads aimed at a third-party product; benign markers are enough.
 
@@ -48,7 +51,7 @@ nothing anywhere itself; only the optional judge and Prompt Guard send text to a
 |---|---|---|
 | `hooks.db` (`INTENTSHIELD_HOOK_DB` or `--db`) | per session: the user's prompts, the values taken from tool results, and the last hook time and working directory per harness (details below the table) | a session is deleted after 7 days without a hook event, or 30 days if a result in it was flagged (details below the table) |
 | `threats.db` (`INTENTSHIELD_THREAT_DB`) | what rule-confirmed attacks used: addresses, URLs, accounts, paths, word fingerprints of the injected sentences, and how often each server produced attacks | an entry expires 30 days after it was last seen; one the operator confirmed does not expire |
-| `proxies/*.db`, `gateway.db`, `intentshield.db` | the audit of a proxy (`proxies/NAME-<hash>.db`, one per wrapped server and client file; a server wrapped by 0.4.3 keeps its `NAME.db`) or the gateway: runs with the user's intent, call arguments, decisions, approvals and the results of executed mutations | no expiry |
+| `proxies/*.db`, `gateway.db`, `intentshield.db` | the audit of a proxy (`proxies/NAME-<hash>.db`, one per wrapped server and client file; a server wrapped earlier keeps its `NAME.db`) or the gateway: runs with the user's intent, call arguments, decisions, approvals and the results of executed mutations | no expiry |
 | `.env` | the judge API keys `install --judge` stored | until you remove them |
 | `backups/`, `installs.json`, `harness-versions.json` | the exact bytes of each settings or MCP file before `install` or `wrap` first changed it (these can hold tokens that were already in that file), when `install` last ran, and each harness's version | no expiry |
 | `tools/` (only with `tool_catalog_dir`) | the names and descriptions of the tools a proxy shows | rewritten when the proxy starts |
@@ -74,10 +77,9 @@ stays in the prompt text as you typed it.
 your user rights; `--no-connect` (scan) and plain `doctor` start no MCP server (`install` and `doctor` do run `<harness> --version` once to record the build). A server named by a file in the working directory, which a
 repository may have chosen, is started only with `--connect-project`.
 
-Since 0.4.3 the library's default databases (`Storage()`, `IntentShieldService.default()`, `create_mcp_server()` and a proxy
-config with no `database_path`) are in `~/.intentshield`, as the command line's are. Before that they were `intentshield.db`
-and `intentshield-mcp.db` in the working directory, and a file of that name already in the working directory keeps being used, so an upgrade keeps
-its data: move or delete it to start using `~/.intentshield`. The configs `configs/mcp-proxy.demo.json` and `mcp-proxy.uvx.json` still name
+The library's default databases (`Storage()`, `IntentShieldService.default()`, `create_mcp_server()` and a proxy
+config with no `database_path`) are in `~/.intentshield`, as the command line's are. An `intentshield.db` or `intentshield-mcp.db`
+already in the working directory keeps being used, so an older install keeps its data: move or delete it to start using `~/.intentshield`. The configs `configs/mcp-proxy.demo.json` and `mcp-proxy.uvx.json` still name
 `intentshield-mcp.db` in the working directory, and a run with either also leaves `threats.db` there. When a detection or grounding agent fails and the guard fails closed, it logs the
 name of the exception class at warning level, never its message, which may hold call arguments.
 

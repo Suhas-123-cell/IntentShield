@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import shutil
@@ -70,6 +71,39 @@ def settings_path(harness: str, scope: str, home: Path | None = None, cwd: Path 
                       "gemini": ".gemini/settings.json"}[harness]
     return home / {"claude": ".claude/settings.json", "codex": ".codex/config.toml",
                    "cursor": ".cursor/hooks.json", "gemini": ".gemini/settings.json"}[harness]
+
+
+# The variable that moves each harness's user settings, and what the harness calls its directory there.
+_CONFIG_DIR_VARIABLE = {"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"}
+_DEFAULT_CONFIG_DIR = {"claude": ".claude", "codex": ".codex"}
+
+
+def relocated_config_dir(harness: str, home: Path | None = None) -> tuple[str, str] | None:
+    """(variable, value) when the variable that moves the harness's user settings (``CLAUDE_CONFIG_DIR``, ``CODEX_HOME``) names a
+    directory other than ``~/.claude`` or ``~/.codex``, else None. ``install`` writes to the default place only, and the harness
+    then reads its user settings from the other directory."""
+    name = _CONFIG_DIR_VARIABLE.get(harness)
+    value = os.environ.get(name, "").strip() if name else ""
+    if not name or not value:
+        return None
+    default = (home or Path.home()) / _DEFAULT_CONFIG_DIR[harness]
+    try:
+        same = Path(value).expanduser().resolve() == default.resolve()
+    except (OSError, RuntimeError):
+        same = False
+    return None if same else (name, value)
+
+
+def relocated_config_advice(harness: str, variable: str, value: str, path: Path) -> str:
+    """What to say when the harness reads its user settings from a directory the hooks were not written to."""
+    if harness == "claude":
+        fix = ("install with `--scope project` in the project (Claude Code also reads .claude/settings.local.json there), or "
+               f"copy the hook entries that `intentshield install claude --dry-run` prints into {value}/settings.json")
+    else:
+        fix = (f"copy the block that `intentshield install codex --dry-run` prints into {value}/config.toml "
+               "(Codex has no project scope here)")
+    return (f"{variable} is set to {value}, and {harness} reads its user settings from there, so it will not see the hooks "
+            f"written to {path}. To guard {harness}: {fix}.")
 
 
 _JUDGE_SPEC = re.compile(r"(ollama|groq|gemini|deepseek|openai|openrouter|custom|on|default)(:[A-Za-z0-9_.:/-]+)?")
@@ -189,12 +223,14 @@ def merge_hooks(settings: dict[str, Any], entries: dict[str, Any]) -> tuple[dict
     (so a stale path from a deleted environment is repaired, not kept)."""
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
-        raise ValueError("'hooks' is not an object")
+        raise ValueError("'hooks' is not an object (it must map event names to lists of hooks); fix it in the file, then run "
+                         "the command again")
     changed = False
     for event, groups in entries.items():
         existing = hooks.setdefault(event, [])
         if not isinstance(existing, list):
-            raise ValueError(f"hooks.{event} is not a list")
+            raise ValueError(f"hooks.{event} is not a list (it must hold the hooks of that event); fix it in the file, then run "
+                             "the command again")
         merged = _without_ours(existing) + groups
         if merged != existing:
             hooks[event] = merged
@@ -278,8 +314,15 @@ def _our_commands(settings: Any) -> list[str]:
     return found
 
 
-def _say_what_was_replaced(old: list[str], new: str) -> None:
-    """A reinstall replaces the hooks as they were, so an option given the first time and not now is gone: say so."""
+def _say_what_was_replaced(old: list[str], new: str, harness: str = "", scope: str = "user", dry_run: bool = False) -> None:
+    """A reinstall replaces the hooks as they were, so an option given the first time and not now is gone: say so. The
+    built-in tool rules are the one a user is likely to lose without meaning to, so they get a line of their own with the
+    command that keeps them."""
     gone = sorted(_hook_flags(old) - _hook_flags([new]))
+    if "--builtin-tools" in gone:
+        gone.remove("--builtin-tools")
+        again = f"intentshield install {harness or 'HARNESS'}{' --scope project' if scope == 'project' else ''} --builtin-tools"
+        print(f"the built-in rules for the shell, file and web tools were on and {'would be' if dry_run else 'are now'} off, "
+              f"because this install was run without --builtin-tools. To keep them, run: {again}")
     if gone:
         print(f"replaced the previous install; no longer set: {', '.join(gone)}. Give the option again to keep it.")

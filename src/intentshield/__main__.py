@@ -6,13 +6,17 @@
     intentshield uninstall <harness>
     intentshield wrap <mcp json>       # put the transparent proxy in front of the servers a client launches
     intentshield unwrap <mcp json>
-    intentshield scan [config ...]     # find the MCP servers your agents use and check them offline
+    intentshield scan [config ...]     # find the MCP servers your agents use and check their tools (no API key)
     intentshield doctor                # check the hooks and proxies are installed and wired correctly
     intentshield demo                  # see the hook allow, ask and deny sample calls (runs nothing)
     intentshield wrap-hook --harness H -- <guard command>   # run any hook under the fail-closed launcher and translation
 
 The guard itself is ``intentshield-hook`` (hooks) and ``intentshield-mcp`` (gateway and transparent
-proxy); this command installs and runs them.
+proxy); this command installs and runs them. Other commands it installs:
+
+    intentshield-mcp-verify --demo     # check a guarded MCP server through the proxy; no tool is run (--config FILE for yours)
+    intentshield-threats list          # show, export or import the attack memory that the hooks and proxies share
+    intentshield-hook <harness>        # the hook itself: a harness runs it, `install` writes the entry that does
 """
 from __future__ import annotations
 
@@ -36,7 +40,11 @@ def serve(port: int = 8000) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    _launch.guarded(lambda: _main(argv))
+    try:
+        _launch.guarded(lambda: _main(argv))
+    except KeyboardInterrupt:  # Ctrl-C during a scan or a connection check is not an error to show a traceback for
+        print("intentshield: interrupted", file=sys.stderr)
+        raise SystemExit(130) from None
 
 
 def _main(argv: list[str] | None = None) -> None:

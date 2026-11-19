@@ -2,20 +2,20 @@
 
 By default the hooks check MCP calls only. `intentshield install <harness> --builtin-tools` also sends the harness's own shell,
 file and web tools to the hook (the per-harness table is in [layers.md](layers.md#what-each-harness-lets-the-guard-do)). Run the
-command again to change it, and install without the flag to go back. `--builtin-tools` has been in the PyPI releases since 0.4.1.
+command again to change it, and install without the flag to go back.
 
 With the flag the hook runs the dangerous-command rules (`src/intentshield/dangerous/`) on every shell command, file read and file
 write, and the session rules (below) on every shell command, fetch and file access. The stricter verdict wins: a deny beats an ask
 beats an allow. A key or cloud credential sent out is a deny even where the session rules would only have asked.
 
 The rules read the call's text alone, parsed safely (`shlex` stages, the wrappers listed below, `bash -c`, `$(...)`,
-here-documents, never executed), with linear-time patterns. They are **text rules and opt-in**, not a sandbox. This page describes
-the code on main, which is ahead of the 0.4.4 package on PyPI: what changed since 0.4.4 is under
-[Unreleased](../CHANGELOG.md#unreleased), and what changed since 0.4.3 is in [Upgrading from 0.4.3](../CHANGELOG.md#upgrading-from-043).
+here-documents, never executed), with linear-time patterns. They are **text rules and opt-in**, not a sandbox. What changed in each release
+is in the [changelog](../CHANGELOG.md). Terms such as taint and verdict are in the [glossary](layers.md#terms).
 
 - A **deny** cannot be approved in the prompt, so it is used where the target is plainly the whole machine or a secret.
 - An **ask** is a prompt in an interactive Claude Code session, and a refusal where nobody can answer.
-- `--review never` drops the asks of these rules and keeps the denies.
+- `--review never` drops the asks of these rules and keeps the denies. It also refuses a call that went past a limit of the reader
+  (see [limits on what is read](#limits-on-what-is-read)): there is no prompt to ask, and the part past the limit was not read.
 
 On this page: [session rules](#session-rules) · [rules by command class](#rules-by-command-class) ·
 [what the parser reads](#what-the-parser-reads) · [limits on what is read](#limits-on-what-is-read) ·
@@ -27,8 +27,14 @@ On this page: [session rules](#session-rules) · [rules by command class](#rules
 
 The session rules apply to a shell command, fetch or file access:
 
-- They are the rules in that table row: an address that came from an injected output, data sent to an address the user did not
-  name, secrets read and sent out, and what may run after an output tried to instruct the agent.
+- A command or fetch that reaches an address from an injected output is a deny.
+- A command asks when it sends data (upload flags, POST, stdin into a network tool, `scp` or `rsync` push, `git push`) to an address
+  that came only from a tool output, or pipes a script fetched from one into a shell.
+- A command asks when it reads secrets (`.env`, `~/.ssh`, `.aws/credentials`, `printenv` piped on) and sends data out, unless the user
+  named the destination. A secret held in an environment variable and written into a request is not read (see
+  [what is not read](#what-is-not-read)).
+- Pages, search results and the output of `curl`, `gh` or other remote commands flag the session; the user's own files and local
+  command output only warn (the rules fire on ordinary auth code and LLM prompts).
 - One difference between the tools: in a session where an output tried to instruct the agent, `curl` to a host the user did not
   name asks, but `WebFetch` to one is not asked about (fetching a page an output linked to is how agents browse).
   - `WebFetch` is refused when the address came from the injected output: the address itself and anything under its path.
@@ -39,6 +45,9 @@ The session rules apply to a shell command, fetch or file access:
   - `--review never` turns the host rule and the user-name-and-password rule off.
 - After an injection a read-only command, and an ordinary local build, test or version-control command such as `pytest` or
   `git commit`, still run; `rm`, `sed -i`, `pip install` and a download from a host the user did not name ask.
+  - Under `--review always`, or when the command names a path that sets up code a later session runs, an ordinary command asks too.
+  - A plain `curl` or `wget -qO-` download counts as read-only only when every host it reaches was named by the user.
+  - Any read of a credential store, and a write to a shell startup file, SSH, a git hook or a harness's settings, asks.
 - After an injection a `curl` to `localhost`, `127.0.0.1` or `[::1]` still runs, with or without `http://` and a port; `-X DELETE`
   asks.
 
@@ -59,15 +68,18 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
 | `find ~ -delete` and `find / -delete` with no test on the name | deny | `-type`, `-mtime`, `-size` and `-empty` do not count as a test on the name: `find ~ -mtime +365 -delete` is a deny too. |
 | `find ... -delete` at the home, a root, a system directory or a folder of the home, with `-o`, `!` or `-not` in it: `find ~ -name '*.tmp' -o -name '*.bak' -delete`, `find ~ ! -name keep -delete` | deny | The delete can remove files that none of its tests name. Below a project (`find ~/proj ...`) it is allowed. |
 | The same with `-prune` as well (`find ~ -name x -prune -o -print -delete`) | ask | Confirm what is pruned. |
-| `find` that names the files it removes, at a system directory or at a folder of the home: `find /usr -name x -delete`, `find /usr -name x -prune -delete`, `find ~/Documents -name '*.tmp' -delete` | ask | A delete by name is limited, but a system directory or a folder of the user's own files is not an ordinary project. |
+| `find` that names the files it removes, at a system directory or at a folder of the home: `find /usr -name x -delete`, `find /us* -name x -delete`, `find /usr -name x -prune -delete`, `find ~/Documents -name '*.tmp' -delete` | ask | A delete by name is limited, but a system directory or a folder of the user's own files is not an ordinary project. |
 | `find` of a folder of the home directory limited by age, size, emptiness or owner, not by name: `find ~/Downloads -mtime +30 -delete`, `-size +1G`, `-empty`, `-newer FILE` | ask | The reason names the test. |
 | `find ~/Downloads -mtime -3 -delete` | deny | `-mtime -3` means the newest files, so it is no test that limits what is deleted. The reason says the find "has no test on the name, age or size" and deletes everything under the folder. |
 | `find ~ -name .DS_Store -delete`, `find ~ -name '*.pyc' -delete`, `find ~ -name '*.tmp' -prune -delete` | allow | A find that deletes only the files it names is read like `rm` of those files and allowed at the home directory itself. It asks at a system directory and at a folder of the home. |
 | `rsync --delete` (or `--remove-source-files`) onto root, the home directory or a system directory; `tar --remove-files` of one; `chattr -R` of one (`chattr -R +i ~`, `chattr -R +i /`) | deny | Other programs that empty the same targets as `rm`. |
 | A glob that matches nearly every hidden entry of the home directory (`~/.[a-z]*`, `~/.??*`) | deny | Read like `~/.*`. |
+| A glob with a partial name that can match a root, home or system directory, in `rm -r`, `mv`, `find -delete`, `rsync --delete` or `tar --remove-files`: `rm -rf /us*`, `rm -rf /[u]sr`, `rm -rf ~/Doc*`, `rm -rf ~/.s*`, `mv /et* /tmp` | deny | It is read like the protected path it can name. |
+| The same glob inside a project or a directory that is not protected: `rm -rf build*`, `rm *.pyc`, `rm -rf node_modules/.cache/*`, `rm -rf ~/proj*`, `rm -rf /tmp/x*`, `rm -rf /usr/lib/python3*` | allow | No protected path matches it. |
+| `rm -rf ./.*` | ask | The same as `rm -rf .*`: everything in or above the working directory. |
 | `sudo rm -rf` of a direct subdirectory of a system directory (`/opt/app`, `/etc/app.d`) | ask | A clean-up that is common; a deny cannot be approved. |
 | `rm -rf` of a variable that may be empty, also after a root or home: `$DIR`, `/$DIR`, `~/$DIR`, `$HOME/$DIR`, `/*$DIR` | ask | If the variable is empty the command deletes a root or home. |
-| A write to a block device, `mkfs`, `wipefs` | deny | The disk is destroyed. |
+| A write to a block device, `mkfs`, `wipefs`, by a redirect, `dd`, `cp`, `tee`, an editor, or the Write, Edit, MultiEdit and NotebookEdit tools (also `/dev//sda`, `/dev/./sda`) | deny | The disk is destroyed. `rm` and `mv` of the device node are not a write of the disk and are allowed. |
 | A fork bomb | deny | The machine stops. |
 
 ### Mode and owner
@@ -88,6 +100,7 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
 | Force-push or deletion of a shared branch: `main`, `master`, `develop`, `release`, `release/...`, `release-1.2`, `hotfix`, ...; also by refspec (`HEAD:main`) | deny | It rewrites or removes history others rely on. |
 | Any other force-push, including the usual one after a rebase (`git push --force-with-lease origin HEAD`, `git push -f origin my-feature`) and a branch such as `release-candidate` | ask | `HEAD` may be a feature branch. |
 | Hook bypass: `--no-verify`, `git commit -n`, setting `core.hooksPath` | ask | The hooks are a check the user set up. Reading or unsetting `core.hooksPath` does not ask. |
+| `git config core.fsmonitor PROGRAM` (a value that is not `true` or `false`) | ask | Git runs the program on every `git status`. `git config core.fsmonitor true` and a read do not ask. The other settings that name a program (`core.sshCommand`, `core.pager`, `core.editor`, `credential.helper`, `diff.external`, `alias.x '!...'`) are not read; see the known limits. |
 | The same bypass through the environment: `GIT_CONFIG_KEY_0=core.hooksPath`, `GIT_CONFIG_PARAMETERS`, `export HUSKY=0; git commit` | ask | Same reason. |
 | `git reset --hard`, `git restore .`, `git clean -f` | ask | They discard work. `git clean -n` deletes nothing and does not ask. |
 | `git checkout -f`, `git checkout --force`, `git switch -f`, `git switch --discard-changes` | ask | They throw away uncommitted changes. |
@@ -106,6 +119,7 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
 | A read of `.env`, a `.pem` that is not a certificate, or a cloud token. `aws configure get` asks for a key, not for `region` | ask | Likely a secret. |
 | A read of a harness's own credential file: `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`, `~/.gemini/mcp-oauth-tokens.json`, `~/.claude.json`, `~/.claude/.credentials.json` | ask | They hold the harness's tokens. The last is covered on a report that some Claude Code installs keep it there, which the vendor pages archived here do not confirm. |
 | `~/.kube`, `~/.docker`, `~/.config/gh` and `~/.config/gcloud` as a directory or by a glob | ask | They hold cluster, registry and token files. |
+| `~/.config/git/credentials` (git's credential file in the XDG directory), read like `~/.git-credentials` | ask | It holds tokens in plain text. |
 | A search of the home, of a directory above it (`/`, `/Users`, `/home`, `~/..`), or of `~/.config`, `~/.local`, `~/.local/share`, `~/Library` or `~/Library/Application Support`: the Grep tool, or `grep -r`, `grep -R`, `egrep`, `fgrep`, `rg`, `ag`, `ack` | ask | It reaches `~/.ssh` and `~/.aws`. With no path the search starts at the working directory. A search inside a project is allowed, and so is one that lists names or counts (`-l`, `-L`, `-c`, `-q`). Skipping names does not lift the ask (see [what the parser reads](#what-the-parser-reads)). |
 | `find` at the home, above it or at those directories, running a reader (`-exec`, `-execdir`, `-ok`, or `\| xargs`) on a name test that can match a key: `-name 'id_*'`, `'*_rsa'`, `-regex '.*id_rsa'`, `-name credentials` | deny | The pattern is tried against the names of keys and credential files and gets the verdict of the name it can only be, as `cat ~/.ssh/id_*` does. |
 | The same `find` where the pattern can only match a file that holds secrets (`.env*`, `*.pem`, `*.p12`) | ask | Likely secrets. |
@@ -116,7 +130,7 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
 | Reading `/etc/sudoers` | ask | It holds rules, not secrets. Writing it is a deny (see the write forms below). |
 | A key or cloud credential named as an argument by a program that no rule reads: `git add ~/.ssh/id_rsa`, `ln -s ~/.ssh/id_rsa x`, `gh gist create`, `az`, `rsync` to a local directory, `curl file://...`; or fed to one on its input: `gh secret set X < ~/.ssh/id_rsa` | ask | The program may send it out. A listing, a mode, a count or a login does not trigger it (`ls`, `stat`, `chmod`, `ssh -i`, `ssh-add`, `ssh-keygen`). It covers the secrets that are denies when read; a `.env` file still needs a program that reads it, such as `cat`. |
 | `ln -s` of the home, `/`, a system directory or `~/Documents` and the like | ask | The link makes a path that later calls read through as that directory. |
-| The key named by `ssh -i`, `scp -i` or `-o IdentityFile=` | allow | It only signs a login and is not a read of the key. A copy of a private key (`id_rsa.bak`, `id_ed25519~`) is the key, wherever it lies. |
+| The key named by `ssh -i`, `scp -i` or `-o IdentityFile=` | allow | It only signs a login and is not a read of the key, also inside `bash -c`, `bash -lc` and `sh -c` (how Codex CLI sends a command). A copy of a private key (`id_rsa.bak`, `id_ed25519~`) is the key. |
 | A file named like a key inside a test directory of the project: `tests/fixtures/id_rsa` (a relative path) | ask | A test fixture, probably not a real key. |
 | The same, by an absolute path | ask | Only when the file lies inside the call's working directory and in no directory that starts with a dot. `~/tests/id_rsa` and a test directory outside the working directory are denies. |
 
@@ -147,13 +161,14 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
 | A write to a shell startup file, cron, a launchd or systemd unit, a git hook or a CI workflow | ask | It runs later without the user. `.zshrc` and `.zshrc.local` ask; a copy that nothing runs (`.zshrc.bak`, `.bashrc.orig`, `.bashrc~`) does not. |
 | A write to `authorized_keys` or sudoers, or to any access file by any of the write forms listed under [what the parser reads](#what-the-parser-reads) | deny | It gives access to the machine. |
 | Deleting or emptying a key or an access file, by `rm`, `truncate`, `shred`, the Write tool, a redirect (`> ~/.ssh/id_rsa`, `echo x >> ~/.aws/credentials`) or a copy over it | ask | The key is lost or replaced. |
+| Making an account or giving it administrator rights: `useradd`, `adduser`, `newusers`, `chpasswd`, `visudo`, `usermod -aG sudo\|admin\|wheel\|root`, `gpasswd -a USER sudo`, `passwd USER`, `sudo passwd`, `dscl . -create\|-passwd\|-append\|-delete`, `sysadminctl -addUser\|-resetPasswordFor` | ask | It changes who can log in. `usermod -aG docker $USER`, a bare `passwd`, `dscl . -read` and `id` do not ask. |
 | Anything that changes the guard itself | ask | See [the guard's own files](#the-guards-own-files). |
 
 ### Too big to read
 
 | Command class | Verdict | Reason |
 |---|---|---|
-| A path, a command, a brace list or a loop past a limit | ask | The limit is named in the reason. See [limits on what is read](#limits-on-what-is-read). |
+| A path, a command, a brace list or a loop past a limit | ask | The limit is named in the reason. With `--review never` it is a deny. See [limits on what is read](#limits-on-what-is-read). |
 
 ## What the parser reads
 
@@ -253,6 +268,7 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
   taken for a home.
 - A `$(...)` inside a word does not end the command (`rm -rf $(pwd) /`). A glob made of glob characters alone at the root or home
   (`/[a-z]*`, `/?`) is read as everything in it, and `echo / | xargs rm -rf` is read as `rm -rf /`.
+- A glob with a partial name (`/us*`, `~/Doc*`, `/[u]sr`, `~/.s*`, `$HOME/Doc*`) that begins at `/`, `~` or `$HOME` is matched part by part against the protected paths (the roots, the system directories, the folders of the home, the home itself). When one matches, `rm -r`, `mv`, `find -delete`, `rsync --delete` and `tar --remove-files` give it the verdict of that path. A relative glob is a glob in the project and is not read, except after a `cd` to the home (`cd ~ && rm -rf Doc*`). `~/D*` also matches folders of that name that are not the system's, and is denied.
 - A `find` that deletes only the files it names (`find ~ -name .DS_Store -delete`, `find ~ -name '*.pyc' -delete`) is read like `rm`
   of those files and allowed under the home directory; asked at a system directory. With only an age, a size, `-empty` or an owner as the test it
   asks at a folder of the home directory and denies at `~`, a root or a system directory.
@@ -269,7 +285,8 @@ row reads it (see [what the parser reads](#what-the-parser-reads)).
 ## Limits on what is read
 
 A command that goes past any of these limits is **asked about, with the limit named**, never allowed: a deny hidden after the limit
-cannot get through by padding the command.
+cannot get through by padding the command. With `--review never` there is no prompt, so such a command is refused, with a reason
+that says it could not be read in full.
 
 - The parser reads at most 50,000 characters, 400 commands, 20,000 words and three levels of nesting (`bash -c`, `eval`, `$(...)`).
   It also reads at most 200 command substitutions, and through at most eight wrappers in front of a command: nine `sudo` in front of
@@ -309,9 +326,12 @@ either way.
 With `--builtin-tools` a call that would switch the guard off asks, in a clean session too:
 
 - the commands `intentshield uninstall|unwrap|install|wrap` (without `--dry-run`) and `pip|uv|pipx uninstall intentshield-mcp`;
-- a delete, move or `chmod` of IntentShield's programs or of `~/.intentshield`, and an SQL change of `hooks.db` or `threats.db`;
+- a delete, move or `chmod` of IntentShield's programs or of `~/.intentshield`, and an SQL change of `hooks.db` or `threats.db` (`delete`, `update`, `insert`, `replace`,
+  `drop`, `create`, `alter`, `vacuum`, `reindex`, a `pragma` that sets a value, `.read`, `-init`, or a script fed to `sqlite3` from a file or a pipe, also
+  in `python -c` code);
 - a write, edit or delete of a harness's hook settings (`~/.claude/settings*.json`, `.claude/settings*.json`, `.claude/hooks/`,
   `~/.codex/config.toml`, `.cursor/hooks.json`, `.gemini/settings.json`);
+- removing, moving or recursively changing the directory that holds those settings: `rm -r`, `rmdir`, `mv`, `find -delete`, `chmod -R`, `rsync --delete` and `tar --remove-files` of `~/.claude`, `.claude`, `.claude/hooks`, `~/.codex`, `.cursor`, `~/.gemini` and the like. Also `rm ~/.claude/*`, `rm ~/.claude/set*`, an MCP server's `delete_directory`, `move_file` and `rename_file` aimed at one, and a `find` from the home, `/` or `/Users` whose `-name` can match `settings.json`, `hooks.json` or `config.toml`. Work inside the directory is not asked about: `rm -rf .claude/worktrees/x`, `mkdir -p .claude/commands`, `ls ~/.claude`, editing `.claude/commands/x.md`, `find ~/.claude -name '*.jsonl' -delete`. `rm -rf .claude` in a project is an expected ask: it takes the project's settings with it.
 - a write made by a redirect, `cp`, `mv`, `ln`, `install`, `dd`, `tee` or `sed -i`, or by the Write and Edit
   tools, whose target is one of IntentShield's programs (`bin/intentshield-hook`, `bin/intentshield-mcp`), its installed package
   (`site-packages/intentshield/`, and the directory the running package is imported from, so a developer of IntentShield itself is
@@ -366,6 +386,15 @@ Settings that loosen the guard:
   no or an empty name goes on as it did. Cursor's shell and file events (`beforeShellExecution`, `beforeReadFile`) have no tool name
   and are not held to this, and neither is any event that is not a call (a result, a prompt). A result is never refused for its tool
   name; on Claude Code and Codex CLI one whose tool name is not text is scanned as the result of an unknown tool.
+- Cursor's `beforeReadFile` event has no ask. A read that the text rules ask about goes ahead with `permission: allow` and a `user_message` that names the file and the reason. That covers `.env`, `~/.npmrc`, `~/.config/gh/hosts.yml`, `~/.docker/config.json`, a file in `~/.ssh` that is not a known public one, and a `.pem`. The same file is an ask on Claude Code's Read tool and in Cursor's shell. A key, a cloud credential, a system secret, and any read after an output in the session tried to instruct the agent, are denies.
+- A call is also refused in each of these cases:
+  - its hook event name is not text, or is one that no harness documents (`pretooluse`, `true`), and the event names an MCP tool
+    (with `--builtin-tools`, a built-in tool too);
+  - it names its tool under another spelling of the key (`toolName`, `TOOL-NAME`) beside a valid event name: an MCP tool name always,
+    any other name only with `--builtin-tools`;
+  - it names a tool and its arguments are under another spelling of `tool_input` (`toolInput`): with or without `--builtin-tools`.
+- A tool name padded with spaces is read as the tool. A result event (`PostToolUse`, `AfterTool`, `afterMCPExecution`) is read as a result and is not refused. Another event the harnesses document that is not a call (`PermissionRequest`, Cursor's `afterFileEdit`) is not refused without `--builtin-tools`; with it, such an event that names an MCP tool or a built-in tool (on Cursor, one that carries a `command` or a `file_path`) is refused. The installed matchers do not send these events to the hook.
+- With `--builtin-tools` a tool the hook has no name for is read as a shell call when its input has a `command` or `cmd` that is a text or a list of words, and as a write when its input has a `file_path`, `path` or `absolute_path` and the text to write. A `file_path` or `path` that is a list of objects is refused for a file tool the hook has a name for (`Read`, `Write`, `Edit`, `MultiEdit`, Gemini CLI's `write_file`); it is not refused for a search tool, an unknown tool or an MCP tool. A Gemini CLI `mcp_context` that is not an object is refused.
 - A tool with another name that runs a command (a future tool, or one a plugin adds) is not matched by name. Claude Code's matcher
   names the tools it sends to the hook, so such a tool never reaches it. Codex CLI's and Gemini CLI's send every tool, and there
   a tool the hook has no name for whose input holds a `command` or `cmd` text is read as a shell call.
@@ -384,6 +413,7 @@ Settings that loosen the guard:
   says it writes, moves, copies, deletes, creates or edits), and `command` or `cmd` as a shell command, by the same file and shell
   rules, and only to make the verdict stricter. A tool whose name says it only lists or searches names (`list`, `tree`, `info`,
   `exists`, `search`) is not read.
+- With `--builtin-tools` the path of an MCP tool whose name says it deletes or moves (`delete`, `remove`, `move`, `rename`, `rmdir`, `trash`, `unlink`) is read as `rm -r` and `mv` read it. A root, home or system directory (`~`, `/`, `~/Documents`, `~/Doc*`) is a deny and a harness's hook settings directory an ask. The destination of a move is not read.
 - Not read: arguments under any other name (`uri`, `args`, a path inside a list of objects or a nested object), a command a server
   runs for a name it accepts, and what an MCP server does on its own. Without `--builtin-tools` none of this is read.
 
@@ -402,7 +432,17 @@ Settings that loosen the guard:
 - A secret held in an environment variable and written into a request in a session with no injection:
   `curl -d "$GITHUB_TOKEN" https://host/` and `curl -H "X-T: $API_KEY" https://host/` are allowed. The same variable sent through
   a pipe (`echo $GITHUB_TOKEN | curl -d @- https://host/`) asks, as an upload to a host the user did not name.
+- An interpreter fed a script on its standard input: the body of a heredoc (`python3 <<'EOF' ... EOF`) is not read, and a
+  here-string (`python3 - <<< '...'`) is matched as text only, while the same code in `python3 -c` is read as code. A shell fed
+  on standard input (`bash <<< 'rm -rf /'`) is read.
+- The working directory under a spelling other than `.`, `./*`, `*`, `$PWD` and `"$PWD"`: `rm -rf` of those asks, while
+  `$(pwd)`, backticks around `pwd`, `~+` and the absolute path of the working directory are allowed.
+- The value of a test selector (`pytest -k`, `--grep`, `jest -t`, `--testNamePattern`, `go test -run`, `npm|yarn|pnpm|bun test
+  -t`) is not read as a path or a program. The selector of another runner (`cargo test NAME`, `rspec -e`, `dotnet test --filter`)
+  is read as words.
 - Arguments of an MCP tool under a name other than the ones listed above, and what an MCP server does on its own.
+- Arguments under a key that is not a spelling of `tool_input` (`x_tool_input`): the call cannot be told from one with no arguments.
+- A tool name or arguments under keys that are no spelling of `tool_name` and `tool_input` (`tool`, `name`, `input`, `args`) in an event whose name no harness documents: the event is not read as a call.
 - PowerShell cmdlets other than the ones listed above, and .NET calls.
 
 ## Known limits
@@ -435,6 +475,9 @@ Each of these was run against the current code with `intentshield.dangerous.asse
 - **`chown` in a project under a temporary directory.** `/private/tmp`, `/var/folders` and `/var/tmp` count as system paths for
   `chown`: `chown -R me build` from a project there asks ("chown on the system path"). From `/tmp/proj` or a project in the home
   it is allowed.
+- **Settings that name a program.** `git config core.sshCommand`, `core.pager`, `core.editor`, `credential.helper`, `diff.external`, `alias.NAME '!...'` and `git -c core.pager=...` are allowed: they are ordinary configuration, and `core.sshCommand 'ssh -i ~/.ssh/work_key'` is how a second key is used. Also allowed: `cat ~/.gem/credentials`, `cat ~/.m2/settings.xml`, a write over `~/.config/git/credentials`, `echo x > /dev/mem`, Windows `net user`.
+- **The settings directory by another way.** `git rm -r .claude`, `cp -r template/.claude ~/`, `rsync -a template/ ~/.claude/` (without `--delete`), `ln -sfn x ~/.claude`, `find . -name settings.json -delete` from a project, a relative partial glob (`rm -rf .cl*`) and a name built at run time (`rm -rf $(echo .claude)`) are not read.
+- **rm and find on an access file.** `rm` and `mv` of `authorized_keys`, `/etc/passwd` or `/etc/shadow` ask (the file is lost, not replaced). `find FILE -delete`, a redirect and the file tools deny. The verdicts differ by design, and `tests/test_dangerous_protected_targets.py` names each exception.
 - **A `HOME` the hook cannot write to** (`/root` on macOS, where there is no such directory). With the session database
   (`--db`, `INTENTSHIELD_HOOK_DB`) somewhere else, an ask stays an ask. With the default database under that `HOME` the database
   cannot open, the hook exits 2 with "Read-only file system", and every call is refused. It fails closed, so the cost is a refused

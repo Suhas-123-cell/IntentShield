@@ -189,9 +189,27 @@ def test_a_directory_above_the_home_asks_whichever_way_it_is_spelled(tmp_path, m
 
 def test_the_changelog_names_each_family_of_verdicts_that_are_weaker_than_the_last_release():
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = changelog.split("\n## Unreleased\n")[1].split("\n## ")[0]
-    weaker = unreleased.split("weaker than 0.4.4:**")[1].split("\n- ")[0]
+    upgrading = changelog.split("\n### Upgrading from 0.4.4\n")[1].split("\n### ")[0]
+    weaker = upgrading.split("weaker than 0.4.4:**")[1].split("\n- ")[0]
     for name in ("known_hosts2", "known_hosts.d/*", "authorized_keys2", "d=$HOME/proj; rm -rf $d", r"echo a \; rm -rf /",
                  "bash -c", "su -c", "sudo -s", "env", "nohup", "timeout", "xargs", r"watch echo a \; rm -rf /",
-                 "$USERPROFILE", "${HOME}x", "autossh", "gcloud compute ssh", "grep -r --exclude-dir=.ssh x ~", "four families"):
+                 "$USERPROFILE", "${HOME}x", "autossh", "gcloud compute ssh", "grep -r --exclude-dir=.ssh x ~",
+                 'core.sshCommand "ssh -i ~/.ssh/work"', "bash -lc 'ssh -i ~/.ssh/id_ed25519 user@host'", "pytest -k id_rsa",
+                 "seven families"):
         assert name in weaker, name
+
+
+def _rule_name_table() -> list[str]:
+    """The rule names in the guide's table under "The rule names in a reason"."""
+    body = GUIDE.split("\n### The rule names in a reason\n")[1].split("\n#")[0]
+    return re.findall(r"^\| `([a-z_]+)` \|", body, re.M)
+
+
+def test_every_rule_name_a_hook_reason_can_carry_is_in_the_guide_table():
+    from intentshield.mcp_inspect.rules import _OUTPUT_RULES
+
+    in_code = [name for name, _rule in _OUTPUT_RULES]
+    in_guide = _rule_name_table()
+    assert sorted(in_guide) == sorted(set(in_guide)), "a rule is listed twice"
+    assert not set(in_code) - set(in_guide), sorted(set(in_code) - set(in_guide))
+    assert not set(in_guide) - set(in_code), sorted(set(in_guide) - set(in_code))

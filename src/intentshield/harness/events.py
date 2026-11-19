@@ -5,6 +5,7 @@ import hashlib
 import json
 import posixpath
 import re
+import shlex
 import sys
 from typing import TYPE_CHECKING, Any
 
@@ -27,7 +28,7 @@ _RESOURCE_TOOLS = {"ReadMcpResourceTool": "read_resource", "ReadMcpResource": "r
 
 def _split_claude(name: str) -> tuple[str, str] | None:
     """Claude Code and Codex name MCP tools mcp__<server>__<tool>."""
-    parts = name.split("__", 2)
+    parts = name.strip().split("__", 2)   # padding does not make it another tool
     return (parts[1], parts[2]) if len(parts) == 3 and parts[0] == "mcp" else None
 
 
@@ -67,16 +68,42 @@ _HANDLED_EVENTS = {
 }
 
 
+def _spelled_as(key: Any, name: str) -> bool:
+    """``key`` is ``name`` (``tool_name``) in another case, or with other separators or padding: ``toolName``, ``TOOL-NAME``,
+    ``tool_name_``, `` tool_name``."""
+    return isinstance(key, str) and key != name and re.sub(r"[^a-z]", "", key.lower()) == name.replace("_", "")
+
+
+def _respelled(event: dict[str, Any], name: str) -> Any:
+    """The value of the key of ``event`` that spells ``name`` another way, or None."""
+    return next((value for key, value in event.items() if _spelled_as(key, name)), None)
+
+
 def _recased_call(event: dict[str, Any], builtin_tools: bool) -> bool:
     """True for an event with no ``tool_name`` that still carries a call under keys in another case (``toolName``,
     ``toolInput``) or a ``tool_input`` alone: a schema that changed its keys must not read as an allow. Without
     ``--builtin-tools`` only a re-cased MCP tool name counts, since the built-in tools are not guarded then."""
     if event.get("tool_name"):
         return False
-    other = event.get("toolName")
-    if isinstance(other, str) and other and (builtin_tools or other.startswith("mcp__")):
+    other = event.get("toolName") or _respelled(event, "tool_name")
+    if isinstance(other, str) and other and (builtin_tools or other.startswith("mcp_")):
         return True
-    return builtin_tools and any(event.get(key) for key in ("tool_input", "toolInput"))
+    return builtin_tools and any(event.get(key) or _respelled(event, key) for key in ("tool_input", "toolInput"))
+
+
+def _respelled_name(event: dict[str, Any], builtin_tools: bool) -> bool:
+    """A call with no ``tool_name`` that names its tool under another spelling of the key (``toolName``). Without
+    ``--builtin-tools`` only an MCP tool name counts."""
+    if "tool_name" in event:
+        return False
+    other = event.get("toolName") or _respelled(event, "tool_name")
+    return isinstance(other, str) and bool(other) and (builtin_tools or other.startswith("mcp_"))
+
+
+def _respelled_input(event: dict[str, Any]) -> bool:
+    """A call that names its tool as the harness does and carries its arguments under another spelling of ``tool_input``
+    (``toolInput``): the arguments are not read, so the call must not read as one with none."""
+    return "tool_input" not in event and _respelled(event, "tool_input") is not None
 
 
 def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = False) -> dict[str, Any] | None:
@@ -84,8 +111,16 @@ def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = Fal
     harness changed its schema, and nothing says whether it is the call or the result, so the call is refused rather than
     waved through. With ``--builtin-tools`` the built-in tools are held to this like the MCP tools."""
     name = event.get("hook_event_name") or ""
-    if name and (not builtin_tools or name in _HANDLED_EVENTS.get(harness, ())):
+    if isinstance(name, str) and name in _HANDLED_EVENTS.get(harness, ()):
+        if name in ("PreToolUse", "BeforeTool", "beforeMCPExecution") and (_respelled_input(event) and (
+                event.get("tool_name") or event.get("mcp_context")) or _respelled_name(event, builtin_tools)):
+            reason = ("IntentShield could not read the tool name or the arguments of this call (they are under keys other "
+                      "than tool_name and tool_input), so it refused the call; update IntentShield or the harness.")
+            print(f"IntentShield: {reason}", file=sys.stderr)
+            return _refusal(harness, reason)
         return None
+    if not builtin_tools and isinstance(name, str) and (name in translation.NON_CALL_EVENTS or name in translation.CALL_EVENTS):
+        return None   # without --builtin-tools only a name that no harness documents is held to this
     if harness in ("claude", "codex"):
         tool = event.get("tool_name", "")
         mcp = _odd_tool_name(event) or (isinstance(tool, str) and (
@@ -101,6 +136,11 @@ def _unnamed_call(harness: str, event: dict[str, Any], builtin_tools: bool = Fal
     reason = ("IntentShield could not tell what this hook event is (its hook_event_name is "
               f"{name!r}), so it refused the call; update IntentShield or the harness.")
     print(f"IntentShield: {reason}", file=sys.stderr)
+    return _refusal(harness, reason)
+
+
+def _refusal(harness: str, reason: str) -> dict[str, Any]:
+    """A refusal of a call in the harness's own reply format."""
     if harness in ("claude", "codex"):
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                        "permissionDecisionReason": reason}}
@@ -199,6 +239,9 @@ def _claude(harness: str, name: str, session: str, event: dict[str, Any],
         if guard.builtin_tools and name == "PreToolUse" and (command := _unlisted_command(event)) is not None:
             label = f"builtin:{event['tool_name']}"
             return _claude_reply(harness, session, label, event, guard, guard.shell(session, label, command))
+        if guard.builtin_tools and name == "PreToolUse" and (written := _unlisted_write(event)) is not None:
+            label = f"builtin:{event['tool_name']}"
+            return _claude_reply(harness, session, label, event, guard, guard.file(session, label, *written, write=True))
         if name == "PreToolUse" and str(event.get("tool_name", "")).startswith("mcp__"):
             # Named like an MCP tool but with no server or no tool part: not readable, so refused like an unreadable built-in
             # call.
@@ -244,9 +287,24 @@ def _unlisted_command(event: dict[str, Any]) -> str | None:
         return None
     arguments = _as_dict(event.get("tool_input"))
     for key in ("command", "cmd"):
-        if isinstance(arguments.get(key), str):
-            return str(arguments[key]).replace("\x00", "")
+        value = arguments.get(key)
+        if isinstance(value, list) and value and all(isinstance(word, str) for word in value):   # an argv, as Codex sends it
+            value = value[0] if len(value) == 1 else shlex.join(value)
+        if isinstance(value, str):
+            return value.replace("\x00", "")
     return None
+
+
+def _unlisted_write(event: dict[str, Any]) -> tuple[str, Any] | None:
+    """(path, text) of a tool the hook has no name for whose input has a path and the text to put in it (a new or renamed file
+    tool of the harness): read as a write of that text, so that a new name is not a way past the rules for files."""
+    tool = event.get("tool_name")
+    if not isinstance(tool, str) or not tool or tool in _BUILTIN or tool.startswith("mcp_"):
+        return None
+    arguments = _as_dict(event.get("tool_input"))
+    path = next((arguments[k] for k in ("file_path", "path", "absolute_path") if isinstance(arguments.get(k), str)), None)
+    text = [arguments[k] for k in ("content", "new_string", "new_source", "text") if arguments.get(k) is not None]
+    return (path.replace("\x00", ""), text) if path and text else None
 
 
 def _claude_builtin(harness: str, name: str, session: str, event: dict[str, Any],
@@ -426,8 +484,15 @@ def _gemini(name: str, session: str, event: dict[str, Any], guard: HarnessGuard)
         if guard.builtin_tools and name == "BeforeTool" and (command := _unlisted_command(event)) is not None:
             v = guard.shell(session, f"builtin:{builtin}", command)
             return None if v.decision == "allow" else _gemini_decision(session, v, guard, "shell")
+        if guard.builtin_tools and name == "BeforeTool" and (written := _unlisted_write(event)) is not None:
+            v = guard.file(session, f"builtin:{builtin}", *written, write=True)
+            return None if v.decision == "allow" else _gemini_decision(session, v, guard, "write")
         return None
     context = event.get("mcp_context") or {}
+    if not isinstance(context, dict):
+        reason = "IntentShield could not read this call (its mcp_context is not an object), so it is refused."
+        print(reason, file=sys.stderr)
+        return _gemini_decision(session, Verdict("deny", reason), guard, "mcp")
     server = context.get("server_name") or context.get("serverName") or "mcp"
     # mcp_context names the server's own tool; tool_name is "mcp_<server>_<tool>", whose
     # server words would count in is_mutation.

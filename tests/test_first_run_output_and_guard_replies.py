@@ -36,7 +36,8 @@ def _hook(tmp_path: Path) -> str:
 
 # --- the doctor right after an install ----------------------------------------------------------------------------------
 
-def test_the_first_doctor_after_an_install_is_a_warning_that_says_what_to_do_not_a_failure(tmp_path, home, capsys):
+def test_the_first_doctor_after_an_install_is_a_warning_that_says_what_to_do_not_a_failure(tmp_path, home, capsys, monkeypatch):
+    monkeypatch.setattr(doctor, "_harness_version", lambda harness, home: (2, 1, 316))  # the harness is on PATH
     cwd = tmp_path / "work"
     cwd.mkdir()
     install.install("claude", home=home, cwd=cwd, hook=_hook(tmp_path))

@@ -57,10 +57,29 @@ class Hit:
     reason: str
     trigger: str = ""   # the path or text a user may have asked for, to soften a deny to an ask
     escalate: bool = False  # an ask that is a deny where the text is written to a file that runs later, unseen
+    limit: str = ""  # set on an ask raised because the command passes a limit of the reader (what could not be read, in words)
 
     def __post_init__(self) -> None:
         if len(self.reason) > 400:  # a reason that quotes a padded path stays readable
             self.reason = _LONG_WORD.sub(lambda m: m[0][:60] + "..." + m[0][-30:], self.reason)
+        if len(self.limit) > 400:
+            self.limit = _LONG_WORD.sub(lambda m: m[0][:60] + "..." + m[0][-30:], self.limit)
+
+
+def _limit_hit(why: str, trigger: str = "") -> Hit:
+    """An ask raised because the command passes a limit of the reader: the part past it was not read. With ``--review never``
+    there is no one to ask, so the hook refuses it."""
+    return Hit(ASK, why, trigger, limit=why)
+
+
+# The limits met while one call is read, for the places that return a path's verdict as a pair, not a ``Hit`` (the path rules).
+_CAPS: ContextVar[list[str] | None] = ContextVar("intentshield_caps", default=None)
+
+
+def _note_cap(why: str) -> None:
+    caps = _CAPS.get()
+    if caps is not None:
+        caps.append(why)
 
 
 @dataclass

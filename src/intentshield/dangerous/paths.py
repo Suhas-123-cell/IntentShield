@@ -5,10 +5,13 @@ import fnmatch
 import os
 import posixpath
 import re
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
-from .core import _EVENT_HOMES, _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, _bin
+from intentshield.shell.lexical import without_logins, without_selectors
+
+from .core import _EVENT_HOMES, _PATH_CAP, _PATH_CAP_WHY, _WORKDIR, ASK, DENY, _bin, _note_cap
 from .writes import _EDITORS
 
 # --- paths -----------------------------------------------------------------------------------------------------
@@ -156,6 +159,30 @@ def _protected(path: str) -> bool:
     return any(low == posixpath.dirname(h).lower() for h in _homes() if posixpath.dirname(h) != "/")   # the directory of homes
 
 
+def _protected_candidates() -> tuple[str, ...]:
+    """The protected paths as ``_norm`` writes them, in lower case: the roots and system directories, the home directory, the
+    folders of the home that ``_HOME_DIRS`` lists, and the directory that holds the homes."""
+    homes = {posixpath.dirname(h).lower() for h in _homes() if posixpath.dirname(h) != "/"}
+    return (*(p for p in sorted(_PROTECTED_LOWER) if p != "/"), *(f"~/{d}" for d in sorted(_HOME_DIRS_LOWER)), *sorted(homes))
+
+
+def _glob_hits(path: str, candidates: Iterable[str]) -> bool:
+    """``path`` is rooted (``/``, ``~``, ``$HOME``), has a glob in a part that is not made of glob characters alone (``/us*``,
+    ``~/Doc*``, ``/[u]sr``, ``~/.s*``), and one of the ``candidates`` (normalised, lower case) is a path it matches, part by part.
+    A relative path is a path in the project and is not read. A glob made of glob characters alone is read by ``_norm``."""
+    p = path.strip().strip("\"'")
+    if not p or len(p) > _PATH_CAP or not p.startswith(("/", "~", "$")) or not any(c in p for c in "*?["):
+        return False
+    n = _norm(_clean_path(p)).lower()
+    return any(c in n for c in "*?[") and any(_segments_match(name, n) for name in candidates)
+
+
+def _protected_glob(path: str) -> bool:
+    """A glob that names a protected path among the paths it matches (``rm -rf /us*``, ``rm -rf ~/Doc*``): it gets the verdict of
+    that path."""
+    return _glob_hits(path, _protected_candidates())
+
+
 def _home_or_above(path: str) -> bool:
     """``path`` is a home directory or a directory above one (``/``, ``/Users``, ``/home``, ``/mnt/c/Users``, ``~/..``): a search
     of it reaches ``~/.ssh`` and ``~/.aws`` as a search of the home itself does. ``/Users/x/..`` is ``/Users``; a path in a
@@ -238,7 +265,7 @@ _SOFT_FILES = re.compile(r"(?:^|/)(?:\.kube/config|\.docker/config\.json|\.npmrc
                          r"\.config/gcloud|\.config/gh/hosts\.yml|\.config/hub|\.terraform\.d/credentials|\.heroku/|"
                          r"\.config/doctl|\.config/op/|\.pgpass|\.my\.cnf|\.s3cfg|\.boto|\.gnupg|\.password-store/|\.cargo/"
                          r"credentials|"
-                         r"\.config/rclone/rclone\.conf|\.oci/config|\.git-credentials|"
+                         r"\.config/rclone/rclone\.conf|\.oci/config|\.git-credentials|\.config/git/credentials|"
                          r"\.codex/auth\.json|\.gemini/(?:oauth_creds|mcp-oauth-tokens)\.json|\.claude/\.credentials\.json|"
                          r"\.claude\.json$)")
 # The directory of a credential store, or a glob over it (``~/.aws/*``, ``~/.aws/c*``): everything in it is read.
@@ -387,7 +414,10 @@ def _cred_level(path: str) -> tuple[str, str] | None:
         return None
     path = _clean_path(path)
     if len(path) > _PATH_CAP:
-        return (ASK, _PATH_CAP_WHY) if _pathlike(path) else None
+        if not _pathlike(path):
+            return None
+        _note_cap(_PATH_CAP_WHY)
+        return ASK, _PATH_CAP_WHY
     n = _norm(path).lower() if path.startswith(("~", "$", "/")) else posixpath.normpath(path.strip()).lower()
     raw = path.strip().lower()
     base = n.rpartition("/")[2]
@@ -563,10 +593,12 @@ def _named_secret(argv: list[str]) -> tuple[str, str, str] | None:
     name = _bin(argv[0])
     if name in _NAMES_ONLY:
         return None
-    args = argv[1:]
+    args = without_selectors(argv)[1:]
     for k, a in enumerate(args):
         if (k and args[k - 1] in _IDENTITY_OPTIONS) or a in _IDENTITY_OPTIONS or a.lower().startswith("identityfile"):
             continue
+        if " " in a:   # a string a shell runs (``bash -c 'ssh -o IdentityFile=KEY host'``): the login keys in it are not named
+            a = without_logins(a)
         for c in [*_candidates(a), a[7:] if a.lower().startswith("file://") else a]:
             c = c.strip("\"'")
             hit = _cred_level(c) if _pathlike(c) and "://" not in c else None
@@ -600,7 +632,10 @@ def persistence_path(path: str) -> tuple[str, str] | None:
     """(decision, why) when writing ``path`` sets up code that runs later or changes who can log in."""
     path = _clean_path(path)
     if len(path) > _PATH_CAP:
-        return (ASK, _PATH_CAP_WHY) if _pathlike(path) else None
+        if not _pathlike(path):
+            return None
+        _note_cap(_PATH_CAP_WHY)
+        return ASK, _PATH_CAP_WHY
     n = _norm(path).lower() if path.startswith(("~", "$", "/")) else posixpath.normpath(path.strip().replace("\\", "/")).lower()
     if not n:
         return None

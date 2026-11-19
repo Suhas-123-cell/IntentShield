@@ -4,10 +4,24 @@ The reference behind the [README](../README.md): what each placement of the guar
 `install`, `wrap`, `scan` and the judge options do in full, the architecture, and the upstream config.
 Running the dashboard, the gateway and the REST API is in [gateway.md](gateway.md); hooks, threat memory and troubleshooting are in [guide.md](guide.md).
 
+On this page: [terms](#terms) · [what each layer sees and stops](#what-each-layer-sees-and-stops) ·
+[what `install` and `wrap` write](#what-install-and-wrap-write) · [the LLM judge](#the-optional-llm-judge) ·
+[scan](#scan-the-mcp-servers-you-already-use) · [architecture](#architecture) · [security boundary](#security-boundary) ·
+[configure an upstream](#configure-an-upstream) · [try it from a clone](#try-it-from-a-clone)
+
 ## Terms
 
 The one glossary for the project's documents; the README and the other pages link here.
 
+- **MCP (Model Context Protocol):** the protocol by which an AI agent calls tools that run in separate programs, called MCP servers.
+- **Harness:** the agent program you run, such as Claude Code, Codex CLI, Cursor or Gemini CLI. It sends your prompt to a model and runs
+  the tool calls the model asks for. IntentShield checks those calls before the harness runs them.
+- **Hook:** a command the harness runs before and after each tool call and asks what to do. `intentshield install <harness>` registers
+  IntentShield as that command; it answers allow, ask or deny.
+- **Proxy (transparent proxy):** a small program that stands between a harness and one MCP server. `intentshield wrap <file>` puts it in
+  front of each stdio server in a config file. It sees the server's tool descriptions and results, which a hook does not.
+- **Gateway:** an MCP server of IntentShield's own (`intentshield-mcp`). The agent calls other tools through its `intentshield_call`
+  tool, and it holds a call that changes something until a person approves it. Most people use hooks and the proxy instead.
 - **Allow, ask, deny:** the three answers a hook gives to a proposed tool call. An ask holds the call for you to confirm; a deny
   blocks it. The gateway and the benchmarks call the same three answers ALLOW, REVIEW and BLOCK, and a call in the review queue has not run.
 - **State-changing call:** a tool call that writes, sends or deletes, as opposed to a read.
@@ -66,10 +80,10 @@ per-session SQLite file at `~/.intentshield/hooks.db`.
   is tainted.
 - Scans every result and taints the session. A result longer than 1,000,000 characters is scanned at its
   first and last 500,000 characters, the reply says the rest was not checked, and later state-changing calls ask. The arguments of a
-  call are read the same way, and the call asks, naming the limit (since 0.4.4).
+  call are read the same way, and the call asks, naming the limit.
 - Asks before a call carrying a recipient, URL, account or path that came only from a tool output, and before
   state-changing calls once tainted (`--review always|tainted|never`).
-- A hook that cannot start or crashes is refused on every harness. Since 0.4.3, `install` puts a launcher in front
+- A hook that cannot start or crashes is refused on every harness. `install` puts a launcher in front
   of the hook on Claude Code, Codex CLI and Gemini CLI that turns a start failure or a crash into a refusal, and
   gives the hook its own 30 s deadline so a slow judge answers before the harness's timeout. Claude Code also gets
   `onFailure: block` and Cursor `failClosed`. The launcher is for POSIX shells: it is left out on Windows and by
@@ -90,52 +104,15 @@ results, file reads, searches and writes. `Grep` is read by its `path`. Claude C
 `list_directory` and `glob`) are not covered: they return names, not file content. A built-in call whose event the hook cannot
 read (an unknown event name, or a command, path or URL that is missing or not text) is refused rather than passed.
 
-- Denies a command or fetch that reaches an address from an injected output.
-- Asks before a command sends data (upload flags, POST, stdin into a network tool, `scp`/`rsync` push,
-  `git push`) to an address that came only from a tool output, or pipes a fetched script from one into a shell.
-- Asks before a command reads secrets (`.env`, `~/.ssh`, `.aws/credentials`, `printenv`) and sends data out,
-  unless the user named the destination.
-- Once an output tried to instruct the agent, asks before a command that is neither read-only nor an ordinary
-  local build, test or version-control command (`pytest`, `git status` and `git commit` pass; `rm`, `sed -i`
-  and `pip install` ask; under `--review always`, or when the command names a path that sets up code a later
-  session runs, an ordinary command asks too; a plain `curl` or `wget -qO-` download counts as read-only only
-  when every host it reaches was named by the user), any read of a credential store, and writes to shell
-  startup files, SSH, git hooks or a harness's settings.
-- Always asks, in any session and flagged or not, before a call that changes IntentShield's own protection: an
-  `intentshield uninstall`, `unwrap`, `install` or `wrap` without `--dry-run`, removing the package, deleting
-  `~/.intentshield`, `hooks.db` or `threats.db`, or a write to a harness's settings or hook files. This is a speed
-  bump for an agent that was talked into it, not protection against one that is determined: the text rules do
-  not see a directory or variable set by an earlier call.
-- When the session rules and the text rules disagree, the stricter one wins (a deny beats an ask beats an allow).
-- Pages, search results and the output of `curl`, `gh` or other remote commands flag the session; the user's
-  own files and local command output only warn (the rules fire on ordinary auth code and LLM prompts).
-- On Cursor, a command with no objection gets `{}` (an empty JSON object, never a truly empty reply, which a
-  fail-closed Cursor hook treats as a failure), which leaves it to Cursor's own approval (measured: an explicit
-  `allow` did not skip it either).
-- Since 0.4.3, text rules for dangerous commands (a recursive delete of home, a force-push of a shared branch,
-  a read of an SSH key, `curl | sh`, ...) also run when the session rules allow. They are opt-in text rules,
-  and what the study measured about their misses is in
-  [the rules page](rules.md#what-the-study-measured-about-these-rules). They read the command behind about 90 wrapper
-  programs (`sudo`, `env`, `flock`, `ssh host`, `find -exec`, ...), and a command past a limit (more than 8 wrappers, 200
-  substitutions or a long brace list) asks and is never allowed. The `PowerShell` tool is read as the POSIX commands its
-  cmdlets mean (`Remove-Item -Recurse -Force`, `Get-Content`, `Invoke-WebRequest` uploads, a download run with
-  `Invoke-Expression`); other cmdlets are not read (the list is in [rules.md](rules.md#which-tools-are-covered)). The wrappers, the limits and the PowerShell
-  cmdlets are there since 0.4.4.
-- The text rules read a path as the place it names, not as it is spelled: dot segments, doubled slashes, a trailing slash and a
-  climb (`~/../x/.ssh/id_rsa`) get the verdict of the plain path. A relative path climbs from the call's working directory as
-  the event wrote it; it is resolved for the path arguments of commands (also the file arguments of a shell or an interpreter), redirect
-  targets and the file tools, and not for a path inside code given to an interpreter with `-c` or `-e`, a path in a script file or a
-  directory an earlier call changed. A write is read as one in these forms (`perl -pi`, `sed -ni`, `awk -i inplace`, an editor, `cp -t DIR`,
-  `tar -C DIR`, `unzip -d DIR`, `rsync` or `scp` to a local path, a `find` that deletes or runs a command), so a write to an access file
-  such as `/etc/sudoers` is a deny in each. A home directory is also the home of the running user wherever it lies (`/mnt/c/Users/x`, `/workspace`), and
-  the listed folder names match in any case (since 0.4.4).
-- The text rules read the harness's own tools. With `--builtin-tools` they also read (since 0.4.4) the path and command
-  arguments of MCP tools (`path`, `file`, `filename`, `command`, `cmd` and a few more); anything else an MCP filesystem or shell
-  server is asked to do is not read.
-- One difference between the tools: in a session where an output tried to instruct the agent, `curl` to a host the user did
-  not name asks, but `WebFetch` to one does not (fetching a page an output linked to is how agents browse). It is refused
-  when the address came from the injected output, and asks for another page of that address's host
-  ([the rules](rules.md#session-rules)).
+Every rule, what is read and what is not, and the verdict of each command class are on one page: [rules.md](rules.md). In short, the
+session rules deny or ask about a command, fetch or file access that carries an address or a secret a tool output supplied, the text
+rules for dangerous commands run beside them, the stricter verdict wins, and a call that changes IntentShield's own protection always
+asks ([session rules](rules.md#session-rules), [the guard's own files](rules.md#the-guards-own-files)). The text rules also read the
+path and command arguments of MCP tools; anything else an MCP filesystem or shell server is asked to do is not read
+([rules.md](rules.md#mcp-tools-are-mostly-outside-these-rules)).
+
+On Cursor, a command with no objection gets `{}` (an empty JSON object, never a truly empty reply, which a fail-closed Cursor hook
+treats as a failure), which leaves it to Cursor's own approval (measured: an explicit `allow` did not skip it either).
 
 ### Transparent proxy
 
@@ -195,7 +172,7 @@ the gateway's tools and the proxy config keys are in
 
 `install` merges the hook entries into the harness's own settings file (`~/.claude/settings.json`,
 `~/.codex/config.toml`, `~/.cursor/hooks.json`, `~/.gemini/settings.json`; `--scope project` uses the file in
-the current directory, and for Claude Code that is `.claude/settings.local.json` since 0.4.4 and `.claude/settings.json` in 0.4.3), naming the installed executable by absolute path, and leaves every other setting alone.
+the current directory, and for Claude Code that is `.claude/settings.local.json`), naming the installed executable by absolute path, and leaves every other setting alone.
 Both `install` and `wrap` are idempotent and reversible (`uninstall`, `unwrap`), and `--dry-run` prints the file
 instead of writing it.
 
@@ -205,20 +182,19 @@ key (`mcp.json`) or `mcp.servers` key (`settings.json`), and for the `[mcp_serve
 `~/.codex/config.toml`. A TOML entry that is an inline table or uses dotted keys is skipped with a message that names the manual
 entry. `unwrap` and `uninstall` give back the file's exact bytes (line endings, comments, spacing). Each
 server entry is rewritten to launch `intentshield-mcp --transparent` with a generated config in
-`~/.intentshield/proxies/`, with an audit database named like that config (`NAME-<hash>.db`, per client file; a server wrapped by 0.4.3 keeps the `NAME.db` it already has), and literal `env` secrets stay in the client's file and are forwarded by name only.
+`~/.intentshield/proxies/`, with an audit database named like that config (`NAME-<hash>.db`, per client file; a server wrapped earlier keeps the `NAME.db` it already has), and literal `env` secrets stay in the client's file and are forwarded by name only.
 A wrapped server gets the variables its entry's `env` names plus basics such as `PATH` and `HOME`, not the rest
 of your shell's environment, so name any other variable it needs (a proxy setting, `AWS_*`, `SSH_AUTH_SOCK`)
 in `env`.
 
 Both write absolute paths of the machine they ran on. Do not commit a project file they changed
-(`.mcp.json`, `.claude/settings.json`, `.cursor/hooks.json`, `.gemini/settings.json`; since 0.4.4, Claude Code's project hooks
-go to `.claude/settings.local.json` instead of `.claude/settings.json`): a teammate who clones
+(`.mcp.json`, `.claude/settings.local.json`, `.cursor/hooks.json`, `.gemini/settings.json`): a teammate who clones
 it gets a server entry or hook that points at a path that does not exist, and a hook launcher that refuses every
 MCP call. Run `install` and `wrap` on each machine instead.
 
 When the guard refuses or asks about something legitimate, or `intentshield doctor` reports a problem, see
 [When the guard blocks or asks about something legitimate](guide.md#when-the-guard-blocks-or-asks-about-something-legitimate)
-and [Troubleshooting](guide.md#troubleshooting). Since 0.4.3, `intentshield wrap-hook` puts the same
+and [Troubleshooting](guide.md#troubleshooting). `intentshield wrap-hook` puts the same
 fail-closed launcher and deadline in front of a third-party hook
 ([Wrapping a third-party hook](guide.md#wrapping-a-third-party-hook)).
 
@@ -379,7 +355,8 @@ echo '{"hook_event_name":"PreToolUse","session_id":"demo","tool_name":"mcp__mail
 ```
 
 The verifier wires a real stdio MCP proxy to the bundled demo server and prints one JSON report whose
-`"status"` is `PASS` (13 checks, including a blocked canary call that never executes). The last command is the
+`"status"` is `PASS` (13 checks, including a blocked canary call that never executes). On a terminal it prints the summary
+(`PASS 13/13 checks`) instead; piped or redirected it prints the JSON, and `--json` and `--summary` force either. The last command is the
 Claude Code `PreToolUse` hook denying a call whose arguments carry injected instructions:
 `"permissionDecision": "deny", "permissionDecisionReason": "Arguments carry injected instructions (instruction_override)."`
 Piped by hand like this, the event comes from your terminal and not from a harness, so `intentshield doctor` does not

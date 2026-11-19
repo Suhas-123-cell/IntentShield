@@ -102,7 +102,7 @@ def test_install_keeps_its_advice_and_uninstall_does_not_ask_for_entries_to_add(
     settings.parent.mkdir()
     settings.write_text("// note\n{}", encoding="utf-8")
     assert cli.run(_args("install")) == 1
-    assert "install <harness> --dry-run" in capsys.readouterr().err
+    assert "`intentshield install claude --dry-run`" in capsys.readouterr().err
     assert cli.run(_args("uninstall")) == 1
     err = capsys.readouterr().err
     assert "remove the entries whose command runs intentshield-hook by hand" in err and "--dry-run" not in err
@@ -150,14 +150,15 @@ def test_a_file_that_changed_meanwhile_keeps_its_own_message(capsys):
 def test_a_missing_claude_binary_is_named(home: Path, capsys):
     install.install("claude", home=home, cwd=home, hook="/opt/bin/intentshield-hook")
     out = capsys.readouterr().out
-    assert "could not read the version of claude (it is not on PATH)" in out and "Put it on PATH" in out
-    assert "blocked instead, which is the safe side" in out
+    assert "could not read the version of claude (it is not on PATH, or its --version printed no number" in out
+    assert "Put it on PATH" in out and "blocked instead, which is the safe side" in out
 
 
 def test_a_missing_cursor_binary_is_named_by_the_program_that_was_looked_for(home: Path, capsys):
     install.install("cursor", home=home, cwd=home, hook="/opt/bin/intentshield-hook")
     out = capsys.readouterr().out
-    assert "could not read the version of cursor (`cursor-agent` is not on PATH)" in out and "Put `cursor-agent` on PATH" in out
+    assert "could not read the version of cursor (`cursor-agent` is not on PATH, or its --version printed no number" in out
+    assert "records it once `cursor-agent` is on PATH" in out
 
 
 # --- Claude Code's built-in tools ----------------------------------------------------------------------------------------

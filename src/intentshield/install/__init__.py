@@ -53,6 +53,8 @@ from .hooks import (
     hook_command,
     hook_entries,
     merge_hooks,
+    relocated_config_advice,
+    relocated_config_dir,
     remove_hooks,
     settings_path,
 )
@@ -219,6 +221,8 @@ __all__ = [
     "legacy_project_settings",
     "merge_hooks",
     "proxy_config",
+    "relocated_config_advice",
+    "relocated_config_dir",
     "remove_hooks",
     "run",
     "server_stem",

@@ -420,9 +420,10 @@ def test_doctor_flags_a_hook_installed_without_the_translation(tmp_path, capsys)
     doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db", verbose=True)
     out = capsys.readouterr().out
     assert "installed without the verdict translation" in out
-    assert "version unknown" in out                      # no version recorded here: the doctor says what that costs
+    # no version recorded here: the doctor says what that costs, which for Codex is nothing
+    assert "could not be read" in out and "do not depend on it" in out
     doctor.doctor(home, tmp_path, home / ".intentshield" / "hooks.db")
-    assert "version unknown" not in capsys.readouterr().out   # a note is printed with --verbose only
+    assert "do not depend on it" not in capsys.readouterr().out   # a note is printed with --verbose only
 
 
 def test_findings_name_the_measured_conditions_per_version():

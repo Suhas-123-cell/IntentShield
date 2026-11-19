@@ -95,7 +95,7 @@ def _hooks(harness: str, path: Path) -> dict[str, list[dict[str, Any]]]:
     if harness == "codex":
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     else:
-        data = install._read_json(path)
+        data = install._read_json(path, rewriting=False)
     hooks = data.get("hooks") if isinstance(data, dict) else None
     found: dict[str, list[dict[str, Any]]] = {}
     for event, groups in (hooks.items() if isinstance(hooks, dict) else ()):
@@ -366,6 +366,8 @@ def _check_runs(report: Report, subject: str, harness: str, path: Path, home: Pa
                         "prompt; if this stays, the harness is not running the hooks.")
         elif (runs.events.get(harness) or 0) < installed and time.time() - installed < FRESH_SECONDS:
             # Right after an install no hook has run, which is what a working install looks like until the harness is used.
+            if report.problems > problems_before:  # a FAIL above says why; this line would promise that it turns ok
+                return
             minutes = max(int((time.time() - installed) // 60), 0)
             report.line("warn", subject, f"installed {minutes} minute(s) ago; no hook has run yet, which is expected until "
                         f"you use {harness}. Start {harness}, send any prompt"
@@ -391,11 +393,16 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
     try:
         hooks = _hooks(harness, path)
     except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
-        report.line("FAIL", subject, f"cannot read the settings file: {exc}")
+        why = str(exc).replace("install <harness>", f"install {harness}")
+        if isinstance(exc, OSError):
+            why += "; make the file readable by you, or move it aside, then run `intentshield doctor` again"
+        report.line("FAIL", subject, f"cannot read the settings file: {why}")
         return True
     if not hooks:
         return False
     problems_before = report.problems
+    if project is None and (moved := install.relocated_config_dir(harness, home)):
+        report.line("warn", subject, install.relocated_config_advice(harness, *moved, path))
     before, why_stale = translation.recorded_version(harness, home)
     version = _harness_version(harness, home)
     if before is None and why_stale and not why_stale.startswith("no version"):
@@ -422,7 +429,19 @@ def _check_harness(report: Report, harness: str, path: Path, runs: Runs | None, 
                                          "no deadline): a hook that cannot start, or a slow one, lets the call run on every "
                                          f"harness measured; run `intentshield install {harness}` again")
     gemini_ask = any("--gemini-ask" in h["command"] for handlers in hooks.values() for h in handlers)
+    if version is None:  # the notes below say the same, but a note is hidden by default and this one costs the user prompts
+        program = translation._PROCESS.get(harness, harness)  # Cursor's command line program is `cursor-agent`
+        why = (f"the version of {program} could not be read ({program} is not on PATH, or its --version printed no number or "
+               "did not answer) and none was recorded")
+        if harness == "claude" or (harness == "gemini" and gemini_ask):  # the only verdicts that depend on the version
+            report.line("warn", harness, f"{why}, so a call that would ask you is blocked instead. Put {program} on PATH, then "
+                                         "run `intentshield doctor` again to record it")
+        else:
+            report.line("note", harness, f"{why}. The hook's verdicts for {harness} do not depend on it, so nothing changes. "
+                                         f"Put {program} on PATH, then run `intentshield doctor` again to record it")
     for level, message in translation.findings(harness, version, gemini_ask):
+        if version is None and message.startswith(f"{harness}: version unknown"):
+            continue  # said above, for the harnesses whose verdicts depend on it and for the others
         report.line(level, subject, message)
     for event, what in ((_CALL_EVENT.get(harness), "call is checked"),
                         (_RESULT_EVENT.get(harness), "result is scanned or tainted")):
@@ -472,9 +491,12 @@ def _check_servers(report: Report, path: Path, connect: list[tuple[Path, str, di
     """Checks the MCP servers of one client file; returns how many are behind the transparent proxy. Each wrapped server whose
     proxy config and command were found is added to ``connect`` when that list is given."""
     try:
-        groups = install._server_groups(install._read_client(path))
+        groups = install._server_groups(install._read_client(path, rewriting=False))
     except (OSError, ValueError) as exc:
-        report.line("warn", str(path), f"cannot read MCP servers: {exc}")
+        why = str(exc)
+        if why.endswith(install.records._BY_HAND_PROXY):  # that tail tells `wrap` users what to do; doctor reads only
+            why = why[:-len(install.records._BY_HAND_PROXY)].rstrip(" ,") + ", then run `intentshield doctor` again"
+        report.line("warn", str(path), f"cannot read MCP servers: {why}")
         return 0
     bare = []
     wrapped = 0
@@ -513,8 +535,9 @@ def _check_servers(report: Report, path: Path, connect: list[tuple[Path, str, di
     if found_ok:
         report.line("ok", str(path),
                     f"{len(found_ok)} server(s) behind the proxy ({', '.join(sorted(found_ok))}): the proxy config "
-                                     "exists and the server's command was found. This does not start the proxy; "
-                                     f"`intentshield doctor {'--connect-project' if project else '--connect'}` does")
+                                     "exists and the server's command was found"
+                                     + ("" if connect is not None else ". This does not start the proxy; "
+                                        f"`intentshield doctor {'--connect-project' if project else '--connect'}` does"))
     if bare:
         report.line("warn", str(path), f"{len(bare)} stdio server(s) not behind the transparent proxy, so their tool "
                                        f"descriptions go unchecked: {', '.join(sorted(bare))}. ",
@@ -526,6 +549,7 @@ def _connect(report: Report, targets: list[tuple[Path, str, dict[str, Any]]], ti
     """Starts each wrapped server through its proxy once, as its client would, and lists its tools. Starting a server runs its
     code, with a minimal inherited environment and the entry's own ``env``."""
     try:
+        from .mcp_inspect import scan_description, tool_text
         from .mcp_upstream import MCPUpstream, MCPUpstreamConfig
         from .scan import safe_environment
     except ModuleNotFoundError as exc:
@@ -533,14 +557,16 @@ def _connect(report: Report, targets: list[tuple[Path, str, dict[str, Any]]], ti
         report.line("FAIL", "--connect", f"the package '{exc.name}' is not installed")
         return
 
-    async def tools(server: dict[str, Any]) -> list[str]:
+    async def tools(server: dict[str, Any]) -> list[tuple[str, bool]]:
+        """(name, whether the proxy would hide it) of each tool, by the poisoning rules that `intentshield scan` applies."""
         config = MCPUpstreamConfig.model_validate({
             "server_id": "doctor-check", "transport": "stdio", "command": str(server["command"]),
             "args": [str(a) for a in server.get("args") or []], "timeout_seconds": timeout, "read_timeout_seconds": timeout})
         env = {**safe_environment(), **{str(k): str(v) for k, v in (server.get("env") or {}).items()}}
         async with asyncio.timeout(timeout):
             async with MCPUpstream(config.model_copy(update={"env": env})) as upstream:
-                return [t.name for t in await upstream.list_tools()]
+                return [(t.name, bool(scan_description(tool_text(t.description or "", t.input_schema, t.title), [])))
+                        for t in await upstream.list_tools()]
 
     for path, label, server in targets:
         try:
@@ -550,6 +576,10 @@ def _connect(report: Report, targets: list[tuple[Path, str, dict[str, Any]]], ti
                                            f"{str(exc).splitlines()[0][:160] if str(exc) else 'no message'})")
         else:
             report.line("ok", str(path), f"{label}: started through the proxy and listed {len(names)} tool(s)")
+            if hidden := [name for name, poisoned in names if poisoned]:
+                report.line("warn", str(path), f"{label}: the proxy hides {len(hidden)} of its {len(names)} tool(s) "
+                                               f"({', '.join(hidden)}) because the description matches the poisoning rules",
+                            command=f". See why with `intentshield scan {shlex.quote(str(path))}`")
 
 
 def _check_database_versions(report: Report, db: Path) -> None:
@@ -558,6 +588,8 @@ def _check_database_versions(report: Report, db: Path) -> None:
     from .harness.store import SCHEMA_VERSION as HOOKS_SCHEMA
     from .threat_memory import SCHEMA_VERSION as THREATS_SCHEMA
 
+    if not db.name:   # ``--db .`` names a directory, which has no database beside it
+        return
     for database, known in ((db, HOOKS_SCHEMA), (db.with_name("threats.db"), THREATS_SCHEMA)):
         if (newer := storage.newer_schema(database, known)) is not None:
             report.line("warn", str(database),
@@ -601,6 +633,9 @@ def doctor(home: Path | None = None, cwd: Path | None = None, db: Path | None = 
             else:
                 started += targets
     if connect:
+        if not started and not unstarted and not report.problems:  # --connect with nothing wrapped would print nothing
+            report.line("--", "--connect", "no wrapped MCP server was found to start. `intentshield wrap <file>` puts the "
+                                           "servers of an MCP file behind the proxy")
         _connect(report, started)
         for path in unstarted:
             report.line("--", str(path), "its wrapped servers were not started: the file is in this directory, so it is code the "
@@ -733,7 +768,8 @@ def add_subcommand(sub: Any) -> None:
     p.add_argument("--verbose", action="store_true",
                    help="also print the notes: facts about how each harness behaves that IntentShield already allows for")
     p.add_argument("--connect-project", action="store_true",
-                   help="with --connect, also start the servers named by files in this directory (code the repository chose)")
+                   help="also start the servers named by files in this directory (code the repository chose); implies "
+                        "--connect")
 
 
 def run(args: argparse.Namespace) -> int:

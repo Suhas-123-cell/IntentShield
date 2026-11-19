@@ -37,6 +37,54 @@ class _Secret:
 
 
 SECRET = _Secret()
+
+_AUTH_COMMAND = re.compile(r"(?<![\w.-])(?:ssh|scp|sftp|rsync|sshfs|mosh)(?![\w:-])[^;&|\n]*")
+_LOGIN_KEY = re.compile(r"(?<![\w-])-i[ \t]*(?:'[^']*'|\"[^\"]*\"|[^\s;&|]+)|IdentityFile[= \t]+(?:'[^']*'|\"[^\"]*\"|[^\s;&|]+)")
+
+
+def without_logins(text: str) -> str:
+    """``text`` (a string a shell runs) without the key files that ssh-family commands in it name for a login: the same keys
+    ``_without_identity`` leaves out of a command that is not inside a shell string."""
+    return _AUTH_COMMAND.sub(lambda m: _LOGIN_KEY.sub("", m[0]), text)
+
+
+_TEST_RUNNERS = frozenset({"pytest", "py.test", "jest", "vitest", "mocha", "phpunit"})
+_TEST_COMMANDS = frozenset({"go", "npm", "yarn", "pnpm", "bun"})
+_SELECTORS = frozenset({"-k", "-t", "-run", "-test.run", "--grep", "--testNamePattern", "--test-name-pattern"})
+
+
+_RUN_PREFIXES = frozenset({"python", "python3", "py", "-m", "npx", "bunx", "uv", "uvx", "run", "exec", "poetry", "pipenv", "pdm",
+                           "hatch", "coverage", "sudo", "env", "time", "nice", "command", "--", "dlx", "x"})
+
+
+def _starts_a_run(word: str) -> bool:
+    """``word`` may stand in front of a test runner without making it an argument of another program: an interpreter, a package
+    runner, a wrapper, a variable assignment or the program (``go``, ``npm``) whose ``test`` command it is."""
+    name = PurePosixPath(word).name
+    return (name in _RUN_PREFIXES or name in _TEST_COMMANDS or bool(re.fullmatch(r"python3\.\d+|[A-Za-z_]\w*=.*", name))
+            or bool(re.fullmatch(r"[A-Za-z_]\w*=.*", word)))
+
+
+def without_selectors(words: list[str]) -> list[str]:
+    """``words`` of a test run without the value of its test selector (``pytest -k id_rsa``, ``go test -run X``, ``jest -t
+    "ssh"``, ``--grep``): it picks test names and is not a path or a program the run reads or starts."""
+    start = next((i for i, w in enumerate(words[:6]) if PurePosixPath(w).name in _TEST_RUNNERS
+                  or (i and PurePosixPath(w).name == "test" and PurePosixPath(words[i - 1]).name in _TEST_COMMANDS)), None)
+    if start is None or not all(_starts_a_run(w) for w in words[:start]):   # ``curl pytest -k FILE`` is not a test run
+        return words
+    out, skip = words[:start + 1], False
+    for w in words[start + 1:]:
+        if skip:
+            skip = False
+        elif w in _SELECTORS:
+            skip = True
+        elif w.partition("=")[0] in _SELECTORS and "=" in w or (w.startswith("-k") and not w.startswith("--") and len(w) > 2):
+            continue
+        else:
+            out.append(w)
+    return out
+
+
 # Commands that print secrets with no file argument to match.
 _SECRET_COMMANDS = {("printenv",), ("gh", "auth", "token"), ("security", "find-generic-password"),
                     ("security", "find-internet-password"), ("aws", "configure", "export-credentials")}

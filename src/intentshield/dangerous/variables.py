@@ -74,11 +74,16 @@ _FILE_FIELD = re.compile(r"((?:[^=@\s]{1,40}=)?@)(.+)")
 _REMOTE_WORD = re.compile(r"^(?:[\w.+-]{1,64}@)?[\w.-]{1,255}:(?!//)")
 
 
+# A word that holds a space and then an option or an absolute path (``ssh -i ~/.ssh/work``, the value of ``git config
+# core.sshCommand``) is a command line, not a path of the directory the command runs in.
+_COMMAND_LINE = re.compile(r"\s(?:-|~/|/|\$)")
+
+
 def _under(cwd: str, arg: str) -> str:
     """``arg`` as a path from the directory ``cwd`` when it is relative, else as it is."""
     if FOLLOW.get():   # the path a link on the way leads to, for an absolute path and a ``~`` path as well
         return (real_path(arg, cwd) or arg) if arg and not arg.startswith("-") else arg
-    if not arg or arg.startswith(("-", "/", "~", "$")) or "://" in arg:
+    if not arg or arg.startswith(("-", "/", "~", "$")) or "://" in arg or _COMMAND_LINE.search(arg):
         return arg
     return _norm(cwd + "/" + arg)
 
@@ -103,6 +108,14 @@ def _resolved_word(cwd: str, name: str, arg: str) -> str:
     if "=" in arg or "@" in arg or _REMOTE_WORD.match(arg):
         return arg
     return _under(cwd, arg)
+
+
+def _git_config(args: list[str]) -> bool:
+    """The arguments of a ``git config`` command (after the options of git itself, which may be ``-c k=v`` or ``-C dir``)."""
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        i += 2 if args[i] in ("-c", "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path") else 1
+    return i < len(args) and args[i] == "config"
 
 
 def _in_dir(cwd: str, name: str, argv: list[str]) -> list[str]:
@@ -140,6 +153,8 @@ def _in_dir(cwd: str, name: str, argv: list[str]) -> list[str]:
                 out.append(a if stopped else _under(cwd, a))
             prev = a
         return [head, *out]
+    if name == "git" and _git_config(args):   # a name and a value (``core.editor vim``), not paths; ``--file F`` names one
+        return [head, *(_resolved_word(cwd, name, a) if k and args[k - 1] in ("-f", "--file") else a for k, a in enumerate(args))]
     if name == "chattr":   # ``+i``, ``=a`` and ``-i`` are attributes; every other word is a file
         return [head, *(a if a.startswith(("+", "=")) else _resolved_word(cwd, name, a) for a in args)]
     if name in _CODE_RUNNERS:

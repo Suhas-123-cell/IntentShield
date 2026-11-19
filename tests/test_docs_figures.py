@@ -1,7 +1,8 @@
 """Figures that the front-door documents state, checked against the committed data or the scripts that print them.
 
-The README line budget and order, the reading path's word counts, the injection table, the upper bounds printed beside 0.0% cells
-and the baseline outputs in CONTRIBUTING.md.
+The README's size and width, its section order, the reading path's word counts, the injection table, the upper bounds printed
+beside 0.0% cells and the baseline outputs in CONTRIBUTING.md. A test that pins a sentence of the README compares it with the
+whitespace normalised, so that wrapping a line cannot break it.
 """
 from __future__ import annotations
 
@@ -23,12 +24,33 @@ def _wilson_upper(k: int, n: int, z: float = 1.959964) -> float:
     return 100 * (centre + half)
 
 
-def test_the_readme_stays_a_front_page_of_at_most_140_lines():
-    assert len(READ("README.md").splitlines()) <= 140
+MAX_README_WORDS = 2200       # the README has about 2,000 words; a cap with some room, not a target
+MAX_README_LINE = 160         # characters, outside tables, code blocks and link reference definitions
+
+
+def test_the_readme_stays_a_front_page_of_at_most_2200_words():
+    words = len(READ("README.md").split())
+    assert words <= MAX_README_WORDS, words
+
+
+def test_the_readme_is_readable_as_raw_text():
+    """No line of prose is wider than 160 characters: PyPI shows the README and a terminal shows it as written. Tables, code
+    blocks and link reference definitions (which carry the long addresses) are not prose."""
+    wide, fenced = [], False
+    for number, line in enumerate(READ("README.md").splitlines(), 1):
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        elif not fenced and not line.startswith("|") and not re.match(r"^\[[^\]]+\]: ", line) and len(line) > MAX_README_LINE:
+            wide.append(f"README.md:{number}: {len(line)} characters")
+    assert not wide, wide
+
+
+# A sentence added to or cut from a document moves its count by less than this; a larger edit updates the table.
+MAX_COUNT_DRIFT = 0.03
 
 
 def test_the_reading_path_word_counts_are_wc_counts():
-    """docs/README.md gives a word count and a time per step; each count is within 5% of `wc -w` on the file."""
+    """docs/README.md gives a word count and a time per step; each count is within 3% of `wc -w` on the file."""
     text = READ("docs/README.md")
     table = text.split("**A reading path**")[1].split("\n\n")[1]
     rows = [[c.strip() for c in line.strip("|").split("|")] for line in table.splitlines()[2:]]
@@ -43,7 +65,7 @@ def test_the_reading_path_word_counts_are_wc_counts():
         stated[step] = (count, int(minutes))
         key = next((k for k in actual if k in step), None)
         if key:
-            assert abs(count - actual[key]) <= 0.05 * actual[key], (key, count, actual[key])
+            assert abs(count - actual[key]) <= MAX_COUNT_DRIFT * actual[key], (key, count, actual[key])
     total_words, total_minutes = stated["all three"]
     parts = [v for k, v in stated.items() if k != "all three"]
     assert abs(total_words - sum(w for w, _ in parts)) <= 10
@@ -184,15 +206,33 @@ def test_the_readme_puts_the_quick_start_before_the_threat_model_and_the_documen
         assert headings.index(early) < results, early
 
 
-def test_the_readme_opens_with_what_the_tool_does_and_what_the_study_found():
-    """The first two paragraphs after the badges are a headline a non-specialist can repeat, then the quick start."""
+def test_the_readme_opens_with_what_the_tool_does_and_for_whom_and_reaches_the_first_command_within_250_words():
+    """The first paragraph after the badges says what the tool does and for whom; the study is a one-line pointer there and is
+    summarised in its own section; the first command of the quick start comes within about 200 words."""
     text = READ("README.md")
     before_quick_start = " ".join(text.split("\n## Quick start")[0].split())
     assert "checks what your AI coding agent does with MCP (Model Context Protocol) tools" in before_quick_start
-    assert "A study of Claude Code, Codex CLI and Gemini CLI found" in before_quick_start
     assert "default hook install runs rules" in before_quick_start
+    assert "22 of 22" not in before_quick_start and "[the hook study](#the-hook-study)" in before_quick_start
+    assert len(before_quick_start.split()) <= 250, len(before_quick_start.split())
+    paragraphs = [" ".join(p.split()) for p in text.split("\n## Quick start")[0].split("\n\n")]
+    first = next(i for i, p in enumerate(paragraphs) if p.startswith("IntentShield checks what your AI coding agent"))
+    assert first == min(i for i, p in enumerate(paragraphs) if p.startswith("IntentShield checks"))
+    assert "study" not in paragraphs[first] and "It is for developers" in paragraphs[first]
     quick = text.split("\n## Quick start\n")[1].split("\n```\n")[0]
     assert quick.count("\nintentshield ") + quick.count("\nuv tool ") == 3, quick
+
+
+def test_the_readme_says_where_an_ask_is_a_prompt_and_where_it_is_a_refusal_and_the_measured_builds():
+    flat = " ".join(READ("README.md").split())
+    assert flat.index("Only some harnesses show an ask as a prompt") < flat.index("## Quick start")
+    for named in ("Claude Code 2.1.85 or later in an interactive session", "Cursor for shell commands",
+                  "`install gemini --gemini-ask`",
+                  "Codex CLI, MCP calls on Cursor and Gemini CLI, and any headless run"):
+        assert named in flat, named
+    assert "--builtin-tools for shell, file and web tools" in flat.split("## Quick start")[1].split("What you should see")[0]
+    assert ("Claude Code 2.0.41 to 2.1.316, Codex CLI 0.131.0 to 0.166.0 and Gemini CLI 0.24.5 to 0.66.0; Cursor was not measured"
+            in flat)
 
 
 def test_the_readme_says_what_install_runs_and_what_scan_and_doctor_skip():
@@ -203,15 +243,17 @@ def test_the_readme_says_what_install_runs_and_what_scan_and_doctor_skip():
 
 
 def _section(heading: str) -> str:
-    return READ("README.md").split(f"\n## {heading}\n")[1].split("\n## ")[0]
+    """The text of a README section, without the link reference definitions that end the file."""
+    body = READ("README.md").split(f"\n## {heading}\n")[1].split("\n## ")[0]
+    return "\n".join(line for line in body.splitlines() if not re.match(r"^\[[^\]]+\]: ", line))
 
 
 def test_the_readme_results_summary_is_short_and_leads_with_the_weak_numbers():
     section = _section("Results")
-    lines = [line for line in section.splitlines() if line.strip()]
-    assert len(lines) <= 9, len(lines)      # the lead-in line and at most eight lines of summary
-    assert lines[1].startswith("- **Injection text the rules were not written for")
-    assert len(section.split()) <= 150, len(section.split())
+    items = [item for item in re.split(r"\n- ", "\n" + section) if item.strip()][1:]
+    assert len(items) <= 4, len(items)      # after the lead-in, at most four items of summary
+    assert " ".join(items[0].split()).startswith("**Injection text the rules were not written for")
+    assert len(section.split()) <= 190, len(section.split())
 
 
 def test_the_readme_hook_study_summary_is_short_and_leaves_the_detail_to_the_report():

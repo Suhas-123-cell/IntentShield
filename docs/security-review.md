@@ -2,6 +2,10 @@
 
 Four read-only reviewers audited IntentShield on 2026-10-30. Three fix agents and the main session then fixed what they found. This page lists every finding, what happened to it and what is still open. It is a self-review by the project's own tooling, not an independent audit.
 
+On this page: [scope and method](#scope-and-method) · [findings](#findings) · [measured effect of the fixes](#measured-effect-of-the-fixes) ·
+[attacks on the judge](#attacks-on-the-judge) · [residual risks and open items](#residual-risks-and-open-items) ·
+[second audit](#second-audit-2026-10-31) · [responsible disclosure](#responsible-disclosure)
+
 ## Scope and method
 
 Four areas, one reviewer each:

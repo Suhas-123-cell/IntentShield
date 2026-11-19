@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 import tempfile
@@ -62,11 +63,29 @@ def _exact_text(path: Path) -> str:
 GATEWAY_DOC = "https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/gateway.md#real-mcp-proxy"
 # What a file that does not parse is told to do instead: `install` prints hook entries, which only the hooks need.
 _BY_HAND_HOOKS = "or add the entries by hand from the output of `intentshield install <harness> --dry-run`"
+_BY_HAND_DRY_RUN = "or add the entries printed above by hand"  # the same command with --dry-run has just printed them
 _BY_HAND_UNINSTALL = "or remove the entries whose command runs intentshield-hook by hand"
 _BY_HAND_PROXY = f"then run the command again (to put the proxy in front of a server by hand instead, see {GATEWAY_DOC})"
 
 
-def _read_json(path: Path, by_hand: str = _BY_HAND_HOOKS) -> dict[str, Any]:
+def _holds_non_finite(data: Any) -> bool:
+    """Whether a parsed file holds NaN, Infinity or a number too large for a float (``1e400``): ``json.dumps`` would write each as
+    a bare word, which is not JSON, so a file that holds one cannot be written back."""
+    stack = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, float) and not math.isfinite(item):
+            return True
+        if isinstance(item, dict):
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return False
+
+
+def _read_json(path: Path, by_hand: str = _BY_HAND_HOOKS, rewriting: bool = True) -> dict[str, Any]:
+    """The file as a dict. With ``rewriting`` (the default) a file that holds a number JSON cannot write back is refused;
+    ``doctor`` only reads, so it passes False."""
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     _SEEN[path.resolve()] = text
     if not text.strip():
@@ -87,7 +106,11 @@ def _read_json(path: Path, by_hand: str = _BY_HAND_HOOKS) -> dict[str, Any]:
     if _has_comments(path) and strip_json_comments(text) != text:
         _COMMENTED.add(path.resolve())
     if not isinstance(data, dict):
-        raise ValueError(f"{path} is not a JSON object")
+        raise ValueError(f"{path} is not a JSON object (the file must start with {{ and end with }}); fix it or move it "
+                         "aside, then run the command again")
+    if rewriting and _holds_non_finite(data):
+        raise ValueError(f"{path} holds a number that JSON cannot write back (NaN, Infinity, or one too large such as 1e400), "
+                         "so it cannot be rewritten safely and was left unchanged; change that number, then run it again")
     return data
 
 
@@ -105,11 +128,11 @@ def _client_data(text: str, path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _read_client(path: Path) -> dict[str, Any]:
+def _read_client(path: Path, rewriting: bool = True) -> dict[str, Any]:
     """Like ``_read_json``, for a TOML client file too; what it says to do about a file that does not parse fits ``wrap``,
     ``unwrap`` and ``doctor``, which read MCP client files, not a hook settings file."""
     if not _is_toml(path):
-        return _read_json(path, _BY_HAND_PROXY)
+        return _read_json(path, _BY_HAND_PROXY, rewriting)
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     _SEEN[path.resolve()] = text
     try:
@@ -152,7 +175,7 @@ def _write(path: Path, text: str, dry_run: bool) -> None:
 
 
 def _json_text(data: dict[str, Any]) -> str:
-    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(data, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
 def _backup_path(path: Path, home: Path | None) -> Path:
