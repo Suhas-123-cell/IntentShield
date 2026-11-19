@@ -6,6 +6,16 @@ Terms such as taint, provenance, verdict translation and the fail-closed launche
 
 ## Unreleased
 
+## 0.4.6 - 2026-11-19
+
+### Upgrading from 0.4.5
+
+- **Only if `CLAUDE_CONFIG_DIR` or `CODEX_HOME` names a directory other than `~/.claude` or `~/.codex`:** `install`, `uninstall`,
+  `doctor` and `scan` now use that directory, where 0.4.5 used the default place and warned. Run `intentshield install <harness>`
+  again with the variable set, as you start the harness. The hooks 0.4.5 wrote to the default place stay there; remove them with
+  `intentshield uninstall <harness>` run without the variable, unless you also start the harness without it.
+- With neither variable set, nothing changes.
+
 ### Changed
 
 - `install`, `uninstall` and `doctor` follow `CLAUDE_CONFIG_DIR` and `CODEX_HOME`. When one names a directory other than

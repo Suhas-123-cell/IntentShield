@@ -29,9 +29,6 @@ intentshield install claude        # or codex, cursor, gemini; guards MCP calls 
 intentshield-mcp-verify --demo --stdio --summary   # the proxy's own check against a bundled demo server
 ```
 
-> **PyPI has 0.4.5**, which predates one change on `main`: see
-> [Unreleased](https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#unreleased).
-
 What you should see:
 - `demo` prints one line per sample call (`allow`, `ask`, `deny`) with the rule's reason, then a second `deny` for an MCP call, and exits 0.
 - `install` runs `<harness> --version` once to record the build, prints `installed claude hooks in <the settings file>`, then a `Next:` line.
@@ -144,8 +141,9 @@ uv tool uninstall intentshield-mcp; rm -r ~/.intentshield         # last
 
 Give `install` the options you used before: running it again without `--builtin-tools` turns those rules off.
 
-Coming from 0.4.4: [Upgrading from 0.4.4][upgrade-044] lists what changes for you, including the verdicts that are weaker than in
-0.4.4. Coming from 0.4.3: [Upgrading from 0.4.3][upgrade-043]. Full steps: [Upgrading and removing][upgrading].
+Coming from 0.4.5: [Upgrading from 0.4.5][upgrade-045] matters only if you set `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Coming from
+0.4.4: [Upgrading from 0.4.4][upgrade-044] lists what changes for you, including the verdicts that are weaker than in 0.4.4.
+Coming from 0.4.3: [Upgrading from 0.4.3][upgrade-043]. Full steps: [Upgrading and removing][upgrading].
 
 ## Results
 
@@ -204,6 +202,7 @@ model on macOS. The [report][report] has every count and caveat.
 [contributing]: https://github.com/Suhas-123-cell/IntentShield/blob/main/CONTRIBUTING.md
 [changelog]: https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md
 [citation]: https://github.com/Suhas-123-cell/IntentShield/blob/main/CITATION.cff
+[upgrade-045]: https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#upgrading-from-045
 [upgrade-044]: https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#upgrading-from-044
 [upgrade-043]: https://github.com/Suhas-123-cell/IntentShield/blob/main/CHANGELOG.md#upgrading-from-043
 [upgrading]: https://github.com/Suhas-123-cell/IntentShield/blob/main/docs/guide.md#upgrading-and-removing-intentshield

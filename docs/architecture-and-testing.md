@@ -375,7 +375,7 @@ INTENTSHIELD_PROXY_CONFIG= INTENTSHIELD_CONTROL_TOKEN= GEMINI_API_KEY= GROQ_API_
 The last line is the test command that [CONTRIBUTING.md](../CONTRIBUTING.md#tests-and-lint) and the pull request template
 give; CI uses `uv sync --group dev --frozen` and has none of those variables set.
 
-Expect every test to pass. Measured on 2026-11-19 on `main` after release 0.4.5.
+Expect every test to pass. Measured on 2026-11-19 on the tree of release 0.4.6.
 
 `pytest --collect-only` lists 19113 test cases in a clean copy of the tree, which on macOS is the 19107 that passed and the 6
 that skipped. The cases come from 2390 test functions: a parametrised function is collected once for each set of arguments, so the
