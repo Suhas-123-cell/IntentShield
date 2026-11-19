@@ -183,8 +183,8 @@ area and how to diagnose a failure are in [docs/architecture-and-testing.md](doc
 
 No bot bumps them; they change by hand, when a release or an advisory makes it worth doing.
 
-- **GitHub Actions** are pinned by commit SHA with the tag in a comment, in `.github/workflows/ci.yml`, `publish.yml` and `audit.yml`: `actions/checkout`, `astral-sh/setup-uv`, `actions/upload-artifact`, `actions/download-artifact` and `pypa/gh-action-pypi-publish`. To move one, find the commit of the new tag on the action's releases page, replace the SHA in every workflow that names it, and update the comment.
-- **uv** is `0.11.16`, written in six places: the `version:` of each `astral-sh/setup-uv` step (three in `ci.yml`, one in `publish.yml`, one in `audit.yml`) and the `COPY --from=ghcr.io/astral-sh/uv:0.11.16` line of the `Dockerfile`. Change them together. `pip-audit` has its own pin in `audit.yml`.
+- **GitHub Actions** are pinned by commit SHA with the tag in a comment, in `.github/workflows/ci.yml`, `build.yml`, `publish.yml` and `audit.yml`: `actions/checkout`, `astral-sh/setup-uv`, `actions/upload-artifact`, `actions/download-artifact` and `pypa/gh-action-pypi-publish`. To move one, find the commit of the new tag on the action's releases page, replace the SHA in every workflow that names it, and update the comment.
+- **uv** is `0.11.16`, written in six places: the `version:` of each `astral-sh/setup-uv` step (three in `ci.yml`, one in `build.yml`, one in `audit.yml`) and the `COPY --from=ghcr.io/astral-sh/uv:0.11.16` line of the `Dockerfile`. Change them together. `pip-audit` has its own pin in `audit.yml`.
 - **Python packages** are pinned by `uv.lock`. Refresh with `uv lock --upgrade` (everything) or `uv lock --upgrade-package NAME`, run the tests, and commit `uv.lock`. CI installs with `--frozen`, so a lock that does not match `pyproject.toml` fails there.
 - **The weekly audit** (`audit.yml`) runs on every push to `main`, on pull requests and on Mondays at 05:17 UTC. It checks `uv.lock` against the PyPI advisory database and fails the run when an advisory has a fixed version; an advisory with no fix yet is printed and does not fail it. It reads only the Python packages: it says nothing about the Actions or the uv version, which stay as pinned until someone moves them.
 
@@ -194,7 +194,7 @@ A change a user can see (a flag, a message, a decision, a fix) gets one line in 
 
 ## Releasing
 
-For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the wheel (`.github/workflows/publish.yml`), so before it. The workflow's first step stops the release unless `pyproject.toml`, `CITATION.cff`, `uv.lock` and a `## X.Y.Z - date` heading in `CHANGELOG.md` name the same version and the tag is `vX.Y.Z`; it then runs `twine check` and installs the wheel in a clean environment (`intentshield --help`, `intentshield demo`, the README's demo one-liner).
+For the maintainer. Pushing a tag `vX.Y.Z` builds, smoke-tests and publishes the wheel (`.github/workflows/publish.yml`, which runs `ci.yml` and `build.yml` for the tag and then uploads), so before it. The first step of `build.yml` stops the release unless `pyproject.toml`, `CITATION.cff`, `uv.lock` and a `## X.Y.Z - date` heading in `CHANGELOG.md` name the same version and the tag is `vX.Y.Z`; it then runs `twine check` and installs the wheel in a clean environment (`intentshield --help`, `intentshield demo`, the README's demo one-liner).
 
 1. Set the version in `pyproject.toml` and in `CITATION.cff` (`version` and `date-released`), then run `uv lock` and commit `uv.lock`: the lock records the package's own version, and a later non-frozen `uv sync` would otherwise rewrite it and leave the tree dirty.
 2. In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z - YYYY-MM-DD` and start a new empty `## Unreleased` above it.
